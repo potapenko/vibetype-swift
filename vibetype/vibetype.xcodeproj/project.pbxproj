@@ -36,6 +36,11 @@
 			path = vibetype;
 			sourceTree = "<group>";
 		};
+		9DB749AA2FE7B0000053C3F3 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		9DB749A22FE7A0000053C3F3 /* vibetypeIOS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = vibetypeIOS;
@@ -89,6 +94,7 @@
 			isa = PBXGroup;
 			children = (
 				9DB7496B2FE6D7300053C3F3 /* vibetype */,
+				9DB749AA2FE7B0000053C3F3 /* Shared */,
 				9DB749A22FE7A0000053C3F3 /* vibetypeIOS */,
 				9DB749792FE6D7320053C3F3 /* vibetypeTests */,
 				9DB749832FE6D7320053C3F3 /* vibetypeUITests */,
@@ -124,6 +130,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				9DB7496B2FE6D7300053C3F3 /* vibetype */,
+				9DB749AA2FE7B0000053C3F3 /* Shared */,
 			);
 			name = vibetype;
 			packageProductDependencies = (
@@ -146,6 +153,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				9DB749A22FE7A0000053C3F3 /* vibetypeIOS */,
+				9DB749AA2FE7B0000053C3F3 /* Shared */,
 			);
 			name = "vibetype-iOS";
 			packageProductDependencies = (

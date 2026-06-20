@@ -83,6 +83,14 @@ once those targets exist. They are not required for a macOS-only task unless
 the selected task explicitly changes shared iOS/macOS code. Operational MCP
 usage and fallbacks live in `docs/agent-tooling.md`.
 
+When a shared SwiftUI surface changes, verification should include:
+
+- typechecking or building the shared source against both macOS and iOS SDKs;
+- an iOS simulator build/run/screenshot through XcodeBuildMCP when the build
+  product can be produced within the bounded run;
+- a QA blocker note when the simulator build or launch times out before a
+  screenshot can be captured.
+
 ## iOS Keyboard Constraints
 
 The iOS keyboard path is a separate platform architecture, not a direct port of
@@ -119,7 +127,9 @@ This split must be confirmed by future iOS specs before implementation.
 - Permission or microphone behavior: fake-backed tests for app logic; bounded
   runtime smoke only when the selected task asks for platform evidence
 - iOS or shared SwiftUI behavior: XcodeBuildMCP simulator build/test/screenshot
-  when an iOS target exists and the selected task touches that surface
+  when an iOS target exists and the selected task touches that surface; if full
+  `xcodebuild` or MCP build/run times out without compiler diagnostics, record
+  the timeout and keep SDK typecheck evidence explicit
 
 ## Sources
 

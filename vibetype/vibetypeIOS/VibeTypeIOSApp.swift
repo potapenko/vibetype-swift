@@ -11,43 +11,24 @@ import SwiftUI
 struct VibeTypeIOSApp: App {
     var body: some Scene {
         WindowGroup {
-            VibeTypeIOSStatusView()
+            VibeTypeIOSRootView()
         }
     }
 }
 
-private struct VibeTypeIOSStatusView: View {
+private struct VibeTypeIOSRootView: View {
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("VibeType", systemImage: "mic.fill")
-                            .font(.title2.weight(.semibold))
-
-                        Text("iOS containing app skeleton")
-                            .font(.headline)
-
-                        Text(
-                            "Keyboard setup, recording, transcription, and text insertion are not enabled in this target yet."
-                        )
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 8)
-                }
-
-                Section("Current Scope") {
-                    Label("Containing app only", systemImage: "iphone")
-                    Label("No keyboard extension", systemImage: "keyboard")
-                    Label("No microphone or network flow", systemImage: "lock.shield")
-                }
+            ScrollView {
+                VibeTypeSetupStatusView(surface: .iOSContainingApp)
+                    .padding(24)
             }
             .navigationTitle("VibeType")
+            .background(Color(.systemGroupedBackground))
         }
     }
 }
 
 #Preview {
-    VibeTypeIOSStatusView()
+    VibeTypeIOSRootView()
 }

@@ -20,45 +20,41 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("VibeType Settings")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                VibeTypeSetupStatusView(surface: .macOSSettings, showsDetailSections: false)
 
-                Text("Settings are not configurable in this build.")
+                Divider()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Permissions")
+                        .font(.headline)
+
+                    Label(
+                        accessibilityPermissionStatus.settingsDescription,
+                        systemImage: accessibilityPermissionStatus.canPasteIntoActiveApp
+                            ? "checkmark.circle"
+                            : "exclamationmark.triangle"
+                    )
                     .foregroundStyle(.secondary)
-            }
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Permissions")
-                    .font(.headline)
-
-                Label(
-                    accessibilityPermissionStatus.settingsDescription,
-                    systemImage: accessibilityPermissionStatus.canPasteIntoActiveApp
-                        ? "checkmark.circle"
-                        : "exclamationmark.triangle"
-                )
-                .foregroundStyle(.secondary)
-
-                if !accessibilityPermissionStatus.canPasteIntoActiveApp {
-                    Button("Open Accessibility Settings") {
-                        accessibilityPermissionService.openAccessibilitySettings()
-                        refreshAccessibilityPermissionStatus()
+                    if !accessibilityPermissionStatus.canPasteIntoActiveApp {
+                        Button("Open Accessibility Settings") {
+                            accessibilityPermissionService.openAccessibilitySettings()
+                            refreshAccessibilityPermissionStatus()
+                        }
                     }
                 }
+
+                Divider()
+
+                Label("Configurable settings are not enabled in this build.", systemImage: "gearshape")
+                    .foregroundStyle(.secondary)
             }
-
-            Divider()
-
-            Label("No configurable settings yet.", systemImage: "gearshape")
-                .foregroundStyle(.secondary)
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(24)
-        .frame(minWidth: 420, minHeight: 300, alignment: .topLeading)
+        .frame(minWidth: 460, minHeight: 380, alignment: .topLeading)
         .onAppear(perform: refreshAccessibilityPermissionStatus)
     }
 

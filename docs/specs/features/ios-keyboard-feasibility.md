@@ -79,6 +79,8 @@ Until future iOS implementation tasks add real features, this target must:
 - identify itself as VibeType;
 - state that keyboard setup, recording, transcription, and text insertion are
   not enabled yet;
+- use only shared, platform-neutral SwiftUI setup/status components when code is
+  intentionally shared with macOS;
 - avoid microphone capture, network calls, Open Access setup, shared
   containers, keyboard extension code, and transcript persistence;
 - stay independent from macOS menu bar, AppKit Settings-window, global-hotkey,
@@ -134,6 +136,12 @@ Not reusable for the iOS keyboard:
 Future shared code should be introduced only after an iOS target exists and a
 task verifies the shared surface on both macOS and iOS.
 
+The initial reusable setup/status surface may be shared between the iOS
+containing app and the macOS Settings window when it remains platform-neutral.
+Shared setup UI must describe current product availability honestly and must
+not expose controls for unavailable recording, transcription, keyboard
+extension, Open Access, or paste behavior.
+
 ## Verification Mapping
 
 - This spec-only task requires `git diff --check`.
@@ -151,4 +159,7 @@ task verifies the shared surface on both macOS and iOS.
 - No direct OpenAI call from the keyboard extension in the MVP.
 - No API key storage inside the keyboard extension.
 - No reliance on keyboard availability in secure or host-rejected fields.
-- No iOS target should be added before a task explicitly selects that work.
+- No iOS target should be added before a task or direct user request explicitly
+  selects that work.
+- The iOS containing app target must remain a safe setup/status surface until a
+  future spec adds real iOS dictation or keyboard behavior.
