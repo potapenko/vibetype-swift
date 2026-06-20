@@ -6,8 +6,7 @@ priority: P2
 lane: testing
 parent: VT-110
 dependencies:
-  - VT-011
-  - VT-041
+  - VT-121
 allowed_paths:
   - vibetype/vibetype/**
   - vibetype/vibetypeTests/**
@@ -21,18 +20,20 @@ Status: backlog
 
 ## Goal
 
-Add the first fake-backed test harness for dictation controller state changes.
+Extend the fake-backed test harness for dictation controller state changes.
 
 ## Scope
 
+- Use the controller boundary from VT-121.
 - Use fake services instead of microphone, network, Keychain, clipboard, or
   paste side effects.
-- Cover a small idle-to-recording or recording-to-transcribing transition.
+- Cover one additional controller transition not already covered by VT-121 to
+  VT-124.
 - Keep real OpenAI and real microphone access out of tests.
 
 ## Acceptance
 
-- A deterministic test covers one controller state transition.
+- A deterministic test extends controller transition coverage.
 - Test code can be extended by later recording, transcription, and paste tasks.
 - No normal test requires system permissions or live credentials.
 
