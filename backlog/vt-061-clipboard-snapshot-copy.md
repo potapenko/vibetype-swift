@@ -1,7 +1,7 @@
 ---
 id: VT-061
 title: Clipboard Snapshot And Copy
-status: backlog
+status: in-progress
 priority: P1
 lane: text-output
 parent: VT-060
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-061 - Clipboard Snapshot And Copy
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
