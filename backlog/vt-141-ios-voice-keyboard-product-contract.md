@@ -1,7 +1,7 @@
 ---
 id: VT-141
 title: iOS Voice Keyboard Product Contract
-status: in-progress
+status: blocked
 priority: P3
 lane: ios-keyboard
 parent: VT-140
@@ -17,7 +17,7 @@ verification:
 
 # VT-141 - iOS Voice Keyboard Product Contract
 
-Status: in-progress
+Status: blocked
 Priority: P3
 Lane: ios-keyboard
 Dependencies: VT-113
@@ -62,3 +62,22 @@ contract.
 
 - Reference article:
   `https://9to5mac.com/2025/06/30/wispr-flow-is-an-ai-that-transcribes-what-you-say-right-from-the-iphone-keyboard/`
+
+## Blocker
+
+Blocked because the selected scope is documentation-only and explicitly forbids
+Swift implementation. The implementer runbook requires a product delta before a
+task can be marked done, and this task's allowed paths cannot produce app
+behavior, Swift source, executable tests, build/runtime capability, or a product
+bug fix.
+
+## Resolution Path
+
+- Blocker category: no product delta possible from selected scope.
+- Follow-up task: VT-144
+  (`backlog/vt-144-ios-keyboard-session-state-model.md`).
+- Unblock condition: implement the smallest executable keyboard voice-session
+  contract as a pure Swift state model with fake-backed tests.
+- Why this run could not finish directly: VT-141 forbids adding Swift
+  implementation, so completing it with only spec prose would violate the
+  product-first automation contract.

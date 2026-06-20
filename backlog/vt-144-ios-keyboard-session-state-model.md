@@ -6,7 +6,7 @@ priority: P3
 lane: ios-keyboard
 parent: VT-140
 dependencies:
-  - VT-141
+  - VT-113
 allowed_paths:
   - vibetype/**
   - docs/specs/features/ios-keyboard-feasibility.md
@@ -21,7 +21,7 @@ verification:
 Status: backlog
 Priority: P3
 Lane: ios-keyboard
-Dependencies: VT-141
+Dependencies: VT-113
 Expected outputs: keyboard session state model and fake-backed tests
 Verification: git diff --check; iOS test or documented blocker
 
@@ -58,3 +58,6 @@ building the visual surface.
 
 - This model should be reusable by the containing app preview surface and the
   keyboard extension where practical.
+- This task is the implementation follow-up for blocked VT-141. It should turn
+  the intended keyboard-visible product contract into executable Swift state
+  and tests before additional iOS keyboard UI tasks depend on it.
