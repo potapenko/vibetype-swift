@@ -24,6 +24,11 @@ This spec covers:
 - cloud sync
 - team policy management
 - full hotkey customization UI
+- provider marketplaces, local model downloads, self-hosted transcription
+  endpoints, or multi-provider settings beyond the OpenAI MVP
+- microphone input device selection
+- usage analytics, telemetry, billing, or cloud-backup controls
+- persistent raw-audio retention settings
 - secure enclave or enterprise secrets management
 
 ## User-visible behavior
@@ -36,7 +41,13 @@ This spec covers:
 - The Settings window should include transcription model.
 - The Settings window should include language setting: Auto, English, Russian,
   or Custom.
+- Transcription model, language, and prompt settings apply to the OpenAI
+  file-transcription MVP only. Settings should not expose local model
+  downloads, provider tabs, self-hosted endpoints, or account-backed
+  transcription modes unless a future spec changes scope.
 - The Settings window should include hotkey display.
+- The hotkey row is read-only for MVP and shows the active shortcut,
+  activation mode, and unavailable/fallback status when known.
 - The Settings window should include toggles for auto-paste, copy to clipboard,
   restoring the previous clipboard, sound on start/stop, and floating recording
   indicator.
@@ -46,6 +57,9 @@ This spec covers:
   field.
 - Missing API key should be reported as a user-visible blocked state before
   transcription is attempted.
+- Settings should include a privacy and permissions section that shows
+  microphone and Accessibility status, provides the next action for blocked
+  permissions, and states that audio is sent to OpenAI for transcription.
 
 ## Default settings
 
@@ -73,6 +87,9 @@ The OpenAI API key has no UserDefaults value or default. It is Keychain-only.
   MVP.
 - Settings changes should not require a manual external setup step after the app
   is built and launched.
+- Unsupported reference settings such as accounts, analytics, cloud backup,
+  system audio capture, local model management, and raw-audio retention should
+  not appear in the MVP settings surface.
 
 ## Edge cases and failure policy
 

@@ -1,7 +1,7 @@
 ---
 id: VT-092
 title: Settings Screen Reference Audit
-status: in-progress
+status: done
 priority: P2
 lane: reference-audit
 parent: VT-090
@@ -15,7 +15,7 @@ allowed_paths:
 
 # VT-092 - Settings Screen Reference Audit
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -34,6 +34,25 @@ settings sections.
 - Missing MVP settings work is represented as small child tasks.
 - Unsupported advanced reference features are not added as implementation tasks.
 - Docs remain product-level.
+
+## Audit Notes
+
+- Reviewed `references/openwhispr-main/src/components/SettingsPage.tsx`,
+  `references/openwhispr-main/src/components/TranscriptionModelPicker.tsx`,
+  `references/openwhispr-main/src/components/ui/ApiKeyInput.tsx`, and
+  `references/openwhispr-main/src/components/ui/MicrophoneSettings.tsx`.
+- Existing VibeType backlog already covers Keychain API-key storage, API-key
+  Settings UI, core output toggles, microphone permission status, Accessibility
+  status, and permission-blocked menu state.
+- Added VT-025 for model, language, custom language, and prompt Settings UI.
+- Added VT-026 for read-only hotkey display and activation-mode status.
+- Added VT-034 for the Settings privacy/permissions section and OpenAI audio
+  disclosure.
+- Did not add tasks for OpenWhispr accounts, billing, cloud backup, telemetry,
+  local model downloads, self-hosted endpoints, multi-provider tabs, system
+  audio capture, microphone device selection, dictionary/snippets, meeting
+  transcription, or raw-audio retention because those are outside the current
+  MVP specs.
 
 ## Verification
 

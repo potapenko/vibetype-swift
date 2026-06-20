@@ -27,6 +27,8 @@ This spec covers:
 - account, billing, or team administration
 - concrete encryption implementation details
 - provider-specific API contracts
+- microphone device selection or system-audio capture settings
+- persistent raw-audio retention controls
 
 ## User-visible behavior
 
@@ -38,6 +40,8 @@ This spec covers:
   actually started.
 - The product must disclose that audio is sent to OpenAI when OpenAI
   transcription is used.
+- Settings must include a concise OpenAI audio-processing disclosure near the
+  relevant transcription or privacy controls.
 - API keys must be stored locally in macOS Keychain, not in UserDefaults or
   plain text files.
 - The MVP must not require accounts, subscriptions, telemetry, analytics,
@@ -49,6 +53,9 @@ This spec covers:
   credentials, or full provider responses in the default product log stream.
 - If a user denies microphone permission, the app should remain usable enough
   to explain what is blocked and how to retry.
+- Settings should show microphone and Accessibility status using product
+  language and provide a bounded next action such as requesting permission or
+  opening the relevant System Settings pane.
 - Microphone permission state must be represented as one of four product
   states:
   - `allowed`: recording may start after an explicit user action.
@@ -67,6 +74,9 @@ This spec covers:
 - Querying Accessibility permission must use the non-prompting status check by
   default. The app may provide a separate action to open the Accessibility pane
   in System Settings.
+- The MVP settings surface must not expose analytics, cloud-backup, local-model
+  management, system-audio capture, or persistent raw-audio retention controls
+  copied from the reference app.
 
 ## Invariants
 

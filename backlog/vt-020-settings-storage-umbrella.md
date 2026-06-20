@@ -9,6 +9,8 @@ dependencies:
   - VT-022
   - VT-023
   - VT-024
+  - VT-025
+  - VT-026
 allowed_paths:
   - backlog/**
   - docs/specs/features/settings-and-secret-storage.md
@@ -28,6 +30,8 @@ Close out the MVP settings and secret-storage behavior after child tasks land.
 - VT-022 Keychain API key storage
 - VT-023 API key settings UI
 - VT-024 MVP settings toggles
+- VT-025 transcription settings fields UI
+- VT-026 hotkey settings display
 
 ## Verification
 

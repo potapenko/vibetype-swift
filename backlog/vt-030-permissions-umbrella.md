@@ -8,6 +8,7 @@ dependencies:
   - VT-031
   - VT-032
   - VT-033
+  - VT-034
 allowed_paths:
   - backlog/**
   - docs/specs/features/privacy-and-permissions.md
@@ -27,6 +28,7 @@ tasks land.
 - VT-031 microphone permission status
 - VT-032 accessibility permission status
 - VT-033 permission blocked menu state
+- VT-034 Settings permissions and privacy section
 
 ## Verification
 
