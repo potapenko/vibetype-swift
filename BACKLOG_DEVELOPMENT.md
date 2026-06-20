@@ -103,7 +103,8 @@ Status values:
 - `in-progress` - claimed by an agent and skipped by other agents;
 - `blocked` - an exceptional blocker that is not merely unfinished
   dependencies; skipped by normal executor agents until a blocker-resolution
-  agent or human changes the task;
+  agent or human changes the task; blocked tasks must include a durable
+  resolution path, not just a stop note;
 - `done` - terminal and verified for the declared scope.
 
 Do not introduce other status values. A task must not be marked `blocked`
@@ -213,15 +214,29 @@ At the end of the iteration:
 3. if the task cannot be completed because of a real blocker discovered after
    claim, set `Status: blocked` and `status: blocked`, then record blocker
    evidence in the task or declared report;
-4. add follow-up tasks only when they are real next work;
-5. stage only files changed for the iteration;
-6. run `git diff --cached --check`;
-7. create a scoped completion checkpoint commit;
-8. report claim commit, completion commit, verification, changed files, next
+4. when marking a task blocked, add a `## Resolution Path` section or an
+   equivalent durable report entry that names exactly what would unblock the
+   task;
+5. for any blocker that can be solved inside the repository, create or update
+   exactly one concrete follow-up task that can remove the blocker, and record
+   that task id/path in the blocked task; if a suitable follow-up already
+   exists, cite it instead of duplicating it;
+6. for operator-only or external blockers, record the shortest exact operator
+   action or status check that would unblock the task and explain why no
+   repository task is useful yet;
+7. add other follow-up tasks only when they are real next work;
+8. stage only files changed for the iteration;
+9. run `git diff --cached --check`;
+10. create a scoped completion checkpoint commit;
+11. report claim commit, completion commit, verification, changed files, next
    eligible task, and remaining blockers.
 
 Completion is not a chat summary alone. The terminal task state must be
 committed.
+
+Blocked is not a terminal abandonment state. It is a queued state for
+blocker-resolution work. A blocked task without a resolution path is incomplete
+workflow state and should be repaired by the next blocker-resolution pass.
 
 ## OpenWhispr Reference Rule
 

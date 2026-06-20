@@ -91,7 +91,11 @@ cleanup, or closeout.
 - `in-progress` - claimed and skipped by other executor agents while the claim
   is fresh; scheduled automation expires task files older than one hour and
   resets only the claim status to `backlog`.
-- `blocked` - exceptional blocker; skipped by normal executor agents.
+- `blocked` - exceptional blocker; skipped by normal executor agents until a
+  blocker-resolution pass or human changes it. A blocked task must include a
+  durable `## Resolution Path` or equivalent report entry that either cites one
+  concrete follow-up task to remove the blocker or records the exact
+  operator-only action/status check needed to unblock it.
 - `done` - terminal and verified for the declared scope.
 
 Do not add other status values.

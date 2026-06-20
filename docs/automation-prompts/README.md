@@ -15,6 +15,7 @@ Repository cwd:
 Runtime runbooks:
 
 - `runbooks/vibetype-swift-backlog-groomer.md`
+- `runbooks/vibetype-swift-blocker-resolver.md`
 - `runbooks/vibetype-swift-implementer.md`
 
 Per-user inventories:

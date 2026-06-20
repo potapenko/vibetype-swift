@@ -144,6 +144,39 @@ and dev servers before and after checks when ownership is clear; clean
 current-run temporary screenshots, audits, profiles, and build artifacts before
 staging; keep only durable reports or explicit evidence.
 
+## Blocked Task Follow-Up Rule
+
+Marking a selected task `blocked` is allowed only when the run also records a
+durable resolution path. Do not close the run with blocker evidence alone.
+
+When the blocker can plausibly be removed by repository work, create or update
+exactly one concrete follow-up backlog task that can unblock the selected task.
+If a suitable follow-up task already exists, cite that existing id/path instead
+of creating a duplicate. The follow-up task must include:
+
+- the original blocked task id it unblocks;
+- a small scope and `allowed_paths`;
+- concrete acceptance criteria;
+- verification commands or evidence;
+- any dependency or operator precondition that must be true before it can run.
+
+Then add a `## Resolution Path` section, or update an existing equivalent
+section, in the blocked task. The section must include the blocker category,
+the follow-up id/path, the condition that should unblock the task, and why the
+current run could not finish it directly.
+
+For platform, verification, runner, cache, disk-space, or environment blockers
+that repeat across tasks, create or cite one infrastructure/verification task
+instead of repeating the same blocker-only note in each task. For a selected
+docs/audit/workflow task where no product delta is possible, keep the existing
+product-first rule: block the selected task and create or refine the smallest
+implementation task that would produce the intended app delta.
+
+Operator-only blockers are the exception. If the unblock requires an action the
+agent must not perform, such as destructive cleanup, user-owned system changes,
+or manual permission approval, record the shortest exact operator action or
+status check and explain why no repository follow-up task is useful yet.
+
 ## Verification
 
 Run the verification named by the selected task. For Swift behavior changes,
@@ -228,3 +261,5 @@ was not applicable or blocked. `Product delta` must name the app behavior,
 Swift code, tests, build/runtime capability, or bug fix delivered. If no
 product delta was possible, the task must be reported as blocked, not done, and
 the report must name the exact next implementation task created or updated.
+For any blocked result, the report must include `Resolution path` with either
+the follow-up task id/path or the explicit operator-only unblock action.

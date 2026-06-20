@@ -7,7 +7,7 @@ status: inspected
 
 # eugenepotapenko Automation Inventory
 
-Inventory date: 2026-06-20
+Inventory date: 2026-06-21
 Inspected user home: `/Users/eugenepotapenko`
 Inspected Codex home: `/Users/eugenepotapenko/.codex`
 Repository cwd:
@@ -19,10 +19,11 @@ Inventory status: inspected
 | Automation id | Name | Status | Schedule | Model | Environment | Prompt source |
 | --- | --- | --- | --- | --- | --- | --- |
 | `vibetype-swift-backlog-groomer` | VibeType Swift Backlog Groomer | active | `FREQ=HOURLY;INTERVAL=2` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md` |
+| `vibetype-swift-blocker-resolver` | VibeType Swift Blocker Resolver | active | `FREQ=HOURLY;INTERVAL=1` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md` |
 | `vibetype-swift-implementer` | VibeType Swift Implementer | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-implementer.md` |
 
-Installed automation count for this repository: 2.
-Active count for this repository: 2.
+Installed automation count for this repository: 3.
+Active count for this repository: 3.
 Paused count for this repository: 0.
 
 ## Installed Automations
@@ -44,6 +45,26 @@ Paused count for this repository: 0.
 - Safety/browser evidence contract: no browser requirement; do not implement
   Swift product code; stop on dirty/staged worktree or in-progress task; no DB
   or destructive storage operations
+- Current decision: active
+
+### `vibetype-swift-blocker-resolver`
+
+- Installed status: `ACTIVE`
+- Schedule: `FREQ=HOURLY;INTERVAL=1`
+- Model / reasoning effort: `gpt-5.5` / `xhigh`
+- Execution environment: `local`
+- Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
+- Prompt shape: short pointer prompt
+- Versioned runtime contract:
+  `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md`
+- Selector/script:
+  `python3 scripts/backlog_blocked_next.py --json`
+- Expected output: one selected blocked task either directly resolved,
+  connected to one concrete follow-up task, or recorded with an exact
+  operator-only unblock action
+- Safety/runtime evidence contract: stop on dirty checkout or active
+  in-progress task; avoid duplicate follow-ups; use bounded verification; no
+  DB or destructive storage operations
 - Current decision: active
 
 ### `vibetype-swift-implementer`
