@@ -1,7 +1,7 @@
 ---
 id: VT-011
 title: App State Recording Status Model
-status: backlog
+status: in-progress
 priority: P0
 lane: swift-app-shell
 parent: VT-010
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-011 - App State Recording Status Model
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
