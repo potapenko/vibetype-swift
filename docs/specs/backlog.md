@@ -22,6 +22,7 @@ the root `backlog/` directory and are selected with
 - `features/menu-bar-app-shell.md`
 - `features/settings-and-secret-storage.md`
 - `features/text-output-workflow.md`
+- `features/global-hotkey.md`
 
 ## Next Specs To Create
 
@@ -30,28 +31,23 @@ the root `backlog/` directory and are selected with
      prompt/vocabulary hint handling, retry policy, timeout, and error mapping.
    - Executable task: `backlog/vt-001-openai-transcription-contract.md`.
 
-2. Global hotkey
-   - Define the default shortcut, hold-to-record vs toggle behavior, repeated
-     press handling, collision handling, and shortcut customization.
-   - Executable task: `backlog/vt-002-global-hotkey-contract.md`.
-
-3. Transcript history
+2. Transcript history
    - Decide whether the optional local last-20 transcript history is in the MVP,
      where it is stored, how it is cleared, and whether it is enabled by
      default.
    - Executable task: `backlog/vt-003-transcript-history-decision.md`.
 
-4. Floating indicator
+3. Floating indicator
    - Define exact visibility, text, placement, focus behavior, and error/done
      transitions for the floating panel.
    - Executable task: `backlog/vt-004-floating-indicator-contract.md`.
 
-5. Verification strategy
+4. Verification strategy
    - Define the first testable seams for microphone input, transcription
      providers, permission denial, timeout behavior, and text handoff.
    - Executable task: `backlog/vt-005-verification-strategy.md`.
 
-6. Platform testing and QA evidence
+5. Platform testing and QA evidence
    - Define how agents choose between unit tests, build checks, macOS runtime
      smoke checks, Computer Use, and future iOS simulator checks.
    - Product contract: `features/platform-testing-strategy.md`.
