@@ -17,8 +17,8 @@ For implementation or file-changing work, read in this order:
 
 ## Normal Development Loop
 
-1. Run
-   `python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress`.
+1. Run `python3 scripts/backlog_next.py --json`; this standard selector run
+   expires stale `in-progress` claims by default.
 2. If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,
    stage only those reset task files, create a scoped repair commit, and rerun
    the selector before claiming work.

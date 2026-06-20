@@ -24,7 +24,7 @@ Each run should:
 6. Prefer parent umbrella tasks plus small child tasks for large areas.
 7. Keep task files short, scoped, and verifiable.
 8. Run
-   `python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress`
+   `python3 scripts/backlog_next.py --json`
    after edits.
 9. Commit only backlog/spec/workflow edits made by the groomer.
 

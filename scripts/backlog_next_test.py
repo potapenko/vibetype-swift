@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -77,7 +79,7 @@ Status: backlog.
             "in-progress",
         )
 
-    def test_apply_expired_in_progress_resets_task_before_selection(self) -> None:
+    def test_default_run_resets_expired_in_progress_before_selection(self) -> None:
         module = load_selector_module()
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -118,17 +120,54 @@ Status: backlog.
             two_hours_ago = time.time() - (2 * 60 * 60)
             os.utime(task_path, (two_hours_ago, two_hours_ago))
 
-            result = module.select_task(
-                root,
-                expire_in_progress_after_hours=1,
-                apply_expired_in_progress=True,
-            )
+            result = module.select_task(root)
             task_text = task_path.read_text(encoding="utf-8")
 
         self.assertEqual(result["status"], "select")
         self.assertEqual(result["selected"]["id"], "VT-001")
         self.assertEqual(result["summary"]["expired_in_progress_count"], 1)
         self.assertEqual(result["expired_in_progress_reset_paths"], ["backlog/vt-001-parent.md"])
+        self.assertIn("status: backlog", task_text)
+        self.assertIn("Status: backlog.", task_text)
+
+    def test_cli_json_resets_expired_in_progress_without_extra_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            backlog = root / "backlog"
+            backlog.mkdir()
+            task_path = backlog / "vt-001-parent.md"
+            task_path.write_text(
+                """---
+id: VT-001
+status: in-progress
+priority: P1
+lane: test
+---
+
+# VT-001 - Parent
+
+Status: in-progress.
+""",
+                encoding="utf-8",
+            )
+            two_hours_ago = time.time() - (2 * 60 * 60)
+            os.utime(task_path, (two_hours_ago, two_hours_ago))
+
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT_PATH), "--root", str(root), "--json"],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=5,
+            )
+            task_text = task_path.read_text(encoding="utf-8")
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["status"], "select")
+        self.assertEqual(result["selected"]["id"], "VT-001")
+        self.assertEqual(result["expired_in_progress_reset_paths"], ["backlog/vt-001-parent.md"])
+        self.assertTrue(result["expired_in_progress_applied"])
         self.assertIn("status: backlog", task_text)
         self.assertIn("Status: backlog.", task_text)
 

@@ -8,7 +8,7 @@ the selector and must not manually choose a task by reading task bodies.
 ## Select The Next Task
 
 ```sh
-python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress
+python3 scripts/backlog_next.py --json
 ```
 
 If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,

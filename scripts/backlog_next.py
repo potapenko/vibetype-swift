@@ -261,7 +261,7 @@ def load_tasks(root: Path) -> tuple[list[Task], list[str]]:
 def select_task(
     root: Path,
     expire_in_progress_after_hours: float | None = 1.0,
-    apply_expired_in_progress: bool = False,
+    apply_expired_in_progress: bool = True,
 ) -> dict[str, Any]:
     now = time.time()
     tasks, errors = load_tasks(root)
@@ -454,25 +454,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Select the next backlog task.")
     parser.add_argument("--root", default=".", help="repository root")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
-    parser.add_argument(
-        "--expire-in-progress-after-hours",
-        type=float,
-        default=1.0,
-        help="treat in-progress task files older than this many hours as expired claims",
-    )
-    parser.add_argument(
-        "--apply-expired-in-progress",
-        action="store_true",
-        help="reset expired in-progress task files back to backlog before selection",
-    )
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
-    result = select_task(
-        root,
-        expire_in_progress_after_hours=args.expire_in_progress_after_hours,
-        apply_expired_in_progress=args.apply_expired_in_progress,
-    )
+    result = select_task(root)
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:

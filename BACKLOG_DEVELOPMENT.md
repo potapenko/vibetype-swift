@@ -123,9 +123,8 @@ must not reimplement queue selection in prompt logic.
 
 Use this flow:
 
-1. Run
-   `python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress`
-   from the canonical checkout.
+1. Run `python3 scripts/backlog_next.py --json` from the canonical checkout.
+   This standard selector run expires stale `in-progress` claims by default.
 2. If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,
    stage only those reset task files, create a scoped claim-expiry repair
    commit such as `Expire stale backlog claims`, and rerun the same selector

@@ -122,7 +122,7 @@ Agents may shallow-scan backlog task headers when selecting work, but they must
 not read the body of a non-selected task. The selector command is:
 
 ```sh
-python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress
+python3 scripts/backlog_next.py --json
 ```
 
 For sequential automation, the canonical checkout is the source of truth. Use

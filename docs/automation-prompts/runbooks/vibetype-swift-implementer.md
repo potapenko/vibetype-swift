@@ -49,7 +49,7 @@ Do not require optional README files that are absent from the checkout.
 Run this selector from the repo root:
 
 ```sh
-python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress
+python3 scripts/backlog_next.py --json
 ```
 
 Treat selector JSON as the only source of truth. Do not reimplement backlog

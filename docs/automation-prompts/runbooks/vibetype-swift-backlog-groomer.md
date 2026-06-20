@@ -46,10 +46,10 @@ tasks.
 Run `git status --short` before writing. If there are uncommitted changes or
 staged changes, stop without editing and report the blocker.
 
-Before grooming, run the selector with claim-expiry repair enabled:
+Before grooming, run the standard selector. It has built-in claim-expiry repair:
 
 ```sh
-python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress
+python3 scripts/backlog_next.py --json
 ```
 
 If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,
@@ -67,7 +67,7 @@ Existing backlog files and the selector are authoritative for ids,
 dependencies, priorities, and ready work:
 
 ```sh
-python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress
+python3 scripts/backlog_next.py --json
 ```
 
 Do not mark tasks done. Do not claim tasks. Do not change implementer-owned
@@ -103,7 +103,7 @@ settings, permissions, or paste work.
 After edits, run:
 
 ```sh
-python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress
+python3 scripts/backlog_next.py --json
 git diff --check
 ```
 
