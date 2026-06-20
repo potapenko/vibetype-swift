@@ -18,6 +18,35 @@ Configured automation cwd:
 Work on the VibeType Swift development backlog as one bounded 10-minute
 iteration.
 
+This automation is product-first. Each run must try to move the working app
+forward, not merely improve repository paperwork. A selected task is successful
+only when the run produces a concrete product delta: app behavior, Swift source,
+tests that protect product behavior, build/runtime configuration needed by the
+app, or a verified bug fix. Documentation, specs, audits, and backlog edits are
+allowed only as supporting work for that product delta.
+
+Do not complete a task by producing only Markdown. If the selected task body
+appears to ask for only docs, audit notes, reference translation, workflow
+cleanup, or task grooming, reinterpret it through the product-first lens before
+doing the easy part:
+
+1. identify the smallest app behavior or testable product capability that the
+   task is meant to unblock;
+2. implement that smallest safe code/test/configuration change in the same run
+   when the behavior is already clear and dependencies are available;
+3. update specs or backlog only as needed to support the code change;
+4. if the task forbids code changes, has allowed paths that make code
+   impossible, or lacks enough product clarity to implement safely, do not mark
+   it `done`; mark it `blocked` with the reason `no product delta possible from
+   selected scope`, record the exact smallest product change that should be
+   made next, and create or update a concrete implementation task for that
+   change.
+
+The selected task's wording is not an excuse to choose a paperwork-only
+completion path. Prefer code and executable verification first. Reference
+research is useful only when it directly changes product behavior, tests, or a
+ready implementation task that the current scope cannot safely execute.
+
 Use the configured canonical checkout as the source of truth. Historical run
 memory is context only; it does not mark tasks complete and must not override
 repository workflow files.
@@ -85,10 +114,16 @@ If the claim cannot be committed safely, stop and report the blocker.
 
 After claim, read only the selected task body and required root/spec files.
 Follow the selected task exactly, including allowed paths, denied paths,
-expected outputs, and verification. If behavior changes, update the relevant
-spec in the same iteration before implementing or completing. If the worktree
-has uncommitted changes that overlap the selected task, stop and report the
-blocker. Do not promote another task into preparatory status.
+expected outputs, and verification, except that a docs-only completion is not
+valid for this implementer automation. If task instructions conflict with the
+product-first contract by forbidding any code/test/configuration change, treat
+that as a blocker for the selected scope rather than closing the task with
+documentation alone. If behavior changes, update the relevant spec in the same
+iteration before implementing or completing. If the worktree has uncommitted
+changes that overlap the selected task, stop and report the blocker. Do not
+promote another task into preparatory status unless the selected task is being
+blocked specifically because it cannot produce product delta; in that case,
+create or refine exactly one smallest implementation task that will.
 
 Use OpenWhispr only as reference evidence. Do not port Electron, React, Node.js
 runtime code, local model downloaders, meeting features, notes, accounts, cloud
@@ -128,6 +163,12 @@ For docs/spec-only changes, at minimum run:
 git diff --check
 ```
 
+Docs/spec-only verification is sufficient only for a blocked or non-product
+support update. It is not sufficient evidence to mark an implementer-selected
+task `done`. A `done` task from this automation must include verification
+matched to the product delta, such as Swift build/test, focused typecheck,
+fake-backed tests, or bounded runtime smoke when relevant.
+
 Use `docs/specs/features/platform-testing-strategy.md` to choose extra platform
 checks. Use fake-backed tests for services and state machines. Do not call the
 live OpenAI API from normal automation. Do not require real microphone input or
@@ -153,4 +194,8 @@ commit hash, completion commit hash if work completed, changed files,
 verification results, platform smoke evidence or reason it was not required,
 cleanup performed, remaining real blocker if any, next selector result if
 checked, actual cwd, execution environment, selected task before/after status,
-and confirmation that the canonical checkout now contains the status update.
+confirmation that the canonical checkout now contains the status update, and a
+short `Product delta` field. `Product delta` must name the app behavior, Swift
+code, tests, build/runtime capability, or bug fix delivered. If no product delta
+was possible, the task must be reported as blocked, not done, and the report
+must name the exact next implementation task created or updated.
