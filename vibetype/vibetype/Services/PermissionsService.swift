@@ -5,6 +5,8 @@
 //  Created by Codex on 6/20/26.
 //
 
+import AppKit
+import ApplicationServices
 import AVFoundation
 
 enum MicrophonePermissionStatus: Equatable {
@@ -96,5 +98,76 @@ struct MicrophonePermissionService {
         case .notDetermined:
             return .notDetermined
         }
+    }
+}
+
+enum AccessibilityPermissionStatus: Equatable {
+    case trusted
+    case notTrusted
+
+    var canPasteIntoActiveApp: Bool {
+        self == .trusted
+    }
+
+    var menuStatusText: String {
+        switch self {
+        case .trusted:
+            return "Accessibility: Allowed"
+        case .notTrusted:
+            return "Accessibility: Not Allowed"
+        }
+    }
+
+    var settingsDescription: String {
+        switch self {
+        case .trusted:
+            return "Auto-paste can control the active app."
+        case .notTrusted:
+            return "Auto-paste will need Accessibility permission."
+        }
+    }
+}
+
+protocol AccessibilityPermissionClient {
+    func isProcessTrusted(promptIfNeeded: Bool) -> Bool
+    func openAccessibilitySettings() -> Bool
+}
+
+struct AXAccessibilityPermissionClient: AccessibilityPermissionClient {
+    func isProcessTrusted(promptIfNeeded: Bool) -> Bool {
+        guard promptIfNeeded else {
+            return AXIsProcessTrusted()
+        }
+
+        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        let options = [promptKey: true] as CFDictionary
+        return AXIsProcessTrustedWithOptions(options)
+    }
+
+    func openAccessibilitySettings() -> Bool {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        ) else {
+            return false
+        }
+
+        return NSWorkspace.shared.open(url)
+    }
+}
+
+struct AccessibilityPermissionService {
+    private let client: AccessibilityPermissionClient
+
+    init(client: AccessibilityPermissionClient = AXAccessibilityPermissionClient()) {
+        self.client = client
+    }
+
+    func currentStatus() -> AccessibilityPermissionStatus {
+        client.isProcessTrusted(promptIfNeeded: false) ? .trusted : .notTrusted
+    }
+
+    @discardableResult
+    func openAccessibilitySettings() -> Bool {
+        client.openAccessibilitySettings()
     }
 }

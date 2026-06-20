@@ -1,7 +1,7 @@
 ---
 id: VT-032
 title: Accessibility Permission Status
-status: in-progress
+status: done
 priority: P1
 lane: permissions
 parent: VT-030
@@ -15,7 +15,7 @@ allowed_paths:
 
 # VT-032 - Accessibility Permission Status
 
-Status: in-progress
+Status: done
 
 ## Goal
 

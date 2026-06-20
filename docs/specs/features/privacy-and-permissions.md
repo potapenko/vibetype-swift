@@ -14,6 +14,7 @@ Keychain storage, and any transcript persistence explicit.
 This spec covers:
 
 - microphone consent
+- Accessibility consent for active-app paste automation
 - recording visibility
 - OpenAI remote-service disclosure
 - local persistence defaults
@@ -59,6 +60,13 @@ This spec covers:
 - The production microphone request flow should use the platform callback
   rather than polling. Automated verification should use a fake permission
   boundary instead of requiring a real system prompt.
+- Accessibility permission state must be represented as one of two product
+  states:
+  - `trusted`: auto-paste may control the active app.
+  - `not trusted`: auto-paste must not simulate paste into the active app.
+- Querying Accessibility permission must use the non-prompting status check by
+  default. The app may provide a separate action to open the Accessibility pane
+  in System Settings.
 
 ## Invariants
 
@@ -74,6 +82,9 @@ This spec covers:
 
 - If permission is denied or restricted by device policy, the app should show a
   recoverable blocked state instead of repeatedly prompting.
+- If Accessibility permission is not trusted, the app should explain that
+  auto-paste is blocked and provide a way to open the relevant System Settings
+  pane when possible.
 - If OpenAI is unavailable, the app should fail the current
   attempt with a visible error and allow a later retry.
 - If debug logging is temporarily enabled for investigation, the developer
@@ -87,6 +98,9 @@ This spec covers:
 
 - Permission state is part of the product state model and must be visible to
   flows that start recording.
+- Accessibility trust state is part of the product state model and must be
+  visible to flows that decide between auto-paste and copy-to-clipboard
+  fallback.
 - Provider configuration is product behavior because it changes model,
   language, prompt, latency, and error behavior.
 - Settings may be stored in UserDefaults, but the API key belongs in Keychain.

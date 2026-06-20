@@ -82,6 +82,31 @@ struct PermissionsServiceTests {
 
         #expect(client.requestCount == 0)
     }
+
+    @Test func accessibilityStatusMapsTrustWithoutPrompting() {
+        let trustedClient = FakeAccessibilityPermissionClient(isTrusted: true)
+        let notTrustedClient = FakeAccessibilityPermissionClient(isTrusted: false)
+
+        #expect(AccessibilityPermissionService(client: trustedClient).currentStatus() == .trusted)
+        #expect(
+            AccessibilityPermissionService(client: notTrustedClient).currentStatus() == .notTrusted
+        )
+        #expect(AccessibilityPermissionStatus.trusted.canPasteIntoActiveApp)
+        #expect(AccessibilityPermissionStatus.notTrusted.canPasteIntoActiveApp == false)
+        #expect(trustedClient.promptRequests == [false])
+        #expect(notTrustedClient.promptRequests == [false])
+    }
+
+    @Test func accessibilitySettingsOpenerIsSeparateFromStatusCheck() {
+        let client = FakeAccessibilityPermissionClient(isTrusted: false, opensSettings: true)
+        let service = AccessibilityPermissionService(client: client)
+
+        #expect(service.currentStatus() == .notTrusted)
+        #expect(client.openSettingsCount == 0)
+        #expect(service.openAccessibilitySettings())
+        #expect(client.openSettingsCount == 1)
+        #expect(client.promptRequests == [false])
+    }
 }
 
 private final class FakeMicrophonePermissionClient: MicrophonePermissionClient {
@@ -111,5 +136,28 @@ private final class FakeMicrophonePermissionClient: MicrophonePermissionClient {
         if !requestResults.isEmpty {
             requestResults.removeFirst()
         }
+    }
+}
+
+private final class FakeAccessibilityPermissionClient: AccessibilityPermissionClient {
+    private(set) var openSettingsCount = 0
+    private(set) var promptRequests: [Bool] = []
+
+    var isTrusted: Bool
+    var opensSettings: Bool
+
+    init(isTrusted: Bool, opensSettings: Bool = false) {
+        self.isTrusted = isTrusted
+        self.opensSettings = opensSettings
+    }
+
+    func isProcessTrusted(promptIfNeeded: Bool) -> Bool {
+        promptRequests.append(promptIfNeeded)
+        return isTrusted
+    }
+
+    func openAccessibilitySettings() -> Bool {
+        openSettingsCount += 1
+        return opensSettings
     }
 }

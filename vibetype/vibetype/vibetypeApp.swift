@@ -22,6 +22,6 @@ struct VibeTypeApp: App {
         Window("VibeType Settings", id: VibeTypeWindow.settings) {
             SettingsView()
         }
-        .defaultSize(width: 420, height: 240)
+        .defaultSize(width: 420, height: 320)
     }
 }

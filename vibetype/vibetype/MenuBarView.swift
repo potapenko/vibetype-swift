@@ -14,60 +14,82 @@ struct MenuBarView: View {
     @State private var dictationStatus = DictationStatus.idle
     @State private var lastClipboardSnapshot: ClipboardSnapshot?
     @State private var clipboardStatusText: String?
+    @State private var accessibilityPermissionStatus: AccessibilityPermissionStatus
 
     private let clipboardService: ClipboardService
+    private let accessibilityPermissionService: AccessibilityPermissionService
 
-    init(clipboardService: ClipboardService = ClipboardService()) {
+    init(
+        clipboardService: ClipboardService = ClipboardService(),
+        accessibilityPermissionService: AccessibilityPermissionService = AccessibilityPermissionService()
+    ) {
         self.clipboardService = clipboardService
+        self.accessibilityPermissionService = accessibilityPermissionService
+        _accessibilityPermissionStatus = State(
+            initialValue: accessibilityPermissionService.currentStatus()
+        )
     }
 
     var body: some View {
-        Text("VibeType")
-            .font(.headline)
+        Group {
+            Text("VibeType")
+                .font(.headline)
 
-        Text(dictationStatus.menuStatusText)
-            .foregroundStyle(.secondary)
-
-        Divider()
-
-        Button(dictationStatus.recordingActionTitle) {
-            dictationStatus = .failure(
-                message: "Start Recording is a placeholder until the recorder task lands."
-            )
-        }
-        .disabled(!dictationStatus.isRecordingActionEnabled)
-
-        if let detailText = dictationStatus.detailText {
-            Text(detailText)
+            Text(dictationStatus.menuStatusText)
                 .foregroundStyle(.secondary)
-        }
 
-        Divider()
-
-        Button("Copy Last Transcript") {
-            copyLastTranscript()
-        }
-        .disabled(!dictationStatus.canCopyLastTranscript)
-
-        if let clipboardStatusText {
-            Text(clipboardStatusText)
+            Text(accessibilityPermissionStatus.menuStatusText)
                 .foregroundStyle(.secondary)
+
+            if !accessibilityPermissionStatus.canPasteIntoActiveApp {
+                Button("Open Accessibility Settings") {
+                    accessibilityPermissionService.openAccessibilitySettings()
+                    refreshAccessibilityPermissionStatus()
+                }
+            }
+
+            Divider()
+
+            Button(dictationStatus.recordingActionTitle) {
+                dictationStatus = .failure(
+                    message: "Start Recording is a placeholder until the recorder task lands."
+                )
+            }
+            .disabled(!dictationStatus.isRecordingActionEnabled)
+
+            if let detailText = dictationStatus.detailText {
+                Text(detailText)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            Button("Copy Last Transcript") {
+                copyLastTranscript()
+            }
+            .disabled(!dictationStatus.canCopyLastTranscript)
+
+            if let clipboardStatusText {
+                Text(clipboardStatusText)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            Button("Settings") {
+                openWindow(id: VibeTypeWindow.settings)
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
+            .keyboardShortcut(",")
+
+            Divider()
+
+            Button("Quit VibeType") {
+                NSApplication.shared.terminate(nil)
+            }
+            .keyboardShortcut("q")
         }
-
-        Divider()
-
-        Button("Settings") {
-            openWindow(id: VibeTypeWindow.settings)
-            NSApplication.shared.activate(ignoringOtherApps: true)
-        }
-        .keyboardShortcut(",")
-
-        Divider()
-
-        Button("Quit VibeType") {
-            NSApplication.shared.terminate(nil)
-        }
-        .keyboardShortcut("q")
+        .onAppear(perform: refreshAccessibilityPermissionStatus)
     }
 
     private func copyLastTranscript() {
@@ -82,6 +104,10 @@ struct MenuBarView: View {
         } catch {
             clipboardStatusText = error.localizedDescription
         }
+    }
+
+    private func refreshAccessibilityPermissionStatus() {
+        accessibilityPermissionStatus = accessibilityPermissionService.currentStatus()
     }
 }
 
