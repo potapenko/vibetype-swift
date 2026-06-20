@@ -21,6 +21,20 @@
                ReferencedContainer = "container:vibetype.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "9DB749B52FE800000053C3F3"
+               BuildableName = "vibetypeIOSTests.xctest"
+               BlueprintName = "vibetypeIOSTests"
+               ReferencedContainer = "container:vibetype.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -29,6 +43,17 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "9DB749B52FE800000053C3F3"
+               BuildableName = "vibetypeIOSTests.xctest"
+               BlueprintName = "vibetypeIOSTests"
+               ReferencedContainer = "container:vibetype.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

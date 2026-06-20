@@ -69,6 +69,37 @@ the MVP.
 - The keyboard must not prompt for long setup, credentials, or permissions
   inline. Complex setup belongs in the containing app.
 
+## Keyboard Voice Session Contract
+
+The keyboard-visible session states are:
+
+- setup needed, when containing-app setup, Open Access, an accepted transcript,
+  or the host text-input context is unavailable;
+- idle, with an optional accepted transcript ready for insertion;
+- launching session, while the keyboard asks the containing app to start the
+  voice flow;
+- listening, while the containing app owns microphone capture;
+- transcribing, while the containing app owns provider work;
+- confirming, when returned text is ready for the user to accept or cancel;
+- accepted transcript, when accepted text can be inserted into the host field;
+- error, without clearing the previous accepted transcript;
+- compact settings, for inline keyboard options and a deep link back to the
+  containing app.
+
+Starting from an unavailable state must not launch recording or provider work.
+It should leave the keyboard in setup-needed state and offer the shortest path
+back to containing-app setup.
+
+Canceling a launch, listening, transcribing, confirming, error, or compact
+settings state returns to idle without deleting the last accepted transcript.
+Accepting text stores only the normalized accepted transcript needed for
+insertion. Empty or whitespace-only returned text becomes an error state and is
+not inserted.
+
+Inline keyboard settings are intentionally compact. Deep setup, credentials,
+microphone consent, Open Access explanation, transcription settings, and history
+management remain containing-app responsibilities.
+
 ## Initial Containing App Target
 
 The first iOS containing app target may launch as a minimal setup/status
@@ -147,6 +178,8 @@ extension, Open Access, or paste behavior.
 - This spec-only task requires `git diff --check`.
 - Future iOS target work should use XcodeBuildMCP or the Build iOS Apps flow
   for simulator build, test, screenshot, or UI snapshot evidence.
+- Keyboard session state model work should use pure Swift tests for start,
+  cancel, accept, error, settings, and unavailable paths.
 - Future keyboard tests should cover next-keyboard availability, no-transcript
   state, Open Access disabled state, and transcript insertion through a fake or
   controlled text-input boundary.
