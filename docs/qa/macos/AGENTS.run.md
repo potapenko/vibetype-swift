@@ -1,6 +1,8 @@
 # macOS QA Runner
 
 Use this guide for bounded Computer Use QA on the VibeType macOS app.
+Use `docs/agent-tooling.md` before choosing between XcodeBuildMCP, direct
+`xcodebuild`, and Computer Use for the selected task.
 
 ## Hard Requirements
 

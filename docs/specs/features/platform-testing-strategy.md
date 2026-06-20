@@ -80,7 +80,8 @@ Use XcodeBuildMCP / Build iOS Apps for future iOS targets:
 
 iOS checks should apply to iOS-specific targets and shared SwiftUI surfaces
 once those targets exist. They are not required for a macOS-only task unless
-the selected task explicitly changes shared iOS/macOS code.
+the selected task explicitly changes shared iOS/macOS code. Operational MCP
+usage and fallbacks live in `docs/agent-tooling.md`.
 
 ## iOS Keyboard Constraints
 

@@ -284,7 +284,8 @@ needs extra platform evidence. Computer Use is for bounded macOS runtime smoke
 when a selected task changes visible app surfaces. XcodeBuildMCP / Build iOS
 Apps is for future iOS simulator build, test, screenshot, and UI-snapshot
 checks when an iOS target exists or a selected task changes shared iOS/macOS
-SwiftUI surfaces.
+SwiftUI surfaces. Use `docs/agent-tooling.md` to discover active MCP tools and
+choose the task-appropriate Xcode, simulator, or Computer Use path.
 
 ## Relationship To Other Files
 

@@ -9,11 +9,13 @@ For implementation or file-changing work, read in this order:
 1. `AGENTS.md`
 2. `BACKLOG_DEVELOPMENT.md`
 3. `SWIFT.md` when Swift, SwiftUI, AppKit, Xcode, or tests are involved
-4. `docs/specs/README.md`
-5. `docs/specs/brownfield-discovery.md`
-6. `docs/openwhispr_swiftui_codex_tz.md` for initial MVP behavior
-7. the relevant feature spec under `docs/specs/features/`
-8. `references/README.md` before using copied OpenWhispr source
+4. `docs/agent-tooling.md` when Xcode, simulator, MCP, runtime QA, or
+   tool-selection decisions are involved
+5. `docs/specs/README.md`
+6. `docs/specs/brownfield-discovery.md`
+7. `docs/openwhispr_swiftui_codex_tz.md` for initial MVP behavior
+8. the relevant feature spec under `docs/specs/features/`
+9. `references/README.md` before using copied OpenWhispr source
 
 ## Normal Development Loop
 
@@ -36,6 +38,8 @@ For platform verification, use
 unit/build checks. Add bounded Computer Use smoke only for changed macOS runtime
 surfaces, and use XcodeBuildMCP / Build iOS Apps for future iOS targets or
 shared SwiftUI surfaces when the selected task requires it.
+Use `docs/agent-tooling.md` to choose between active MCP tools, normal
+`xcodebuild`, and Computer Use for a selected task.
 
 ## Current Project Shape
 

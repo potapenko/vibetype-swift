@@ -36,6 +36,8 @@ Required reading before edits:
 - `AGENTS.md`
 - `BACKLOG_DEVELOPMENT.md`
 - `docs/agent-onboarding.md`
+- `docs/agent-tooling.md` when Xcode, simulator, MCP, runtime QA, or
+  tool-selection decisions are involved
 - `docs/specs/README.md`
 - `docs/specs/brownfield-discovery.md`
 - `docs/specs/features/blocked-task-resolution-automation.md`
@@ -174,6 +176,10 @@ git diff --check
 Use bounded waits for external tools. Do not call the live OpenAI API from
 normal automation. Do not require real microphone input or real system
 permission prompts for normal tests.
+When the blocker is platform verification or simulator evidence, check the
+active MCP tool surface and use XcodeBuildMCP when it matches the selected
+verification need; otherwise use the repository's documented `xcodebuild`
+fallback and record the reason.
 
 ## Expected Output
 
@@ -183,7 +189,8 @@ checkpoint commit when files changed.
 Final report must include selected blocked task id/title/path, action taken
 (`directly_resolved`, `follow_up_created`, `follow_up_refined`, or
 `operator_only`), follow-up id/path or operator action, changed files,
-verification results, cleanup performed, completion commit hash if files
-changed, next blocked selector result if checked, actual cwd, execution
-environment, and confirmation that the canonical checkout now contains the
-status or resolution-path update.
+verification results, `Tooling` with the XcodeBuildMCP / `xcodebuild` /
+Computer Use path used when relevant, cleanup performed, completion commit hash
+if files changed, next blocked selector result if checked, actual cwd,
+execution environment, and confirmation that the canonical checkout now
+contains the status or resolution-path update.

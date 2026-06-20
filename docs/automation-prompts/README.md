@@ -18,6 +18,10 @@ Runtime runbooks:
 - `runbooks/vibetype-swift-blocker-resolver.md`
 - `runbooks/vibetype-swift-implementer.md`
 
+Shared tooling guidance:
+
+- `../agent-tooling.md`
+
 Per-user inventories:
 
 - `users/eugenepotapenko.md`

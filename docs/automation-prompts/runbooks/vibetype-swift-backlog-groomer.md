@@ -19,6 +19,9 @@ Run one bounded backlog grooming pass for the VibeType Swift repository.
 Translate the MVP brief, current Swift project state, existing specs, and the
 copied OpenWhispr reference source into small executable backlog tasks for the
 separate implementer automation. Do not implement Swift product code.
+When grooming platform or shared SwiftUI tasks, use `docs/agent-tooling.md` so
+new tasks name the appropriate XcodeBuildMCP, `xcodebuild`, Computer Use, or
+fallback evidence path.
 
 Use the configured canonical checkout as the source of truth. Before edits,
 confirm the actual cwd is the configured repository root and execution
@@ -30,6 +33,7 @@ Required reading before edits:
 - `AGENTS.md`
 - `BACKLOG_DEVELOPMENT.md`
 - `docs/agent-onboarding.md`
+- `docs/agent-tooling.md`
 - `SWIFT.md`
 - `docs/specs/README.md`
 - `docs/specs/backlog.md`
@@ -115,5 +119,5 @@ source-code implementation files or unrelated changes.
 
 Final report must include created or updated task ids, parent/child grouping
 changes, reference files inspected, selector status and selected task path,
-verification results, commit hash if created, actual cwd, execution
-environment, and any blocker.
+verification results, tooling assumptions added to tasks when relevant, commit
+hash if created, actual cwd, execution environment, and any blocker.

@@ -61,6 +61,8 @@ Required reading before edits:
 - `AGENTS.md`
 - `BACKLOG_DEVELOPMENT.md`
 - `docs/agent-onboarding.md`
+- `docs/agent-tooling.md` when Xcode, simulator, MCP, runtime QA, or
+  tool-selection decisions are involved
 - `SWIFT.md` when Swift, SwiftUI, AppKit, Xcode, or tests may change
 - `docs/specs/README.md`
 - `docs/specs/brownfield-discovery.md`
@@ -210,6 +212,9 @@ Use `docs/specs/features/platform-testing-strategy.md` to choose extra platform
 checks. Use fake-backed tests for services and state machines. Do not call the
 live OpenAI API from normal automation. Do not require real microphone input or
 real system permission prompts for normal tests.
+Before falling back to shell-only Xcode commands for simulator or shared
+SwiftUI work, check the active MCP tool surface and use XcodeBuildMCP when it
+matches the selected verification need.
 
 Every run that delivers a product delta must make an explicit runtime QA
 decision before marking the task complete:
@@ -253,9 +258,10 @@ commit hash, completion commit hash if work completed, changed files,
 verification results, platform smoke evidence or reason it was not required,
 cleanup performed, remaining real blocker if any, next selector result if
 checked, actual cwd, execution environment, selected task before/after status,
-confirmation that the canonical checkout now contains the status update, and a
-short `Product delta` field. The report must also include a `Runtime QA` field
-with one of `required`, `not_applicable`, or `blocked`; the Computer Use
+confirmation that the canonical checkout now contains the status update,
+`Tooling` with the XcodeBuildMCP / `xcodebuild` / Computer Use path used, and
+a short `Product delta` field. The report must also include a `Runtime QA`
+field with one of `required`, `not_applicable`, or `blocked`; the Computer Use
 scenario/actions/observed result when required; or the exact reason runtime QA
 was not applicable or blocked. `Product delta` must name the app behavior,
 Swift code, tests, build/runtime capability, or bug fix delivered. If no
