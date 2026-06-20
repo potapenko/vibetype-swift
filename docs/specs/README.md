@@ -36,11 +36,13 @@ decisions as unknowns.
 ## What Does Not Live Here
 
 - agent workflow and operational rules
-  - keep those in `AGENTS.md`
+  - keep those in `AGENTS.md` and `BACKLOG_DEVELOPMENT.md`
 - step-by-step test procedures
   - keep those in test files or QA artifacts
 - styling system rules
   - keep those in styling docs when they exist
+- Swift engineering rules
+  - keep those in `SWIFT.md`
 - deep implementation notes that are only useful at code level
   - keep those near the source
 
@@ -79,6 +81,7 @@ Skip new specs for:
 ```text
 docs/specs/
   README.md
+  brownfield-discovery.md
   backlog.md
   templates/
     feature-spec.md
@@ -96,7 +99,11 @@ docs/specs/
 ## Relationship With Other Layers
 
 - `AGENTS.md` defines workflow and rules for agents.
+- `BACKLOG_DEVELOPMENT.md` defines queue selection, claim, and checkpoint
+  behavior.
+- `SWIFT.md` defines Swift, SwiftUI, AppKit interop, and engineering rules.
 - `docs/specs/` defines product behavior.
+- `references/` stores imported reference material and audit notes.
 - tests or QA artifacts define verification and evidence.
 
 These layers must stay separate.

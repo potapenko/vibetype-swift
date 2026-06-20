@@ -8,6 +8,11 @@ feature work, start with:
 
 - `day-to-day-spec-first.md`
 
+For executable backlog work, use the root workflow:
+
+- `BACKLOG_DEVELOPMENT.md`
+- `python3 scripts/backlog_next.py --json`
+
 Available prompts:
 
 - `greenfield-bootstrap.md`

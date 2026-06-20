@@ -97,12 +97,55 @@ step.
 Before doing implementation work:
 
 1. Read this `AGENTS.md`.
-2. Read `docs/specs/README.md`.
-3. Read `docs/openwhispr_swiftui_codex_tz.md` when working on initial MVP
+2. Read `BACKLOG_DEVELOPMENT.md` for file-changing development, backlog work,
+   or automation setup.
+3. Read `docs/agent-onboarding.md`.
+4. Read `SWIFT.md` before Swift, SwiftUI, AppKit, Xcode, or test changes.
+5. Read `docs/specs/README.md`.
+6. Read `docs/specs/brownfield-discovery.md`.
+7. Read `docs/openwhispr_swiftui_codex_tz.md` when working on initial MVP
    behavior.
-4. Read the relevant feature spec in `docs/specs/features/` if one exists.
-5. Read `docs/specs/backlog.md` when selecting the next product area.
-6. Only then implement or modify behavior.
+8. Read the relevant feature spec in `docs/specs/features/` if one exists.
+9. Read `docs/specs/backlog.md` when selecting the next product area.
+10. Read `references/README.md` before using copied OpenWhispr source as
+    reference evidence.
+11. Only then implement or modify behavior.
+
+## Backlog Development
+
+`BACKLOG_DEVELOPMENT.md` is the root development workflow for this repository.
+It is the primary coordination model for Swift app, specs, docs, reference
+audit, verification, and automation work.
+
+Use the root Backlog Development workflow before opening detailed task bodies.
+Agents may shallow-scan backlog task headers when selecting work, but they must
+not read the body of a non-selected task. The selector command is:
+
+```sh
+python3 scripts/backlog_next.py --json
+```
+
+For sequential automation, the canonical checkout is the source of truth. Use
+the current repository state, not chat memory, to determine task status.
+
+## Checkpoint Commits
+
+At the end of every task-solving chat that changes repository files, the agent
+must create a checkpoint commit before the final response.
+
+Checkpoint commits must stage and commit only the files changed for the current
+task. Do not stage unrelated user changes or unrelated generated files. If the
+worktree already contains unrelated changes, leave them untouched and mention
+them in the final response.
+
+If no repository files changed during the chat, report that no checkpoint
+commit was needed.
+
+Automation runs, separate worker chats, and bounded subtask executions count as
+task-solving iterations. If they change repository files, they must finish by
+updating any relevant plan/task status, running the appropriate verification,
+staging only their own changes, and creating a scoped checkpoint commit before
+reporting completion or handing work to the next run.
 
 ## Spec-First Rule
 
@@ -153,6 +196,10 @@ implementation details such as SwiftUI/AppKit/UIKit structure, speech framework
 choice, accessibility permissions, clipboard behavior, persistence, or remote
 transcription provider are treated as fixed.
 
+All Swift implementation must follow `SWIFT.md`. If a task needs to violate
+`SWIFT.md` for platform or integration reasons, document the reason in the code
+review or final response and prefer a small, isolated exception.
+
 ## Verification Rule
 
 If a task changes behavior, update or add appropriate verification artifacts.
@@ -161,6 +208,18 @@ evidence, or another project-appropriate artifact.
 
 For microphone, transcription, permissions, or external-service behavior, tests
 must avoid indefinite waits and must use bounded timeouts or controllable fakes.
+
+For Swift behavior changes, the baseline verification is:
+
+```sh
+xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build
+git diff --check
+```
+
+Run the matching `xcodebuild ... test` command when tests or test-covered
+behavior change. For docs/spec-only changes, `git diff --check` is usually
+enough unless the edited docs change executable commands that should be
+exercised.
 
 ## Writing Style For Specs
 
@@ -173,3 +232,13 @@ Specs should be:
 
 Avoid deep implementation detail unless it is necessary to preserve the product
 contract.
+
+## OpenWhispr Reference Use
+
+The copied OpenWhispr source under `references/openwhispr-main/` is reference
+evidence only. Use it to understand behavior around hotkeys, recording,
+permissions, paste handoff, settings, and edge cases.
+
+Do not port Electron, React, Node.js runtime, local model downloaders, meeting
+features, notes, accounts, cloud sync, billing, telemetry, or updater behavior
+into this Swift app unless a future spec explicitly changes the MVP scope.

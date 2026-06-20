@@ -1,5 +1,6 @@
-Before writing code, read the current project's `AGENTS.md` and the relevant
-existing spec.
+Before writing code, read the current project's `AGENTS.md`,
+`BACKLOG_DEVELOPMENT.md`, `SWIFT.md` when Swift code is involved, and the
+relevant existing spec.
 
 If the requested change affects user-visible behavior:
 
