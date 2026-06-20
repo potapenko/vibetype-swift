@@ -1,6 +1,6 @@
 ---
 id: VT-006
-status: backlog
+status: in-progress
 priority: P1
 lane: reference
 dependencies:
@@ -14,7 +14,7 @@ verification:
 
 # OpenWhispr Reference Behavior Audit
 
-Status: backlog
+Status: in-progress
 Priority: P1
 Lane: reference
 Dependencies: none
