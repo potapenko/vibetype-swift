@@ -1,12 +1,13 @@
 ---
 id: VT-114
 title: iOS Simulator Baseline
-status: in-progress
+status: blocked
 priority: P3
 lane: ios
 parent: VT-110
 dependencies:
   - VT-113
+  - VT-117
 allowed_paths:
   - vibetype/**
   - docs/qa/**
@@ -16,7 +17,7 @@ allowed_paths:
 
 # VT-114 - iOS Simulator Baseline
 
-Status: in-progress
+Status: blocked
 
 ## Goal
 
@@ -37,6 +38,26 @@ iOS target exists.
 - Any screenshot evidence is saved under `docs/qa/` when durable evidence is
   useful.
 - The task does not disturb the macOS backlog queue.
+
+## Blocker
+
+Blocked by missing iOS product target.
+
+Evidence from the 2026-06-21 automation pass:
+
+- Xcode lists only the `vibetype`, `vibetypeTests`, and `vibetypeUITests`
+  targets.
+- `vibetype/vibetype.xcodeproj/project.pbxproj` uses `SDKROOT = macosx` and
+  has no `IPHONEOS_DEPLOYMENT_TARGET` or iOS app target.
+- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype
+  -showdestinations` reports only macOS destinations for the `vibetype`
+  scheme.
+- XcodeBuildMCP session defaults were empty; `list_sims` failed to return
+  enabled simulators in this environment, and a direct `xcrun simctl list
+  devices available -j` probe was interrupted after a bounded wait.
+
+Next implementation task: VT-117 must add the first minimal iOS containing-app
+target before this simulator baseline can be retried.
 
 ## Verification
 
