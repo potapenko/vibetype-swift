@@ -1,7 +1,7 @@
 ---
 id: VT-090
 title: OpenWhispr Reference Audit Umbrella
-status: backlog
+status: in-progress
 priority: P2
 lane: reference-audit
 dependencies:
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-090 - OpenWhispr Reference Audit Umbrella
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
