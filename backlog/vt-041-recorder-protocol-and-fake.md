@@ -1,7 +1,7 @@
 ---
 id: VT-041
 title: Recorder Protocol And Fake
-status: in-progress
+status: blocked
 priority: P1
 lane: recording
 parent: VT-040
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-041 - Recorder Protocol And Fake
 
-Status: in-progress
+Status: blocked
 
 ## Goal
 
@@ -38,3 +38,16 @@ Create the recorder service boundary before adding AVFoundation details.
 
 - `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Blocker Evidence
+
+- Implemented the recorder protocol, status model, reusable fake recorder, and
+  fake-backed unit coverage for success, failure, cancellation, and protocol
+  consumption.
+- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+  failed after unit tests passed because `vibetypeUITests-Runner` cannot
+  initialize off-console: `User interaction required. Can't authenticate off
+  console`.
+- Narrow evidence passed:
+  `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  and `git diff --check`.
