@@ -1,7 +1,7 @@
 ---
 id: VT-051
 title: Multipart Transcription Request Builder
-status: backlog
+status: in-progress
 priority: P1
 lane: transcription
 parent: VT-050
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-051 - Multipart Transcription Request Builder
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
