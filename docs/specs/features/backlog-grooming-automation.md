@@ -23,10 +23,12 @@ Each run should:
 5. Add or refine backlog tasks for missing behavior.
 6. Prefer parent umbrella tasks plus small child tasks for large areas.
 7. Keep task files short, scoped, and verifiable.
-8. Run
+8. Review the generated diff before committing and split or tighten any task
+   that is broader than one agent checkpoint.
+9. Run
    `python3 scripts/backlog_next.py --json`
    after edits.
-9. Commit only backlog/spec/workflow edits made by the groomer.
+10. Commit only backlog/spec/workflow edits made by the groomer.
 
 ## Task Size
 
@@ -41,6 +43,19 @@ checkpoint. Examples:
 
 If a task needs more than one screen, service, or behavior contract, create a
 parent task and split it into children.
+
+Before committing, the groomer should re-read each new or materially changed
+child task and confirm that it has:
+
+- one primary observable output
+- explicit dependencies and allowed paths
+- concrete acceptance criteria
+- verification that matches the task layer
+- non-goals when adjacent product scope is easy to accidentally include
+
+If a child task mixes UI, service work, permissions, network behavior, or
+persistence in one implementation slice, split it or make it an umbrella before
+the groomer commit is created.
 
 ## Reference Rules
 

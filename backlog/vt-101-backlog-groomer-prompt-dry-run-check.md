@@ -1,7 +1,7 @@
 ---
 id: VT-101
 title: Backlog Groomer Prompt Dry Run Check
-status: in-progress
+status: done
 priority: P2
 lane: workflow
 parent: VT-100
@@ -13,7 +13,7 @@ allowed_paths:
 
 # VT-101 - Backlog Groomer Prompt Dry Run Check
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -31,6 +31,19 @@ and patch the prompt/spec if it creates tasks that are too large or too vague.
 - Groomer output remains small-task oriented.
 - Parent and child task grouping is preserved.
 - The implementer selector still returns a ready task.
+
+## Review Notes
+
+- Reviewed the first groomer-created commit, `258b360` (`backlog: groom
+  dictation controller tasks`), which created a controller umbrella and focused
+  children for service boundary, start/stop, success output, and failure/cancel
+  flows.
+- Checked the later history groomer commit, `3f5caf7`, as a second sample; it
+  also preserved umbrella plus child grouping for settings, model, store,
+  append, and clear slices.
+- Tightened `docs/specs/features/backlog-grooming-automation.md` with an
+  explicit generated-diff self-review gate so future groomer runs split tasks
+  that combine too many implementation layers.
 
 ## Verification
 
