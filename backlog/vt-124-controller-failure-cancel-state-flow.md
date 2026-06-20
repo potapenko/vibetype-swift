@@ -29,6 +29,8 @@ previous accepted transcript.
 ## Scope
 
 - Cancel active recording before transcription begins.
+- Cancel active processing when the current service boundary supports it, and
+  discard any late result.
 - Map recorder or transcription failures into visible app state.
 - Preserve the previous successful transcript after failure or cancellation.
 - Use fakes instead of live microphone, network, or output side effects.
@@ -36,6 +38,8 @@ previous accepted transcript.
 ## Acceptance
 
 - Cancel stops the active fake recording and does not start transcription.
+- Cancel during fake processing leaves the app recoverable and does not accept
+  a late transcript.
 - A failed recording or transcription ends in a visible failure state.
 - Previous successful transcript text is not overwritten by failure or cancel.
 

@@ -41,6 +41,9 @@ This spec covers:
   generated text.
 - After capture stops, the app may enter a processing state while
   transcription completes.
+- Start, stop, and cancel actions must be serialized through one active
+  session. Repeated or overlapping actions may be ignored or shown as blocked,
+  but must not enqueue duplicate recorder, transcription, or output work.
 - Processing must not wait indefinitely. If transcription cannot finish within
   the configured timeout, the session fails with a visible, recoverable error.
 - A successful session must expose the final transcript as the last transcript
@@ -56,6 +59,9 @@ This spec covers:
 
 - No background or hidden recording is allowed.
 - Repeated start actions must not create parallel recordings.
+- Repeated stop or completion actions must not produce duplicate transcription
+  uploads, duplicate output handoffs, or multiple accepted transcripts for one
+  recording.
 - Stopping or cancelling capture must not silently accept unfinished text.
 - A failed session must not overwrite previously accepted text.
 - Recording, transcribing, done, and error states must be mutually
@@ -74,6 +80,8 @@ This spec covers:
   empty/no-speech result or a clear no-input message.
 - If transcription produces low-confidence or empty output, the app should not
   pretend the result is final useful text.
+- If a late transcription result arrives after cancellation or failure, it must
+  be discarded rather than accepted as a new last transcript.
 - If the app is interrupted by platform lifecycle events, the session should
   stop or fail visibly rather than continue recording invisibly.
 - If the recording is too short, the app should show a clear error instead of

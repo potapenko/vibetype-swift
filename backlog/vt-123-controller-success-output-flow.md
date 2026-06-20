@@ -32,12 +32,14 @@ configured output workflow.
 - Accept only normalized, non-empty transcript text.
 - Store accepted text as the current last transcript.
 - Send accepted text to the output boundary according to settings.
+- Run output handoff at most once for a single accepted transcription result.
 - Keep live OpenAI, real clipboard, and real paste events out of tests.
 
 ## Acceptance
 
 - A fake successful transcription updates the last transcript.
 - Empty or whitespace-only output does not run copy or paste handoff.
+- Empty or whitespace-only output leaves the previous last transcript intact.
 - Output handoff failure leaves the transcript visible or recoverable.
 
 ## Source Evidence
@@ -45,6 +47,8 @@ configured output workflow.
 - OpenWhispr trims transcription text, updates transcript state, and then
   performs paste-or-copy handoff in
   `references/openwhispr-main/src/hooks/useAudioRecording.js`.
+- The same hook shows a no-audio path for blank completion text and returns
+  before paste, clipboard copy, or save behavior.
 - Accessibility can fall back to copy-only behavior per
   `references/openwhispr-main/src/utils/permissions.ts`.
 

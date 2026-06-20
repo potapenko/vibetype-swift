@@ -30,6 +30,8 @@ Wire the controller's start and stop actions through the recording boundary.
 - Stop only an active recording and move to transcribing when an artifact is
   returned.
 - Ignore repeated start or stop actions that would create parallel work.
+- Serialize overlapping menu and hotkey start/stop requests through one
+  controller path.
 - Use fake-backed tests for state transitions.
 
 ## Acceptance
@@ -38,11 +40,16 @@ Wire the controller's start and stop actions through the recording boundary.
 - Stop from recording produces the next transcribing-ready state.
 - Repeated start while recording and start while transcribing are no-ops or
   visible blocked states, not parallel recordings.
+- Repeated stop while a stop is already being handled does not start duplicate
+  transcription work.
+- Stop without an active recording is a no-op or visible blocked state.
 
 ## Source Evidence
 
 - OpenWhispr uses start and stop locks to prevent overlapping recording work in
   `references/openwhispr-main/src/hooks/useAudioRecording.js`.
+- The same hook rejects recording start while the reference audio manager is
+  already recording or processing.
 
 ## Verification
 
