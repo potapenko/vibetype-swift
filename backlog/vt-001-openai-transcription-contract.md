@@ -1,6 +1,6 @@
 ---
 id: VT-001
-status: in-progress
+status: done
 priority: P0
 lane: specs
 dependencies:
@@ -12,7 +12,7 @@ verification:
 
 # OpenAI Transcription Contract Spec
 
-Status: in-progress
+Status: done
 Priority: P0
 Lane: specs
 Dependencies: none

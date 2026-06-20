@@ -23,31 +23,27 @@ the root `backlog/` directory and are selected with
 - `features/settings-and-secret-storage.md`
 - `features/text-output-workflow.md`
 - `features/global-hotkey.md`
+- `features/openai-transcription.md`
 
 ## Next Specs To Create
 
-1. OpenAI transcription contract
-   - Define exact request/response behavior, model setting, language setting,
-     prompt/vocabulary hint handling, retry policy, timeout, and error mapping.
-   - Executable task: `backlog/vt-001-openai-transcription-contract.md`.
-
-2. Transcript history
+1. Transcript history
    - Decide whether the optional local last-20 transcript history is in the MVP,
      where it is stored, how it is cleared, and whether it is enabled by
      default.
    - Executable task: `backlog/vt-003-transcript-history-decision.md`.
 
-3. Floating indicator
+2. Floating indicator
    - Define exact visibility, text, placement, focus behavior, and error/done
      transitions for the floating panel.
    - Executable task: `backlog/vt-004-floating-indicator-contract.md`.
 
-4. Verification strategy
+3. Verification strategy
    - Define the first testable seams for microphone input, transcription
      providers, permission denial, timeout behavior, and text handoff.
    - Executable task: `backlog/vt-005-verification-strategy.md`.
 
-5. Platform testing and QA evidence
+4. Platform testing and QA evidence
    - Define how agents choose between unit tests, build checks, macOS runtime
      smoke checks, Computer Use, and future iOS simulator checks.
    - Product contract: `features/platform-testing-strategy.md`.
@@ -70,6 +66,7 @@ before deeper recording, transcription, permission, or settings work proceeds.
 - Default hotkey: Control + Space or Option + Space.
 - Primary recording mode: hold-to-record first, or toggle first if hold mode is
   unstable.
-- Exact OpenAI transcription model default and timeout values.
+- Whether the default OpenAI transcription model and timeout should change
+  after real-world QA.
 - Whether transcript history is included in MVP and whether it is enabled by
   default.
