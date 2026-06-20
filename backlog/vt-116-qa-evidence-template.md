@@ -1,7 +1,7 @@
 ---
 id: VT-116
 title: QA Evidence Template
-status: backlog
+status: in-progress
 priority: P3
 lane: testing
 parent: VT-110
@@ -13,7 +13,7 @@ allowed_paths:
 
 # VT-116 - QA Evidence Template
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
