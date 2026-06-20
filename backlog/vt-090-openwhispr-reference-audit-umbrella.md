@@ -1,7 +1,7 @@
 ---
 id: VT-090
 title: OpenWhispr Reference Audit Umbrella
-status: in-progress
+status: done
 priority: P2
 lane: reference-audit
 dependencies:
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-090 - OpenWhispr Reference Audit Umbrella
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -31,6 +31,17 @@ are complete.
 - VT-092 settings screen audit
 - VT-093 recording flow audit
 - VT-094 clipboard and paste audit
+
+## Closeout Notes
+
+- All reference-audit child tasks are complete.
+- The useful MVP behavior from OpenWhispr is represented in existing specs or
+  small Swift-native backlog tasks.
+- No additional reference-audit slice is needed before implementation work
+  continues.
+- Non-MVP OpenWhispr areas remain out of scope: Electron/React architecture,
+  local models, meetings, notes, accounts, billing, cloud sync, telemetry, and
+  updater behavior.
 
 ## Verification
 
