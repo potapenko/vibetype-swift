@@ -1,7 +1,7 @@
 ---
 id: VT-015
 title: Menu Bar Identity And Tooltip
-status: in-progress
+status: blocked
 priority: P2
 lane: swift-app-shell
 parent: VT-010
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-015 - Menu Bar Identity And Tooltip
 
-Status: in-progress
+Status: blocked
 
 ## Goal
 
@@ -51,3 +51,25 @@ translate only the product need: a recognizable native macOS menu bar item.
 
 - `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`
+
+## Blocker Evidence
+
+2026-06-20:
+
+- Implemented the native SwiftUI menu bar identity and updated the menu bar
+  app shell spec, but the required Xcode build gate could not complete on the
+  current host.
+- Initial `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype
+  -destination 'platform=macOS' build` stalled in build description/external
+  tool probing and then reported `No space left on device` while writing
+  DerivedData attachments/logs.
+- `df -h /Users` showed the data volume at 100% capacity, with only about
+  113 MiB free before project-specific DerivedData cleanup and about 178 MiB
+  free after a bounded retry.
+- Removed only the generated project-specific Xcode DerivedData directory
+  `/Users/eugenepotapenko/Library/Developer/Xcode/DerivedData/vibetype-gkapclbsegetweejyiilhpjsxaak`
+  and retried the build once; the retry again did not reach compilation before
+  the bounded cutoff and was interrupted.
+- Narrow evidence passed:
+  `xcrun swiftc -typecheck -parse-as-library $(rg --files vibetype/vibetype -g '*.swift' | sort)`
+  and `git diff --check`.

@@ -31,6 +31,12 @@ This spec covers:
 
 - The app should run as a macOS menu bar app.
 - The menu bar status item should remain available while the app is running.
+- The menu bar item identity for the MVP is the title `VibeType`, the native
+  SF Symbol `mic.fill`, and help text `VibeType Dictation`.
+- The menu bar title is the accessibility label. The help text is the tooltip
+  when the SwiftUI `MenuBarExtra` label exposes native macOS help.
+- The app should not copy OpenWhispr's Electron tray asset lookup, icon
+  fallback generation, or cross-platform tray behavior.
 - The menu should include Start Recording or Stop Recording depending on the
   current state.
 - Before recording exists, Start Recording may be a visible placeholder, but it
@@ -87,4 +93,7 @@ settings must not start, stop, or cancel recording by itself.
 
 ## Unknowns requiring confirmation
 
-- Final app name and menu bar label/icon.
+- Whether future product naming changes should replace `VibeType` before
+  packaging.
+- Whether post-MVP menu bar polish needs a custom AppKit `NSStatusItem` for
+  status-specific icons or lower-level tooltip control.
