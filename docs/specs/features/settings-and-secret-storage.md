@@ -27,6 +27,9 @@ This spec covers:
 
 ## User-visible behavior
 
+- Before concrete settings fields exist, Settings may open a native placeholder
+  window titled for VibeType settings. The placeholder must not show fake or
+  nonfunctional form controls.
 - The Settings window should include OpenAI API Key.
 - The OpenAI API key should be saved locally in macOS Keychain.
 - The Settings window should include transcription model.

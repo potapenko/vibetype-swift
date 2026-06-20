@@ -9,6 +9,8 @@ import AppKit
 import SwiftUI
 
 struct MenuBarView: View {
+    @Environment(\.openWindow) private var openWindow
+
     @State private var dictationStatus = DictationStatus.idle
 
     var body: some View {
@@ -31,6 +33,14 @@ struct MenuBarView: View {
             Text(detailText)
                 .foregroundStyle(.secondary)
         }
+
+        Divider()
+
+        Button("Settings") {
+            openWindow(id: VibeTypeWindow.settings)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        .keyboardShortcut(",")
 
         Divider()
 

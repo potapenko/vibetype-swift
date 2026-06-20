@@ -7,6 +7,10 @@
 
 import SwiftUI
 
+enum VibeTypeWindow {
+    static let settings = "settings"
+}
+
 @main
 struct VibeTypeApp: App {
     var body: some Scene {
@@ -14,5 +18,10 @@ struct VibeTypeApp: App {
             MenuBarView()
         }
         .menuBarExtraStyle(.menu)
+
+        Window("VibeType Settings", id: VibeTypeWindow.settings) {
+            SettingsView()
+        }
+        .defaultSize(width: 420, height: 240)
     }
 }
