@@ -48,6 +48,17 @@ This spec covers:
   credentials, or full provider responses in the default product log stream.
 - If a user denies microphone permission, the app should remain usable enough
   to explain what is blocked and how to retry.
+- Microphone permission state must be represented as one of four product
+  states:
+  - `allowed`: recording may start after an explicit user action.
+  - `denied`: recording is blocked until the user changes system permission.
+  - `not determined`: the app may request permission through the platform flow.
+  - `unavailable`: recording is blocked because audio input is not available.
+- Querying microphone permission must not start recording or create an audio
+  file.
+- The production microphone request flow should use the platform callback
+  rather than polling. Automated verification should use a fake permission
+  boundary instead of requiring a real system prompt.
 
 ## Invariants
 
