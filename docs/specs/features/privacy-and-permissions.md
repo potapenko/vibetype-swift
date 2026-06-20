@@ -1,0 +1,98 @@
+# Privacy And Permissions
+
+## Goal
+
+Define the first privacy and permission contract for a microphone-based text
+input app.
+
+VibeType handles spoken work content and sends audio to OpenAI for
+transcription, so the product must make microphone capture, remote processing,
+Keychain storage, and any transcript persistence explicit.
+
+## Scope
+
+This spec covers:
+
+- microphone consent
+- recording visibility
+- OpenAI remote-service disclosure
+- local persistence defaults
+- debug logging boundaries
+- user content handling before a dedicated storage spec exists
+
+## Non-goals
+
+- legal privacy-policy wording
+- account, billing, or team administration
+- concrete encryption implementation details
+- provider-specific API contracts
+
+## User-visible behavior
+
+- The app must request microphone permission through the platform's normal
+  permission flow before recording.
+- The app must explain Accessibility permission when auto-paste requires
+  simulated Cmd+V or control of the active app.
+- The app must not imply that recording is active unless microphone capture has
+  actually started.
+- The product must disclose that audio is sent to OpenAI when OpenAI
+  transcription is used.
+- API keys must be stored locally in macOS Keychain, not in UserDefaults or
+  plain text files.
+- The MVP must not require accounts, subscriptions, telemetry, analytics,
+  server-side state, or cloud sync.
+- The default product contract is no retained audio. Transcript history is
+  optional and needs an explicit local-only behavior decision before
+  implementation.
+- Debug logging must not include raw dictated text, raw audio payloads, tokens,
+  credentials, or full provider responses in the default product log stream.
+- If a user denies microphone permission, the app should remain usable enough
+  to explain what is blocked and how to retry.
+
+## Invariants
+
+- No microphone capture without explicit user action and permission.
+- No hidden background recording.
+- No remote provider other than OpenAI without a product-level decision and
+  user-visible disclosure.
+- No persistent audio without an explicit spec.
+- Default logs must be short, scannable, and free of sensitive dictated content.
+- API keys must never be logged.
+
+## Edge cases and failure policy
+
+- If permission is denied or restricted by device policy, the app should show a
+  recoverable blocked state instead of repeatedly prompting.
+- If OpenAI is unavailable, the app should fail the current
+  attempt with a visible error and allow a later retry.
+- If debug logging is temporarily enabled for investigation, the developer
+  should turn it back off after verification.
+- If a crash or interruption happens during recording, the app must not retain
+  audio as an undocumented recovery artifact.
+- If Accessibility permission is denied, auto-paste should fall back to copy to
+  clipboard and show a clear status or error.
+
+## Route / state / data implications
+
+- Permission state is part of the product state model and must be visible to
+  flows that start recording.
+- Provider configuration is product behavior because it changes model,
+  language, prompt, latency, and error behavior.
+- Settings may be stored in UserDefaults, but the API key belongs in Keychain.
+- Local storage of audio or transcript history needs separate spec coverage
+  before implementation.
+
+## Verification mapping
+
+- Add permission-state tests or manual QA for first launch, denied permission,
+  permission granted after denial, and unavailable microphone when implementation
+  exists.
+- Add tests or review checks that default logs do not include raw dictated
+  content.
+
+## Unknowns requiring confirmation
+
+- Whether the app needs a formal onboarding screen before first recording.
+- Whether transcript history is included in MVP and enabled by default.
+- Whether temporary debug audio retention is allowed in debug builds.
+- Exact wording and placement for OpenAI audio-processing disclosure.
