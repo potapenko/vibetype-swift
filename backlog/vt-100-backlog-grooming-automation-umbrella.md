@@ -1,7 +1,7 @@
 ---
 id: VT-100
 title: Backlog Grooming Automation Umbrella
-status: in-progress
+status: blocked
 priority: P2
 lane: workflow
 dependencies:
@@ -14,7 +14,7 @@ allowed_paths:
 
 # VT-100 - Backlog Grooming Automation Umbrella
 
-Status: in-progress
+Status: blocked
 
 ## Goal
 
@@ -29,3 +29,15 @@ contract is in place.
 
 - `python3 scripts/backlog_next.py --json`
 - `git diff --check`
+
+## Blocker Evidence
+
+2026-06-20:
+
+- Blocked by the implementer automation product-first runbook: this selected
+  umbrella can only change backlog, workflow, or backlog-grooming spec files,
+  so no app behavior, Swift source, executable test, build/runtime capability,
+  or verified product bug fix can be delivered from the selected scope.
+- Reason: `no product delta possible from selected scope`.
+- Exact next product change refined for the queue:
+  `VT-073 - Hold To Record Activation Mode Slice`.

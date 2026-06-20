@@ -1,6 +1,6 @@
 ---
 id: VT-073
-title: Hold To Record Decision Slice
+title: Hold To Record Activation Mode Slice
 status: backlog
 priority: P3
 lane: hotkey
@@ -8,31 +8,41 @@ parent: VT-070
 dependencies:
   - VT-002
 allowed_paths:
+  - vibetype/vibetype/Services/GlobalHotkeyService.swift
+  - vibetype/vibetypeTests/GlobalHotkeyServiceTests.swift
   - docs/specs/features/**
   - backlog/vt-073-hold-to-record-decision-slice.md
 ---
 
-# VT-073 - Hold To Record Decision Slice
+# VT-073 - Hold To Record Activation Mode Slice
 
 Status: backlog
 
 ## Goal
 
-Decide whether the MVP supports hold-to-record or only tap-to-toggle.
+Make the MVP hotkey activation-mode decision executable in the Swift hotkey
+model.
 
 ## Scope
 
-- Update the hotkey spec with the MVP decision.
-- Compare against OpenWhispr activation modes only as reference behavior.
-- Do not implement hotkey code.
+- Update the hotkey spec only if the MVP activation-mode decision needs
+  tightening.
+- Ensure the Swift hotkey model exposes the chosen MVP activation mode in a
+  way later controller code can branch on without string parsing.
+- Add or update fake-backed/unit coverage for hold-to-record versus toggle
+  semantics at the hotkey model boundary.
+- Do not register real global hotkeys, wire the dictation controller, or change
+  Settings UI in this slice.
 
 ## Acceptance
 
 - Spec states the activation mode for MVP.
-- Deferred behavior is explicitly listed if hold-to-record is postponed.
-- Implementation tasks can depend on the decision.
+- Swift code has an executable representation of the chosen activation mode and
+  any fallback/toggle behavior needed by later controller work.
+- Tests cover the model-level distinction between hold-to-record and toggle
+  behavior, including whether key-up should stop recording.
 
 ## Verification
 
-- `python3 scripts/backlog_next.py --json`
+- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
