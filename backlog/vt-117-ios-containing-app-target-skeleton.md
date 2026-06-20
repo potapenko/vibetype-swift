@@ -1,7 +1,7 @@
 ---
 id: VT-117
 title: iOS Containing App Target Skeleton
-status: in-progress
+status: blocked
 priority: P2
 lane: ios
 parent: VT-110
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-117 - iOS Containing App Target Skeleton
 
-Status: in-progress
+Status: blocked
 
 ## Goal
 
@@ -50,3 +50,57 @@ real app surface to build.
 - XcodeBuildMCP or Build iOS Apps simulator build/run for the new iOS target.
 - `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`
+
+## Implementation Notes
+
+- Added a minimal native SwiftUI `vibetype-iOS` containing-app target and
+  shared scheme.
+- Added a small iOS setup/status surface that identifies VibeType and states
+  keyboard setup, recording, transcription, and text insertion are not enabled
+  yet.
+- Kept macOS target behavior unchanged and did not add keyboard-extension,
+  microphone, OpenAI, paste, shared-container, Open Access, or persistence
+  behavior.
+- Updated the iOS feasibility spec to preserve the skeleton target's limited
+  visible contract.
+
+## Blocker Evidence
+
+- `xcodebuild -list -project vibetype/vibetype.xcodeproj` lists targets
+  `vibetype`, `vibetype-iOS`, `vibetypeTests`, and `vibetypeUITests`; schemes
+  `vibetype` and `vibetype-iOS`.
+- `xmllint --noout
+  vibetype/vibetype.xcodeproj/xcshareddata/xcschemes/vibetype-iOS.xcscheme`
+  passed.
+- `xcrun --sdk iphonesimulator swiftc -typecheck -parse-as-library -target
+  arm64-apple-ios17.0-simulator vibetype/vibetypeIOS/VibeTypeIOSApp.swift`
+  passed.
+- XcodeBuildMCP `list_sims` failed without returning available simulators.
+- XcodeBuildMCP `build_sim` reached Xcode but failed because no concrete
+  installed simulator matched the requested destination; Xcode reports only the
+  generic `Any iOS Simulator Device` placeholder for the iOS scheme.
+- Direct `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype-iOS
+  -destination 'generic/platform=iOS Simulator' -derivedDataPath
+  /tmp/vibetype-swift-vt117-direct-derived build` was interrupted after a
+  bounded wait while stuck in Xcode build-service external-tool probing.
+- Required macOS build `xcodebuild -project vibetype/vibetype.xcodeproj -scheme
+  vibetype -destination 'platform=macOS' build` was also interrupted after a
+  bounded wait while stuck in the same Xcode build-service external-tool
+  probing phase.
+- `git diff --check` passed.
+
+## Resolution Path
+
+Blocker category: local Xcode/simulator environment.
+
+Operator-only unblock: make a concrete iOS Simulator device available to Xcode
+and XcodeBuildMCP, then rerun the VT-117 simulator build/run and macOS build
+checks. A useful status check is:
+
+```sh
+xcrun simctl list devices available
+```
+
+No repository follow-up task was created because the target, scheme, and source
+are present; the remaining blocker is local simulator availability plus the
+current Xcode build-service hang, not missing repository work.

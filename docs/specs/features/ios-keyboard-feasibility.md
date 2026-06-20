@@ -16,7 +16,6 @@ This spec covers:
 
 ## Non-goals
 
-- adding an iOS target
 - implementing a keyboard extension
 - implementing iOS recording, transcription, or storage
 - replacing the native iOS system dictation experience
@@ -69,6 +68,21 @@ the MVP.
   the user to enable the keyboard.
 - The keyboard must not prompt for long setup, credentials, or permissions
   inline. Complex setup belongs in the containing app.
+
+## Initial Containing App Target
+
+The first iOS containing app target may launch as a minimal setup/status
+surface before keyboard or dictation behavior exists.
+
+Until future iOS implementation tasks add real features, this target must:
+
+- identify itself as VibeType;
+- state that keyboard setup, recording, transcription, and text insertion are
+  not enabled yet;
+- avoid microphone capture, network calls, Open Access setup, shared
+  containers, keyboard extension code, and transcript persistence;
+- stay independent from macOS menu bar, AppKit Settings-window, global-hotkey,
+  floating-indicator, and Accessibility paste code.
 
 ## Open Access And Shared State
 
