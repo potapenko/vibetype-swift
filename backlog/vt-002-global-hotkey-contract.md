@@ -1,6 +1,6 @@
 ---
 id: VT-002
-status: backlog
+status: in-progress
 priority: P0
 lane: specs
 dependencies:
@@ -12,7 +12,7 @@ verification:
 
 # Global Hotkey Contract Spec
 
-Status: backlog
+Status: in-progress
 Priority: P0
 Lane: specs
 Dependencies: none
