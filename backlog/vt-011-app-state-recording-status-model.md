@@ -1,7 +1,7 @@
 ---
 id: VT-011
 title: App State Recording Status Model
-status: in-progress
+status: blocked
 priority: P0
 lane: swift-app-shell
 parent: VT-010
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-011 - App State Recording Status Model
 
-Status: in-progress
+Status: blocked
 
 ## Goal
 
@@ -40,3 +40,14 @@ transcribing, completed, and error states.
 
 - `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Blocker Evidence
+
+2026-06-20:
+
+- The state model implementation is present and the unit-test target passes:
+  `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
+- The required full scheme test command fails before VT-011 assertions because
+  `vibetypeUITests-Runner` cannot initialize for UI testing in this off-console
+  automation environment: `User interaction required. Can't authenticate off console`.
+- `git diff --check` passes.

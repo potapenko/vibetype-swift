@@ -9,25 +9,28 @@ import AppKit
 import SwiftUI
 
 struct MenuBarView: View {
-    @State private var statusMessage = "Ready"
-    @State private var placeholderMessage = "Recording is not implemented in this build."
+    @State private var dictationStatus = DictationStatus.idle
 
     var body: some View {
         Text("VibeType")
             .font(.headline)
 
-        Text(statusMessage)
+        Text(dictationStatus.menuStatusText)
             .foregroundStyle(.secondary)
 
         Divider()
 
-        Button("Start Recording") {
-            statusMessage = "Recording unavailable"
-            placeholderMessage = "Start Recording is a placeholder until the recorder task lands."
+        Button(dictationStatus.recordingActionTitle) {
+            dictationStatus = .failure(
+                message: "Start Recording is a placeholder until the recorder task lands."
+            )
         }
+        .disabled(!dictationStatus.isRecordingActionEnabled)
 
-        Text(placeholderMessage)
-            .foregroundStyle(.secondary)
+        if let detailText = dictationStatus.detailText {
+            Text(detailText)
+                .foregroundStyle(.secondary)
+        }
 
         Divider()
 

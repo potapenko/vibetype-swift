@@ -8,12 +8,26 @@
 import Testing
 @testable import vibetype
 
-struct vibetypeTests {
+struct DictationStatusTests {
 
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
-        // Swift Testing Documentation
-        // https://developer.apple.com/documentation/testing
+    @Test func exposesMenuTextForCoreStates() {
+        #expect(DictationStatus.idle.menuStatusText == "Ready")
+        #expect(DictationStatus.recording.menuStatusText == "Recording...")
+        #expect(DictationStatus.transcribing.menuStatusText == "Transcribing...")
+        #expect(DictationStatus.success(transcript: "Hello").menuStatusText == "Done")
+        #expect(DictationStatus.failure(message: "Missing permission").menuStatusText == "Error")
     }
 
+    @Test func exposesRecordingActionForCurrentState() {
+        #expect(DictationStatus.idle.recordingActionTitle == "Start Recording")
+        #expect(DictationStatus.recording.recordingActionTitle == "Stop Recording")
+        #expect(DictationStatus.transcribing.recordingActionTitle == "Start Recording")
+        #expect(DictationStatus.transcribing.isRecordingActionEnabled == false)
+    }
+
+    @Test func carriesSuccessAndFailureDetails() {
+        #expect(DictationStatus.success(transcript: "Typed text").lastTranscriptText == "Typed text")
+        #expect(DictationStatus.success(transcript: "Typed text").detailText == "Typed text")
+        #expect(DictationStatus.failure(message: "Missing permission").detailText == "Missing permission")
+    }
 }
