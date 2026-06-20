@@ -1,7 +1,7 @@
 ---
 id: VT-092
 title: Settings Screen Reference Audit
-status: backlog
+status: in-progress
 priority: P2
 lane: reference-audit
 parent: VT-090
@@ -15,7 +15,7 @@ allowed_paths:
 
 # VT-092 - Settings Screen Reference Audit
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
