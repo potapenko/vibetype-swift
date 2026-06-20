@@ -1,0 +1,154 @@
+//
+//  GlobalHotkeyServiceTests.swift
+//  vibetypeTests
+//
+//  Created by Codex on 6/20/26.
+//
+
+import Testing
+@testable import vibetype
+
+struct GlobalHotkeyServiceTests {
+
+    @Test func defaultShortcutIsVisibleAsDisplayData() {
+        let configuration = GlobalHotkeyConfiguration.defaultDictation
+
+        #expect(configuration.shortcut == .defaultDictation)
+        #expect(configuration.shortcut.displayText == "Option+Space")
+        #expect(configuration.activationMode == .holdToRecord)
+        #expect(configuration.displayText == "Option+Space - Hold to record")
+    }
+
+    @Test func fallbackShortcutUsesControlOptionSpace() {
+        let configuration = GlobalHotkeyConfiguration.fallbackDictation
+
+        #expect(configuration.shortcut == .fallbackDictation)
+        #expect(configuration.shortcut.displayText == "Control+Option+Space")
+        #expect(configuration.displayText == "Control+Option+Space - Hold to record")
+    }
+
+    @Test func registrationStatusExposesActiveConfiguration() {
+        let configuration = GlobalHotkeyConfiguration.defaultDictation
+
+        #expect(
+            GlobalHotkeyRegistrationStatus.registered(configuration).activeConfiguration
+                == configuration
+        )
+        #expect(GlobalHotkeyRegistrationStatus.registered(configuration).isRegistered)
+        #expect(GlobalHotkeyRegistrationStatus.notRegistered.isRegistered == false)
+        #expect(
+            GlobalHotkeyRegistrationStatus.unavailable(message: "Already in use").displayText
+                == "Global hotkey unavailable"
+        )
+    }
+
+    @Test func fakeHotkeyDeliversSubscribedActions() throws {
+        let service = FakeGlobalHotkeyService()
+        var receivedActions: [GlobalHotkeyAction] = []
+
+        try service.startListening { action in
+            receivedActions.append(action)
+        }
+        service.trigger(.keyDown)
+        service.trigger(.keyUp)
+
+        #expect(service.startListeningCount == 1)
+        #expect(service.currentRegistrationStatus == .registered(.defaultDictation))
+        #expect(service.triggeredActions == [.keyDown, .keyUp])
+        #expect(receivedActions == [.keyDown, .keyUp])
+    }
+
+    @Test func fakeHotkeyCanSimulateFallbackRegistration() throws {
+        let service = FakeGlobalHotkeyService(
+            preferredConfiguration: .defaultDictation,
+            startListeningResult: .success(.fallbackRegistered(.fallbackDictation))
+        )
+        var receivedActions: [GlobalHotkeyAction] = []
+
+        try service.startListening { action in
+            receivedActions.append(action)
+        }
+        service.trigger(.keyDown)
+
+        #expect(service.preferredConfiguration == .defaultDictation)
+        #expect(service.currentRegistrationStatus == .fallbackRegistered(.fallbackDictation))
+        #expect(service.currentRegistrationStatus.activeConfiguration == .fallbackDictation)
+        #expect(receivedActions == [.keyDown])
+    }
+
+    @Test func fakeHotkeyCanSimulateRegistrationFailure() {
+        let service = FakeGlobalHotkeyService(
+            startListeningResult: .failure(
+                .registrationUnavailable(message: "Option+Space is already in use.")
+            )
+        )
+        var receivedActions: [GlobalHotkeyAction] = []
+
+        do {
+            try service.startListening { action in
+                receivedActions.append(action)
+            }
+            Issue.record("Expected startListening to throw")
+        } catch let error as GlobalHotkeyServiceError {
+            #expect(
+                error == .registrationUnavailable(
+                    message: "Option+Space is already in use."
+                )
+            )
+        } catch {
+            Issue.record("Expected GlobalHotkeyServiceError, got \(error)")
+        }
+
+        service.trigger(.keyDown)
+
+        #expect(service.startListeningCount == 1)
+        #expect(
+            service.currentRegistrationStatus == .unavailable(
+                message: "Option+Space is already in use."
+            )
+        )
+        #expect(service.triggeredActions == [.keyDown])
+        #expect(receivedActions.isEmpty)
+    }
+
+    @Test func stopListeningClearsSubscribedHandler() throws {
+        let service = FakeGlobalHotkeyService()
+        var receivedActions: [GlobalHotkeyAction] = []
+
+        try service.startListening { action in
+            receivedActions.append(action)
+        }
+        service.stopListening()
+        service.trigger(.keyDown)
+
+        #expect(service.stopListeningCount == 1)
+        #expect(service.currentRegistrationStatus == .notRegistered)
+        #expect(receivedActions.isEmpty)
+    }
+
+    @Test func appCodeCanDependOnHotkeyProtocol() throws {
+        let service = FakeGlobalHotkeyService()
+        let consumer = HotkeyConsumer(service: service)
+
+        try consumer.connect()
+        service.trigger(.keyDown)
+
+        #expect(consumer.receivedActions == [.keyDown])
+        #expect(service.currentRegistrationStatus == .registered(.defaultDictation))
+    }
+}
+
+private final class HotkeyConsumer {
+    private let service: any GlobalHotkeyService
+    private(set) var receivedActions: [GlobalHotkeyAction] = []
+
+    init(service: any GlobalHotkeyService) {
+        self.service = service
+    }
+
+    func connect() throws {
+        try service.startListening { [weak self] action in
+            self?.receivedActions.append(action)
+        }
+    }
+}
