@@ -1,6 +1,6 @@
 ---
 id: VT-006
-status: in-progress
+status: done
 priority: P1
 lane: reference
 dependencies:
@@ -14,7 +14,7 @@ verification:
 
 # OpenWhispr Reference Behavior Audit
 
-Status: in-progress
+Status: done
 Priority: P1
 Lane: reference
 Dependencies: none
@@ -51,3 +51,5 @@ native Swift MVP without porting its Electron/React architecture.
   `references/openwhispr-main/main.js`,
   `references/openwhispr-main/src/hooks/`, and
   `references/openwhispr-main/resources/macos-*.swift`.
+- Completed audit note:
+  `references/openwhispr-reference-behavior-audit.md`.
