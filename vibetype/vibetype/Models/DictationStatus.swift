@@ -69,6 +69,14 @@ enum DictationStatus: Equatable {
         }
     }
 
+    var lastTranscriptMenuText: String {
+        guard let transcript = lastTranscriptText, !transcript.isEmpty else {
+            return "No transcript yet."
+        }
+
+        return transcript
+    }
+
     var canCopyLastTranscript: Bool {
         guard let transcript = lastTranscriptText else {
             return false

@@ -32,7 +32,11 @@ This spec covers:
 
 - A successful transcription must be visible as the last transcript in the menu
   bar UI or settings surface.
+- Before any successful transcription exists, the menu must show a clear
+  empty-state placeholder instead of hiding the Last Transcript area.
 - The menu must provide a Copy Last Transcript action.
+- Copy Last Transcript must be disabled or safely no-op when no non-empty last
+  transcript is available.
 - If `autoPaste` is enabled and Accessibility permission is available, the app
   should insert the transcript into the current active app at the cursor.
 - MVP auto-paste uses the clipboard plus simulated Cmd+V.

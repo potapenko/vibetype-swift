@@ -64,6 +64,13 @@ struct MenuBarView: View {
 
             Divider()
 
+            Text("Last Transcript")
+                .font(.subheadline)
+
+            Text(dictationStatus.lastTranscriptMenuText)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+
             Button("Copy Last Transcript") {
                 copyLastTranscript()
             }
