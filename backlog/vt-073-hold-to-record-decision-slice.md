@@ -1,7 +1,7 @@
 ---
 id: VT-073
 title: Hold To Record Activation Mode Slice
-status: backlog
+status: in-progress
 priority: P3
 lane: hotkey
 parent: VT-070
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-073 - Hold To Record Activation Mode Slice
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
