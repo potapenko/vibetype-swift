@@ -1,7 +1,7 @@
 ---
 id: VT-093
 title: Recording Flow Reference Audit
-status: backlog
+status: in-progress
 priority: P2
 lane: reference-audit
 parent: VT-090
@@ -14,7 +14,7 @@ allowed_paths:
 
 # VT-093 - Recording Flow Reference Audit
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
