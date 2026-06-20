@@ -26,18 +26,13 @@ the root `backlog/` directory and are selected with
 - `features/openai-transcription.md`
 - `features/floating-indicator.md`
 - `features/transcript-history.md`
+- `features/platform-testing-strategy.md`
+- `features/verification-strategy.md`
 
 ## Next Specs To Create
 
-1. Verification strategy
-   - Define the first testable seams for microphone input, transcription
-     providers, permission denial, timeout behavior, and text handoff.
-   - Executable task: `backlog/vt-005-verification-strategy.md`.
-
-2. Platform testing and QA evidence
-   - Define how agents choose between unit tests, build checks, macOS runtime
-     smoke checks, Computer Use, and future iOS simulator checks.
-   - Product contract: `features/platform-testing-strategy.md`.
+No first-pass specs are currently missing from this planning note. Use the
+executable backlog for the next implementation or refinement task.
 
 ## Seeded Backlog Shape
 

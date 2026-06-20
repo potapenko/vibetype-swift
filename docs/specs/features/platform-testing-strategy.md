@@ -8,6 +8,9 @@ fragile full-app checks for every change.
 Testing must prove the changed behavior at the smallest useful layer, then add
 platform smoke evidence only when a task touches the platform surface.
 
+Detailed MVP service seams and fake/manual boundaries are defined in
+`verification-strategy.md`.
+
 ## Test Layers
 
 ### Unit And Model Tests
