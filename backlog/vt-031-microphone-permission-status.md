@@ -1,7 +1,7 @@
 ---
 id: VT-031
 title: Microphone Permission Status
-status: backlog
+status: in-progress
 priority: P1
 lane: permissions
 parent: VT-030
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-031 - Microphone Permission Status
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
