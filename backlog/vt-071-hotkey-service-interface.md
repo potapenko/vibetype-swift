@@ -1,7 +1,7 @@
 ---
 id: VT-071
 title: Hotkey Service Interface
-status: backlog
+status: in-progress
 priority: P2
 lane: hotkey
 parent: VT-070
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-071 - Hotkey Service Interface
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
