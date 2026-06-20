@@ -1,7 +1,7 @@
 ---
 id: VT-015
 title: Menu Bar Identity And Tooltip
-status: backlog
+status: in-progress
 priority: P2
 lane: swift-app-shell
 parent: VT-010
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-015 - Menu Bar Identity And Tooltip
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
