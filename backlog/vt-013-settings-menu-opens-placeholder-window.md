@@ -1,7 +1,7 @@
 ---
 id: VT-013
 title: Settings Menu Opens Placeholder Window
-status: backlog
+status: in-progress
 priority: P1
 lane: settings
 parent: VT-010
@@ -15,7 +15,7 @@ allowed_paths:
 
 # VT-013 - Settings Menu Opens Placeholder Window
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
