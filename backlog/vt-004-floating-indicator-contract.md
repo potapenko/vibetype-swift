@@ -1,6 +1,6 @@
 ---
 id: VT-004
-status: in-progress
+status: done
 priority: P1
 lane: specs
 dependencies:
@@ -12,7 +12,7 @@ verification:
 
 # Floating Indicator Contract Spec
 
-Status: in-progress
+Status: done
 Priority: P1
 Lane: specs
 Dependencies: none

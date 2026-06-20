@@ -24,6 +24,7 @@ the root `backlog/` directory and are selected with
 - `features/text-output-workflow.md`
 - `features/global-hotkey.md`
 - `features/openai-transcription.md`
+- `features/floating-indicator.md`
 
 ## Next Specs To Create
 
@@ -33,17 +34,12 @@ the root `backlog/` directory and are selected with
      default.
    - Executable task: `backlog/vt-003-transcript-history-decision.md`.
 
-2. Floating indicator
-   - Define exact visibility, text, placement, focus behavior, and error/done
-     transitions for the floating panel.
-   - Executable task: `backlog/vt-004-floating-indicator-contract.md`.
-
-3. Verification strategy
+2. Verification strategy
    - Define the first testable seams for microphone input, transcription
      providers, permission denial, timeout behavior, and text handoff.
    - Executable task: `backlog/vt-005-verification-strategy.md`.
 
-4. Platform testing and QA evidence
+3. Platform testing and QA evidence
    - Define how agents choose between unit tests, build checks, macOS runtime
      smoke checks, Computer Use, and future iOS simulator checks.
    - Product contract: `features/platform-testing-strategy.md`.

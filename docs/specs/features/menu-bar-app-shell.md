@@ -43,6 +43,8 @@ This spec covers:
 - A floating indicator may be shown during recording and transcription when the
   setting is enabled.
 - The floating indicator must not steal focus or interfere with the active app.
+- Detailed floating indicator behavior is defined in
+  `features/floating-indicator.md`.
 
 ## Invariants
 
@@ -86,5 +88,3 @@ settings must not start, stop, or cancel recording by itself.
 ## Unknowns requiring confirmation
 
 - Final app name and menu bar label/icon.
-- Exact floating indicator copy and placement.
-- Whether done status disappears automatically and after what delay.
