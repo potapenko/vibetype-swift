@@ -49,6 +49,17 @@ This spec covers:
   to clipboard and show a clear status or error.
 - If `restorePreviousClipboard` is enabled, the app may restore the prior
   clipboard after a short delay.
+- Auto-paste should write the transcript to the clipboard before sending the
+  paste event, then wait a short bounded clipboard-settle delay before posting
+  Cmd+V.
+- macOS auto-paste should use an Accessibility-gated native keyboard event
+  boundary. The MVP must not depend on Electron, Node.js, or AppleScript paste
+  helpers for the Swift implementation.
+- If the paste event fails or times out, the transcript should remain on the
+  clipboard, the app should show a copy-only fallback status, and a bounded
+  retry may happen only if it will not duplicate a successful paste.
+- Clipboard restore should happen only after a successful paste. Copy-only and
+  failed-paste fallback leave the transcript on the clipboard.
 - If output delivery fails, the last transcript should remain visible or
   recoverable in the current session.
 - Last Transcript is current-session state and does not require persistent
@@ -74,6 +85,10 @@ This spec covers:
   output error.
 - If the previous clipboard cannot be restored, the app should not hide that
   failure when restore behavior was enabled.
+- Paste and restore delays must be bounded. The first native macOS adapter may
+  use roughly a 100-150ms paste delay after writing the clipboard and roughly a
+  400-500ms restore delay after a successful paste, refined by QA only when the
+  product behavior changes.
 - Clipboard snapshot and restore behavior is plain-text only for the MVP.
   Rich clipboard formats may be replaced during copy or paste handoff until a
   future spec defines richer preservation.
@@ -101,6 +116,5 @@ This spec covers:
 
 - Whether `autoPaste` should default to on or off.
 - Whether `copyToClipboard` should always happen even when auto-paste succeeds.
-- Exact delay and failure behavior for restoring the previous clipboard.
 - Whether the app needs command phrases for punctuation, formatting, or editing.
 - Whether target app should be captured at recording start or paste time.

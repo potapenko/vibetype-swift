@@ -1,7 +1,7 @@
 ---
 id: VT-094
 title: Clipboard Paste Reference Audit
-status: in-progress
+status: done
 priority: P2
 lane: reference-audit
 parent: VT-090
@@ -15,7 +15,7 @@ allowed_paths:
 
 # VT-094 - Clipboard Paste Reference Audit
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -34,6 +34,22 @@ small Swift-native tasks.
 - Clipboard and paste MVP behavior is fully represented by tasks or specs.
 - New tasks use `NSPasteboard`, accessibility trust checks, and native events.
 - No Node/Electron clipboard dependency is introduced.
+
+## Audit Notes
+
+- `references/openwhispr-main/src/helpers/clipboard.js` writes the transcript to
+  the clipboard before any paste attempt, gates macOS paste on Accessibility
+  trust, uses a copy-only fallback when trust or paste execution fails, and
+  restores the previous clipboard only after a successful paste.
+- The reference's macOS helper posts Cmd+V with `CGEvent` after
+  `AXIsProcessTrusted()`. VibeType should preserve that native boundary and
+  avoid Electron, Node.js, or AppleScript paste helpers.
+- Existing task VT-062 now carries the missing native paste delay, timeout, and
+  failure fallback requirements.
+- Existing task VT-063 now carries the missing restore-after-success-only and
+  copy-only fallback requirements.
+- No new backlog task was needed; the existing text-output children cover copy,
+  paste, restore, and last-transcript integration.
 
 ## Verification
 
