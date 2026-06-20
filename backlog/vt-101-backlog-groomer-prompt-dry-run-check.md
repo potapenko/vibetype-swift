@@ -1,7 +1,7 @@
 ---
 id: VT-101
 title: Backlog Groomer Prompt Dry Run Check
-status: backlog
+status: in-progress
 priority: P2
 lane: workflow
 parent: VT-100
@@ -13,7 +13,7 @@ allowed_paths:
 
 # VT-101 - Backlog Groomer Prompt Dry Run Check
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
