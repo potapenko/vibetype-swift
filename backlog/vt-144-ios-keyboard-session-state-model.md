@@ -1,7 +1,7 @@
 ---
 id: VT-144
 title: iOS Keyboard Session State Model
-status: backlog
+status: in-progress
 priority: P3
 lane: ios-keyboard
 parent: VT-140
@@ -18,7 +18,7 @@ verification:
 
 # VT-144 - iOS Keyboard Session State Model
 
-Status: backlog
+Status: in-progress
 Priority: P3
 Lane: ios-keyboard
 Dependencies: VT-113
