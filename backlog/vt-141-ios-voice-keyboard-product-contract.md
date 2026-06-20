@@ -1,7 +1,7 @@
 ---
 id: VT-141
 title: iOS Voice Keyboard Product Contract
-status: backlog
+status: in-progress
 priority: P3
 lane: ios-keyboard
 parent: VT-140
@@ -17,7 +17,7 @@ verification:
 
 # VT-141 - iOS Voice Keyboard Product Contract
 
-Status: backlog
+Status: in-progress
 Priority: P3
 Lane: ios-keyboard
 Dependencies: VT-113
