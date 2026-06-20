@@ -6,6 +6,7 @@ priority: P0
 lane: swift-app-shell
 dependencies:
   - VT-000
+  - VT-015
   - VT-011
   - VT-012
   - VT-013
@@ -32,6 +33,7 @@ Close out the native menu bar MVP shell after its child tasks are implemented.
 ## Child Tasks
 
 - VT-000 first visible menu bar item
+- VT-015 menu bar identity and tooltip
 - VT-011 app state model
 - VT-012 start/stop label binding
 - VT-013 settings menu opens a window
