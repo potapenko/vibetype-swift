@@ -1,7 +1,7 @@
 ---
 id: VT-021
 title: Settings Defaults Model
-status: backlog
+status: in-progress
 priority: P1
 lane: settings
 parent: VT-020
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-021 - Settings Defaults Model
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
