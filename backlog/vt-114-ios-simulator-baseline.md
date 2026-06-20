@@ -1,7 +1,7 @@
 ---
 id: VT-114
 title: iOS Simulator Baseline
-status: backlog
+status: in-progress
 priority: P3
 lane: ios
 parent: VT-110
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-114 - iOS Simulator Baseline
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
