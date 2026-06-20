@@ -5,6 +5,7 @@
 //  Created by Codex on 6/20/26.
 //
 
+import Foundation
 @testable import vibetype
 
 final class FakeGlobalHotkeyService: GlobalHotkeyService {
@@ -33,10 +34,11 @@ final class FakeGlobalHotkeyService: GlobalHotkeyService {
     func startListening(actionHandler: @escaping GlobalHotkeyActionHandler) throws {
         startListeningCount += 1
 
-        do {
-            currentRegistrationStatus = try startListeningResult.get()
+        switch startListeningResult {
+        case .success(let registrationStatus):
+            currentRegistrationStatus = registrationStatus
             self.actionHandler = actionHandler
-        } catch let error as GlobalHotkeyServiceError {
+        case .failure(let error):
             currentRegistrationStatus = .unavailable(
                 message: error.errorDescription ?? error.localizedDescription
             )

@@ -50,12 +50,45 @@ enum GlobalHotkeyActivationMode: Equatable {
     case holdToRecord
     case toggle
 
+    var stopsRecordingOnKeyUp: Bool {
+        self == .holdToRecord
+    }
+
     var displayName: String {
         switch self {
         case .holdToRecord:
             return "Hold to record"
         case .toggle:
             return "Toggle"
+        }
+    }
+
+    func recordingCommand(
+        for action: GlobalHotkeyAction,
+        isRecording: Bool,
+        isShortcutPressed: Bool
+    ) -> GlobalHotkeyRecordingCommand? {
+        switch self {
+        case .holdToRecord:
+            switch action {
+            case .keyDown where !isShortcutPressed && !isRecording:
+                return .startRecording
+            case .keyUp where isShortcutPressed && isRecording:
+                return .stopRecording
+            default:
+                return nil
+            }
+        case .toggle:
+            switch action {
+            case .keyDown where !isShortcutPressed && isRecording:
+                return .stopRecording
+            case .keyDown where !isShortcutPressed:
+                return .startRecording
+            case .keyUp:
+                return nil
+            default:
+                return nil
+            }
         }
     }
 }
@@ -77,11 +110,32 @@ struct GlobalHotkeyConfiguration: Equatable {
     var displayText: String {
         "\(shortcut.displayText) - \(activationMode.displayName)"
     }
+
+    var stopsRecordingOnKeyUp: Bool {
+        activationMode.stopsRecordingOnKeyUp
+    }
+
+    func recordingCommand(
+        for action: GlobalHotkeyAction,
+        isRecording: Bool,
+        isShortcutPressed: Bool
+    ) -> GlobalHotkeyRecordingCommand? {
+        activationMode.recordingCommand(
+            for: action,
+            isRecording: isRecording,
+            isShortcutPressed: isShortcutPressed
+        )
+    }
 }
 
 enum GlobalHotkeyAction: Equatable {
     case keyDown
     case keyUp
+}
+
+enum GlobalHotkeyRecordingCommand: Equatable {
+    case startRecording
+    case stopRecording
 }
 
 enum GlobalHotkeyRegistrationStatus: Equatable {

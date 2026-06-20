@@ -16,6 +16,7 @@ struct GlobalHotkeyServiceTests {
         #expect(configuration.shortcut == .defaultDictation)
         #expect(configuration.shortcut.displayText == "Option+Space")
         #expect(configuration.activationMode == .holdToRecord)
+        #expect(configuration.stopsRecordingOnKeyUp)
         #expect(configuration.displayText == "Option+Space - Hold to record")
     }
 
@@ -24,7 +25,79 @@ struct GlobalHotkeyServiceTests {
 
         #expect(configuration.shortcut == .fallbackDictation)
         #expect(configuration.shortcut.displayText == "Control+Option+Space")
+        #expect(configuration.stopsRecordingOnKeyUp)
         #expect(configuration.displayText == "Control+Option+Space - Hold to record")
+    }
+
+    @Test func holdToRecordStartsOnKeyDownAndStopsOnMatchingKeyUp() {
+        let configuration = GlobalHotkeyConfiguration.defaultDictation
+
+        #expect(
+            configuration.recordingCommand(
+                for: .keyDown,
+                isRecording: false,
+                isShortcutPressed: false
+            ) == .startRecording
+        )
+        #expect(
+            configuration.recordingCommand(
+                for: .keyDown,
+                isRecording: true,
+                isShortcutPressed: true
+            ) == nil
+        )
+        #expect(
+            configuration.recordingCommand(
+                for: .keyUp,
+                isRecording: true,
+                isShortcutPressed: true
+            ) == .stopRecording
+        )
+        #expect(
+            configuration.recordingCommand(
+                for: .keyUp,
+                isRecording: true,
+                isShortcutPressed: false
+            ) == nil
+        )
+    }
+
+    @Test func toggleModeUsesKeyDownOnlyAndIgnoresKeyUp() {
+        let configuration = GlobalHotkeyConfiguration(
+            shortcut: .defaultDictation,
+            activationMode: .toggle
+        )
+
+        #expect(configuration.stopsRecordingOnKeyUp == false)
+        #expect(configuration.displayText == "Option+Space - Toggle")
+        #expect(
+            configuration.recordingCommand(
+                for: .keyDown,
+                isRecording: false,
+                isShortcutPressed: false
+            ) == .startRecording
+        )
+        #expect(
+            configuration.recordingCommand(
+                for: .keyUp,
+                isRecording: true,
+                isShortcutPressed: true
+            ) == nil
+        )
+        #expect(
+            configuration.recordingCommand(
+                for: .keyDown,
+                isRecording: true,
+                isShortcutPressed: true
+            ) == nil
+        )
+        #expect(
+            configuration.recordingCommand(
+                for: .keyDown,
+                isRecording: true,
+                isShortcutPressed: false
+            ) == .stopRecording
+        )
     }
 
     @Test func registrationStatusExposesActiveConfiguration() {

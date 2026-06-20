@@ -29,6 +29,9 @@ This spec covers:
   belongs to Spotlight.
 - The shortcut should use hold-to-record when the native macOS implementation
   can observe both key down and key up reliably.
+- The MVP configuration prefers hold-to-record for both the default shortcut
+  and automatic fallback shortcut; toggle mode is only the fallback when the
+  native event path cannot safely deliver key-up events.
 - In hold-to-record mode:
   - key down starts one recording session when the app is idle and microphone
     permission is available;
