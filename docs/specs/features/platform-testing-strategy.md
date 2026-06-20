@@ -68,7 +68,8 @@ the selected task explicitly changes shared iOS/macOS code.
 ## iOS Keyboard Constraints
 
 The iOS keyboard path is a separate platform architecture, not a direct port of
-the macOS menu bar flow.
+the macOS menu bar flow. The product split is defined in
+`ios-keyboard-feasibility.md`.
 
 Product constraints:
 
