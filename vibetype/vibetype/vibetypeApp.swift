@@ -8,10 +8,11 @@
 import SwiftUI
 
 @main
-struct vibetypeApp: App {
+struct VibeTypeApp: App {
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        MenuBarExtra("VibeType", systemImage: "mic.fill") {
+            MenuBarView()
         }
+        .menuBarExtraStyle(.menu)
     }
 }

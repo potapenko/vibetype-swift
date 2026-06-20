@@ -33,6 +33,8 @@ This spec covers:
 - The menu bar status item should remain available while the app is running.
 - The menu should include Start Recording or Stop Recording depending on the
   current state.
+- Before recording exists, Start Recording may be a visible placeholder, but it
+  must clearly state that recording is not available yet.
 - The menu should include Settings, Last Transcript, Copy Last Transcript, and
   Quit.
 - Quit must terminate the app cleanly.
@@ -84,6 +86,5 @@ settings must not start, stop, or cancel recording by itself.
 ## Unknowns requiring confirmation
 
 - Final app name and menu bar label/icon.
-- Whether the first implementation uses `MenuBarExtra`, `NSStatusItem`, or both.
 - Exact floating indicator copy and placement.
 - Whether done status disappears automatically and after what delay.

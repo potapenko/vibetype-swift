@@ -1,7 +1,7 @@
 ---
 id: VT-000
 title: First Menu Bar Item Shell
-status: in-progress
+status: done
 priority: P0
 lane: swift-app-shell
 dependencies:
@@ -14,7 +14,7 @@ allowed_paths:
 
 # VT-000 - First Menu Bar Item Shell
 
-Status: in-progress
+Status: done
 
 ## Goal
 
