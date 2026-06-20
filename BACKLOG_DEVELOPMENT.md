@@ -248,6 +248,13 @@ final report explains the verification scope. External-service, microphone,
 permissions, or app-run checks must use bounded waits and controllable fakes
 where practical.
 
+Use `docs/specs/features/platform-testing-strategy.md` to decide when a task
+needs extra platform evidence. Computer Use is for bounded macOS runtime smoke
+when a selected task changes visible app surfaces. XcodeBuildMCP / Build iOS
+Apps is for future iOS simulator build, test, screenshot, and UI-snapshot
+checks when an iOS target exists or a selected task changes shared iOS/macOS
+SwiftUI surfaces.
+
 ## Relationship To Other Files
 
 - `AGENTS.md` defines workflow, safety, and agent rules.

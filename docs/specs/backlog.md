@@ -51,6 +51,11 @@ the root `backlog/` directory and are selected with
      providers, permission denial, timeout behavior, and text handoff.
    - Executable task: `backlog/vt-005-verification-strategy.md`.
 
+6. Platform testing and QA evidence
+   - Define how agents choose between unit tests, build checks, macOS runtime
+     smoke checks, Computer Use, and future iOS simulator checks.
+   - Product contract: `features/platform-testing-strategy.md`.
+
 ## Seeded Backlog Shape
 
 The executable backlog is split into umbrella parent tasks and small child

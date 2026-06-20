@@ -27,6 +27,12 @@ For implementation or file-changing work, read in this order:
 8. Create a scoped completion checkpoint commit.
 9. Report verification, changed files, and the next selector result.
 
+For platform verification, use
+`docs/specs/features/platform-testing-strategy.md`. Most tasks should use
+unit/build checks. Add bounded Computer Use smoke only for changed macOS runtime
+surfaces, and use XcodeBuildMCP / Build iOS Apps for future iOS targets or
+shared SwiftUI surfaces when the selected task requires it.
+
 ## Current Project Shape
 
 The repository currently contains a minimal Xcode SwiftUI app template, not a

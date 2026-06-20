@@ -237,6 +237,12 @@ depends on platform quirks.
   maintain.
 - Manual QA is acceptable for platform permission and active-app paste behavior
   when automated tests would be fragile; record the exact scenario and outcome.
+- Follow `docs/specs/features/platform-testing-strategy.md` when deciding
+  whether a task needs only unit/build verification or additional macOS
+  Computer Use or iOS simulator evidence.
+- Keep macOS app-run, permission, microphone, simulator, and UI automation
+  checks bounded. If a platform smoke check cannot complete quickly, report the
+  blocker instead of turning the run into an open-ended manual session.
 
 ## Comments And Documentation
 
