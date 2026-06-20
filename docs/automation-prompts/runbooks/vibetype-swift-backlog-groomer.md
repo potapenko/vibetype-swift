@@ -43,9 +43,20 @@ tasks.
 
 ## Safety
 
-Run `git status --short` before writing. If there are uncommitted changes,
-staged changes, or an in-progress selected task from another run, stop without
-editing and report the blocker.
+Run `git status --short` before writing. If there are uncommitted changes or
+staged changes, stop without editing and report the blocker.
+
+Before grooming, run the selector with claim-expiry repair enabled:
+
+```sh
+python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress
+```
+
+If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,
+stage only those reset task files, create a scoped repair commit such as
+`Expire stale backlog claims`, and rerun the same selector command before
+continuing. If non-expired `in_progress` entries remain, stop without grooming
+and report the active claim diagnostics.
 
 Do not modify sibling repositories. Do not access MongoDB directly. Do not run
 destructive database or object-storage operations.
@@ -56,7 +67,7 @@ Existing backlog files and the selector are authoritative for ids,
 dependencies, priorities, and ready work:
 
 ```sh
-python3 scripts/backlog_next.py --json
+python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress
 ```
 
 Do not mark tasks done. Do not claim tasks. Do not change implementer-owned
@@ -92,7 +103,7 @@ settings, permissions, or paste work.
 After edits, run:
 
 ```sh
-python3 scripts/backlog_next.py --json
+python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress
 git diff --check
 ```
 

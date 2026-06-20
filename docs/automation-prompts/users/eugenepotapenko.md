@@ -37,7 +37,8 @@ Paused count for this repository: 0.
 - Prompt shape: short pointer prompt
 - Versioned runtime contract:
   `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md`
-- Selector/script: `python3 scripts/backlog_next.py --json`
+- Selector/script:
+  `python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress`
 - Expected output: up to eight groomed backlog/spec/workflow tasks, selector
   status, verification, and scoped checkpoint commit when files change
 - Safety/browser evidence contract: no browser requirement; do not implement
@@ -55,7 +56,8 @@ Paused count for this repository: 0.
 - Prompt shape: short pointer prompt
 - Versioned runtime contract:
   `docs/automation-prompts/runbooks/vibetype-swift-implementer.md`
-- Selector/script: `python3 scripts/backlog_next.py --json`
+- Selector/script:
+  `python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress`
 - Expected output: one selected backlog iteration with claim/completion
   checkpoint commits, verification, platform smoke evidence when required, and
   cleanup report

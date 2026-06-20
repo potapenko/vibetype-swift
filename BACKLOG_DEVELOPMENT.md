@@ -110,6 +110,12 @@ Do not introduce other status values. A task must not be marked `blocked`
 solely because its dependencies are not `done`; leave it `backlog` and let the
 selector skip it as dependency-pending.
 
+`in-progress` is a short-lived claim, not a durable wait state. It must end
+with a committed `done`, `blocked`, or claim-expiry reset. Scheduled automation
+must expire `in-progress` task files whose file modification time is more than
+one hour old, reset only their claim status to `backlog`, commit that repair,
+and rerun selection before claiming work.
+
 ## Selection Rule
 
 Agents must not read the full backlog body before selecting work. They also
@@ -117,20 +123,31 @@ must not reimplement queue selection in prompt logic.
 
 Use this flow:
 
-1. Run `python3 scripts/backlog_next.py --json` from the canonical checkout.
-2. If the selector returns `status: "select"`, claim exactly the returned
+1. Run
+   `python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress`
+   from the canonical checkout.
+2. If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,
+   stage only those reset task files, create a scoped claim-expiry repair
+   commit such as `Expire stale backlog claims`, and rerun the same selector
+   command before claiming work.
+3. If the selector returns `status: "select"`, claim exactly the returned
    `selected.path`.
-3. If the selector returns `status: "no_ready"`, stop and report that no
-   dependency-ready task is available. Do not mark arbitrary tasks `blocked`.
-4. If the selector returns `status: "queue_error"`, stop and report the queue
+4. If the selector returns `status: "no_ready"`, stop and report that no
+   dependency-ready task is available. Include any `in_progress` and
+   `blocking_in_progress` diagnostics from the selector. Do not mark arbitrary
+   tasks `blocked`.
+5. If the selector returns `status: "queue_error"`, stop and report the queue
    diagnostics. Do not claim a task.
-5. Read the selected task body only after claim.
+6. Read the selected task body only after claim.
 
 The selector reads only front matter and title lines. It treats `done`,
 `in-progress`, and `blocked` as skipped states, treats `backlog`, `ready`, and
 missing status as candidates, checks that all declared dependencies are `done`,
-and picks the dependency-ready task with the highest priority. Ties prefer the
-task that directly unblocks the most other tasks, then the numeric task id.
+and picks the dependency-ready task with the highest priority. It also reports
+active claims, stale claim candidates, reset paths, and unmet dependency
+statuses so stale claims are visible instead of ordinary dependency debt. Ties
+prefer the task that directly unblocks the most other tasks, then the numeric
+task id.
 
 ## Oversized Task Decomposition
 

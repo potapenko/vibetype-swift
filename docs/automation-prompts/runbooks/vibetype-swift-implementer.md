@@ -49,17 +49,24 @@ Do not require optional README files that are absent from the checkout.
 Run this selector from the repo root:
 
 ```sh
-python3 scripts/backlog_next.py --json
+python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress
 ```
 
 Treat selector JSON as the only source of truth. Do not reimplement backlog
 sorting, select by filename manually, or read non-selected task bodies.
 
+If selector output includes non-empty `expired_in_progress_reset_paths`, stop
+before claiming work, run `git diff --check`, stage only those reset task
+files, create a scoped claim-expiry repair commit such as
+`Expire stale backlog claims`, and rerun the same selector command. This keeps
+abandoned claims from stopping the queue forever while preserving an auditable
+repair commit.
+
 If selector status is `select`, claim exactly `selected.path`. If status is
 `no_ready`, stop without changing repository files and report the selector
 summary, `ready_count`, `dependency_pending_count`, and first dependency-pending
-examples. If status is `queue_error`, stop without claiming and report the
-diagnostics.
+examples, including any `in_progress` and `blocking_in_progress` diagnostics.
+If status is `queue_error`, stop without claiming and report the diagnostics.
 
 Never mark a task `blocked` merely because declared dependencies are not done;
 dependency-pending tasks stay `backlog` and are skipped by the selector.

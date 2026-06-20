@@ -8,12 +8,17 @@ the selector and must not manually choose a task by reading task bodies.
 ## Select The Next Task
 
 ```sh
-python3 scripts/backlog_next.py --json
+python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress
 ```
 
-If the selector returns `status: "select"`, claim exactly the returned
-`selected.path`. If it returns `no_ready` or `queue_error`, stop and report the
-result.
+If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,
+stage only those reset task files, create a scoped repair commit such as
+`Expire stale backlog claims`, and rerun the same selector command before
+claiming work.
+
+If the selector returns `status: "select"` after any stale-claim repair, claim
+exactly the returned `selected.path`. If it returns `no_ready` or
+`queue_error`, stop and report the result.
 
 ## Task Template
 
@@ -83,7 +88,9 @@ cleanup, or closeout.
 
 - `backlog` - unfinished and unclaimed.
 - `ready` - optional explicit ready marker; still requires selector checks.
-- `in-progress` - claimed and skipped by other executor agents.
+- `in-progress` - claimed and skipped by other executor agents while the claim
+  is fresh; scheduled automation expires task files older than one hour and
+  resets only the claim status to `backlog`.
 - `blocked` - exceptional blocker; skipped by normal executor agents.
 - `done` - terminal and verified for the declared scope.
 

@@ -5,7 +5,7 @@ This backlog was created during the initial spec-first bootstrap for
 
 This file is a product/spec planning note. Executable agent tasks now live in
 the root `backlog/` directory and are selected with
-`python3 scripts/backlog_next.py --json`.
+`python3 scripts/backlog_next.py --json --expire-in-progress-after-hours 1 --apply-expired-in-progress`.
 
 ## Evidence Used
 
