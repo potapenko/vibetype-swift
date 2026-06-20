@@ -1,7 +1,7 @@
 ---
 id: VT-014
 title: Last Transcript Menu Placeholders
-status: backlog
+status: in-progress
 priority: P1
 lane: text-output
 parent: VT-010
@@ -15,7 +15,7 @@ allowed_paths:
 
 # VT-014 - Last Transcript Menu Placeholders
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
