@@ -1,7 +1,7 @@
 ---
 id: VT-132
 title: Transcript History Entry Model
-status: backlog
+status: in-progress
 priority: P2
 lane: history
 parent: VT-130
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-132 - Transcript History Entry Model
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
