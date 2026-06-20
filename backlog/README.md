@@ -61,6 +61,24 @@ One short product or engineering goal.
 - Links to relevant specs, reference files, or prior decisions.
 ```
 
+## Umbrella Parents
+
+Large product areas should be represented as parent tasks with dependencies on
+small child tasks. Parent tasks are planning containers, not normal
+implementation slices.
+
+Use this pattern when a product area is too large for one agent checkpoint:
+
+- keep the parent task in `status: backlog`
+- add all child task ids to the parent's `dependencies`
+- make each child task independently selectable and verifiable
+- keep each child near a 10-minute agent slice when possible
+- do not claim a parent task while its children are still incomplete
+
+The selector will naturally prefer ready child tasks. Parent tasks become ready
+only after their children are complete and can then be used for final review,
+cleanup, or closeout.
+
 ## Status Values
 
 - `backlog` - unfinished and unclaimed.

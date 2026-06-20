@@ -51,6 +51,16 @@ the root `backlog/` directory and are selected with
      providers, permission denial, timeout behavior, and text handoff.
    - Executable task: `backlog/vt-005-verification-strategy.md`.
 
+## Seeded Backlog Shape
+
+The executable backlog is split into umbrella parent tasks and small child
+tasks. Parent tasks describe product areas, while child tasks should be short
+implementation slices that a single agent checkpoint can claim, implement,
+verify, and commit.
+
+The first implementation slice should establish a visible native menu bar item
+before deeper recording, transcription, permission, or settings work proceeds.
+
 ## Highest-Priority Unknowns
 
 - Final app name: `OpenWhisprSwift`, `DictationBar`, `VibeType`, or another
