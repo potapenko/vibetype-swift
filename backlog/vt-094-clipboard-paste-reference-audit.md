@@ -1,7 +1,7 @@
 ---
 id: VT-094
 title: Clipboard Paste Reference Audit
-status: backlog
+status: in-progress
 priority: P2
 lane: reference-audit
 parent: VT-090
@@ -15,7 +15,7 @@ allowed_paths:
 
 # VT-094 - Clipboard Paste Reference Audit
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
