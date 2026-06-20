@@ -20,21 +20,30 @@ Status: backlog
 
 ## Goal
 
-Create the first bounded macOS runtime smoke checklist for Computer Use.
+Create the first bounded macOS runtime smoke evidence for the real menu bar
+app surface.
 
 ## Scope
 
-- Document how to verify that the app launches, exposes a menu bar item, opens
-  its menu, and opens Settings.
-- Record what evidence should be kept under `docs/qa/`.
-- Do not implement product code or run an unbounded manual session.
+- Build and launch the freshly built macOS app.
+- Use Computer Use to verify that the app exposes a menu bar item, opens its
+  menu, and opens Settings.
+- Save a concise task-scoped QA report under `docs/qa/macos/`.
+- Do not require real microphone input, OpenAI credentials, permission prompts,
+  or an unbounded manual session.
 
 ## Acceptance
 
-- A short QA checklist exists for menu bar smoke.
-- The checklist defines a bounded stop condition and blocker format.
-- The checklist does not require real microphone, OpenAI, or permissions.
+- A short QA report records the build command, app launch path, Computer Use
+  scenario, observed menu bar/Settings behavior, and pass/fail/blocker result.
+- The smoke uses bounded stop conditions and does not require real microphone,
+  OpenAI, or permission changes.
+- If Computer Use or app launch is blocked, the report captures the exact
+  blocker and last successful build/test evidence.
 
 ## Verification
 
+- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- Bounded Computer Use smoke against the launched app, or a concrete blocker
+  report under `docs/qa/macos/`
 - `git diff --check`
