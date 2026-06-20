@@ -1,7 +1,7 @@
 ---
 id: VT-041
 title: Recorder Protocol And Fake
-status: backlog
+status: in-progress
 priority: P1
 lane: recording
 parent: VT-040
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-041 - Recorder Protocol And Fake
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
