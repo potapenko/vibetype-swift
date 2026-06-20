@@ -1,7 +1,7 @@
 ---
 id: VT-100
 title: Backlog Grooming Automation Umbrella
-status: backlog
+status: in-progress
 priority: P2
 lane: workflow
 dependencies:
@@ -14,7 +14,7 @@ allowed_paths:
 
 # VT-100 - Backlog Grooming Automation Umbrella
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
