@@ -1,7 +1,7 @@
 ---
 id: VT-117
 title: iOS Containing App Target Skeleton
-status: backlog
+status: in-progress
 priority: P2
 lane: ios
 parent: VT-110
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-117 - iOS Containing App Target Skeleton
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
