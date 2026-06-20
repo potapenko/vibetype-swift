@@ -69,6 +69,10 @@ Required reading before edits:
 - `docs/specs/features/platform-testing-strategy.md` when a task changes
   verification strategy, UI runtime behavior, permissions, microphone, paste
   handoff, iOS, shared SwiftUI surfaces, or QA evidence
+- `docs/qa/macos/AGENTS.run.md` when a task changes user-visible macOS UI,
+  app-run behavior, menu bar behavior, Settings, permissions, recording status,
+  floating indicator, clipboard/paste handoff, or any action that should be
+  verified by operating the built app
 - any task-relevant specs required by `AGENTS.md` or the selected task
 
 Do not require optional README files that are absent from the checkout.
@@ -174,15 +178,37 @@ checks. Use fake-backed tests for services and state machines. Do not call the
 live OpenAI API from normal automation. Do not require real microphone input or
 real system permission prompts for normal tests.
 
-Use Computer Use only for bounded macOS runtime smoke when the selected task
-changes visible app surfaces such as menu bar, Settings, floating indicator,
-permission UI, or active-app paste handoff. Use XcodeBuildMCP / Build iOS Apps
+Every run that delivers a product delta must make an explicit runtime QA
+decision before marking the task complete:
+
+- `required`: the task changed a visible macOS surface or user interaction.
+- `not_applicable`: the task changed only non-UI model/service logic and has
+  build/test evidence.
+- `blocked`: the app or relevant UI could not be launched, inspected, or
+  operated within the bounded run.
+
+When runtime QA is `required`, read `docs/qa/macos/AGENTS.run.md`, build the
+app, launch or relaunch the freshly built app, open Computer Use, and operate
+the changed behavior through the real macOS UI. Walk the exact affected menu,
+window, panel, button, toggle, field, status, indicator, or handoff path. Do
+not stop at code review or app launch; perform the changed user action and
+inspect the visible result.
+
+At minimum, Computer Use QA must cover the task-specific happy path and one
+relevant blocked or disabled state when that state is visible and safe to
+exercise. For example, a menu-bar task must open the menu and verify the
+changed items or state; a Settings task must open Settings and operate the
+changed controls; a permission/status task must inspect the visible blocked or
+allowed state; a paste/handoff task must use the safest bounded target app or
+record why active-app handoff was blocked.
+
+If runtime QA cannot complete quickly, do not silently downgrade it to
+`not_applicable`. Record `blocked`, include the exact app-launch, inspection,
+permission, microphone, Accessibility, paste, or Computer Use blocker, and keep
+the completed build/test evidence explicit. Use XcodeBuildMCP / Build iOS Apps
 for future iOS simulator build, test, screenshot, or UI snapshot checks when an
 iOS target exists or the selected task changes shared iOS/macOS SwiftUI
 surfaces.
-
-If a platform smoke check cannot complete quickly, record the blocker and keep
-the completed build/test evidence explicit instead of waiting indefinitely.
 
 ## Expected Output
 
@@ -195,7 +221,10 @@ verification results, platform smoke evidence or reason it was not required,
 cleanup performed, remaining real blocker if any, next selector result if
 checked, actual cwd, execution environment, selected task before/after status,
 confirmation that the canonical checkout now contains the status update, and a
-short `Product delta` field. `Product delta` must name the app behavior, Swift
-code, tests, build/runtime capability, or bug fix delivered. If no product delta
-was possible, the task must be reported as blocked, not done, and the report
-must name the exact next implementation task created or updated.
+short `Product delta` field. The report must also include a `Runtime QA` field
+with one of `required`, `not_applicable`, or `blocked`; the Computer Use
+scenario/actions/observed result when required; or the exact reason runtime QA
+was not applicable or blocked. `Product delta` must name the app behavior,
+Swift code, tests, build/runtime capability, or bug fix delivered. If no
+product delta was possible, the task must be reported as blocked, not done, and
+the report must name the exact next implementation task created or updated.

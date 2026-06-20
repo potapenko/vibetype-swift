@@ -6,7 +6,8 @@ Keep VibeType development verifiable on each small backlog task while avoiding
 fragile full-app checks for every change.
 
 Testing must prove the changed behavior at the smallest useful layer, then add
-platform smoke evidence only when a task touches the platform surface.
+platform smoke evidence when a task touches the platform surface or a
+user-visible interaction that can only be trusted after launching the app.
 
 Detailed MVP service seams and fake/manual boundaries are defined in
 `verification-strategy.md`.
@@ -32,7 +33,8 @@ or depend on real system permission prompts.
 For normal Swift behavior changes, the baseline verification is a macOS build
 or test command plus diff hygiene.
 
-Use macOS runtime smoke only for tasks that change the running app surface:
+Use macOS runtime smoke for tasks that change the running app surface or the
+user action behind that surface:
 
 - menu bar item creation
 - menu contents
@@ -40,17 +42,32 @@ Use macOS runtime smoke only for tasks that change the running app surface:
 - floating indicator visibility
 - permission-state UI
 - active-app paste handoff
+- buttons, toggles, fields, labels, status text, or menu actions that a user
+  can operate
+- end-to-end flows that connect visible UI to a newly implemented service seam
 
 Runtime smoke should be bounded. If the app cannot be launched or inspected
 quickly, record the blocker and keep unit/build verification explicit.
 
 ### Computer Use Smoke
 
-Computer Use is the preferred visual smoke layer for the running macOS app.
+Computer Use is the required visual smoke layer for a changed macOS runtime
+surface unless the task is model/service-only or the surface is explicitly
+blocked in the current environment.
 
 Use it to capture evidence that a user-visible surface exists and can be
 interacted with, such as opening the menu bar item or Settings window. Do not
 use it as the primary assertion layer for service logic.
+
+Every implementation run must report a runtime QA decision:
+
+- `required`: Computer Use was used to launch or relaunch the app and inspect
+  the changed surface or interaction.
+- `not_applicable`: the change was non-UI service/model behavior and was
+  covered by build, unit, or fake-backed test evidence.
+- `blocked`: Computer Use or the app run could not reach the relevant surface
+  within the bounded run; report the blocker and the last successful
+  build/test evidence.
 
 ### iOS Simulator Checks
 
@@ -93,8 +110,9 @@ This split must be confirmed by future iOS specs before implementation.
 
 - Docs/spec-only: `git diff --check`
 - Swift model or service behavior: macOS test command plus `git diff --check`
-- Swift app shell or UI behavior: macOS build command plus `git diff --check`;
-  add Computer Use smoke when the task changes visible runtime UI
+- Swift app shell, UI behavior, or user-visible interaction: macOS build
+  command plus `git diff --check`; run bounded Computer Use smoke against the
+  changed surface or report a concrete blocker
 - External-service behavior: fake-backed tests with bounded timeout behavior;
   no live provider call in normal automation
 - Permission or microphone behavior: fake-backed tests for app logic; bounded

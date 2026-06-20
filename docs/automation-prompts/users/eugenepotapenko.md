@@ -61,8 +61,9 @@ Paused count for this repository: 0.
 - Expected output: one selected backlog iteration with claim/completion
   checkpoint commits, verification, platform smoke evidence when required, and
   cleanup report
-- Safety/browser evidence contract: browser/computer-use only for bounded
-  runtime smoke when visible app surfaces change; no live OpenAI API in normal
+- Safety/runtime evidence contract: explicit runtime QA decision for each
+  product delta; Computer Use required for bounded app-run QA when visible
+  macOS surfaces or user interactions change; no live OpenAI API in normal
   automation; no DB or destructive storage operations
 - Current decision: active
 
