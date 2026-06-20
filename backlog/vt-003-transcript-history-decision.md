@@ -1,6 +1,6 @@
 ---
 id: VT-003
-status: in-progress
+status: done
 priority: P1
 lane: specs
 dependencies:
@@ -12,7 +12,7 @@ verification:
 
 # Transcript History Decision Spec
 
-Status: in-progress
+Status: done
 Priority: P1
 Lane: specs
 Dependencies: none
@@ -46,3 +46,11 @@ Decide whether the optional last-20 transcript history belongs in the MVP.
 
 - Read `docs/specs/features/privacy-and-permissions.md`.
 - Read `docs/specs/features/text-output-workflow.md`.
+
+## Completion
+
+- Added `docs/specs/features/transcript-history.md`.
+- Decision: transcript history is in the MVP as an opt-in local-only feature,
+  disabled by default.
+- Updated related privacy, text-output, settings, and spec-backlog notes.
+- Verification: `git diff --check` passed.

@@ -43,8 +43,8 @@ This spec covers:
 - The MVP must not require accounts, subscriptions, telemetry, analytics,
   server-side state, or cloud sync.
 - The default product contract is no retained audio. Transcript history is
-  optional and needs an explicit local-only behavior decision before
-  implementation.
+  opt-in, local-only, disabled by default, and governed by
+  `transcript-history.md`.
 - Debug logging must not include raw dictated text, raw audio payloads, tokens,
   credentials, or full provider responses in the default product log stream.
 - If a user denies microphone permission, the app should remain usable enough
@@ -104,8 +104,8 @@ This spec covers:
 - Provider configuration is product behavior because it changes model,
   language, prompt, latency, and error behavior.
 - Settings may be stored in UserDefaults, but the API key belongs in Keychain.
-- Local storage of audio or transcript history needs separate spec coverage
-  before implementation.
+- Local storage of audio needs separate spec coverage before implementation.
+  Transcript history storage is governed by `transcript-history.md`.
 
 ## Verification mapping
 
@@ -118,6 +118,5 @@ This spec covers:
 ## Unknowns requiring confirmation
 
 - Whether the app needs a formal onboarding screen before first recording.
-- Whether transcript history is included in MVP and enabled by default.
 - Whether temporary debug audio retention is allowed in debug builds.
 - Exact wording and placement for OpenAI audio-processing disclosure.

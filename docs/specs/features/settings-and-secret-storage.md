@@ -15,6 +15,7 @@ This spec covers:
 - UserDefaults-backed non-secret settings
 - Keychain-backed OpenAI API key
 - copy, paste, recording, and indicator toggles
+- transcript history toggle and clear action
 - prompt or vocabulary hint setting
 
 ## Non-goals
@@ -39,6 +40,8 @@ This spec covers:
 - The Settings window should include toggles for auto-paste, copy to clipboard,
   restoring the previous clipboard, sound on start/stop, and floating recording
   indicator.
+- The Settings window should include a Save Transcript History toggle and a
+  Clear Transcript History action once persistent history is implemented.
 - The Settings window should include an optional prompt or vocabulary hint
   field.
 - Missing API key should be reported as a user-visible blocked state before
@@ -57,6 +60,7 @@ The MVP non-secret settings default to:
 - restore previous clipboard: on
 - sound on start/stop: on
 - floating recording indicator: on
+- save transcript history: off
 
 The OpenAI API key has no UserDefaults value or default. It is Keychain-only.
 
@@ -92,14 +96,15 @@ UserDefaults may store:
 - restoreClipboard
 - soundEnabled
 - showFloatingIndicator
+- saveTranscriptHistory
 - prompt or vocabulary hint
 
 Keychain stores:
 
 - OpenAI API key
 
-Transcript history, if implemented, needs separate behavior for retention and
-clearing.
+Transcript history retention and clearing behavior is governed by
+`transcript-history.md`.
 
 ## Verification mapping
 
@@ -111,4 +116,3 @@ clearing.
 
 - Whether settings need import/export.
 - Whether the language Custom field is free text or a constrained code.
-- Whether transcript history settings are included in MVP.

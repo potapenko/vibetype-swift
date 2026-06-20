@@ -14,6 +14,7 @@ disabled.
 This spec covers:
 
 - last transcript visibility
+- relationship to optional transcript history
 - output handoff actions
 - auto-paste behavior
 - copy-to-clipboard fallback
@@ -50,6 +51,10 @@ This spec covers:
   clipboard after a short delay.
 - If output delivery fails, the last transcript should remain visible or
   recoverable in the current session.
+- Last Transcript is current-session state and does not require persistent
+  transcript history to be enabled.
+- Optional persistent history is governed by `transcript-history.md`. Enabling
+  history must not change the copy or paste behavior for the current transcript.
 
 ## Invariants
 
@@ -80,9 +85,11 @@ This spec covers:
 
 - The app stores the last transcript in current app state and may expose it in
   the menu or settings.
+- If optional transcript history is enabled, accepted transcripts may also be
+  written to local persistent history under `transcript-history.md`.
 - Output handoff may require platform permissions such as clipboard access,
   accessibility control, or keyboard event simulation.
-- Persistent drafts or history require a separate storage spec.
+- Persistent drafts outside transcript history require a separate storage spec.
 
 ## Verification mapping
 

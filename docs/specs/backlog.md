@@ -25,21 +25,16 @@ the root `backlog/` directory and are selected with
 - `features/global-hotkey.md`
 - `features/openai-transcription.md`
 - `features/floating-indicator.md`
+- `features/transcript-history.md`
 
 ## Next Specs To Create
 
-1. Transcript history
-   - Decide whether the optional local last-20 transcript history is in the MVP,
-     where it is stored, how it is cleared, and whether it is enabled by
-     default.
-   - Executable task: `backlog/vt-003-transcript-history-decision.md`.
-
-2. Verification strategy
+1. Verification strategy
    - Define the first testable seams for microphone input, transcription
      providers, permission denial, timeout behavior, and text handoff.
    - Executable task: `backlog/vt-005-verification-strategy.md`.
 
-3. Platform testing and QA evidence
+2. Platform testing and QA evidence
    - Define how agents choose between unit tests, build checks, macOS runtime
      smoke checks, Computer Use, and future iOS simulator checks.
    - Product contract: `features/platform-testing-strategy.md`.
@@ -64,5 +59,3 @@ before deeper recording, transcription, permission, or settings work proceeds.
   unstable.
 - Whether the default OpenAI transcription model and timeout should change
   after real-world QA.
-- Whether transcript history is included in MVP and whether it is enabled by
-  default.
