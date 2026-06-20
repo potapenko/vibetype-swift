@@ -1,7 +1,7 @@
 ---
 id: VT-113
 title: iOS Keyboard Feasibility Spec
-status: backlog
+status: in-progress
 priority: P2
 lane: ios
 parent: VT-110
@@ -13,7 +13,7 @@ allowed_paths:
 
 # VT-113 - iOS Keyboard Feasibility Spec
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
