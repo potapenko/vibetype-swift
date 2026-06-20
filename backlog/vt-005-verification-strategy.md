@@ -1,6 +1,6 @@
 ---
 id: VT-005
-status: backlog
+status: in-progress
 priority: P1
 lane: testing
 dependencies:
@@ -16,7 +16,7 @@ verification:
 
 # Verification Strategy Spec
 
-Status: backlog
+Status: in-progress
 Priority: P1
 Lane: testing
 Dependencies: VT-001, VT-002
