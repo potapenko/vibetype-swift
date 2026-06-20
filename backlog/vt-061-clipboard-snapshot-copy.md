@@ -1,7 +1,7 @@
 ---
 id: VT-061
 title: Clipboard Snapshot And Copy
-status: in-progress
+status: blocked
 priority: P1
 lane: text-output
 parent: VT-060
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-061 - Clipboard Snapshot And Copy
 
-Status: in-progress
+Status: blocked
 
 ## Goal
 
@@ -39,3 +39,13 @@ copying transcript text.
 
 - `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Blocker Evidence
+
+- 2026-06-20: Clipboard implementation and unit-level verification are present.
+- Required full scheme verification failed after the unit tests passed because
+  `vibetypeUITests-Runner` could not initialize off-console:
+  `User interaction required. Can't authenticate off console`.
+- Narrow verification passed:
+  `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
+- `git diff --check` passed.

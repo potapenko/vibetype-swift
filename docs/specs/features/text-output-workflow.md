@@ -36,6 +36,8 @@ This spec covers:
 - If `autoPaste` is enabled and Accessibility permission is available, the app
   should insert the transcript into the current active app at the cursor.
 - MVP auto-paste uses the clipboard plus simulated Cmd+V.
+- Clipboard replacement should snapshot the previous plain-text clipboard value
+  when available so a later restore step can put that text back.
 - If `autoPaste` is disabled and `copyToClipboard` is enabled, the transcript
   should be copied to clipboard.
 - If Accessibility permission is missing, auto-paste should fall back to copy
@@ -63,6 +65,9 @@ This spec covers:
   output error.
 - If the previous clipboard cannot be restored, the app should not hide that
   failure when restore behavior was enabled.
+- Clipboard snapshot and restore behavior is plain-text only for the MVP.
+  Rich clipboard formats may be replaced during copy or paste handoff until a
+  future spec defines richer preservation.
 - If the active app changes between recording start and paste time, the paste
   should follow the product's current-active-app rule unless a future spec pins
   the target at recording start.

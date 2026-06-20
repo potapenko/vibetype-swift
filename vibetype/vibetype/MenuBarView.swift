@@ -12,6 +12,14 @@ struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
 
     @State private var dictationStatus = DictationStatus.idle
+    @State private var lastClipboardSnapshot: ClipboardSnapshot?
+    @State private var clipboardStatusText: String?
+
+    private let clipboardService: ClipboardService
+
+    init(clipboardService: ClipboardService = ClipboardService()) {
+        self.clipboardService = clipboardService
+    }
 
     var body: some View {
         Text("VibeType")
@@ -36,6 +44,18 @@ struct MenuBarView: View {
 
         Divider()
 
+        Button("Copy Last Transcript") {
+            copyLastTranscript()
+        }
+        .disabled(!dictationStatus.canCopyLastTranscript)
+
+        if let clipboardStatusText {
+            Text(clipboardStatusText)
+                .foregroundStyle(.secondary)
+        }
+
+        Divider()
+
         Button("Settings") {
             openWindow(id: VibeTypeWindow.settings)
             NSApplication.shared.activate(ignoringOtherApps: true)
@@ -48,6 +68,20 @@ struct MenuBarView: View {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+
+    private func copyLastTranscript() {
+        guard let transcript = dictationStatus.lastTranscriptText else {
+            clipboardStatusText = ClipboardServiceError.emptyText.localizedDescription
+            return
+        }
+
+        do {
+            lastClipboardSnapshot = try clipboardService.copyPlainText(transcript)
+            clipboardStatusText = "Last transcript copied."
+        } catch {
+            clipboardStatusText = error.localizedDescription
+        }
     }
 }
 

@@ -68,4 +68,12 @@ enum DictationStatus: Equatable {
             return nil
         }
     }
+
+    var canCopyLastTranscript: Bool {
+        guard let transcript = lastTranscriptText else {
+            return false
+        }
+
+        return !transcript.isEmpty
+    }
 }

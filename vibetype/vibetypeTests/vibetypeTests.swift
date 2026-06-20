@@ -30,4 +30,10 @@ struct DictationStatusTests {
         #expect(DictationStatus.success(transcript: "Typed text").detailText == "Typed text")
         #expect(DictationStatus.failure(message: "Missing permission").detailText == "Missing permission")
     }
+
+    @Test func onlyNonEmptySuccessTranscriptCanBeCopied() {
+        #expect(DictationStatus.idle.canCopyLastTranscript == false)
+        #expect(DictationStatus.success(transcript: "").canCopyLastTranscript == false)
+        #expect(DictationStatus.success(transcript: "Typed text").canCopyLastTranscript == true)
+    }
 }
