@@ -1,7 +1,7 @@
 ---
 id: VT-021
 title: Settings Defaults Model
-status: in-progress
+status: blocked
 priority: P1
 lane: settings
 parent: VT-020
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-021 - Settings Defaults Model
 
-Status: in-progress
+Status: blocked
 
 ## Goal
 
@@ -39,3 +39,14 @@ Add a small Swift settings model with MVP defaults.
 
 - `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Blocker Evidence
+
+- 2026-06-20: Settings defaults model, UserDefaults-backed non-secret store,
+  and unit tests are present.
+- Required full scheme verification failed after the unit tests passed because
+  `vibetypeUITests-Runner` could not initialize off-console:
+  `User interaction required. Can't authenticate off console`.
+- Narrow verification passed:
+  `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
+- `git diff --check` passed.

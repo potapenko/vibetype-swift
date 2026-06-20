@@ -44,6 +44,22 @@ This spec covers:
 - Missing API key should be reported as a user-visible blocked state before
   transcription is attempted.
 
+## Default settings
+
+The MVP non-secret settings default to:
+
+- transcription model: `gpt-4o-transcribe`
+- language: Auto
+- custom language code: empty
+- prompt or vocabulary hint: empty
+- auto-paste: on
+- copy to clipboard: on
+- restore previous clipboard: on
+- sound on start/stop: on
+- floating recording indicator: on
+
+The OpenAI API key has no UserDefaults value or default. It is Keychain-only.
+
 ## Invariants
 
 - API key must not be stored in UserDefaults.
@@ -93,7 +109,6 @@ clearing.
 
 ## Unknowns requiring confirmation
 
-- Exact default model name.
 - Whether settings need import/export.
 - Whether the language Custom field is free text or a constrained code.
 - Whether transcript history settings are included in MVP.
