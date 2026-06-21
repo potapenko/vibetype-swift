@@ -1,7 +1,7 @@
 ---
 id: VT-148
 title: Xcode Build Service Health Check
-status: backlog
+status: in-progress
 priority: P3
 lane: testing
 parent: VT-110
@@ -13,7 +13,7 @@ allowed_paths:
 
 # VT-148 - Xcode Build Service Health Check
 
-Status: backlog
+Status: in-progress
 Priority: P3
 Lane: testing
 Dependencies: none
