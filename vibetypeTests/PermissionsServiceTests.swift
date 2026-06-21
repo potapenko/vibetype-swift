@@ -100,6 +100,28 @@ struct PermissionsServiceTests {
         #expect(MicrophonePermissionStatus.unavailable.settingsDescription.contains("no microphone input"))
     }
 
+    @Test func microphoneMenuCopyBlocksRecordingWithClearNextAction() {
+        #expect(MicrophonePermissionStatus.allowed.menuStatusText == "Microphone: Allowed")
+        #expect(MicrophonePermissionStatus.allowed.menuDetailText == nil)
+        #expect(MicrophonePermissionStatus.allowed.canUseRecordingAction)
+        #expect(MicrophonePermissionStatus.allowed.canRecord)
+
+        #expect(MicrophonePermissionStatus.notDetermined.menuStatusText == "Microphone: Permission Needed")
+        #expect(MicrophonePermissionStatus.notDetermined.menuDetailText?.contains("Allow microphone access") == true)
+        #expect(MicrophonePermissionStatus.notDetermined.canUseRecordingAction)
+        #expect(MicrophonePermissionStatus.notDetermined.canRecord == false)
+
+        #expect(MicrophonePermissionStatus.denied.menuStatusText == "Microphone: Not Allowed")
+        #expect(MicrophonePermissionStatus.denied.menuDetailText?.contains("Recording is blocked") == true)
+        #expect(MicrophonePermissionStatus.denied.canUseRecordingAction == false)
+        #expect(MicrophonePermissionStatus.denied.canRecord == false)
+
+        #expect(MicrophonePermissionStatus.unavailable.menuStatusText == "Microphone: Unavailable")
+        #expect(MicrophonePermissionStatus.unavailable.menuDetailText?.contains("no microphone input") == true)
+        #expect(MicrophonePermissionStatus.unavailable.canUseRecordingAction == false)
+        #expect(MicrophonePermissionStatus.unavailable.canRecord == false)
+    }
+
     @Test func accessibilityStatusMapsTrustWithoutPrompting() {
         let trustedClient = FakeAccessibilityPermissionClient(isTrusted: true)
         let notTrustedClient = FakeAccessibilityPermissionClient(isTrusted: false)
@@ -133,6 +155,17 @@ struct PermissionsServiceTests {
         #expect(AccessibilityPermissionStatus.notTrusted.settingsStatusText == "Accessibility: Not Allowed")
         #expect(AccessibilityPermissionStatus.notTrusted.settingsSystemImage == "exclamationmark.triangle")
         #expect(AccessibilityPermissionStatus.notTrusted.settingsDescription.contains("copy-only fallback"))
+    }
+
+    @Test func accessibilityMenuCopyKeepsCopyFallbackAvailable() {
+        #expect(AccessibilityPermissionStatus.trusted.menuStatusText == "Accessibility: Allowed")
+        #expect(AccessibilityPermissionStatus.trusted.menuDetailText == nil)
+        #expect(AccessibilityPermissionStatus.trusted.canPasteIntoActiveApp)
+
+        #expect(AccessibilityPermissionStatus.notTrusted.menuStatusText == "Accessibility: Not Allowed")
+        #expect(AccessibilityPermissionStatus.notTrusted.menuDetailText?.contains("Auto-paste is unavailable") == true)
+        #expect(AccessibilityPermissionStatus.notTrusted.menuDetailText?.contains("copied") == true)
+        #expect(AccessibilityPermissionStatus.notTrusted.canPasteIntoActiveApp == false)
     }
 }
 

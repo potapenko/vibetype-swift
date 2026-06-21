@@ -1,7 +1,7 @@
 ---
 id: VT-149
 title: Permission Surfaces Runtime Verification And Repair
-status: in-progress
+status: done
 priority: P1
 lane: permissions
 parent: VT-030
@@ -23,7 +23,7 @@ verification:
 
 # VT-149 - Permission Surfaces Runtime Verification And Repair
 
-Status: in-progress
+Status: done
 Priority: P1
 Lane: permissions
 Dependencies: VT-033, VT-034
@@ -67,3 +67,24 @@ surfaces.
 - This task unblocks VT-030.
 - Prior child tasks implemented microphone status, Accessibility status, menu
   blocked-state copy, and Settings privacy/permission copy.
+
+## Completion Notes
+
+- Added focused permission-surface tests for menu microphone status/detail copy,
+  recording gating, and Accessibility copy-only fallback messaging.
+- Confirmed the current Swift menu and Settings permission surfaces match the
+  product specs by source review and test coverage.
+- Verification:
+  - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+    passed.
+  - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build-for-testing -only-testing:vibetypeTests/PermissionsServiceTests`
+    passed.
+  - `git diff --check` passed before completion.
+  - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests/PermissionsServiceTests`
+    failed before assertions because the macOS test runner could not resume the
+    launched app process.
+- Runtime QA: blocked. The freshly built app launched and stayed running, but
+  the active Computer Use surface exposed only a click action and no screenshot,
+  semantic snapshot, accessibility tree, or element discovery for inspecting
+  the menu bar or Settings surfaces.
+- QA note: `docs/qa/macos/vt-149-2026-06-21-permission-surfaces.md`.
