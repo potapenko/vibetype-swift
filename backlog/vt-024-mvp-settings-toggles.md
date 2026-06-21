@@ -1,7 +1,7 @@
 ---
 id: VT-024
 title: MVP Settings Toggles
-status: backlog
+status: in-progress
 priority: P2
 lane: settings
 parent: VT-020
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-024 - MVP Settings Toggles
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
