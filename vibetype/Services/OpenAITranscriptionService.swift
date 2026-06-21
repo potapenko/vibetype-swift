@@ -203,13 +203,17 @@ enum OpenAITranscriptionServiceError: Error, Equatable, LocalizedError {
     case emptyTranscript
 
     var errorDescription: String? {
+        userFacingMessage
+    }
+
+    var userFacingMessage: String {
         switch self {
         case .missingAPIKey:
             return "Enter an OpenAI API key before transcribing."
         case .apiKeyUnavailable:
             return "The OpenAI API key could not be read."
-        case .invalidRecording:
-            return "The recording could not be prepared for transcription."
+        case .invalidRecording(let error):
+            return error.userFacingMessage
         case .invalidRequest:
             return "The transcription request could not be prepared."
         case .timedOut:
@@ -234,6 +238,69 @@ enum OpenAITranscriptionServiceError: Error, Equatable, LocalizedError {
             return "OpenAI returned an unreadable transcription response."
         case .emptyTranscript:
             return "No speech text was detected."
+        }
+    }
+
+    var operatorLogCategory: String {
+        switch self {
+        case .missingAPIKey:
+            return "missing_api_key"
+        case .apiKeyUnavailable:
+            return "api_key_unavailable"
+        case .invalidRecording(let error):
+            return error.operatorLogCategory
+        case .invalidRequest:
+            return "invalid_request"
+        case .timedOut:
+            return "timeout"
+        case .networkUnavailable:
+            return "network_unavailable"
+        case .networkFailure:
+            return "network_failure"
+        case .cancelled:
+            return "cancelled"
+        case .invalidAPIKey:
+            return "invalid_api_key"
+        case .rateLimited:
+            return "rate_limited"
+        case .providerUnavailable:
+            return "provider_unavailable"
+        case .badRequest:
+            return "bad_request"
+        case .providerRejected(let statusCode):
+            return "provider_rejected_\(statusCode)"
+        case .invalidResponse:
+            return "invalid_response"
+        case .emptyTranscript:
+            return "empty_transcript"
+        }
+    }
+}
+
+private extension OpenAITranscriptionRequestBuilderError {
+    var userFacingMessage: String {
+        switch self {
+        case .missingAudioFile:
+            return "The recording file is missing."
+        case .emptyAudioFile:
+            return "No audio was captured. Try recording again."
+        case .unsupportedAudioFileType:
+            return "The recording format is not supported."
+        case .unreadableAudioFile:
+            return "The recording file could not be read."
+        }
+    }
+
+    var operatorLogCategory: String {
+        switch self {
+        case .missingAudioFile:
+            return "missing_audio_file"
+        case .emptyAudioFile:
+            return "empty_audio"
+        case .unsupportedAudioFileType:
+            return "unsupported_audio"
+        case .unreadableAudioFile:
+            return "unreadable_audio"
         }
     }
 }

@@ -1,7 +1,7 @@
 ---
 id: VT-053
 title: Transcription Error Mapping
-status: in-progress
+status: blocked
 priority: P1
 lane: transcription
 parent: VT-050
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-053 - Transcription Error Mapping
 
-Status: in-progress
+Status: blocked
 
 ## Goal
 
@@ -40,3 +40,54 @@ messages.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Result
+
+- Added stable `OpenAITranscriptionServiceError` user-facing messages and
+  operator log categories for transcription failure states.
+- Mapped recording-preparation failures to specific messages, including a
+  no-audio message for empty captured audio.
+- Expanded fake-backed transcription service tests for URL loading failures,
+  provider HTTP status codes, empty audio before upload, and stable
+  message/category output.
+- Updated the OpenAI transcription spec to preserve compact error messages and
+  log categories without payload, prompt, audio, transcript, or secret logging.
+
+## Blocker Evidence
+
+- 2026-06-21 CEST: implementation and focused test coverage were added, but
+  required Xcode verification could not complete in this automation pass.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' -derivedDataPath
+  /tmp/vibetype-swift-vt053-deriveddata test
+  -only-testing:vibetypeTests/OpenAITranscriptionServiceTests` timed out with
+  `BUILD INTERRUPTED` before test execution.
+- `/opt/homebrew/bin/timeout 180 xcodebuild -quiet -project
+  vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS'
+  -derivedDataPath /tmp/vibetype-swift-vt053-deriveddata build-for-testing
+  -only-testing:vibetypeTests/OpenAITranscriptionServiceTests` timed out with
+  `BUILD INTERRUPTED` before compiler diagnostics or test-bundle output.
+- Direct Swift Testing file typecheck was not usable outside Xcode because the
+  `TestingMacros` plugin was unavailable to plain `swiftc`.
+- Narrow evidence passed:
+  `/opt/homebrew/bin/timeout 90 xcrun swiftc -typecheck -parse-as-library
+  $(rg --files vibetype Shared -g '*.swift' | sort)`.
+- Narrow smoke evidence passed: a run-owned `/tmp` harness compiled the
+  production transcription service files and exercised provider status mapping,
+  URL error mapping, empty-audio rejection before upload, and stable compact
+  messages/log categories without live OpenAI or real Keychain access.
+- `git diff --check` passed.
+
+## Resolution Path
+
+- Blocker category: local Xcode build/test service hang.
+- Follow-up task: `VT-148`
+  (`backlog/vt-148-xcode-build-service-health.md`).
+- Unblock condition: after the local Xcode build service reaches macOS test
+  execution again, rerun
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination
+  'platform=macOS' test -only-testing:vibetypeTests/OpenAITranscriptionServiceTests`
+  plus `git diff --check`.
+- If focused tests pass, a blocker-resolution pass may mark this task done
+  without additional source edits because the error presentation boundary,
+  mapping tests, service behavior, and spec update are already present.

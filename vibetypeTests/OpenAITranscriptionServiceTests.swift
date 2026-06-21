@@ -112,15 +112,45 @@ struct OpenAITranscriptionServiceTests {
         }
     }
 
+    @Test func urlLoadingFailuresMapToProductErrors() async throws {
+        let audioFileURL = try makeTemporaryAudioFile()
+        defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
+
+        let cases: [(URLError.Code, OpenAITranscriptionServiceError)] = [
+            (.notConnectedToInternet, .networkUnavailable),
+            (.networkConnectionLost, .networkUnavailable),
+            (.cannotFindHost, .networkUnavailable),
+            (.cannotConnectToHost, .networkUnavailable),
+            (.cancelled, .cancelled),
+            (.badServerResponse, .networkFailure),
+        ]
+
+        for (urlErrorCode, expectedError) in cases {
+            let service = makeService(loader: FakeURLLoader(result: .failure(URLError(urlErrorCode))))
+
+            await expectTranscriptionError(expectedError) {
+                try await service.transcribe(audioFileURL: audioFileURL, settings: .defaults)
+            }
+        }
+    }
+
     @Test func providerStatusCodesMapToProductErrors() async throws {
         let audioFileURL = try makeTemporaryAudioFile()
         defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
 
         let cases: [(Int, OpenAITranscriptionServiceError)] = [
             (401, .invalidAPIKey),
+            (403, .invalidAPIKey),
+            (408, .timedOut),
             (429, .rateLimited),
-            (500, .providerUnavailable),
             (400, .badRequest),
+            (404, .badRequest),
+            (413, .badRequest),
+            (415, .badRequest),
+            (422, .badRequest),
+            (500, .providerUnavailable),
+            (503, .providerUnavailable),
+            (418, .providerRejected(statusCode: 418)),
         ]
 
         for (statusCode, expectedError) in cases {
@@ -180,6 +210,69 @@ struct OpenAITranscriptionServiceTests {
         }
 
         #expect(loader.requests.isEmpty)
+    }
+
+    @Test func emptyAudioFileErrorIsMappedBeforeNetworkRequest() async throws {
+        let audioFileURL = try makeTemporaryAudioFile(contents: Data())
+        defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
+
+        let loader = FakeURLLoader(
+            result: .success(Data(#"{"text":"unused"}"#.utf8), makeHTTPResponse(statusCode: 200))
+        )
+        let service = makeService(loader: loader)
+
+        await expectTranscriptionError(.invalidRecording(.emptyAudioFile(audioFileURL))) {
+            try await service.transcribe(audioFileURL: audioFileURL, settings: .defaults)
+        }
+
+        #expect(loader.requests.isEmpty)
+    }
+
+    @Test func commonFailureMessagesAndLogCategoriesAreStable() {
+        let audioFileURL = URL(fileURLWithPath: "/tmp/recording.m4a")
+        let cases: [(OpenAITranscriptionServiceError, String, String)] = [
+            (
+                .missingAPIKey,
+                "Enter an OpenAI API key before transcribing.",
+                "missing_api_key"
+            ),
+            (
+                .invalidAPIKey,
+                "OpenAI rejected the saved API key. Check Settings.",
+                "invalid_api_key"
+            ),
+            (
+                .rateLimited,
+                "OpenAI rate limits were reached. Try again later.",
+                "rate_limited"
+            ),
+            (
+                .timedOut,
+                "Transcription timed out.",
+                "timeout"
+            ),
+            (
+                .invalidRecording(.emptyAudioFile(audioFileURL)),
+                "No audio was captured. Try recording again.",
+                "empty_audio"
+            ),
+            (
+                .providerUnavailable,
+                "OpenAI is unavailable. Try again later.",
+                "provider_unavailable"
+            ),
+            (
+                .emptyTranscript,
+                "No speech text was detected.",
+                "empty_transcript"
+            ),
+        ]
+
+        for (error, expectedMessage, expectedLogCategory) in cases {
+            #expect(error.userFacingMessage == expectedMessage)
+            #expect(error.errorDescription == expectedMessage)
+            #expect(error.operatorLogCategory == expectedLogCategory)
+        }
     }
 
     private func makeService(

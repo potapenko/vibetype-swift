@@ -128,6 +128,9 @@ This spec covers:
   prompt or vocabulary hint.
 - Provider failures map to product errors before they reach menu, settings, or
   output views.
+- Product errors expose a compact user-facing message plus a stable
+  operator-log category. Default logs may use only the category and must not
+  include request payloads, API keys, prompts, audio, or transcript text.
 - Transcript text is accepted only after response parsing, trimming, and empty
   result validation.
 - The text-output workflow receives only accepted transcript text, not raw
@@ -136,8 +139,9 @@ This spec covers:
 ## Verification mapping
 
 - Add fake-backed tests for missing key, invalid key, rate limit, timeout,
-  network failure, bad settings, unsupported file, empty transcript, successful
-  response parsing, and log redaction when implementation exists.
+  network failure, bad settings, unsupported or empty audio, server failure,
+  empty transcript, successful response parsing, compact error messages, and
+  log redaction when implementation exists.
 - Use controllable URLSession or service fakes rather than live OpenAI calls.
 - Test timeout behavior with an injectable delay or clock so verification stays
   bounded.
