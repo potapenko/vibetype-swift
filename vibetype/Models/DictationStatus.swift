@@ -53,8 +53,8 @@ enum DictationStatus: Equatable {
             return "Recording placeholder active. Microphone input is not captured in this build."
         case .transcribing:
             return "Transcribing audio..."
-        case .success(let transcript):
-            return transcript.isEmpty ? "No transcript available." : transcript
+        case .success:
+            return lastTranscriptText ?? "No transcript available."
         case .failure(let message):
             return message
         }
@@ -63,7 +63,7 @@ enum DictationStatus: Equatable {
     var lastTranscriptText: String? {
         switch self {
         case .success(let transcript):
-            return transcript
+            return AcceptedTranscript.nonEmptyNormalizedText(from: transcript)
         default:
             return nil
         }
@@ -78,11 +78,7 @@ enum DictationStatus: Equatable {
     }
 
     var canCopyLastTranscript: Bool {
-        guard let transcript = lastTranscriptText else {
-            return false
-        }
-
-        return !transcript.isEmpty
+        lastTranscriptText != nil
     }
 
     var placeholderRecordingActionResult: DictationStatus {

@@ -33,6 +33,8 @@ This spec covers:
 
 - A successful transcription must be visible as the last transcript in the menu
   bar UI or settings surface.
+- Last Transcript and Copy Last Transcript must use text after trimming leading
+  and trailing whitespace and newlines.
 - Before any successful transcription exists, the menu must show a clear
   empty-state placeholder instead of hiding the Last Transcript area.
 - The menu must provide a Copy Last Transcript action.
@@ -79,8 +81,9 @@ This spec covers:
 
 ## Edge cases and failure policy
 
-- If transcription output is empty, the app should show a clear error instead
-  of copying or pasting empty text as a successful result.
+- If transcription output is empty or whitespace-only after trimming, the app
+  should show a clear error instead of copying or pasting empty text as a
+  successful result.
 - If the clipboard or host app is unavailable, the app should show a recoverable
   output error.
 - If the previous clipboard cannot be restored, the app should not hide that

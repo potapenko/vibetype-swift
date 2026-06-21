@@ -11,6 +11,7 @@ dependencies:
   - VT-114
   - VT-115
   - VT-116
+  - VT-148
 allowed_paths:
   - backlog/**
   - docs/specs/features/platform-testing-strategy.md
@@ -33,6 +34,7 @@ Close out the platform testing plan after the small QA child tasks are complete.
 - VT-114 iOS simulator baseline
 - VT-115 shared SwiftUI screen QA split
 - VT-116 QA evidence template
+- VT-148 Xcode build service health check
 
 ## Verification
 

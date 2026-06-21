@@ -148,12 +148,9 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
     private func parseTranscript(from data: Data) throws -> String {
         do {
             let response = try decoder.decode(OpenAITranscriptionResponse.self, from: data)
-            let transcript = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !transcript.isEmpty else {
-                throw OpenAITranscriptionServiceError.emptyTranscript
-            }
-
-            return transcript
+            return try AcceptedTranscript(rawText: response.text).text
+        } catch AcceptedTranscript.ValidationError.emptyText {
+            throw OpenAITranscriptionServiceError.emptyTranscript
         } catch let error as OpenAITranscriptionServiceError {
             throw error
         } catch {

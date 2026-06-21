@@ -35,10 +35,27 @@ struct DictationStatusTests {
         )
     }
 
-    @Test func onlyNonEmptySuccessTranscriptCanBeCopied() {
+    @Test func exposesOnlyNormalizedSuccessTranscript() {
+        let status = DictationStatus.success(transcript: "  Typed text\n")
+
+        #expect(status.lastTranscriptText == "Typed text")
+        #expect(status.lastTranscriptMenuText == "Typed text")
+        #expect(status.detailText == "Typed text")
+    }
+
+    @Test func onlyNonEmptyNormalizedSuccessTranscriptCanBeCopied() {
         #expect(DictationStatus.idle.canCopyLastTranscript == false)
         #expect(DictationStatus.success(transcript: "").canCopyLastTranscript == false)
+        #expect(DictationStatus.success(transcript: "  \n\t  ").canCopyLastTranscript == false)
         #expect(DictationStatus.success(transcript: "Typed text").canCopyLastTranscript == true)
+    }
+
+    @Test func whitespaceOnlySuccessTranscriptShowsEmptyState() {
+        let status = DictationStatus.success(transcript: "  \n\t  ")
+
+        #expect(status.lastTranscriptText == nil)
+        #expect(status.lastTranscriptMenuText == "No transcript yet.")
+        #expect(status.detailText == "No transcript available.")
     }
 
     @Test func placeholderRecordingActionTogglesOnlyStartAndStopStates() {
