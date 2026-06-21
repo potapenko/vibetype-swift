@@ -1,7 +1,7 @@
 ---
 id: VT-152
 title: Settings Toggles Blocker Closeout
-status: backlog
+status: in-progress
 priority: P2
 lane: settings
 dependencies:
@@ -20,7 +20,7 @@ verification:
 
 # VT-152 - Settings Toggles Blocker Closeout
 
-Status: backlog
+Status: in-progress
 Priority: P2
 Lane: settings
 Dependencies: VT-013, VT-021, VT-148
