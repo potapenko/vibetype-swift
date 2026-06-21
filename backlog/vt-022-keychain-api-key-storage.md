@@ -1,7 +1,7 @@
 ---
 id: VT-022
 title: Keychain API Key Storage
-status: in-progress
+status: done
 priority: P1
 lane: settings
 parent: VT-020
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-022 - Keychain API Key Storage
 
-Status: in-progress
+Status: done
 
 ## Goal
 
