@@ -1,7 +1,7 @@
 ---
 id: VT-112
 title: macOS Menu Bar Computer Use Smoke
-status: backlog
+status: in-progress
 priority: P2
 lane: testing
 parent: VT-110
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-112 - macOS Menu Bar Computer Use Smoke
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
