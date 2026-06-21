@@ -1,7 +1,7 @@
 ---
 id: VT-025
 title: Transcription Settings Fields UI
-status: backlog
+status: in-progress
 priority: P2
 lane: settings
 parent: VT-020
@@ -18,7 +18,7 @@ allowed_paths:
 
 # VT-025 - Transcription Settings Fields UI
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
