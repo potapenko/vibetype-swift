@@ -1,7 +1,7 @@
 ---
 id: VT-021
 title: Settings Defaults Model
-status: blocked
+status: done
 priority: P1
 lane: settings
 parent: VT-020
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-021 - Settings Defaults Model
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -51,15 +51,13 @@ Add a small Swift settings model with MVP defaults.
   `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
 - `git diff --check` passed.
 
-## Resolution Path
+## Completion Evidence
 
-- Blocker category: full scheme UI-test runner cannot authenticate
-  off-console.
-- Unblock condition: rerun
-  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
-  and `git diff --check`; if they still pass, apply the
-  `verification-strategy.md` policy that accepts narrow target evidence when
-  only the UI-test runner needs off-console interaction.
-- A blocker-resolution pass may then mark this task done without additional
-  source edits because the settings model, non-secret persistence, and unit
-  evidence are already present.
+- 2026-06-21 04:57 CEST: Blocker-resolution pass verified the existing
+  settings model and non-secret persistence tests directly.
+- Passed:
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
+- The full scheme UI-test runner blocker is covered by
+  `docs/specs/features/verification-strategy.md`: narrow target evidence is
+  acceptable when the full UI-test runner requires off-console interaction.
+- `git diff --check` passed.
