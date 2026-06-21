@@ -1,7 +1,7 @@
 ---
 id: VT-063
 title: Clipboard Restore After Paste
-status: in-progress
+status: done
 priority: P2
 lane: text-output
 parent: VT-060
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-063 - Clipboard Restore After Paste
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -51,3 +51,15 @@ Restore the previous clipboard after auto-paste when the setting is enabled.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Completion Evidence
+
+- 2026-06-21 17:35 CEST: Added delayed previous-clipboard restoration to
+  `TextInsertionService` after successful Accessibility-gated paste when the
+  `restoreClipboard` setting is enabled and a plain-text snapshot exists.
+- Added fake-backed tests for successful restore, disabled restore, missing
+  previous plain text, restore failure reporting, and existing copy-only /
+  failed-paste fallback behavior.
+- Verification passed:
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`.
+  `git diff --check` passed.

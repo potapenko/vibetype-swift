@@ -52,6 +52,7 @@ struct TaskTextInsertionSleeper: TextInsertionSleeping {
 
 struct TextInsertionService {
     static let defaultClipboardSettleDelay: TimeInterval = 0.12
+    static let defaultClipboardRestoreDelay: TimeInterval = 0.45
     static let defaultPasteTimeout: TimeInterval = 3
 
     private let clipboardService: ClipboardService
@@ -59,6 +60,7 @@ struct TextInsertionService {
     private let pasteEventPoster: any PasteEventPosting
     private let sleeper: any TextInsertionSleeping
     private let clipboardSettleDelay: TimeInterval
+    private let clipboardRestoreDelay: TimeInterval
     private let pasteTimeout: TimeInterval
 
     init(
@@ -67,6 +69,7 @@ struct TextInsertionService {
         pasteEventPoster: any PasteEventPosting = CGEventPasteEventPoster(),
         sleeper: any TextInsertionSleeping = TaskTextInsertionSleeper(),
         clipboardSettleDelay: TimeInterval = Self.defaultClipboardSettleDelay,
+        clipboardRestoreDelay: TimeInterval = Self.defaultClipboardRestoreDelay,
         pasteTimeout: TimeInterval = Self.defaultPasteTimeout
     ) {
         self.clipboardService = clipboardService
@@ -74,12 +77,16 @@ struct TextInsertionService {
         self.pasteEventPoster = pasteEventPoster
         self.sleeper = sleeper
         self.clipboardSettleDelay = max(0, clipboardSettleDelay)
+        self.clipboardRestoreDelay = max(0, clipboardRestoreDelay)
         self.pasteTimeout = pasteTimeout > 0 ? pasteTimeout : Self.defaultPasteTimeout
     }
 
     func deliver(_ transcript: String, settings: AppSettings) async throws -> TextInsertionResult {
         if settings.autoPaste {
-            return try await pasteOrCopyFallback(transcript)
+            return try await pasteOrCopyFallback(
+                transcript,
+                shouldRestorePreviousClipboard: settings.restoreClipboard
+            )
         }
 
         guard settings.copyToClipboard else {
@@ -90,7 +97,10 @@ struct TextInsertionService {
         return .copiedToClipboard(reason: .autoPasteDisabled, snapshot: snapshot)
     }
 
-    private func pasteOrCopyFallback(_ transcript: String) async throws -> TextInsertionResult {
+    private func pasteOrCopyFallback(
+        _ transcript: String,
+        shouldRestorePreviousClipboard: Bool
+    ) async throws -> TextInsertionResult {
         let snapshot = try clipboardService.copyPlainText(transcript)
 
         guard accessibilityPermissionService.currentStatus().canPasteIntoActiveApp else {
@@ -100,11 +110,36 @@ struct TextInsertionService {
         do {
             try await sleeper.sleep(seconds: clipboardSettleDelay)
             try await postPasteWithTimeout()
-            return .pasted(snapshot: snapshot)
+            let restoreStatus = await restorePreviousClipboardIfNeeded(
+                from: snapshot,
+                enabled: shouldRestorePreviousClipboard
+            )
+            return .pasted(snapshot: snapshot, restoreStatus: restoreStatus)
         } catch TextInsertionServiceError.pasteTimedOut {
             return .copiedToClipboard(reason: .pasteTimedOut, snapshot: snapshot)
         } catch {
             return .copiedToClipboard(reason: .pasteFailed, snapshot: snapshot)
+        }
+    }
+
+    private func restorePreviousClipboardIfNeeded(
+        from snapshot: ClipboardSnapshot,
+        enabled: Bool
+    ) async -> TextInsertionRestoreStatus {
+        guard enabled else {
+            return .disabled
+        }
+
+        guard snapshot.canRestorePlainText else {
+            return .skippedNoPreviousPlainText
+        }
+
+        do {
+            try await sleeper.sleep(seconds: clipboardRestoreDelay)
+            try clipboardService.restorePlainText(from: snapshot)
+            return .restored
+        } catch {
+            return .failed
         }
     }
 
@@ -130,18 +165,36 @@ struct TextInsertionService {
 }
 
 enum TextInsertionResult: Equatable {
-    case pasted(snapshot: ClipboardSnapshot)
+    case pasted(snapshot: ClipboardSnapshot, restoreStatus: TextInsertionRestoreStatus)
     case copiedToClipboard(reason: TextInsertionCopyOnlyReason, snapshot: ClipboardSnapshot)
     case skipped(reason: TextInsertionSkipReason)
 
     var statusText: String {
         switch self {
-        case .pasted:
-            return "Transcript pasted."
+        case .pasted(_, let restoreStatus):
+            return restoreStatus.statusText
         case .copiedToClipboard(let reason, _):
             return reason.statusText
         case .skipped(let reason):
             return reason.statusText
+        }
+    }
+}
+
+enum TextInsertionRestoreStatus: Equatable {
+    case disabled
+    case skippedNoPreviousPlainText
+    case restored
+    case failed
+
+    var statusText: String {
+        switch self {
+        case .disabled, .skippedNoPreviousPlainText:
+            return "Transcript pasted."
+        case .restored:
+            return "Transcript pasted. Previous clipboard restored."
+        case .failed:
+            return "Transcript pasted, but the previous clipboard could not be restored."
         }
     }
 }

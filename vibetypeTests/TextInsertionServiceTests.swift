@@ -11,7 +11,7 @@ import Testing
 
 struct TextInsertionServiceTests {
 
-    @Test func trustedAutoPasteCopiesTranscriptAndPostsPasteAfterSettleDelay() async throws {
+    @Test func trustedAutoPasteRestoresPreviousClipboardAfterSuccessfulPasteWhenEnabled() async throws {
         let clipboardClient = FakeTextInsertionClipboardClient(plainText: "previous clipboard")
         let pasteEventPoster = FakePasteEventPoster()
         let sleeper = FakeTextInsertionSleeper()
@@ -20,17 +20,98 @@ struct TextInsertionServiceTests {
             accessibilityIsTrusted: true,
             pasteEventPoster: pasteEventPoster,
             sleeper: sleeper,
-            clipboardSettleDelay: 0.12
+            clipboardSettleDelay: 0.12,
+            clipboardRestoreDelay: 0.45
         )
 
         let result = try await service.deliver("hello active app", settings: defaultSettings())
 
-        #expect(result == .pasted(snapshot: ClipboardSnapshot(plainText: "previous clipboard")))
-        #expect(result.statusText == "Transcript pasted.")
-        #expect(clipboardClient.plainText == "hello active app")
-        #expect(clipboardClient.writtenText == ["hello active app"])
+        #expect(
+            result == .pasted(
+                snapshot: ClipboardSnapshot(plainText: "previous clipboard"),
+                restoreStatus: .restored
+            )
+        )
+        #expect(result.statusText == "Transcript pasted. Previous clipboard restored.")
+        #expect(clipboardClient.plainText == "previous clipboard")
+        #expect(clipboardClient.writtenText == ["hello active app", "previous clipboard"])
         #expect(await pasteEventPoster.postCount() == 1)
-        #expect(await sleeper.sleepCalls() == [0.12])
+        #expect(await sleeper.sleepCalls() == [0.12, 0.45])
+    }
+
+    @Test func restoreDisabledLeavesTranscriptOnClipboardAfterSuccessfulPaste() async throws {
+        let clipboardClient = FakeTextInsertionClipboardClient(plainText: "previous clipboard")
+        let pasteEventPoster = FakePasteEventPoster()
+        let service = makeService(
+            clipboardClient: clipboardClient,
+            accessibilityIsTrusted: true,
+            pasteEventPoster: pasteEventPoster
+        )
+        let settings = makeSettings(
+            autoPaste: true,
+            copyToClipboard: true,
+            restoreClipboard: false
+        )
+
+        let result = try await service.deliver("keep transcript", settings: settings)
+
+        #expect(
+            result == .pasted(
+                snapshot: ClipboardSnapshot(plainText: "previous clipboard"),
+                restoreStatus: .disabled
+            )
+        )
+        #expect(result.statusText == "Transcript pasted.")
+        #expect(clipboardClient.plainText == "keep transcript")
+        #expect(clipboardClient.writtenText == ["keep transcript"])
+        #expect(await pasteEventPoster.postCount() == 1)
+    }
+
+    @Test func missingPreviousPlainTextSkipsRestoreAndLeavesTranscriptOnClipboard() async throws {
+        let clipboardClient = FakeTextInsertionClipboardClient(plainText: nil)
+        let pasteEventPoster = FakePasteEventPoster()
+        let service = makeService(
+            clipboardClient: clipboardClient,
+            accessibilityIsTrusted: true,
+            pasteEventPoster: pasteEventPoster
+        )
+
+        let result = try await service.deliver("no previous text", settings: defaultSettings())
+
+        #expect(
+            result == .pasted(
+                snapshot: ClipboardSnapshot(plainText: nil),
+                restoreStatus: .skippedNoPreviousPlainText
+            )
+        )
+        #expect(result.statusText == "Transcript pasted.")
+        #expect(clipboardClient.plainText == "no previous text")
+        #expect(clipboardClient.writtenText == ["no previous text"])
+        #expect(await pasteEventPoster.postCount() == 1)
+    }
+
+    @Test func restoreFailureReportsPastedResultWithoutThrowing() async throws {
+        let clipboardClient = FakeTextInsertionClipboardClient(plainText: "previous clipboard")
+        clipboardClient.failAfterSuccessfulWriteCount = 1
+        let pasteEventPoster = FakePasteEventPoster()
+        let service = makeService(
+            clipboardClient: clipboardClient,
+            accessibilityIsTrusted: true,
+            pasteEventPoster: pasteEventPoster
+        )
+
+        let result = try await service.deliver("restore failure text", settings: defaultSettings())
+
+        #expect(
+            result == .pasted(
+                snapshot: ClipboardSnapshot(plainText: "previous clipboard"),
+                restoreStatus: .failed
+            )
+        )
+        #expect(result.statusText.contains("could not be restored"))
+        #expect(clipboardClient.plainText == "restore failure text")
+        #expect(clipboardClient.writtenText == ["restore failure text"])
+        #expect(await pasteEventPoster.postCount() == 1)
     }
 
     @Test func missingAccessibilityFallsBackToCopiedTranscriptWithoutPostingPaste() async throws {
@@ -145,6 +226,7 @@ struct TextInsertionServiceTests {
         pasteEventPoster: FakePasteEventPoster = FakePasteEventPoster(),
         sleeper: FakeTextInsertionSleeper = FakeTextInsertionSleeper(),
         clipboardSettleDelay: TimeInterval = 0,
+        clipboardRestoreDelay: TimeInterval = 0,
         pasteTimeout: TimeInterval = 1
     ) -> TextInsertionService {
         TextInsertionService(
@@ -157,15 +239,20 @@ struct TextInsertionServiceTests {
             pasteEventPoster: pasteEventPoster,
             sleeper: sleeper,
             clipboardSettleDelay: clipboardSettleDelay,
+            clipboardRestoreDelay: clipboardRestoreDelay,
             pasteTimeout: pasteTimeout
         )
     }
 
     private func defaultSettings() -> AppSettings {
-        makeSettings(autoPaste: true, copyToClipboard: true)
+        makeSettings(autoPaste: true, copyToClipboard: true, restoreClipboard: true)
     }
 
-    private func makeSettings(autoPaste: Bool, copyToClipboard: Bool) -> AppSettings {
+    private func makeSettings(
+        autoPaste: Bool,
+        copyToClipboard: Bool,
+        restoreClipboard: Bool = true
+    ) -> AppSettings {
         AppSettings(
             transcriptionModel: AppSettings.defaultTranscriptionModel,
             language: .automatic,
@@ -173,7 +260,7 @@ struct TextInsertionServiceTests {
             prompt: "",
             autoPaste: autoPaste,
             copyToClipboard: copyToClipboard,
-            restoreClipboard: true,
+            restoreClipboard: restoreClipboard,
             soundEnabled: true,
             showFloatingIndicator: true,
             saveTranscriptHistory: false
@@ -184,6 +271,7 @@ struct TextInsertionServiceTests {
 private final class FakeTextInsertionClipboardClient: ClipboardClient {
     private(set) var writtenText: [String] = []
     var plainText: String?
+    var failAfterSuccessfulWriteCount: Int?
 
     init(plainText: String?) {
         self.plainText = plainText
@@ -195,6 +283,10 @@ private final class FakeTextInsertionClipboardClient: ClipboardClient {
 
     @discardableResult
     func replacePlainText(_ text: String) -> Bool {
+        if let failAfterSuccessfulWriteCount, writtenText.count >= failAfterSuccessfulWriteCount {
+            return false
+        }
+
         plainText = text
         writtenText.append(text)
         return true

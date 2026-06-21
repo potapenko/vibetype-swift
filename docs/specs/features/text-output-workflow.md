@@ -49,8 +49,9 @@ This spec covers:
   should be copied to clipboard.
 - If Accessibility permission is missing, auto-paste should fall back to copy
   to clipboard and show a clear status or error.
-- If `restorePreviousClipboard` is enabled, the app may restore the prior
-  clipboard after a short delay.
+- If `restorePreviousClipboard` is enabled and auto-paste succeeds, the app
+  should restore the prior plain-text clipboard after a short delay when a
+  plain-text snapshot exists.
 - Auto-paste should write the transcript to the clipboard before sending the
   paste event, then wait a short bounded clipboard-settle delay before posting
   Cmd+V.
@@ -86,8 +87,9 @@ This spec covers:
   successful result.
 - If the clipboard or host app is unavailable, the app should show a recoverable
   output error.
-- If the previous clipboard cannot be restored, the app should not hide that
-  failure when restore behavior was enabled.
+- If the previous clipboard cannot be restored, the app should not crash or
+  treat the paste as failed, but it must surface that restore failure when
+  restore behavior was enabled.
 - Paste and restore delays must be bounded. The first native macOS adapter may
   use roughly a 100-150ms paste delay after writing the clipboard and roughly a
   400-500ms restore delay after a successful paste, refined by QA only when the
