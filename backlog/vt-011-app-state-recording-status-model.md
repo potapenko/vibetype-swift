@@ -1,7 +1,7 @@
 ---
 id: VT-011
 title: App State Recording Status Model
-status: blocked
+status: done
 priority: P0
 lane: swift-app-shell
 parent: VT-010
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-011 - App State Recording Status Model
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -38,7 +38,7 @@ transcribing, completed, and error states.
 
 ## Verification
 
-- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
 - `git diff --check`
 
 ## Blocker Evidence
@@ -51,3 +51,18 @@ transcribing, completed, and error states.
   `vibetypeUITests-Runner` cannot initialize for UI testing in this off-console
   automation environment: `User interaction required. Can't authenticate off console`.
 - `git diff --check` passes.
+
+## Completion Evidence
+
+2026-06-21:
+
+- Verified the existing `DictationStatus` model exposes idle, recording,
+  transcribing, success, and failure states for menu code without real
+  microphone or network services.
+- Verified the menu reads `DictationStatus` for status text, recording action
+  title, action enabled state, last transcript display, and copy eligibility.
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests` passed.
+- The focused unit target is the accepted evidence for this model-only task
+  because `docs/specs/features/verification-strategy.md` allows narrow target
+  evidence when the full scheme is blocked only by the macOS UI-test runner
+  needing off-console authentication.
