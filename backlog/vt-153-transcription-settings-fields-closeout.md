@@ -1,7 +1,7 @@
 ---
 id: VT-153
 title: Transcription Settings Fields Closeout
-status: backlog
+status: in-progress
 priority: P2
 lane: settings
 dependencies:
@@ -20,7 +20,7 @@ verification:
 
 # VT-153 - Transcription Settings Fields Closeout
 
-Status: backlog
+Status: in-progress
 Priority: P2
 Lane: settings
 Dependencies: VT-013, VT-021, VT-148
