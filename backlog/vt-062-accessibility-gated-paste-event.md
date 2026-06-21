@@ -1,7 +1,7 @@
 ---
 id: VT-062
 title: Accessibility Gated Paste Event
-status: backlog
+status: in-progress
 priority: P1
 lane: text-output
 parent: VT-060
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-062 - Accessibility Gated Paste Event
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
