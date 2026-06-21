@@ -1,7 +1,7 @@
 ---
 id: VT-012
 title: Start Stop Menu Label Binding
-status: backlog
+status: in-progress
 priority: P0
 lane: swift-app-shell
 parent: VT-010
@@ -15,7 +15,7 @@ allowed_paths:
 
 # VT-012 - Start Stop Menu Label Binding
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
