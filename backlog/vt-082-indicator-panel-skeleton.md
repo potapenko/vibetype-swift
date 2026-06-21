@@ -1,7 +1,7 @@
 ---
 id: VT-082
 title: Indicator Panel Skeleton
-status: backlog
+status: in-progress
 priority: P3
 lane: indicator
 parent: VT-080
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-082 - Indicator Panel Skeleton
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
