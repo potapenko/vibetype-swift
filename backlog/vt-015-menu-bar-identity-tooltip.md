@@ -1,7 +1,7 @@
 ---
 id: VT-015
 title: Menu Bar Identity And Tooltip
-status: blocked
+status: done
 priority: P2
 lane: swift-app-shell
 parent: VT-010
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-015 - Menu Bar Identity And Tooltip
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -51,6 +51,26 @@ translate only the product need: a recognizable native macOS menu bar item.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`
+
+## Completion Evidence
+
+2026-06-22 closeout:
+
+- `VT-150` reran the local recovery path from the current checkout before
+  retrying the macOS build gate.
+- Recovery command:
+  `python3 scripts/local_tooling_recover.py --apply --json`.
+- Recovery result: `ok: true`; no stale processes matched. Current-run
+  recovery removed generated artifacts only: first project-scoped DerivedData,
+  then `scripts/__pycache__`.
+- The active MCP surface was checked; no matching macOS XcodeBuildMCP build
+  tool was exposed, so the closeout used the bounded shell `xcodebuild`
+  fallback required by `VT-150`.
+- Bounded build retry passed:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+  ended with `** BUILD SUCCEEDED **`.
+- No Swift source, Xcode project, spec, asset, or menu behavior changes were
+  made in the closeout run.
 
 ## Blocker Evidence
 

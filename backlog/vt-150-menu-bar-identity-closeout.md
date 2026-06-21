@@ -1,7 +1,7 @@
 ---
 id: VT-150
 title: Menu Bar Identity Blocker Closeout
-status: blocked
+status: done
 priority: P0
 lane: swift-app-shell
 dependencies:
@@ -18,7 +18,7 @@ verification:
 
 # VT-150 - Menu Bar Identity Blocker Closeout
 
-Status: blocked
+Status: done
 Priority: P0
 Lane: swift-app-shell
 Dependencies: VT-000
@@ -55,6 +55,24 @@ has an executable path again.
   blocker note with recovery JSON and the bounded command result.
 - The task preserves the existing native SwiftUI/AppKit menu-bar scope.
 - No unrelated backlog or source files are modified.
+
+## Completion Evidence
+
+2026-06-22 closeout:
+
+- Local recovery was run before the selected bounded build retry:
+  `python3 scripts/local_tooling_recover.py --apply --json`.
+- Recovery result: `ok: true`; no stale processes matched. Current-run
+  recovery removed generated artifacts only: first project-scoped DerivedData,
+  then `scripts/__pycache__`.
+- The active MCP surface was checked; no matching macOS XcodeBuildMCP build
+  tool was exposed, so the closeout used the task's standard bounded shell
+  `xcodebuild` path.
+- Bounded build retry passed:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+  ended with `** BUILD SUCCEEDED **`.
+- `VT-015` is marked `done` with this fresh build evidence. No Swift source,
+  Xcode project, spec, asset, or menu behavior changes were made.
 
 ## Tooling Assumptions
 
