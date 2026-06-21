@@ -18,6 +18,41 @@ enum MicrophonePermissionStatus: Equatable {
     var canRecord: Bool {
         self == .allowed
     }
+
+    var canUseRecordingAction: Bool {
+        switch self {
+        case .allowed, .notDetermined:
+            return true
+        case .denied, .unavailable:
+            return false
+        }
+    }
+
+    var menuStatusText: String {
+        switch self {
+        case .allowed:
+            return "Microphone: Allowed"
+        case .denied:
+            return "Microphone: Not Allowed"
+        case .notDetermined:
+            return "Microphone: Permission Needed"
+        case .unavailable:
+            return "Microphone: Unavailable"
+        }
+    }
+
+    var menuDetailText: String? {
+        switch self {
+        case .allowed:
+            return nil
+        case .denied:
+            return "Recording is blocked until microphone access is allowed."
+        case .notDetermined:
+            return "Allow microphone access before starting dictation."
+        case .unavailable:
+            return "Recording is blocked because no microphone input is available."
+        }
+    }
 }
 
 enum MicrophoneAuthorizationStatus: Equatable {
@@ -99,6 +134,17 @@ struct MicrophonePermissionService {
             return .notDetermined
         }
     }
+
+    @discardableResult
+    func openMicrophoneSettings() -> Bool {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        ) else {
+            return false
+        }
+
+        return NSWorkspace.shared.open(url)
+    }
 }
 
 enum AccessibilityPermissionStatus: Equatable {
@@ -123,7 +169,16 @@ enum AccessibilityPermissionStatus: Equatable {
         case .trusted:
             return "Auto-paste can control the active app."
         case .notTrusted:
-            return "Auto-paste will need Accessibility permission."
+            return "Auto-paste needs Accessibility permission. Transcription and copy-only fallback can still work."
+        }
+    }
+
+    var menuDetailText: String? {
+        switch self {
+        case .trusted:
+            return nil
+        case .notTrusted:
+            return "Auto-paste is unavailable; transcripts can still be copied."
         }
     }
 }

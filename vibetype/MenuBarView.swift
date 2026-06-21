@@ -15,22 +15,29 @@ struct MenuBarView: View {
     @State private var appSettings: AppSettings
     @State private var lastClipboardSnapshot: ClipboardSnapshot?
     @State private var clipboardStatusText: String?
+    @State private var microphonePermissionStatus: MicrophonePermissionStatus
     @State private var accessibilityPermissionStatus: AccessibilityPermissionStatus
     @State private var floatingIndicatorPanel = FloatingIndicatorPanelController()
 
     private let clipboardService: ClipboardService
+    private let microphonePermissionService: MicrophonePermissionService
     private let accessibilityPermissionService: AccessibilityPermissionService
     private let appSettingsStore: AppSettingsStore
 
     init(
         clipboardService: ClipboardService = ClipboardService(),
+        microphonePermissionService: MicrophonePermissionService = MicrophonePermissionService(),
         accessibilityPermissionService: AccessibilityPermissionService = AccessibilityPermissionService(),
         appSettingsStore: AppSettingsStore = AppSettingsStore()
     ) {
         self.clipboardService = clipboardService
+        self.microphonePermissionService = microphonePermissionService
         self.accessibilityPermissionService = accessibilityPermissionService
         self.appSettingsStore = appSettingsStore
         _appSettings = State(initialValue: appSettingsStore.load())
+        _microphonePermissionStatus = State(
+            initialValue: microphonePermissionService.currentStatus()
+        )
         _accessibilityPermissionStatus = State(
             initialValue: accessibilityPermissionService.currentStatus()
         )
@@ -44,8 +51,28 @@ struct MenuBarView: View {
             Text(dictationStatus.menuStatusText)
                 .foregroundStyle(.secondary)
 
+            Text(microphonePermissionStatus.menuStatusText)
+                .foregroundStyle(.secondary)
+
+            if let microphoneDetailText = microphonePermissionStatus.menuDetailText {
+                Text(microphoneDetailText)
+                    .foregroundStyle(.secondary)
+            }
+
+            if microphonePermissionStatus == .denied {
+                Button("Open Microphone Settings") {
+                    microphonePermissionService.openMicrophoneSettings()
+                    refreshMicrophonePermissionStatus()
+                }
+            }
+
             Text(accessibilityPermissionStatus.menuStatusText)
                 .foregroundStyle(.secondary)
+
+            if let accessibilityDetailText = accessibilityPermissionStatus.menuDetailText {
+                Text(accessibilityDetailText)
+                    .foregroundStyle(.secondary)
+            }
 
             if !accessibilityPermissionStatus.canPasteIntoActiveApp {
                 Button("Open Accessibility Settings") {
@@ -56,10 +83,10 @@ struct MenuBarView: View {
 
             Divider()
 
-            Button(dictationStatus.recordingActionTitle) {
-                dictationStatus = dictationStatus.placeholderRecordingActionResult
+            Button(recordingActionTitle) {
+                performRecordingAction()
             }
-            .disabled(!dictationStatus.isRecordingActionEnabled)
+            .disabled(!isRecordingActionEnabled)
 
             if let detailText = dictationStatus.detailText {
                 Text(detailText)
@@ -102,6 +129,7 @@ struct MenuBarView: View {
         }
         .onAppear {
             reloadAppSettings()
+            refreshMicrophonePermissionStatus()
             refreshAccessibilityPermissionStatus()
             updateFloatingIndicator()
         }
@@ -122,6 +150,50 @@ struct MenuBarView: View {
         } catch {
             clipboardStatusText = error.localizedDescription
         }
+    }
+
+    private var recordingActionTitle: String {
+        switch microphonePermissionStatus {
+        case .notDetermined:
+            return "Request Microphone Access"
+        case .allowed, .denied, .unavailable:
+            return dictationStatus.recordingActionTitle
+        }
+    }
+
+    private var isRecordingActionEnabled: Bool {
+        dictationStatus.isRecordingActionEnabled && microphonePermissionStatus.canUseRecordingAction
+    }
+
+    private func performRecordingAction() {
+        switch microphonePermissionStatus {
+        case .allowed:
+            dictationStatus = dictationStatus.placeholderRecordingActionResult
+        case .notDetermined:
+            requestMicrophonePermission()
+        case .denied, .unavailable:
+            if let microphoneDetailText = microphonePermissionStatus.menuDetailText {
+                dictationStatus = .failure(message: microphoneDetailText)
+            }
+        }
+    }
+
+    private func requestMicrophonePermission() {
+        microphonePermissionService.requestPermission { newStatus in
+            DispatchQueue.main.async {
+                microphonePermissionStatus = newStatus
+
+                if newStatus.canRecord {
+                    dictationStatus = .idle
+                } else if let microphoneDetailText = newStatus.menuDetailText {
+                    dictationStatus = .failure(message: microphoneDetailText)
+                }
+            }
+        }
+    }
+
+    private func refreshMicrophonePermissionStatus() {
+        microphonePermissionStatus = microphonePermissionService.currentStatus()
     }
 
     private func refreshAccessibilityPermissionStatus() {

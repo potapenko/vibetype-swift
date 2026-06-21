@@ -39,6 +39,14 @@ This spec covers:
   fallback generation, or cross-platform tray behavior.
 - The menu should include Start Recording or Stop Recording depending on the
   current state.
+- The menu should show microphone permission status before the recording
+  action. If microphone access is not determined, the primary recording action
+  should request microphone access instead of pretending to record. If
+  microphone access is denied or unavailable, recording must be blocked and the
+  menu must expose the next recoverable action when one exists.
+- Accessibility permission must not block transcription or copy-only flows.
+  When Accessibility is not trusted, the menu should explain that auto-paste is
+  unavailable while transcripts can still be copied.
 - Before recording exists, Start Recording may be a visible placeholder, but it
   must clearly state that recording is not available yet.
 - Before recording exists, a placeholder Start/Stop transition may exercise

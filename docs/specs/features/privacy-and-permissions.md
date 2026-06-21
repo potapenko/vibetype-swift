@@ -53,6 +53,10 @@ This spec covers:
   credentials, or full provider responses in the default product log stream.
 - If a user denies microphone permission, the app should remain usable enough
   to explain what is blocked and how to retry.
+- The menu bar must surface microphone permission state before recording starts.
+  Missing or denied microphone permission must block recording and show the
+  shortest available next action, such as requesting access or opening the
+  Microphone pane in System Settings.
 - Settings should show microphone and Accessibility status using product
   language and provide a bounded next action such as requesting permission or
   opening the relevant System Settings pane.
@@ -95,6 +99,9 @@ This spec covers:
 - If Accessibility permission is not trusted, the app should explain that
   auto-paste is blocked and provide a way to open the relevant System Settings
   pane when possible.
+- If Accessibility permission is not trusted, transcription itself should remain
+  available when other requirements are met, and the app should fall back to a
+  copy-only path instead of simulating paste into the active app.
 - If OpenAI is unavailable, the app should fail the current
   attempt with a visible error and allow a later retry.
 - If debug logging is temporarily enabled for investigation, the developer
