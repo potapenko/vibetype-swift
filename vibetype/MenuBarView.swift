@@ -12,19 +12,25 @@ struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
 
     @State private var dictationStatus = DictationStatus.idle
+    @State private var appSettings: AppSettings
     @State private var lastClipboardSnapshot: ClipboardSnapshot?
     @State private var clipboardStatusText: String?
     @State private var accessibilityPermissionStatus: AccessibilityPermissionStatus
+    @State private var floatingIndicatorPanel = FloatingIndicatorPanelController()
 
     private let clipboardService: ClipboardService
     private let accessibilityPermissionService: AccessibilityPermissionService
+    private let appSettingsStore: AppSettingsStore
 
     init(
         clipboardService: ClipboardService = ClipboardService(),
-        accessibilityPermissionService: AccessibilityPermissionService = AccessibilityPermissionService()
+        accessibilityPermissionService: AccessibilityPermissionService = AccessibilityPermissionService(),
+        appSettingsStore: AppSettingsStore = AppSettingsStore()
     ) {
         self.clipboardService = clipboardService
         self.accessibilityPermissionService = accessibilityPermissionService
+        self.appSettingsStore = appSettingsStore
+        _appSettings = State(initialValue: appSettingsStore.load())
         _accessibilityPermissionStatus = State(
             initialValue: accessibilityPermissionService.currentStatus()
         )
@@ -94,7 +100,14 @@ struct MenuBarView: View {
             }
             .keyboardShortcut("q")
         }
-        .onAppear(perform: refreshAccessibilityPermissionStatus)
+        .onAppear {
+            reloadAppSettings()
+            refreshAccessibilityPermissionStatus()
+            updateFloatingIndicator()
+        }
+        .onChange(of: dictationStatus) { _ in
+            updateFloatingIndicator()
+        }
     }
 
     private func copyLastTranscript() {
@@ -113,6 +126,20 @@ struct MenuBarView: View {
 
     private func refreshAccessibilityPermissionStatus() {
         accessibilityPermissionStatus = accessibilityPermissionService.currentStatus()
+    }
+
+    private func reloadAppSettings() {
+        appSettings = appSettingsStore.load()
+    }
+
+    @MainActor
+    private func updateFloatingIndicator() {
+        floatingIndicatorPanel.update(
+            with: FloatingIndicatorPresentation.presentation(
+                for: dictationStatus,
+                settings: appSettings
+            )
+        )
     }
 }
 
