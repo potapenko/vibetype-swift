@@ -185,10 +185,13 @@ report success in this state.
 
 ## Current Run Thread
 
-At the end, after the final report has enough information, request archive of
-the current housekeeping automation run thread by calling
-`set_thread_archived` with `archived=true` and no `threadId`, when that tool is
-available.
+At the end, after the final report has enough information, follow the hard
+final resource cleanup and MCP/thread lifecycle guidance in
+`docs/agent-tooling.md`: terminate or close every resource the run started,
+clean only non-durable run-owned temporary artifacts, and report any residual
+resource that cannot be terminated. Then request archive of the current
+housekeeping automation run thread by calling `set_thread_archived` with
+`archived=true` and no `threadId`, when that tool is available.
 
 Do not archive the current housekeeping thread before completing the sweep
 report.
@@ -209,6 +212,7 @@ Report a compact operator summary with these fields:
 - `skipped_active_or_pending`
 - `orphaned_or_stale`
 - `blocker`
+- `cleanup`
 - `current_thread_archive`
 
 `installed_housekeeping_readback` must include the readback-verified

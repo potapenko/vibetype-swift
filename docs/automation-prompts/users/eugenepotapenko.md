@@ -29,6 +29,11 @@ Installed automation count for this repository: 6.
 Active count for this repository: 6.
 Paused count for this repository: 0.
 
+Global final gate: every installed automation prompt now requires hard
+run-owned resource cleanup before the final response, residual resource
+reporting when cleanup cannot terminate something safely, and current-thread
+archive request when thread management is available.
+
 ## Installed Automations
 
 ### `vibetype-swift-backlog-archiver`
@@ -44,8 +49,9 @@ Paused count for this repository: 0.
 - Archive script:
   `python3 scripts/backlog_archive_done.py --apply --json`
 - Expected output: one bounded completed-backlog archive pass, selector
-  readback, `git diff --check`, scoped checkpoint commit when files move, and
-  current-thread archive status when thread management is available
+  readback, `git diff --check`, scoped checkpoint commit when files move,
+  hard cleanup report, and current-thread archive status when thread
+  management is available
 - Safety contract: move only clean verified `done` task files from top-level
   `backlog/` to `backlog/done/`; do not claim tasks, implement product code,
   resolve blockers, groom tasks, or run destructive database/storage operations
@@ -67,8 +73,8 @@ Paused count for this repository: 0.
   status, verification, and scoped checkpoint commit when files change
 - Tooling contract: read `docs/agent-tooling.md` before creating platform or
   shared SwiftUI tasks that name XcodeBuildMCP, `xcodebuild`, Computer Use, or
-  fallback evidence; request current-thread archive before the final report
-  when thread management is available
+  fallback evidence; perform hard run-owned cleanup and request current-thread
+  archive before the final report when thread management is available
 - Safety/browser evidence contract: no browser requirement; do not implement
   Swift product code; dirty Git state is not a blocker and must be preserved
   with path-limited commits; no DB or destructive storage operations
@@ -88,8 +94,8 @@ Paused count for this repository: 0.
   `python3 scripts/backlog_blocked_next.py --json`
 - Expected output: one selected blocked task either directly resolved,
   connected to one concrete follow-up task, or recorded with an exact
-  operator-only unblock action; current-thread archive requested before the
-  final report when thread management is available
+  operator-only unblock action; hard cleanup report and current-thread archive
+  requested before the final report when thread management is available
 - Tooling contract: read `docs/agent-tooling.md` when a blocker involves
   Xcode, simulator, MCP, runtime QA, or tool-selection decisions
 - Safety/runtime evidence contract: dirty Git state is not a blocker and must
@@ -111,7 +117,7 @@ Paused count for this repository: 0.
   `python3 scripts/backlog_next.py --json`
 - Expected output: one selected backlog iteration with claim/completion
   checkpoint commits, verification, platform smoke evidence when required, and
-  cleanup report, including current-thread archive status when thread
+  hard cleanup report, including current-thread archive status when thread
   management is available
 - Tooling contract: read `docs/agent-tooling.md` when Xcode, simulator, MCP,
   runtime QA, or tool-selection decisions are involved
@@ -134,8 +140,8 @@ Paused count for this repository: 0.
 - Recovery script:
   `python3 scripts/local_tooling_recover.py --apply --json`
 - Expected output: one bounded local tooling recovery pass, bounded macOS
-  unit-test health check, selector readback, cleanup report, and current-thread
-  archive status when thread management is available
+  unit-test health check, selector readback, hard cleanup report, and
+  current-thread archive status when thread management is available
 - Safety/runtime evidence contract: fix local Xcode/build/test/simulator,
   cache, DerivedData, missing local utility, and missing local library blockers
   automatically; do not perform destructive database/storage operations,
@@ -154,8 +160,9 @@ Paused count for this repository: 0.
 - Versioned runtime contract:
   `docs/automation-prompts/runbooks/archive-completed-automation-threads.md`
 - Expected output: one current-repository-only archive-housekeeping pass that
-  readback-verifies eligible automation-run threads and sweeps until the
-  remaining eligible tail is at most two
+  readback-verifies eligible automation-run threads, sweeps until the remaining
+  eligible tail is at most two, and reports hard cleanup before archiving the
+  current housekeeping thread
 - Safety/thread contract: use thread-management tools as source of truth;
   inspect only automation threads for this exact cwd; do not inspect, count, or
   archive other-repository, active, pending, manual, or ambiguous threads;

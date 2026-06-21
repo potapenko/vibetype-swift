@@ -77,12 +77,15 @@ Do not modify sibling repositories. Do not access MongoDB directly. Do not run
 destructive database or object-storage operations.
 
 Apply run hygiene: keep MCP inspection task-specific, do not manually kill
-broad MCP process names, and follow `docs/agent-tooling.md` MCP/thread
-lifecycle guidance by requesting archive of the current automation thread
-before the final response when the thread-management tool is available. Clean
-only current-run temporary artifacts that are not durable evidence. For stale
-local Xcode/build/test tooling, use `scripts/local_tooling_recover.py` rather
-than stopping for user cleanup.
+broad MCP process names unless the process is clearly run-owned, and follow the
+hard final resource cleanup and MCP/thread lifecycle guidance in
+`docs/agent-tooling.md` by terminating or closing every resource the run
+started, reporting any residual resource that cannot be terminated, and
+requesting archive of the current automation thread before the final response
+when the thread-management tool is available. Clean only current-run temporary
+artifacts that are not durable evidence. For stale local Xcode/build/test
+tooling, use `scripts/local_tooling_recover.py` rather than stopping for user
+cleanup.
 
 ## Backlog Rules
 
@@ -151,6 +154,8 @@ Final report must include created or updated task ids, parent/child grouping
 changes, reference files inspected, selector status and selected task path,
 verification results, local tooling recovery summary, tooling assumptions added
 to tasks when relevant, commit hash if created, actual cwd, execution
-environment, `Thread archive` with `requested` or `unavailable` according to
-the MCP/thread lifecycle action, UI/functionality coverage rows updated or
-explicitly unchanged, unrelated dirty files preserved, and any blocker.
+environment, cleanup performed with terminated resources and any residual
+resources with reasons, `Thread archive` with `requested` or `unavailable`
+according to the MCP/thread lifecycle action, UI/functionality coverage rows
+updated or explicitly unchanged, unrelated dirty files preserved, and any
+blocker.

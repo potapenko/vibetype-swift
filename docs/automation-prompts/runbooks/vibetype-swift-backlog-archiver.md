@@ -51,6 +51,13 @@ Do not manually move task files. Do not archive `backlog`, `ready`,
 `in-progress`, or `blocked` tasks. Do not edit sibling repositories. Do not run
 destructive database or object-storage operations.
 
+Before the final response, follow the hard final resource cleanup and
+MCP/thread lifecycle guidance in `docs/agent-tooling.md`: terminate or close
+every resource the run started, clean only non-durable run-owned temporary
+artifacts, report any residual resource that cannot be terminated, and request
+archive of the current automation thread when the thread-management tool is
+available.
+
 ## Apply Rule
 
 If the dry-run reports `planned_count` greater than zero, run:
@@ -103,6 +110,7 @@ python3 scripts/backlog_blocked_next_test.py
 Final report must include actual cwd, dry-run planned/skipped counts, apply
 moved/skipped counts when applicable, active task count, archived done count,
 normal selector status, blocked selector status, verification results, commit
-hash if files changed, unrelated dirty files preserved, cleanup performed, and
-`Thread archive` with `requested` or `unavailable` according to the
-thread-management tool surface.
+hash if files changed, unrelated dirty files preserved, cleanup performed with
+terminated resources and any residual resources with reasons, and `Thread
+archive` with `requested` or `unavailable` according to the thread-management
+tool surface.

@@ -170,11 +170,13 @@ invalid for this repository.
 Apply run hygiene: close run-owned browser sessions, app launches, simulators,
 and dev servers before and after checks when ownership is clear; clean
 current-run temporary screenshots, audits, profiles, and build artifacts before
-staging; keep only durable reports or explicit evidence. Follow
-`docs/agent-tooling.md` MCP/thread lifecycle guidance: keep MCP inspection
-task-specific, do not manually kill broad MCP process names, and request
-archive of the current automation thread before the final response when the
-thread-management tool is available. Stale local Xcode/build/test/simulator
+staging; keep only durable reports or explicit evidence. Follow the hard final
+resource cleanup and MCP/thread lifecycle guidance in `docs/agent-tooling.md`:
+keep MCP inspection task-specific, do not manually kill broad MCP process names
+unless the process is clearly run-owned, terminate or close every resource the
+run started, report any residual resource that cannot be terminated, and
+request archive of the current automation thread before the final response when
+the thread-management tool is available. Stale local Xcode/build/test/simulator
 tooling, generated caches, missing local CLI utilities, and project-scoped
 DerivedData are automation problems, not user chores; fix them in the run by
 using `scripts/local_tooling_recover.py`, local package managers, Xcode command
@@ -294,9 +296,10 @@ checkpoint commit.
 Final report must include selector status, selected task id/title/path, claim
 commit hash, completion commit hash if work completed, changed files,
 verification results, platform smoke evidence or reason it was not required,
-cleanup performed, remaining real blocker if any, next selector result if
-checked, actual cwd, execution environment, selected task before/after status,
-confirmation that the canonical checkout now contains the status update,
+cleanup performed with terminated resources and any residual resources with
+reasons, remaining real blocker if any, next selector result if checked, actual
+cwd, execution environment, selected task before/after status, confirmation
+that the canonical checkout now contains the status update,
 `Tooling` with the XcodeBuildMCP / `xcodebuild` / Computer Use path used, and
 a short `Product delta` field. Include `Thread archive` with `requested` or
 `unavailable` according to the MCP/thread lifecycle action. The report must

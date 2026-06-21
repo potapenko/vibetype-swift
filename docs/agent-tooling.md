@@ -52,6 +52,42 @@ no `threadId` when the thread-management tool is available. Report
 `Thread archive: unavailable` and keep the rest of the cleanup bounded to
 artifacts clearly owned by the current run.
 
+## Hard Final Resource Cleanup And Archive Gate
+
+Every scheduled automation run must treat resource cleanup as a required final
+gate, not a best-effort note. Before the final response, the run must release
+everything it started or opened during that run:
+
+- terminate run-owned app launches, dev servers, preview servers, browser
+  sessions, Playwright/Chrome sessions, simulator sessions, Xcode/build/test
+  subprocesses, audio or media helpers, and other local tool subprocesses;
+- close or stop run-owned MCP/browser/computer-use sessions when the active
+  tool surface exposes a scoped close or stop action;
+- clean run-owned temporary screenshots, traces, profiles, downloads, bytecode,
+  logs, and generated caches that are not durable evidence;
+- preserve repository sources, committed evidence, durable reports, user-owned
+  browser sessions, unrelated application state, databases, and object storage;
+- never kill broad process-name matches unless the process is clearly owned by
+  the current run, current process tree, selected task, or repository recovery
+  helper.
+
+If a process or session cannot be terminated because ownership is ambiguous,
+the OS denies permission, or the tool surface has no scoped close action, the
+run must report the residual resource with the best available `pid`, owner,
+command, cwd or tool name, and reason it was left running. This is still a
+cleanup result; silently leaving resources behind is not allowed.
+
+After cleanup, the run must request archive of the current automation thread
+with `set_thread_archived` using `archived: true` and no `threadId` when that
+tool is available. The final response must include both:
+
+```text
+Cleanup: <terminated/cleaned resources, or residual resources with reasons>
+Thread archive: requested | unavailable
+```
+
+Do not send the final response until this gate has been attempted and reported.
+
 ## XcodeBuildMCP
 
 Official documentation:

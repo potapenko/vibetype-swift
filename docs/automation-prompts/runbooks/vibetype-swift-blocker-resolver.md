@@ -93,12 +93,15 @@ Apply run hygiene: close run-owned browser sessions, app launches, simulators,
 and dev servers before and after checks when ownership is clear; clean
 current-run temporary screenshots, audits, profiles, downloads, bytecode, and
 build artifacts before staging; keep only durable reports or explicit evidence.
-Follow `docs/agent-tooling.md` MCP/thread lifecycle guidance: keep MCP
-inspection task-specific, do not manually kill broad MCP process names, and
-request archive of the current automation thread before the final response when
-the thread-management tool is available. For local build/test tooling, use the
-repo recovery helper and local installation/configuration commands when needed;
-do not downgrade local tooling repair to a user/operator action.
+Follow the hard final resource cleanup and MCP/thread lifecycle guidance in
+`docs/agent-tooling.md`: keep MCP inspection task-specific, do not manually
+kill broad MCP process names unless the process is clearly run-owned, terminate
+or close every resource the run started, report any residual resource that
+cannot be terminated, and request archive of the current automation thread
+before the final response when the thread-management tool is available. For
+local build/test tooling, use the repo recovery helper and local
+installation/configuration commands when needed; do not downgrade local tooling
+repair to a user/operator action.
 
 ## Blocked Selector
 
@@ -232,8 +235,9 @@ Final report must include selected blocked task id/title/path, action taken
 `tooling_recovered`, or `operator_only`), follow-up id/path or operator action,
 local tooling recovery summary, changed files, verification results, `Tooling`
 with the XcodeBuildMCP / `xcodebuild` / Computer Use path used when relevant,
-cleanup performed, `Thread archive` with `requested` or `unavailable` according
-to the MCP/thread lifecycle action, completion commit hash if files changed,
+cleanup performed with terminated resources and any residual resources with
+reasons, `Thread archive` with `requested` or `unavailable` according to the
+MCP/thread lifecycle action, completion commit hash if files changed,
 next blocked selector result if checked, actual cwd, execution environment,
 unrelated dirty files preserved, and confirmation that the canonical checkout
 now contains the status or resolution-path update.

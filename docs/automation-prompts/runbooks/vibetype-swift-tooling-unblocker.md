@@ -62,6 +62,13 @@ Do not perform destructive database operations, destructive object-storage
 operations, destructive Git rollback, external account login, payment/account
 changes, manual system privacy approval, or broad unrelated process cleanup.
 
+Before the final response, follow the hard final resource cleanup and
+MCP/thread lifecycle guidance in `docs/agent-tooling.md`: terminate or close
+every resource the run started, clean only non-durable run-owned temporary
+artifacts, report any residual resource that cannot be terminated, and request
+archive of the current automation thread when the thread-management tool is
+available.
+
 ## Selector Readback
 
 After recovery and health check, run:
@@ -90,5 +97,6 @@ Final report must include actual cwd, execution environment, recovery command,
 recovery JSON summary, any install/configuration commands run, health-check
 command/result, selector status after recovery, blocked selector result after
 recovery, `git diff --check` result, changed files if any, commit hash if any,
-cleanup performed, remaining blocker if any, and `Thread archive` with
-`requested` or `unavailable` according to the thread-management tool surface.
+cleanup performed with terminated resources and any residual resources with
+reasons, remaining blocker if any, and `Thread archive` with `requested` or
+`unavailable` according to the thread-management tool surface.
