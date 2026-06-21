@@ -17,6 +17,7 @@ TestResults/
 # Swift Package Manager
 .build/
 .swiftpm/
+__pycache__/
 
 # Build artifacts
 *.app
