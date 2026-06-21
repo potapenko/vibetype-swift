@@ -67,6 +67,15 @@ Normalize transcription output before it reaches clipboard or paste workflows.
 - Narrow sanity evidence passed:
   `/opt/homebrew/bin/timeout 90 xcrun swiftc -typecheck -parse-as-library $(rg --files vibetype Shared -g '*.swift' | sort)`.
 - `git diff --check` passed.
+- Closeout retry on 2026-06-21 23:38 CEST in `VT-156`: local tooling
+  recovery returned `ok: true`, removed project DerivedData at
+  `/Users/eugenepotapenko/Library/Developer/Xcode/DerivedData/vibetype-cgljxvuvdfxmqbeiqfwkdshvjovc`,
+  and found no stale allowlisted Xcode processes. The bounded focused unit-test
+  retry
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  reached Xcode's `clang -v -E -dM ... /dev/null` external-tool probe, did not
+  reach compiler diagnostics, test discovery, or test execution, and ended
+  with `** BUILD INTERRUPTED **` / exit code 143 after the timeout.
 
 ## Resolution Path
 

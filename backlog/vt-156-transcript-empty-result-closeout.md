@@ -1,7 +1,7 @@
 ---
 id: VT-156
 title: Transcript Empty Result Closeout
-status: in-progress
+status: blocked
 priority: P1
 lane: transcription
 dependencies:
@@ -19,7 +19,7 @@ verification:
 
 # VT-156 - Transcript Empty Result Closeout
 
-Status: in-progress
+Status: blocked
 Priority: P1
 Lane: transcription
 Dependencies: VT-052, VT-148
@@ -60,3 +60,47 @@ normalization can unblock output and controller success-flow work.
 - Use standard `xcodebuild` for the focused macOS unit-test gate.
 - Treat local Xcode/build-service/test-runner problems as
   automation-recoverable before recording a remaining blocker.
+
+## Result
+
+- Ran local tooling recovery on 2026-06-21 23:38 CEST:
+  `python3 scripts/local_tooling_recover.py --apply --json`.
+- Recovery returned `ok: true`, removed project DerivedData at
+  `/Users/eugenepotapenko/Library/Developer/Xcode/DerivedData/vibetype-cgljxvuvdfxmqbeiqfwkdshvjovc`,
+  and found no stale allowlisted Xcode processes.
+- Retried the focused fake-backed transcription unit-test gate:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests`.
+- The command reached Xcode's `clang -v -E -dM ... /dev/null` external-tool
+  probe, did not reach compiler diagnostics, test discovery, or test
+  execution, and ended with `** BUILD INTERRUPTED **` / exit code 143 after
+  the timeout.
+- Updated `VT-054` with the fresh bounded blocker evidence.
+
+## Runtime QA
+
+- Result: not_applicable.
+- Reason: this closeout task exercised fake-backed transcription unit-test
+  verification only and did not change visible macOS UI or user interaction.
+
+## Resolution Path
+
+- Blocker category: local Xcode build/test tooling timeout before focused
+  unit tests can execute.
+- Recovery attempted: `python3 scripts/local_tooling_recover.py --apply --json`
+  returned `ok: true`, removed project DerivedData, and found no stale
+  allowlisted Xcode processes.
+- Fresh bounded retry result: the focused `vibetypeTests` command still timed
+  out before compiler diagnostics, test discovery, or test execution.
+- Existing infrastructure evidence: `VT-148`
+  (`backlog/done/vt-148-xcode-build-service-health.md`) records the same
+  automation-recoverable Xcode build-service timeout class, so this closeout
+  cites that path instead of creating a duplicate tooling task.
+- Unblock condition: rerun local tooling recovery, then rerun
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests`. If it reaches and passes focused tests, mark
+  `VT-054` and this closeout done. If it still times out before execution,
+  continue automatic local Xcode tooling repair and append fresh
+  recovery/retry evidence.
