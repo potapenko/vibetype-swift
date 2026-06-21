@@ -1,7 +1,7 @@
 ---
 id: VT-061
 title: Clipboard Snapshot And Copy
-status: blocked
+status: done
 priority: P1
 lane: text-output
 parent: VT-060
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-061 - Clipboard Snapshot And Copy
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -62,3 +62,12 @@ copying transcript text.
 - A blocker-resolution pass may then mark this task done without additional
   source edits because the clipboard boundary and unit-level verification are
   already present.
+
+## Completion Evidence
+
+- 2026-06-21 17:03 CEST: Blocker-resolution pass verified the existing
+  clipboard boundary and fake-backed tests with
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
+- `git diff --check` passed.
+- Applied `verification-strategy.md` narrow-evidence policy because the only
+  known full-scheme blocker was the off-console UI-test runner.
