@@ -1,7 +1,7 @@
 ---
 id: VT-131
 title: History Settings Flag
-status: backlog
+status: in-progress
 priority: P2
 lane: history
 parent: VT-130
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-131 - History Settings Flag
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
