@@ -128,6 +128,28 @@ python3 scripts/backlog_next.py --json
 For sequential automation, the canonical checkout is the source of truth. Use
 the current repository state, not chat memory, to determine task status.
 
+## Dirty Git State Is Never A Blocker
+
+Agents must never stop, skip, block, or report success-without-work merely
+because `git status` is dirty. This includes conditions described as "GitHub
+dirty", "dirty Git", dirty worktree, dirty checkout, unstaged changes, staged
+changes, uncommitted changes, or overlapping local edits.
+
+Dirty state is normal in this repository because multiple automation and manual
+threads may touch the same checkout. The required behavior is:
+
+- inspect the relevant diff;
+- preserve existing changes;
+- work against the current file contents;
+- stage and commit only the current task's owned paths;
+- use path-limited commands such as `git add <owned paths>` and
+  `git commit --only <owned paths>` when unrelated changes exist.
+
+Do not revert, reset, clean, stash, or include unrelated changes unless the
+user explicitly asks for that exact Git operation. Do not introduce new
+workflow, runbook, prompt, or automation rules that make dirty Git state a stop
+condition.
+
 ## Checkpoint Commits
 
 At the end of every task-solving chat that changes repository files, the agent

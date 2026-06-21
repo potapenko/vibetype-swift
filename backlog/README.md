@@ -109,6 +109,12 @@ committing only their owned paths. Do not revert user or concurrent agent
 changes. Do not include unrelated changes in a task commit. Use path-limited
 staging and commit commands when the index is dirty.
 
+Do not create or follow backlog instructions that stop on "GitHub dirty",
+"dirty Git", dirty worktree, unstaged changes, staged changes, uncommitted
+changes, or overlapping edits. If such wording appears in a generated task,
+runbook, or automation prompt, treat it as invalid for this repository and
+repair it when the file is in scope.
+
 ## Automation-Recoverable Blockers
 
 Xcode, `xcodebuild`, `xctest`, `SWBBuildService`, compiler-probe, DerivedData,

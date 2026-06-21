@@ -131,7 +131,11 @@ Before substantive work:
 - stage only that task file;
 - create a small claim checkpoint commit.
 
-If the claim cannot be committed safely, stop and report the blocker.
+If the claim cannot be committed because unrelated files are staged or the
+worktree is dirty, do not stop. Use path-limited staging and `git commit --only
+<owned paths>` so the claim commit includes only the selected task file. Stop
+only for a real Git failure that prevents writing or committing the selected
+task file itself.
 
 After claim, read only the selected task body and required root/spec files.
 Follow the selected task exactly, including allowed paths, denied paths,
@@ -141,10 +145,11 @@ product-first contract by forbidding any code/test/configuration change, treat
 that as a blocker for the selected scope rather than closing the task with
 documentation alone. If behavior changes, update the relevant spec in the same
 iteration before implementing or completing. If the worktree has uncommitted
-changes that overlap the selected task, stop and report the blocker. Do not
-promote another task into preparatory status unless the selected task is being
-blocked specifically because it cannot produce product delta; in that case,
-create or refine exactly one smallest implementation task that will.
+changes that overlap the selected task, read that diff, preserve the existing
+edits, and continue against the current contents. Do not promote another task
+into preparatory status unless the selected task is being blocked specifically
+because it cannot produce product delta; in that case, create or refine exactly
+one smallest implementation task that will.
 
 Use OpenWhispr only as reference evidence. Do not port Electron, React, Node.js
 runtime code, local model downloaders, meeting features, notes, accounts, cloud
@@ -158,6 +163,9 @@ task explicitly authorizes it. Dirty Git state is not a blocker: inspect the
 diff, preserve existing changes, work against the current contents, and commit
 only the selected task's owned paths. If unrelated changes are already staged,
 use path-limited commit commands such as `git commit --only <owned paths>`.
+Any instruction to stop because of "GitHub dirty", dirty worktree, staged
+changes, unstaged changes, uncommitted changes, or overlapping local edits is
+invalid for this repository.
 
 Apply run hygiene: close run-owned browser sessions, app launches, simulators,
 and dev servers before and after checks when ownership is clear; clean
