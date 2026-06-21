@@ -53,7 +53,8 @@ struct AppSettings: Equatable {
         copyToClipboard: true,
         restoreClipboard: true,
         soundEnabled: true,
-        showFloatingIndicator: true
+        showFloatingIndicator: true,
+        saveTranscriptHistory: false
     )
 
     var transcriptionModel: String
@@ -65,6 +66,7 @@ struct AppSettings: Equatable {
     var restoreClipboard: Bool
     var soundEnabled: Bool
     var showFloatingIndicator: Bool
+    var saveTranscriptHistory: Bool
 
     var resolvedTranscriptionModel: String {
         let trimmedModel = transcriptionModel.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -94,6 +96,7 @@ struct AppSettingsStore {
         Key.restoreClipboard,
         Key.soundEnabled,
         Key.showFloatingIndicator,
+        Key.saveTranscriptHistory,
     ]
 
     private enum Key {
@@ -106,6 +109,7 @@ struct AppSettingsStore {
         static let restoreClipboard = keyPrefix + "restoreClipboard"
         static let soundEnabled = keyPrefix + "soundEnabled"
         static let showFloatingIndicator = keyPrefix + "showFloatingIndicator"
+        static let saveTranscriptHistory = keyPrefix + "saveTranscriptHistory"
     }
 
     private let userDefaults: UserDefaults
@@ -131,7 +135,9 @@ struct AppSettingsStore {
                 ?? defaultSettings.restoreClipboard,
             soundEnabled: optionalBool(forKey: Key.soundEnabled) ?? defaultSettings.soundEnabled,
             showFloatingIndicator: optionalBool(forKey: Key.showFloatingIndicator)
-                ?? defaultSettings.showFloatingIndicator
+                ?? defaultSettings.showFloatingIndicator,
+            saveTranscriptHistory: optionalBool(forKey: Key.saveTranscriptHistory)
+                ?? defaultSettings.saveTranscriptHistory
         )
     }
 
@@ -145,6 +151,7 @@ struct AppSettingsStore {
         userDefaults.set(settings.restoreClipboard, forKey: Key.restoreClipboard)
         userDefaults.set(settings.soundEnabled, forKey: Key.soundEnabled)
         userDefaults.set(settings.showFloatingIndicator, forKey: Key.showFloatingIndicator)
+        userDefaults.set(settings.saveTranscriptHistory, forKey: Key.saveTranscriptHistory)
     }
 
     private func loadLanguage(defaultValue: TranscriptionLanguage) -> TranscriptionLanguage {

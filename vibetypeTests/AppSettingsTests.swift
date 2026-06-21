@@ -25,6 +25,7 @@ struct AppSettingsTests {
         #expect(settings.restoreClipboard)
         #expect(settings.soundEnabled)
         #expect(settings.showFloatingIndicator)
+        #expect(settings.saveTranscriptHistory == false)
     }
 
     @Test func resolvesBlankModelAndPromptWithoutMutatingStoredValues() {
@@ -68,7 +69,8 @@ struct AppSettingsTests {
             copyToClipboard: true,
             restoreClipboard: false,
             soundEnabled: false,
-            showFloatingIndicator: true
+            showFloatingIndicator: true,
+            saveTranscriptHistory: true
         )
 
         store.save(settings)
