@@ -54,6 +54,20 @@ Add a Swift-native service boundary for global hotkey registration.
   interrupted after bounded waits.
 - Narrow checks completed: app source `swiftc -typecheck` passed, app module
   `swiftc -emit-module -enable-testing` passed, and `git diff --check` passed.
+- 2026-06-22: `VT-157` reran the focused verification from the current
+  checkout after
+  `python3 scripts/local_tooling_recover.py --apply --json`.
+- Recovery removed generated project DerivedData at
+  `/Users/eugenepotapenko/Library/Developer/Xcode/DerivedData/vibetype-cgljxvuvdfxmqbeiqfwkdshvjovc`
+  and found no stale Xcode/test processes before retry.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  reached Xcode build-description external-tool probing, did not reach compiler
+  diagnostics, test discovery, or test execution, and ended with
+  `** BUILD INTERRUPTED **`.
+- Post-timeout recovery removed generated `scripts/__pycache__` and found no
+  remaining stale run-owned Xcode/test processes.
+- Fresh QA note:
+  `docs/qa/runs/hotkey-service-closeout-2026-06-22.md`.
 
 ## Resolution Path
 
@@ -68,3 +82,6 @@ Add a Swift-native service boundary for global hotkey registration.
 - If Xcode still blocks before test execution, record the fresh bounded Xcode
   blocker and keep using the existing `swiftc` checks only as narrow sanity
   evidence.
+- Existing infrastructure evidence: `VT-148`
+  (`backlog/done/vt-148-xcode-build-service-health.md`) records the same
+  automation-recoverable Xcode external-tool probe timeout class.

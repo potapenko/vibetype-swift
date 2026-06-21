@@ -1,7 +1,7 @@
 ---
 id: VT-157
 title: Hotkey Service Blocker Closeout
-status: in-progress
+status: blocked
 priority: P2
 lane: hotkey
 dependencies:
@@ -20,7 +20,7 @@ verification:
 
 # VT-157 - Hotkey Service Blocker Closeout
 
-Status: in-progress
+Status: blocked
 Priority: P2
 Lane: hotkey
 Dependencies: VT-000, VT-002, VT-148
@@ -61,3 +61,36 @@ controller handoff work can progress.
 - Use standard `xcodebuild` for the focused macOS unit-test gate.
 - Treat local Xcode/build-service/test-runner problems as
   automation-recoverable before recording a remaining blocker.
+
+## Result
+
+Blocked on 2026-06-22 after rerunning the current focused `VT-071` verification
+gate.
+
+- Ran `python3 scripts/local_tooling_recover.py --apply --json` before retry.
+  Recovery removed generated project DerivedData and found no stale Xcode/test
+  processes.
+- Retried
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
+- The command reached Xcode build-description external-tool probing, did not
+  reach compiler diagnostics, test discovery, or test execution, and ended with
+  `** BUILD INTERRUPTED **`.
+- Post-timeout recovery removed generated `scripts/__pycache__` and found no
+  remaining stale run-owned Xcode/test processes.
+- Updated `VT-071` with the fresh bounded recovery/test evidence and left it
+  blocked.
+- QA note: `docs/qa/runs/hotkey-service-closeout-2026-06-22.md`.
+
+## Resolution Path
+
+- Blocker category: local Xcode build/test tooling timeout before compiler or
+  unit-test execution.
+- Existing infrastructure evidence: `VT-148`
+  (`backlog/done/vt-148-xcode-build-service-health.md`) records the same
+  automation-recoverable Xcode external-tool probe timeout class.
+- Unblock condition: rerun local tooling recovery, then rerun the focused
+  `vibetypeTests` command until Xcode reaches compiler output and test
+  execution.
+- The current run could not mark `VT-071` or `VT-157` done because the required
+  focused unit-test gate still did not execute after recovery and a bounded
+  retry.
