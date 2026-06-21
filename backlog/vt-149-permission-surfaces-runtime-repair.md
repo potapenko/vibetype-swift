@@ -1,7 +1,7 @@
 ---
 id: VT-149
 title: Permission Surfaces Runtime Verification And Repair
-status: backlog
+status: in-progress
 priority: P1
 lane: permissions
 parent: VT-030
@@ -23,7 +23,7 @@ verification:
 
 # VT-149 - Permission Surfaces Runtime Verification And Repair
 
-Status: backlog
+Status: in-progress
 Priority: P1
 Lane: permissions
 Dependencies: VT-033, VT-034
