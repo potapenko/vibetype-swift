@@ -1,7 +1,7 @@
 ---
 id: VT-112
 title: macOS Menu Bar Computer Use Smoke
-status: in-progress
+status: done
 priority: P2
 lane: testing
 parent: VT-110
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-112 - macOS Menu Bar Computer Use Smoke
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -47,3 +47,13 @@ app surface.
 - Bounded Computer Use smoke against the launched app, or a concrete blocker
   report under `docs/qa/macos/`
 - `git diff --check`
+
+## Result
+
+- 2026-06-21: Added
+  `docs/qa/macos/vt-112-2026-06-21-menu-bar-smoke.md`.
+- The app built successfully and a freshly built run-owned app process launched
+  and stayed running.
+- Runtime QA result: `blocked` because the available Computer Use surface
+  exposed only clicking and no screenshot, semantic snapshot, accessibility
+  tree, or element discovery for safe macOS menu bar/Settings inspection.
