@@ -52,14 +52,14 @@
 			path = vibetypeIOS;
 			sourceTree = "<group>";
 		};
-		9DB749B12FE800000053C3F3 /* vibetypeIOSTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = vibetypeIOSTests;
-			sourceTree = "<group>";
-		};
 		9DB749AA2FE7B0000053C3F3 /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		9DB749B12FE800000053C3F3 /* vibetypeIOSTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = vibetypeIOSTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -236,8 +236,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				9DB749B12FE800000053C3F3 /* vibetypeIOSTests */,
 				9DB749AA2FE7B0000053C3F3 /* Shared */,
+				9DB749B12FE800000053C3F3 /* vibetypeIOSTests */,
 			);
 			name = vibetypeIOSTests;
 			packageProductDependencies = (
@@ -259,9 +259,6 @@
 					9DB749682FE6D7300053C3F3 = {
 						CreatedOnToolsVersion = 26.5;
 					};
-					9DB749B52FE800000053C3F3 = {
-						CreatedOnToolsVersion = 26.5;
-					};
 					9DB749752FE6D7320053C3F3 = {
 						CreatedOnToolsVersion = 26.5;
 						TestTargetID = 9DB749682FE6D7300053C3F3;
@@ -271,6 +268,9 @@
 						TestTargetID = 9DB749682FE6D7300053C3F3;
 					};
 					9DB749A62FE7A0000053C3F3 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					9DB749B52FE800000053C3F3 = {
 						CreatedOnToolsVersion = 26.5;
 					};
 				};
