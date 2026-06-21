@@ -44,7 +44,8 @@ Paused count for this repository: 0.
   status, verification, and scoped checkpoint commit when files change
 - Tooling contract: read `docs/agent-tooling.md` before creating platform or
   shared SwiftUI tasks that name XcodeBuildMCP, `xcodebuild`, Computer Use, or
-  fallback evidence
+  fallback evidence; request current-thread archive before the final report
+  when thread management is available
 - Safety/browser evidence contract: no browser requirement; do not implement
   Swift product code; stop on dirty/staged worktree or in-progress task; no DB
   or destructive storage operations
@@ -64,7 +65,8 @@ Paused count for this repository: 0.
   `python3 scripts/backlog_blocked_next.py --json`
 - Expected output: one selected blocked task either directly resolved,
   connected to one concrete follow-up task, or recorded with an exact
-  operator-only unblock action
+  operator-only unblock action; current-thread archive requested before the
+  final report when thread management is available
 - Tooling contract: read `docs/agent-tooling.md` when a blocker involves
   Xcode, simulator, MCP, runtime QA, or tool-selection decisions
 - Safety/runtime evidence contract: stop on dirty checkout or active
@@ -86,7 +88,8 @@ Paused count for this repository: 0.
   `python3 scripts/backlog_next.py --json`
 - Expected output: one selected backlog iteration with claim/completion
   checkpoint commits, verification, platform smoke evidence when required, and
-  cleanup report
+  cleanup report, including current-thread archive status when thread
+  management is available
 - Tooling contract: read `docs/agent-tooling.md` when Xcode, simulator, MCP,
   runtime QA, or tool-selection decisions are involved
 - Safety/runtime evidence contract: explicit runtime QA decision for each

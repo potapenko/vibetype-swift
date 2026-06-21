@@ -23,6 +23,31 @@ Do not assume that internet access or an open Xcode window means GUI
 automation is available. Internet access, XcodeBuildMCP, and Computer Use are
 separate capabilities.
 
+## MCP And Thread Lifecycle
+
+Local Codex automation threads may start MCP server processes for available
+tool surfaces when a run thread is opened. Closing run-owned browser sessions,
+apps, simulators, or dev servers does not by itself close the MCP server
+processes owned by the Codex thread.
+
+Keep MCP use narrow:
+
+- Do not inspect MCP tools unless the selected task requires Xcode, simulator,
+  browser-visible, or macOS runtime QA evidence.
+- Prefer the documented shell `xcodebuild` commands for the macOS build/test
+  baseline when they satisfy the selected task's verification.
+- Use Computer Use only for changed visible macOS runtime behavior.
+- Do not manually kill broad MCP process names from an automation run; those
+  processes may belong to other active user or automation threads.
+
+At the end of every scheduled automation run, after verification and checkpoint
+handling are complete and before the final response, request archive of the
+current automation thread with `set_thread_archived` using `archived: true` and
+no `threadId` when the thread-management tool is available. Report
+`Thread archive: requested`. If the archive tool is unavailable, report
+`Thread archive: unavailable` and keep the rest of the cleanup bounded to
+artifacts clearly owned by the current run.
+
 ## XcodeBuildMCP
 
 Official documentation:

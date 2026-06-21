@@ -76,6 +76,10 @@ Apply run hygiene: close run-owned browser sessions, app launches, simulators,
 and dev servers before and after checks when ownership is clear; clean
 current-run temporary screenshots, audits, profiles, downloads, bytecode, and
 build artifacts before staging; keep only durable reports or explicit evidence.
+Follow `docs/agent-tooling.md` MCP/thread lifecycle guidance: keep MCP
+inspection task-specific, do not manually kill broad MCP process names, and
+request archive of the current automation thread before the final response when
+the thread-management tool is available.
 
 ## Blocked Selector
 
@@ -190,7 +194,8 @@ Final report must include selected blocked task id/title/path, action taken
 (`directly_resolved`, `follow_up_created`, `follow_up_refined`, or
 `operator_only`), follow-up id/path or operator action, changed files,
 verification results, `Tooling` with the XcodeBuildMCP / `xcodebuild` /
-Computer Use path used when relevant, cleanup performed, completion commit hash
-if files changed, next blocked selector result if checked, actual cwd,
-execution environment, and confirmation that the canonical checkout now
-contains the status or resolution-path update.
+Computer Use path used when relevant, cleanup performed, `Thread archive` with
+`requested` or `unavailable` according to the MCP/thread lifecycle action,
+completion commit hash if files changed, next blocked selector result if
+checked, actual cwd, execution environment, and confirmation that the canonical
+checkout now contains the status or resolution-path update.

@@ -22,6 +22,11 @@ Shared tooling guidance:
 
 - `../agent-tooling.md`
 
+Every scheduled automation runbook must follow the MCP/thread lifecycle rule in
+`../agent-tooling.md`: keep MCP use task-specific and request archive of the
+current automation thread before the final response when the thread-management
+tool is available.
+
 Per-user inventories:
 
 - `users/eugenepotapenko.md`

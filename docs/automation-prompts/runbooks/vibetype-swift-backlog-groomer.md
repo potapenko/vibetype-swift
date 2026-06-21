@@ -65,6 +65,12 @@ and report the active claim diagnostics.
 Do not modify sibling repositories. Do not access MongoDB directly. Do not run
 destructive database or object-storage operations.
 
+Apply run hygiene: keep MCP inspection task-specific, do not manually kill
+broad MCP process names, and follow `docs/agent-tooling.md` MCP/thread
+lifecycle guidance by requesting archive of the current automation thread
+before the final response when the thread-management tool is available. Clean
+only current-run temporary artifacts that are not durable evidence.
+
 ## Backlog Rules
 
 Existing backlog files and the selector are authoritative for ids,
@@ -120,4 +126,6 @@ source-code implementation files or unrelated changes.
 Final report must include created or updated task ids, parent/child grouping
 changes, reference files inspected, selector status and selected task path,
 verification results, tooling assumptions added to tasks when relevant, commit
-hash if created, actual cwd, execution environment, and any blocker.
+hash if created, actual cwd, execution environment, `Thread archive` with
+`requested` or `unavailable` according to the MCP/thread lifecycle action, and
+any blocker.

@@ -144,7 +144,11 @@ task explicitly authorizes it.
 Apply run hygiene: close run-owned browser sessions, app launches, simulators,
 and dev servers before and after checks when ownership is clear; clean
 current-run temporary screenshots, audits, profiles, and build artifacts before
-staging; keep only durable reports or explicit evidence.
+staging; keep only durable reports or explicit evidence. Follow
+`docs/agent-tooling.md` MCP/thread lifecycle guidance: keep MCP inspection
+task-specific, do not manually kill broad MCP process names, and request
+archive of the current automation thread before the final response when the
+thread-management tool is available.
 
 ## Blocked Task Follow-Up Rule
 
@@ -260,12 +264,14 @@ cleanup performed, remaining real blocker if any, next selector result if
 checked, actual cwd, execution environment, selected task before/after status,
 confirmation that the canonical checkout now contains the status update,
 `Tooling` with the XcodeBuildMCP / `xcodebuild` / Computer Use path used, and
-a short `Product delta` field. The report must also include a `Runtime QA`
-field with one of `required`, `not_applicable`, or `blocked`; the Computer Use
-scenario/actions/observed result when required; or the exact reason runtime QA
-was not applicable or blocked. `Product delta` must name the app behavior,
-Swift code, tests, build/runtime capability, or bug fix delivered. If no
-product delta was possible, the task must be reported as blocked, not done, and
-the report must name the exact next implementation task created or updated.
-For any blocked result, the report must include `Resolution path` with either
-the follow-up task id/path or the explicit operator-only unblock action.
+a short `Product delta` field. Include `Thread archive` with `requested` or
+`unavailable` according to the MCP/thread lifecycle action. The report must
+also include a `Runtime QA` field with one of `required`, `not_applicable`, or
+`blocked`; the Computer Use scenario/actions/observed result when required; or
+the exact reason runtime QA was not applicable or blocked. `Product delta` must
+name the app behavior, Swift code, tests, build/runtime capability, or bug fix
+delivered. If no product delta was possible, the task must be reported as
+blocked, not done, and the report must name the exact next implementation task
+created or updated. For any blocked result, the report must include
+`Resolution path` with either the follow-up task id/path or the explicit
+operator-only unblock action.
