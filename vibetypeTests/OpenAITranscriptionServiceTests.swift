@@ -228,6 +228,26 @@ struct OpenAITranscriptionServiceTests {
         #expect(loader.requests.isEmpty)
     }
 
+    @Test func invalidCustomLanguageErrorIsMappedBeforeNetworkRequest() async throws {
+        let audioFileURL = try makeTemporaryAudioFile()
+        defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
+
+        var settings = AppSettings.defaults
+        settings.language = .custom
+        settings.customLanguageCode = "en-US"
+
+        let loader = FakeURLLoader(
+            result: .success(Data(#"{"text":"unused"}"#.utf8), makeHTTPResponse(statusCode: 200))
+        )
+        let service = makeService(loader: loader)
+
+        await expectTranscriptionError(.invalidRecording(.invalidCustomLanguageCode("en-US"))) {
+            try await service.transcribe(audioFileURL: audioFileURL, settings: settings)
+        }
+
+        #expect(loader.requests.isEmpty)
+    }
+
     @Test func commonFailureMessagesAndLogCategoriesAreStable() {
         let audioFileURL = URL(fileURLWithPath: "/tmp/recording.m4a")
         let cases: [(OpenAITranscriptionServiceError, String, String)] = [
@@ -255,6 +275,11 @@ struct OpenAITranscriptionServiceTests {
                 .invalidRecording(.emptyAudioFile(audioFileURL)),
                 "No audio was captured. Try recording again.",
                 "empty_audio"
+            ),
+            (
+                .invalidRecording(.invalidCustomLanguageCode("en-US")),
+                "Use a two- or three-letter custom language code.",
+                "invalid_language_code"
             ),
             (
                 .providerUnavailable,

@@ -288,6 +288,8 @@ private extension OpenAITranscriptionRequestBuilderError {
             return "The recording format is not supported."
         case .unreadableAudioFile:
             return "The recording file could not be read."
+        case .invalidCustomLanguageCode:
+            return "Use a two- or three-letter custom language code."
         }
     }
 
@@ -301,6 +303,8 @@ private extension OpenAITranscriptionRequestBuilderError {
             return "unsupported_audio"
         case .unreadableAudioFile:
             return "unreadable_audio"
+        case .invalidCustomLanguageCode:
+            return "invalid_language_code"
         }
     }
 }

@@ -26,7 +26,7 @@ struct OpenAITranscriptionRequestBuilder {
 
     func makeRequest(audioFileURL: URL, settings: AppSettings) throws -> URLRequest {
         let audioFile = try validatedAudioFile(at: audioFileURL)
-        let body = makeMultipartBody(audioFile: audioFile, settings: settings)
+        let body = try makeMultipartBody(audioFile: audioFile, settings: settings)
 
         var request = URLRequest(url: endpointURL)
         request.httpMethod = "POST"
@@ -82,13 +82,13 @@ struct OpenAITranscriptionRequestBuilder {
         }
     }
 
-    private func makeMultipartBody(audioFile: AudioFilePart, settings: AppSettings) -> Data {
+    private func makeMultipartBody(audioFile: AudioFilePart, settings: AppSettings) throws -> Data {
         var body = Data()
 
         body.appendFormField(name: "model", value: settings.resolvedTranscriptionModel, boundary: boundary)
         body.appendFormField(name: "response_format", value: "json", boundary: boundary)
 
-        if let languageCode = settings.resolvedLanguageCode {
+        if let languageCode = try validatedLanguageCode(for: settings) {
             body.appendFormField(name: "language", value: languageCode, boundary: boundary)
         }
 
@@ -108,6 +108,17 @@ struct OpenAITranscriptionRequestBuilder {
         return body
     }
 
+    private func validatedLanguageCode(for settings: AppSettings) throws -> String? {
+        switch settings.customLanguageCodeValidation {
+        case .invalid:
+            throw OpenAITranscriptionRequestBuilderError.invalidCustomLanguageCode(
+                settings.customLanguageCode
+            )
+        case .notRequired, .emptyFallsBackToAutomatic, .valid:
+            return settings.resolvedLanguageCode
+        }
+    }
+
     private static let supportedContentTypeByExtension = [
         "m4a": "audio/mp4",
         "wav": "audio/wav",
@@ -119,6 +130,7 @@ enum OpenAITranscriptionRequestBuilderError: Error, Equatable, LocalizedError {
     case emptyAudioFile(URL)
     case unsupportedAudioFileType(String)
     case unreadableAudioFile(URL)
+    case invalidCustomLanguageCode(String)
 
     var errorDescription: String? {
         switch self {
@@ -130,6 +142,8 @@ enum OpenAITranscriptionRequestBuilderError: Error, Equatable, LocalizedError {
             return "The recording format is not supported."
         case .unreadableAudioFile:
             return "The recording file could not be read."
+        case .invalidCustomLanguageCode:
+            return "Use a two- or three-letter custom language code."
         }
     }
 }

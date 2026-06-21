@@ -51,9 +51,10 @@ This spec covers:
   during transcription with a clear recording error.
 - Language `Auto` sends no language parameter.
 - Language `English` sends `en`; language `Russian` sends `ru`.
-- A custom language must be an ISO-639-style language code accepted by the
-  implementation's validation. An invalid custom value blocks transcription
-  with a settings error before upload.
+- A custom language must be a two- or three-letter ISO-639-style language code
+  accepted by the implementation's validation. An empty custom value falls back
+  to Auto. An invalid non-empty custom value blocks transcription with a
+  settings error before upload.
 - The optional prompt or vocabulary hint is sent only when non-empty after
   trimming whitespace.
 - Prompt text should guide spelling, vocabulary, and style. It must not be

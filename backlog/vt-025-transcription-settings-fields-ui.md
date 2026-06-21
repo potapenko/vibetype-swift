@@ -1,7 +1,7 @@
 ---
 id: VT-025
 title: Transcription Settings Fields UI
-status: in-progress
+status: blocked
 priority: P2
 lane: settings
 parent: VT-020
@@ -18,7 +18,7 @@ allowed_paths:
 
 # VT-025 - Transcription Settings Fields UI
 
-Status: in-progress
+Status: blocked
 
 ## Goal
 
@@ -53,3 +53,35 @@ Expose the MVP transcription settings in the native Settings window.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`
+
+## Blocker
+
+The product code and focused validation smoke were implemented, but the
+required macOS Xcode build could not complete in this environment.
+
+Evidence from 2026-06-21:
+
+- Passed: `/opt/homebrew/bin/timeout 90 xcrun swiftc -typecheck -parse-as-library $(rg --files vibetype Shared -g '*.swift' | sort)`
+- Passed: direct app-module emit with `xcrun swiftc -emit-module -enable-testing`
+- Passed: run-owned smoke harness for custom language validation and request
+  builder behavior printed `vt025 smoke passed`
+- Passed: `git diff --check`
+- Blocked: `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build` timed out during early Xcode build-service/external-tool probing and ended with `** BUILD INTERRUPTED **`
+- Blocked: direct focused test-source typecheck could not load Swift Testing
+  outside Xcode: `no such module 'Testing'`
+
+## Resolution Path
+
+Blocker category: local Xcode build-service health.
+
+Follow-up: `VT-148` at `backlog/vt-148-xcode-build-service-health.md`.
+
+Unblock condition: a bounded macOS `xcodebuild` build or unit-test command
+reaches compiler diagnostics or test execution again. After that, rerun this
+task's required build verification and, because Settings UI changed, perform
+bounded macOS runtime QA through Computer Use if an inspection surface is
+available.
+
+This run could not finish the task directly because the required Xcode command
+timed out before compiler diagnostics despite direct Swift compiler evidence
+passing.

@@ -54,6 +54,40 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Transcription") {
+                TextField("Model", text: settingBinding(\.transcriptionModel))
+                    .textFieldStyle(.roundedBorder)
+
+                if isUsingDefaultTranscriptionModelFallback {
+                    Label(
+                        "Empty model uses \(AppSettings.defaultTranscriptionModel).",
+                        systemImage: "info.circle"
+                    )
+                    .foregroundStyle(.secondary)
+                }
+
+                Picker("Language", selection: languageBinding) {
+                    ForEach(TranscriptionLanguage.allCases, id: \.self) { language in
+                        Text(language.displayName).tag(language)
+                    }
+                }
+
+                if appSettings.language == .custom {
+                    TextField("Custom language code", text: settingBinding(\.customLanguageCode))
+                        .textFieldStyle(.roundedBorder)
+
+                    Label(
+                        customLanguageCodeStatusMessage,
+                        systemImage: customLanguageCodeStatusImage
+                    )
+                    .foregroundStyle(customLanguageCodeStatusTint)
+                }
+
+                TextField("Prompt or vocabulary hint", text: settingBinding(\.prompt), axis: .vertical)
+                    .lineLimit(2...4)
+                    .textFieldStyle(.roundedBorder)
+            }
+
             Section("Behavior") {
                 Toggle(
                     "Paste transcript into active app",
@@ -118,6 +152,55 @@ struct SettingsView: View {
                 appSettingsStore.save(appSettings)
             }
         )
+    }
+
+    private func settingBinding(_ keyPath: WritableKeyPath<AppSettings, String>) -> Binding<String> {
+        Binding(
+            get: {
+                appSettings[keyPath: keyPath]
+            },
+            set: { newValue in
+                appSettings[keyPath: keyPath] = newValue
+                appSettingsStore.save(appSettings)
+            }
+        )
+    }
+
+    private var languageBinding: Binding<TranscriptionLanguage> {
+        Binding(
+            get: {
+                appSettings.language
+            },
+            set: { newValue in
+                appSettings.language = newValue
+                appSettingsStore.save(appSettings)
+            }
+        )
+    }
+
+    private var isUsingDefaultTranscriptionModelFallback: Bool {
+        appSettings.transcriptionModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var customLanguageCodeStatusMessage: String {
+        switch appSettings.customLanguageCodeValidation {
+        case .notRequired:
+            return ""
+        case .emptyFallsBackToAutomatic:
+            return "Empty custom language uses Auto."
+        case .valid(let normalizedCode):
+            return "Language code: \(normalizedCode)"
+        case .invalid:
+            return "Use a two- or three-letter code, such as en or ru."
+        }
+    }
+
+    private var customLanguageCodeStatusImage: String {
+        appSettings.customLanguageCodeValidation.isInvalid ? "exclamationmark.triangle" : "info.circle"
+    }
+
+    private var customLanguageCodeStatusTint: Color {
+        appSettings.customLanguageCodeValidation.isInvalid ? .red : .secondary
     }
 
     private func reloadAppSettings() {

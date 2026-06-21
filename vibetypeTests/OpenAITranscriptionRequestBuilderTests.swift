@@ -77,6 +77,42 @@ struct OpenAITranscriptionRequestBuilderTests {
         #expect(bodyText.contains("Content-Type: audio/wav"))
     }
 
+    @Test func omitsEmptyCustomLanguageAsAutomaticFallback() throws {
+        let audioFileURL = try makeTemporaryAudioFile(
+            named: "recording.wav",
+            contents: Data("wav bytes".utf8)
+        )
+        defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
+
+        var settings = AppSettings.defaults
+        settings.language = .custom
+        settings.customLanguageCode = "   "
+
+        let request = try OpenAITranscriptionRequestBuilder(boundary: "Boundary-Test")
+            .makeRequest(audioFileURL: audioFileURL, settings: settings)
+        let bodyText = try #require(request.multipartBodyText)
+
+        #expect(bodyText.contains("name=\"language\"") == false)
+    }
+
+    @Test func throwsControlledErrorForInvalidCustomLanguageCode() throws {
+        let audioFileURL = try makeTemporaryAudioFile(
+            named: "recording.wav",
+            contents: Data("wav bytes".utf8)
+        )
+        defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
+
+        var settings = AppSettings.defaults
+        settings.language = .custom
+        settings.customLanguageCode = "en-US"
+
+        let builder = OpenAITranscriptionRequestBuilder(boundary: "Boundary-Test")
+
+        #expect(throws: OpenAITranscriptionRequestBuilderError.invalidCustomLanguageCode("en-US")) {
+            _ = try builder.makeRequest(audioFileURL: audioFileURL, settings: settings)
+        }
+    }
+
     @Test func throwsControlledErrorForMissingAudioFile() {
         let missingFileURL = URL(fileURLWithPath: "/tmp/vibetype-missing-recording.m4a")
         let builder = OpenAITranscriptionRequestBuilder(boundary: "Boundary-Test")

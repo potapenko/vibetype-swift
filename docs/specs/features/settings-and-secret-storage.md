@@ -101,8 +101,9 @@ The OpenAI API key has no UserDefaults value or default. It is Keychain-only.
   the key was saved.
 - If Keychain read fails during transcription, the app should show missing or
   inaccessible API key instead of making an unauthenticated request.
-- If a custom language field is empty or invalid, the app should fall back to
-  Auto or show a clear validation error.
+- If the Custom language field is empty, the app should fall back to Auto. If
+  the field is non-empty and not a two- or three-letter language code, Settings
+  should show a clear validation error.
 - If model is empty, the app should use the configured default model or show a
   setup-needed state.
 

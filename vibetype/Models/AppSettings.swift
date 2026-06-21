@@ -36,7 +36,30 @@ enum TranscriptionLanguage: String, CaseIterable, Codable, Equatable {
             return "ru"
         case .custom:
             let trimmedCode = customCode.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmedCode.isEmpty ? nil : trimmedCode
+            guard AppSettings.isSupportedCustomLanguageCode(trimmedCode) else {
+                return nil
+            }
+            return trimmedCode.lowercased()
+        }
+    }
+}
+
+enum CustomLanguageCodeValidation: Equatable {
+    case notRequired
+    case emptyFallsBackToAutomatic
+    case valid(normalizedCode: String)
+    case invalid
+
+    var isInvalid: Bool {
+        self == .invalid
+    }
+
+    var resolvedLanguageCode: String? {
+        switch self {
+        case .valid(let normalizedCode):
+            return normalizedCode
+        case .notRequired, .emptyFallsBackToAutomatic, .invalid:
+            return nil
         }
     }
 }
@@ -79,7 +102,44 @@ struct AppSettings: Equatable {
     }
 
     var resolvedLanguageCode: String? {
-        language.apiLanguageCode(customCode: customLanguageCode)
+        switch language {
+        case .automatic:
+            return nil
+        case .english:
+            return "en"
+        case .russian:
+            return "ru"
+        case .custom:
+            return customLanguageCodeValidation.resolvedLanguageCode
+        }
+    }
+
+    var customLanguageCodeValidation: CustomLanguageCodeValidation {
+        guard language == .custom else {
+            return .notRequired
+        }
+
+        let trimmedCode = customLanguageCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedCode.isEmpty else {
+            return .emptyFallsBackToAutomatic
+        }
+
+        guard Self.isSupportedCustomLanguageCode(trimmedCode) else {
+            return .invalid
+        }
+
+        return .valid(normalizedCode: trimmedCode.lowercased())
+    }
+
+    static func isSupportedCustomLanguageCode(_ code: String) -> Bool {
+        let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedCode.count == 2 || trimmedCode.count == 3 else {
+            return false
+        }
+
+        return trimmedCode.unicodeScalars.allSatisfy { scalar in
+            (65...90).contains(scalar.value) || (97...122).contains(scalar.value)
+        }
     }
 }
 

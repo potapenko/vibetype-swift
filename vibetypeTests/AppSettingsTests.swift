@@ -43,7 +43,32 @@ struct AppSettingsTests {
         #expect(TranscriptionLanguage.english.apiLanguageCode(customCode: "") == "en")
         #expect(TranscriptionLanguage.russian.apiLanguageCode(customCode: "") == "ru")
         #expect(TranscriptionLanguage.custom.apiLanguageCode(customCode: "  uk  ") == "uk")
+        #expect(TranscriptionLanguage.custom.apiLanguageCode(customCode: "ENG") == "eng")
         #expect(TranscriptionLanguage.custom.apiLanguageCode(customCode: "   ") == nil)
+        #expect(TranscriptionLanguage.custom.apiLanguageCode(customCode: "english") == nil)
+        #expect(TranscriptionLanguage.custom.apiLanguageCode(customCode: "en-US") == nil)
+    }
+
+    @Test func validatesCustomLanguageCodeForSettingsAndRequests() {
+        var settings = AppSettings.defaults
+
+        #expect(settings.customLanguageCodeValidation == .notRequired)
+
+        settings.language = .custom
+        settings.customLanguageCode = "   "
+
+        #expect(settings.customLanguageCodeValidation == .emptyFallsBackToAutomatic)
+        #expect(settings.resolvedLanguageCode == nil)
+
+        settings.customLanguageCode = " RU "
+
+        #expect(settings.customLanguageCodeValidation == .valid(normalizedCode: "ru"))
+        #expect(settings.resolvedLanguageCode == "ru")
+
+        settings.customLanguageCode = "russian"
+
+        #expect(settings.customLanguageCodeValidation == .invalid)
+        #expect(settings.resolvedLanguageCode == nil)
     }
 
     @Test func loadsDefaultsFromEmptyUserDefaults() {
