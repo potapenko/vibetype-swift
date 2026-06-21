@@ -1,7 +1,7 @@
 ---
 id: VT-053
 title: Transcription Error Mapping
-status: backlog
+status: in-progress
 priority: P1
 lane: transcription
 parent: VT-050
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-053 - Transcription Error Mapping
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
