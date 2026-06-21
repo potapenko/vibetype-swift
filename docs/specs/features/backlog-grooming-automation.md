@@ -33,6 +33,28 @@ Each run should:
    after edits.
 12. Commit only backlog/spec/workflow edits made by the groomer.
 
+## Completed Task Archive
+
+Completed tasks should not permanently crowd the active queue.
+
+The archive agent moves verified `done` task files from top-level `backlog/` to
+`backlog/done/`. The move preserves the Markdown record and keeps the task id
+available to selectors as dependency evidence.
+
+The archive agent must:
+
+- run `scripts/backlog_archive_done.py` in dry-run or apply mode;
+- move only clean task files whose front matter and visible status are both
+  `done`;
+- skip `backlog`, `ready`, `in-progress`, and `blocked` tasks;
+- skip status mismatches, destination collisions, unavailable Git status, and
+  uncommitted source task changes;
+- rerun normal and blocked selectors after an apply run;
+- commit only the moved task files and archive-tooling changes it owns.
+
+Normal selectors read `backlog/done/*.md` only as dependency records. Archived
+done tasks must not be selectable implementation work.
+
 ## Task Size
 
 Child tasks should usually have one observable output and fit a short agent

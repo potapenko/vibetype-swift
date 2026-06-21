@@ -5,6 +5,10 @@ This directory is the executable development queue for VibeType Swift.
 Use `BACKLOG_DEVELOPMENT.md` before selecting work. Executor agents must use
 the selector and must not manually choose a task by reading task bodies.
 
+Top-level `backlog/*.md` files are the active queue. Completed tasks may be
+archived under `backlog/done/`; those files remain dependency records but are
+not executable tasks.
+
 ## Select The Next Task
 
 ```sh
@@ -19,6 +23,20 @@ claiming work.
 If the selector returns `status: "select"` after any stale-claim repair, claim
 exactly the returned `selected.path`. If it returns `no_ready` or
 `queue_error`, stop and report the result.
+
+## Archive Completed Tasks
+
+Maintenance agents should keep completed tasks out of the active queue:
+
+```sh
+python3 scripts/backlog_archive_done.py --dry-run --json
+python3 scripts/backlog_archive_done.py --apply --json
+```
+
+The archive command moves only clean top-level tasks whose front matter and
+visible status are both `done`. After an apply run, rerun
+`python3 scripts/backlog_next.py --json`, run `git diff --check`, and create a
+scoped checkpoint commit for the moved task files.
 
 ## Task Template
 
@@ -97,7 +115,8 @@ cleanup, or closeout.
   concrete follow-up task to remove the blocker, names the required
   automation-recoverable local tooling recovery, or records the exact
   operator-only action/status check needed to unblock it.
-- `done` - terminal and verified for the declared scope.
+- `done` - terminal and verified for the declared scope. Done tasks may be
+  moved to `backlog/done/` by the archive automation.
 
 Do not add other status values.
 

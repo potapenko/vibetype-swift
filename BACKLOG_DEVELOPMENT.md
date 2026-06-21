@@ -55,6 +55,16 @@ The active development backlog lives in:
 backlog/
 ```
 
+Completed task records may be archived out of the active queue after their
+completion checkpoint commit. Archived completed tasks live in:
+
+```text
+backlog/done/
+```
+
+Archived tasks remain durable dependency records. Normal executor agents must
+not claim, edit, or read archived task bodies while selecting active work.
+
 `README.md` files in backlog folders are instructions and templates. They are
 not executable tasks.
 
@@ -105,7 +115,8 @@ Status values:
   dependencies; skipped by normal executor agents until a blocker-resolution
   agent or human changes the task; blocked tasks must include a durable
   resolution path, not just a stop note;
-- `done` - terminal and verified for the declared scope.
+- `done` - terminal and verified for the declared scope. Completed tasks may
+  move from `backlog/*.md` to `backlog/done/*.md` after their completion commit.
 
 Do not introduce other status values. A task must not be marked `blocked`
 solely because its dependencies are not `done`; leave it `backlog` and let the
@@ -140,14 +151,45 @@ Use this flow:
    diagnostics. Do not claim a task.
 6. Read the selected task body only after claim.
 
-The selector reads only front matter and title lines. It treats `done`,
-`in-progress`, and `blocked` as skipped states, treats `backlog`, `ready`, and
-missing status as candidates, checks that all declared dependencies are `done`,
-and picks the dependency-ready task with the highest priority. It also reports
-active claims, stale claim candidates, reset paths, and unmet dependency
-statuses so stale claims are visible instead of ordinary dependency debt. Ties
-prefer the task that directly unblocks the most other tasks, then the numeric
-task id.
+The selector reads only front matter and title lines. It treats active `done`,
+`in-progress`, and `blocked` tasks as skipped states, treats active `backlog`,
+`ready`, and missing status tasks as candidates, checks that all declared
+dependencies are `done`, and picks the dependency-ready task with the highest
+priority. It also reads `backlog/done/*.md` as dependency-only completed
+records. Archived tasks must have both `status: done` and visible `Status:
+done`; they must never become selectable work. The selector also reports active
+claims, stale claim candidates, reset paths, and unmet dependency statuses so
+stale claims are visible instead of ordinary dependency debt. Ties prefer the
+task that directly unblocks the most other tasks, then the numeric task id.
+
+## Completed Task Archive
+
+Completed task archival is an agent responsibility, not an operator chore.
+
+Use this command to preview or apply archival of verified completed tasks:
+
+```sh
+python3 scripts/backlog_archive_done.py --dry-run --json
+python3 scripts/backlog_archive_done.py --apply --json
+```
+
+The archive script moves only clean top-level `backlog/*.md` files whose front
+matter and visible status are both `done`. It skips files with status mismatch,
+destination collisions, unavailable Git status, or uncommitted source changes.
+It never archives `backlog`, `ready`, `in-progress`, or `blocked` tasks.
+
+After an apply run that moves files, the agent must run:
+
+```sh
+python3 scripts/backlog_next.py --json
+python3 scripts/backlog_blocked_next.py --json
+git diff --check
+```
+
+Then stage and commit only the moved backlog paths plus any archive-tooling
+changes from the current task. Do not ask a human to move completed task files.
+Scheduled maintenance should run this archive command before normal selector
+work so the active queue stays small.
 
 ## Local Tooling Recovery
 

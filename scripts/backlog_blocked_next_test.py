@@ -55,6 +55,30 @@ Status: {status}
 
 
 class BacklogBlockedNextTests(unittest.TestCase):
+    def test_archived_done_dependency_does_not_create_queue_error(self) -> None:
+        module = load_selector_module()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            backlog = root / "backlog"
+            archive = backlog / "done"
+            archive.mkdir(parents=True)
+            write_task(archive, "vt-001-done.md", "VT-001", "done", priority="P1")
+            write_task(
+                backlog,
+                "vt-002-blocked.md",
+                "VT-002",
+                "blocked",
+                priority="P1",
+                dependencies=("VT-001",),
+            )
+
+            result = module.select_blocked_task(root)
+
+        self.assertEqual(result["status"], "select")
+        self.assertEqual(result["selected"]["id"], "VT-002")
+        self.assertEqual(result["summary"]["archived_done_count"], 1)
+
     def test_selects_highest_priority_blocked_task(self) -> None:
         module = load_selector_module()
 

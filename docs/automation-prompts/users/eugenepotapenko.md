@@ -18,17 +18,38 @@ Inventory status: inspected
 
 | Automation id | Name | Status | Schedule | Model | Environment | Prompt source |
 | --- | --- | --- | --- | --- | --- | --- |
+| `vibetype-swift-backlog-archiver` | VibeType Swift Backlog Archiver | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-archiver.md` |
 | `vibetype-swift-backlog-groomer` | VibeType Swift Backlog Groomer | active | `FREQ=HOURLY;INTERVAL=2` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md` |
 | `vibetype-swift-blocker-resolver` | VibeType Swift Blocker Resolver | active | `FREQ=HOURLY;INTERVAL=1` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md` |
 | `vibetype-swift-implementer` | VibeType Swift Implementer | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-implementer.md` |
 | `vibetype-swift-tooling-unblocker` | VibeType Swift Tooling Unblocker | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md` |
 | `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
 
-Installed automation count for this repository: 5.
-Active count for this repository: 5.
+Installed automation count for this repository: 6.
+Active count for this repository: 6.
 Paused count for this repository: 0.
 
 ## Installed Automations
+
+### `vibetype-swift-backlog-archiver`
+
+- Installed status: `ACTIVE`
+- Schedule: `FREQ=MINUTELY;INTERVAL=15`
+- Model / reasoning effort: `gpt-5.4-mini` / `low`
+- Execution environment: `local`
+- Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
+- Prompt shape: short pointer prompt
+- Versioned runtime contract:
+  `docs/automation-prompts/runbooks/vibetype-swift-backlog-archiver.md`
+- Archive script:
+  `python3 scripts/backlog_archive_done.py --apply --json`
+- Expected output: one bounded completed-backlog archive pass, selector
+  readback, `git diff --check`, scoped checkpoint commit when files move, and
+  current-thread archive status when thread management is available
+- Safety contract: move only clean verified `done` task files from top-level
+  `backlog/` to `backlog/done/`; do not claim tasks, implement product code,
+  resolve blockers, groom tasks, or run destructive database/storage operations
+- Current decision: active
 
 ### `vibetype-swift-backlog-groomer`
 

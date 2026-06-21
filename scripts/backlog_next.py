@@ -22,6 +22,7 @@ from typing import Any
 TERMINAL_STATUSES = {"done", "in-progress", "blocked"}
 CANDIDATE_STATUSES = {"backlog", "ready", ""}
 PRIORITY_RANK = {"p0": 0, "p1": 1, "p2": 2, "p3": 3}
+ARCHIVED_DONE_DIR = Path("backlog") / "done"
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ class Task:
     priority: str
     lane: str
     dependencies: tuple[str, ...]
+    archived: bool = False
 
 
 def normalize_status(value: str | None) -> str:
@@ -66,8 +68,36 @@ def parse_front_matter(lines: list[str]) -> dict[str, Any]:
     return data
 
 
-def parse_task(path: Path) -> Task:
-    lines = path.read_text(encoding="utf-8").splitlines()
+def read_task_header_lines(path: Path) -> list[str]:
+    lines: list[str] = []
+    front_matter_open = False
+    front_matter_closed = False
+    saw_title = False
+    saw_visible_status = False
+
+    with path.open(encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.rstrip("\n")
+            lines.append(line)
+
+            if len(lines) == 1 and line.strip() == "---":
+                front_matter_open = True
+            elif front_matter_open and not front_matter_closed and line.strip() == "---":
+                front_matter_closed = True
+
+            if line.startswith("# "):
+                saw_title = True
+            if re.match(r"^Status:\s*(.+?)\s*$", line):
+                saw_visible_status = True
+
+            if (not front_matter_open or front_matter_closed) and saw_title and saw_visible_status:
+                break
+
+    return lines
+
+
+def parse_task(path: Path, archived: bool = False) -> Task:
+    lines = read_task_header_lines(path)
     front_matter = parse_front_matter(lines)
     visible_status = ""
     title = path.stem
@@ -98,6 +128,7 @@ def parse_task(path: Path) -> Task:
         priority=str(front_matter.get("priority") or "P3"),
         lane=str(front_matter.get("lane") or ""),
         dependencies=dependencies,
+        archived=archived,
     )
 
 
@@ -111,7 +142,7 @@ def priority_rank(priority: str) -> int:
 
 
 def task_to_json(task: Task, root: Path, unblocks: list[str], unmet: list[str]) -> dict[str, Any]:
-    return {
+    task_json = {
         "id": task.task_id,
         "path": str(task.path.relative_to(root)),
         "title": task.title,
@@ -124,6 +155,9 @@ def task_to_json(task: Task, root: Path, unblocks: list[str], unmet: list[str]) 
         "unblocks": unblocks,
         "unblock_count": len(unblocks),
     }
+    if task.archived:
+        task_json["archived"] = True
+    return task_json
 
 
 def file_mtime_details(path: Path, now: float) -> dict[str, Any]:
@@ -258,16 +292,46 @@ def load_tasks(root: Path) -> tuple[list[Task], list[str]]:
     return tasks, errors
 
 
+def load_archived_done_tasks(root: Path) -> tuple[list[Task], list[str]]:
+    tasks: list[Task] = []
+    errors: list[str] = []
+    archive_dir = root / ARCHIVED_DONE_DIR
+    if not archive_dir.exists():
+        return tasks, errors
+
+    for path in sorted(archive_dir.glob("*.md")):
+        if path.name.lower() == "readme.md":
+            continue
+        try:
+            task = parse_task(path, archived=True)
+        except OSError as exc:
+            errors.append(f"{path}: {exc}")
+            continue
+        tasks.append(task)
+        if task.status != "done" or task.visible_status != "done":
+            errors.append(
+                f"{path}: archived task must have status: done and visible Status: done"
+            )
+    return tasks, errors
+
+
+def load_tasks_with_archived_done(root: Path) -> tuple[list[Task], list[Task], list[str]]:
+    active_tasks, errors = load_tasks(root)
+    archived_done_tasks, archive_errors = load_archived_done_tasks(root)
+    errors.extend(archive_errors)
+    return active_tasks, archived_done_tasks, errors
+
+
 def select_task(
     root: Path,
     expire_in_progress_after_hours: float | None = 1.0,
     apply_expired_in_progress: bool = True,
 ) -> dict[str, Any]:
     now = time.time()
-    tasks, errors = load_tasks(root)
+    active_tasks, archived_done_tasks, errors = load_tasks_with_archived_done(root)
     expired_before_apply = [
         task
-        for task in tasks
+        for task in active_tasks
         if is_expired_in_progress(task, now, expire_in_progress_after_hours)
     ]
     expired_before_apply.sort(key=lambda task: (task_number(task.task_id), task.task_id))
@@ -289,9 +353,10 @@ def select_task(
                 expired_reset_paths.append(str(task.path.relative_to(root)))
             except (OSError, ValueError) as exc:
                 errors.append(str(exc))
-        tasks, load_errors = load_tasks(root)
+        active_tasks, archived_done_tasks, load_errors = load_tasks_with_archived_done(root)
         errors.extend(load_errors)
 
+    tasks = active_tasks + archived_done_tasks
     by_id: dict[str, Task] = {}
     duplicates: dict[str, list[str]] = {}
     for task in tasks:
@@ -321,7 +386,7 @@ def select_task(
     pending: list[tuple[Task, list[str]]] = []
     in_progress: list[Task] = []
     blocked_by_in_progress: dict[str, set[str]] = {}
-    for task in tasks:
+    for task in active_tasks:
         if task.status == "done":
             skipped["done"] += 1
             continue
@@ -362,7 +427,8 @@ def select_task(
     in_progress.sort(key=lambda task: (task_number(task.task_id), task.task_id))
 
     summary = {
-        "task_count": len(tasks),
+        "task_count": len(active_tasks),
+        "archived_done_count": len(archived_done_tasks),
         "ready_count": len(ready),
         "dependency_pending_count": len(pending),
         "blocking_in_progress_count": len(blocked_by_in_progress),

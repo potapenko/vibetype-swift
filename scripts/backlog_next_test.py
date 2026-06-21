@@ -28,6 +28,82 @@ def load_selector_module():
 
 
 class BacklogNextTests(unittest.TestCase):
+    def test_archived_done_dependency_makes_active_task_ready(self) -> None:
+        module = load_selector_module()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            backlog = root / "backlog"
+            archive = backlog / "done"
+            archive.mkdir(parents=True)
+            (archive / "vt-001-parent.md").write_text(
+                """---
+id: VT-001
+status: done
+priority: P1
+lane: test
+---
+
+# VT-001 - Parent
+
+Status: done
+""",
+                encoding="utf-8",
+            )
+            (backlog / "vt-002-dependent.md").write_text(
+                """---
+id: VT-002
+status: backlog
+priority: P1
+lane: test
+dependencies:
+  - VT-001
+---
+
+# VT-002 - Dependent
+
+Status: backlog.
+""",
+                encoding="utf-8",
+            )
+
+            result = module.select_task(root)
+
+        self.assertEqual(result["status"], "select")
+        self.assertEqual(result["selected"]["id"], "VT-002")
+        self.assertEqual(result["summary"]["task_count"], 1)
+        self.assertEqual(result["summary"]["archived_done_count"], 1)
+        self.assertEqual(result["summary"]["ready_count"], 1)
+
+    def test_archived_done_duplicate_id_is_queue_error(self) -> None:
+        module = load_selector_module()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            backlog = root / "backlog"
+            archive = backlog / "done"
+            archive.mkdir(parents=True)
+            for parent in (backlog, archive):
+                (parent / "vt-001-task.md").write_text(
+                    """---
+id: VT-001
+status: done
+priority: P1
+lane: test
+---
+
+# VT-001 - Task
+
+Status: done
+""",
+                    encoding="utf-8",
+                )
+
+            result = module.select_task(root)
+
+        self.assertEqual(result["status"], "queue_error")
+        self.assertIn("duplicate task id VT-001", result["errors"][0])
+
     def test_no_ready_reports_in_progress_dependency_blocker(self) -> None:
         module = load_selector_module()
 

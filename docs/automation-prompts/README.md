@@ -15,6 +15,7 @@ Repository cwd:
 Runtime runbooks:
 
 - `runbooks/archive-completed-automation-threads.md`
+- `runbooks/vibetype-swift-backlog-archiver.md`
 - `runbooks/vibetype-swift-backlog-groomer.md`
 - `runbooks/vibetype-swift-blocker-resolver.md`
 - `runbooks/vibetype-swift-implementer.md`

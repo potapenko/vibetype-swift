@@ -19,19 +19,22 @@ For implementation or file-changing work, read in this order:
 
 ## Normal Development Loop
 
-1. Run `python3 scripts/backlog_next.py --json`; this standard selector run
+1. Run `python3 scripts/backlog_archive_done.py --apply --json` when doing
+   scheduled or maintenance work, then commit any moved completed task files
+   before claiming new implementation work.
+2. Run `python3 scripts/backlog_next.py --json`; this standard selector run
    expires stale `in-progress` claims by default.
-2. If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,
+3. If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,
    stage only those reset task files, create a scoped repair commit, and rerun
    the selector before claiming work.
-3. Claim exactly the selected task with a claim checkpoint commit.
-4. Read the selected task body.
-5. Update specs before behavior changes.
-6. Implement only the selected scope.
-7. Run the task verification.
-8. Mark the task done or blocked.
-9. Create a scoped completion checkpoint commit.
-10. Report verification, changed files, and the next selector result.
+4. Claim exactly the selected task with a claim checkpoint commit.
+5. Read the selected task body.
+6. Update specs before behavior changes.
+7. Implement only the selected scope.
+8. Run the task verification.
+9. Mark the task done or blocked.
+10. Create a scoped completion checkpoint commit.
+11. Report verification, changed files, and the next selector result.
 
 For platform verification, use
 `docs/specs/features/platform-testing-strategy.md`. Most tasks should use

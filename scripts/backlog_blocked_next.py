@@ -11,7 +11,7 @@ from typing import Any
 from backlog_next import (
     Task,
     git_last_change,
-    load_tasks,
+    load_tasks_with_archived_done,
     priority_rank,
     task_number,
     task_to_json,
@@ -82,12 +82,14 @@ def blocked_task_to_json(task: Task, root: Path, dependents: dict[str, list[str]
 
 
 def select_blocked_task(root: Path) -> dict[str, Any]:
-    tasks, errors = load_tasks(root)
-    _by_id, dependents, dependency_errors = task_dependency_maps(tasks)
+    active_tasks, archived_done_tasks, errors = load_tasks_with_archived_done(root)
+    all_tasks = active_tasks + archived_done_tasks
+    _by_id, dependents, dependency_errors = task_dependency_maps(all_tasks)
     errors.extend(dependency_errors)
-    summary = status_summary(tasks)
+    summary = status_summary(active_tasks)
+    summary["archived_done_count"] = len(archived_done_tasks)
 
-    blocked_tasks = [task for task in tasks if task.status == "blocked"]
+    blocked_tasks = [task for task in active_tasks if task.status == "blocked"]
     blocked_tasks.sort(
         key=lambda task: (
             priority_rank(task.priority),
