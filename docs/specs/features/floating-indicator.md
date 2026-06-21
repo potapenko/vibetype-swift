@@ -85,12 +85,13 @@ transcription, paste, clipboard, settings, or permission state.
 
 Product states map to the indicator as follows:
 
-- `idle`: hidden
-- `recording`: visible with recording copy when enabled
-- `transcribing`: visible with processing copy when enabled
-- `done`: brief visible confirmation when enabled, then hidden
-- `error`: brief visible summary when enabled, then hidden with durable error
-  surfaced elsewhere
+| App state | Indicator visibility | Display copy | Dismissal |
+| --- | --- | --- | --- |
+| `idle` | hidden | none | immediate |
+| `recording` | visible when enabled | `Recording` | when recording stops or fails |
+| `transcribing` | visible when enabled | `Transcribing` | when transcription completes or fails |
+| `done` | briefly visible when enabled | `Done` | automatic after about two seconds |
+| `error` | briefly visible when enabled | short product-language error summary | automatic after about six seconds or when a new session starts |
 
 The `showFloatingIndicator` setting is local UserDefaults-backed app state.
 
