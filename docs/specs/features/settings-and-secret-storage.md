@@ -38,6 +38,10 @@ This spec covers:
   nonfunctional form controls.
 - The Settings window should include OpenAI API Key.
 - The OpenAI API key should be saved locally in macOS Keychain.
+- Saving an API key should clear the entry field and show only saved, missing,
+  or error state. The full saved key must not be echoed back in Settings.
+- A saved API key may be replaced by entering a new key, and the user may
+  remove the saved key from Settings.
 - The Settings window should include transcription model.
 - The Settings window should include language setting: Auto, English, Russian,
   or Custom.

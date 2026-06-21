@@ -1,7 +1,7 @@
 ---
 id: VT-023
 title: API Key Settings UI
-status: in-progress
+status: blocked
 priority: P1
 lane: settings
 parent: VT-020
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-023 - API Key Settings UI
 
-Status: in-progress
+Status: blocked
 
 ## Goal
 
@@ -38,3 +38,41 @@ Add the native settings field for entering and saving the OpenAI API key.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`
+
+## Result
+
+- Added a native Settings OpenAI section with a secure API key entry.
+- Saving writes through `KeychainService`, clears the visible field, and shows
+  only saved, missing, or error state.
+- The saved key can be replaced by entering a new key or removed from Settings.
+- Updated the settings and secret-storage spec to preserve the no-echo
+  Keychain-only behavior.
+
+## Blocker Evidence
+
+- 2026-06-21 CEST: implementation and spec update were added, but required
+  Xcode build verification did not complete in this automation pass.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' build` timed out with
+  `BUILD INTERRUPTED` after stalling during Xcode build-service external-tool
+  probing.
+- Narrow evidence passed:
+  `/opt/homebrew/bin/timeout 90 xcrun swiftc -typecheck -parse-as-library
+  $(rg --files vibetype Shared -g '*.swift' | sort)`.
+- `git diff --check` passed.
+- Runtime QA was blocked because the freshly changed app could not be built
+  within the bounded run.
+
+## Resolution Path
+
+- Blocker category: local Xcode build service hang.
+- Follow-up task: `VT-148`
+  (`backlog/vt-148-xcode-build-service-health.md`).
+- Unblock condition: after the local Xcode build service reaches macOS build or
+  test execution again, rerun
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination
+  'platform=macOS' build` plus `git diff --check`.
+- If the build passes, a blocker-resolution pass should launch the freshly
+  built app, open Settings, verify the secure API key save/clear/remove states,
+  and then mark this task done without additional source edits unless runtime
+  QA finds a defect.

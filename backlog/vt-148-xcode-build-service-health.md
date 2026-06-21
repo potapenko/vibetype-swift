@@ -29,6 +29,8 @@ blocked Swift model/service tasks to finish their normal verification gates.
 
 - Run a bounded macOS unit-test health command:
   `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
+- Include blocked task `VT-023` in the retry assessment when deciding which
+  tasks can safely complete after Xcode build/test health returns.
 - Record a concise QA report under `docs/qa/runs/` with the exact command,
   result, timeout or failure point, and whether blocked tasks can be retried.
 - Do not change app source, tests, product specs, Xcode project settings, or
@@ -38,7 +40,8 @@ blocked Swift model/service tasks to finish their normal verification gates.
 
 - The report names whether Xcode reached test execution.
 - If the command passes, the report names the blocked task ids that are safe to
-  retry for completion verification.
+  retry for completion verification, including `VT-023` when macOS app build
+  verification is healthy.
 - If the command times out before compiler diagnostics or test execution, the
   report records the fresh bounded timeout and any exact operator-only action
   or status check that appears necessary.
