@@ -38,6 +38,7 @@ Required reading before edits:
 - `docs/specs/README.md`
 - `docs/specs/backlog.md`
 - `docs/specs/features/backlog-grooming-automation.md`
+- `docs/specs/features/ui-functionality-coverage.md`
 - `docs/openwhispr_swiftui_codex_tz.md`
 - `references/README.md`
 - only OpenWhispr reference files relevant to the behavior being groomed
@@ -47,8 +48,12 @@ tasks.
 
 ## Safety
 
-Run `git status --short` before writing. If there are uncommitted changes or
-staged changes, stop without editing and report the blocker.
+Run `git status --short` before writing. If there are staged changes, stop
+without editing and report the blocker. If there are unstaged changes, inspect
+whether they overlap files this groomer may edit or materially affect the
+source-shape decision. Stop on overlap. For clearly unrelated unstaged files,
+continue only after recording them as unrelated dirty worktree state, and never
+stage or modify them.
 
 Before grooming, run the standard selector. It has built-in claim-expiry repair:
 
@@ -84,6 +89,12 @@ Do not mark tasks done. Do not claim tasks. Do not change implementer-owned
 source files. Do not delete tasks. Do not duplicate tasks that already cover the
 behavior.
 
+When saying existing tasks cover reference behavior, verify the coverage against
+`docs/specs/features/ui-functionality-coverage.md` and the selector output.
+A blocked or dependency-pending task is not enough by itself. Record the first
+unblock action or create/refine one small executable task instead of treating a
+blocked area as complete coverage.
+
 Create or refine at most eight backlog tasks per run. Prefer umbrella parent
 tasks plus small child tasks when a product area is larger than one checkpoint.
 Child tasks should usually have one observable output and be close to a
@@ -93,6 +104,10 @@ decision.
 
 Keep each task narrow, with `allowed_paths`, dependencies, acceptance criteria,
 and verification commands.
+
+Update `docs/specs/features/ui-functionality-coverage.md` in the same run when
+new or refined tasks change the current state, next task, reference evidence, or
+verification plan for a visible surface or end-to-end product flow.
 
 ## Reference Translation
 
@@ -127,5 +142,6 @@ Final report must include created or updated task ids, parent/child grouping
 changes, reference files inspected, selector status and selected task path,
 verification results, tooling assumptions added to tasks when relevant, commit
 hash if created, actual cwd, execution environment, `Thread archive` with
-`requested` or `unavailable` according to the MCP/thread lifecycle action, and
-any blocker.
+`requested` or `unavailable` according to the MCP/thread lifecycle action,
+UI/functionality coverage rows updated or explicitly unchanged, unrelated dirty
+files left untouched, and any blocker.

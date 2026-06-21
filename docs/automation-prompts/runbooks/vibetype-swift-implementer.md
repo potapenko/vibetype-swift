@@ -101,7 +101,10 @@ If selector status is `select`, claim exactly `selected.path`. If status is
 `no_ready`, stop without changing repository files and report the selector
 summary, `ready_count`, `dependency_pending_count`, and first dependency-pending
 examples, including any `in_progress` and `blocking_in_progress` diagnostics.
-If status is `queue_error`, stop without claiming and report the diagnostics.
+When `no_ready` includes blocked tasks, also run
+`python3 scripts/backlog_blocked_next.py --json` read-only and report the top
+blocked task and whether the blocker resolver should run next. If status is
+`queue_error`, stop without claiming and report the diagnostics.
 
 Never mark a task `blocked` merely because declared dependencies are not done;
 dependency-pending tasks stay `backlog` and are skipped by the selector.

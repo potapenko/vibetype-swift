@@ -18,17 +18,20 @@ Each run should:
 
 1. Read the repository workflow contract.
 2. Read the MVP brief and existing specs.
-3. Inspect current Swift source shape.
-4. Inspect only the relevant reference source files.
-5. Add or refine backlog tasks for missing behavior.
-6. Prefer parent umbrella tasks plus small child tasks for large areas.
-7. Keep task files short, scoped, and verifiable.
-8. Review the generated diff before committing and split or tighten any task
+3. Read `docs/specs/features/ui-functionality-coverage.md`.
+4. Inspect current Swift source shape.
+5. Inspect only the relevant reference source files.
+6. Add or refine backlog tasks for missing behavior.
+7. Update the UI/functionality coverage map when a surface, flow, reference
+   mapping, task status, or known gap changes.
+8. Prefer parent umbrella tasks plus small child tasks for large areas.
+9. Keep task files short, scoped, and verifiable.
+10. Review the generated diff before committing and split or tighten any task
    that is broader than one agent checkpoint.
-9. Run
+11. Run
    `python3 scripts/backlog_next.py --json`
    after edits.
-10. Commit only backlog/spec/workflow edits made by the groomer.
+12. Commit only backlog/spec/workflow edits made by the groomer.
 
 ## Task Size
 
@@ -56,6 +59,29 @@ child task and confirm that it has:
 If a child task mixes UI, service work, permissions, network behavior, or
 persistence in one implementation slice, split it or make it an umbrella before
 the groomer commit is created.
+
+## Coverage Map
+
+The groomer must keep `docs/specs/features/ui-functionality-coverage.md` as the
+durable bridge between product surfaces, OpenWhispr behavior evidence, current
+Swift files, backlog task ids, and verification needs.
+
+When auditing reference behavior, "covered by existing tasks" is only a valid
+completion reason when each cited behavior maps to one of:
+
+- a `done` task with current implementation evidence;
+- a dependency-ready task selected or selectable by `scripts/backlog_next.py`;
+- a blocked task with a concrete resolver path and the first unblock action
+  recorded in the coverage map.
+
+A blocked task is not sufficient coverage by itself. If useful reference
+behavior maps only to blocked or dependency-pending tasks, the groomer must
+record that gap and either refine the unblock path or add one small task that
+makes the next product delta executable.
+
+The map is not a substitute for specs or task completion. It is a navigation
+artifact that prevents audits from declaring broad UI behavior covered while
+the visible app still contains placeholders or disconnected service seams.
 
 ## Reference Rules
 

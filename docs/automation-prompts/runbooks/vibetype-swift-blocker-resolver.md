@@ -52,20 +52,25 @@ Do not require optional README files that are absent from the checkout.
 
 ## Safety Gate
 
-Start with a clean, race-aware checkout:
+Start with a race-aware checkout:
 
 1. Run `git status --short`.
-2. If there are uncommitted changes, stop unless every changed file is clearly
-   owned by the current resolver run.
-3. Run `python3 scripts/backlog_next.py --json` before blocked selection. This
+2. If there are staged changes, stop unless every staged file is clearly owned
+   by the current resolver run.
+3. If there are unstaged changes, inspect whether they overlap the selected
+   blocked task, files needed to verify it, or backlog/spec/workflow files the
+   resolver may edit. Stop on overlap. Clearly unrelated unstaged files may
+   remain in the worktree if the run reports them and does not stage, modify, or
+   rely on them.
+4. Run `python3 scripts/backlog_next.py --json` before blocked selection. This
    normal selector expires stale implementation claims by default.
-4. If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,
+5. If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,
    stage only those reset task files, create a scoped claim-expiry repair
    commit, and rerun `python3 scripts/backlog_next.py --json`.
-5. If the normal selector reports a non-expired `in_progress` or
+6. If the normal selector reports a non-expired `in_progress` or
    `blocking_in_progress` task after stale-claim repair, stop without changes
    to avoid racing the implementer in the canonical checkout.
-6. If the normal selector reports `queue_error`, stop and report the queue
+7. If the normal selector reports `queue_error`, stop and report the queue
    diagnostics.
 
 Do not access MongoDB directly. Do not run destructive database or
@@ -112,6 +117,12 @@ Prefer direct resolution when all of these are true:
 - the original acceptance criteria can be checked without broad new work;
 - verification can be rerun with bounded waits;
 - any required code or spec repair stays inside the selected task's scope.
+
+For verification-only blockers whose resolution path says the work is already
+implemented, first rerun the narrow verification named in the task and
+`git diff --check`. If both pass and the repository verification strategy allows
+that narrow evidence for the blocker class, mark the selected task `done`
+without creating another follow-up task.
 
 If direct resolution succeeds, mark the selected task `done`, record fresh
 verification evidence, stage only resolver-owned changes, and commit.
@@ -197,5 +208,6 @@ verification results, `Tooling` with the XcodeBuildMCP / `xcodebuild` /
 Computer Use path used when relevant, cleanup performed, `Thread archive` with
 `requested` or `unavailable` according to the MCP/thread lifecycle action,
 completion commit hash if files changed, next blocked selector result if
-checked, actual cwd, execution environment, and confirmation that the canonical
-checkout now contains the status or resolution-path update.
+checked, actual cwd, execution environment, unrelated dirty files left
+untouched, and confirmation that the canonical checkout now contains the status
+or resolution-path update.

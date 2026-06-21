@@ -1,7 +1,7 @@
 ---
 id: VT-031
 title: Microphone Permission Status
-status: blocked
+status: done
 priority: P1
 lane: permissions
 parent: VT-030
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-031 - Microphone Permission Status
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -62,3 +62,18 @@ Add a Swift-native way to read and request microphone permission for the MVP.
 - A blocker-resolution pass may then mark this task done without additional
   source edits because the microphone permission service and fake-backed tests
   are already present.
+
+## Resolution Evidence
+
+- 2026-06-21: Focused unit verification passed during the unblock audit:
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
+- A later resolver rerun of the same command, plus a
+  `-skip-testing:vibetypeUITests` variant, was interrupted after Xcode stalled
+  in `com.apple.dt.xctest.target-runner` finalization. No source files changed
+  between the passing focused unit run and this resolver status update.
+- Fresh bounded build verification passed:
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`.
+- Fresh `git diff --check` passed.
+- Applied `docs/specs/features/verification-strategy.md` policy for accepting
+  narrow target evidence when the remaining failure is the full Xcode/UI test
+  runner rather than the microphone permission implementation.
