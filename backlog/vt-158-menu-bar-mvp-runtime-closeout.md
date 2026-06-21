@@ -119,6 +119,27 @@ Verification evidence:
 - Cleanup after the timed-out focused test removed generated DerivedData and
   terminated stale `SWBBuildService` pid `87805`.
 
+2026-06-22 01:12 CEST blocker resolver refresh:
+
+- Passed: `python3 scripts/local_tooling_recover.py --apply --json`
+  terminated stale VibeType build/test tooling before retry:
+  `xcodebuild` pids `15276` and `15277`, `SWBBuildService` pid `15810`, and
+  clang probe pid `15886`.
+- Blocked:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+  again reached the early `clang -v -E -dM ... /dev/null` probe before
+  compiler diagnostics and exited 143 with `** BUILD INTERRUPTED **`.
+- Passed: recovery after the build retry found no remaining stale processes or
+  generated artifacts.
+- Blocked:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  reached Xcode external-tool probing before test discovery or execution and
+  exited 143 with `** BUILD INTERRUPTED **`.
+- Passed: final recovery found no remaining stale processes or generated
+  artifacts.
+- Runtime QA remains blocked because no fresh macOS app build product was
+  produced.
+
 Durable QA note:
 
 - `docs/qa/macos/vt-158-2026-06-22-menu-bar-runtime-closeout.md`
