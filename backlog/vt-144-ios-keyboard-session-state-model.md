@@ -13,7 +13,7 @@ allowed_paths:
   - backlog/vt-144-ios-keyboard-session-state-model.md
 verification:
   - git diff --check
-  - xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype-iOS -destination 'platform=iOS Simulator' test
+  - xcodebuild -project vibetype.xcodeproj -scheme vibetype-iOS -destination 'platform=iOS Simulator' test
 ---
 
 # VT-144 - iOS Keyboard Session State Model
@@ -72,9 +72,9 @@ building the visual surface.
 - Added a hostless `vibetypeIOSTests` target to the iOS scheme so the same
   model has iOS simulator test-bundle coverage.
 - Verification passed:
-  - `xcrun --sdk iphonesimulator swiftc -typecheck -target arm64-apple-ios17.0-simulator -parse-as-library vibetype/Shared/KeyboardSessionState.swift`
-  - `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype-iOS -destination 'generic/platform=iOS Simulator' build-for-testing`
-  - `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests/KeyboardSessionStateTests`
+  - `xcrun --sdk iphonesimulator swiftc -typecheck -target arm64-apple-ios17.0-simulator -parse-as-library Shared/KeyboardSessionState.swift`
+  - `xcodebuild -project vibetype.xcodeproj -scheme vibetype-iOS -destination 'generic/platform=iOS Simulator' build-for-testing`
+  - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests/KeyboardSessionStateTests`
 - Documented iOS simulator runtime blocker: XcodeBuildMCP discovered the three
   `vibetypeIOSTests` cases, but simulator execution failed before assertions
   because the cloned simulator could not boot; an explicit existing-simulator

@@ -9,8 +9,8 @@ dependencies:
   - VT-000
   - VT-002
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/**
   - backlog/vt-071-hotkey-service-interface.md
 ---
@@ -37,19 +37,19 @@ Add a Swift-native service boundary for global hotkey registration.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
 
 ## Blocker Evidence
 
 - 2026-06-20: Implemented the service boundary and fake-backed tests, but
   Xcode verification did not complete in this local session.
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
   blocked in Xcode target-runner materialization/finalization and was
   interrupted after bounded waits.
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
   hit the same target-runner blocker.
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' -derivedDataPath /tmp/vibetype-swift-vt071-derived build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' -derivedDataPath /tmp/vibetype-swift-vt071-derived build`
   also stopped returning progress after build graph creation and was
   interrupted after bounded waits.
 - Narrow checks completed: app source `swiftc -typecheck` passed, app module

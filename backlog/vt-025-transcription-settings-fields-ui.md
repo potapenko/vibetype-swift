@@ -9,8 +9,8 @@ dependencies:
   - VT-013
   - VT-021
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/settings-and-secret-storage.md
   - docs/specs/features/openai-transcription.md
   - backlog/vt-025-transcription-settings-fields-ui.md
@@ -51,5 +51,5 @@ Expose the MVP transcription settings in the native Settings window.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`

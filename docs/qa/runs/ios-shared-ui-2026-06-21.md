@@ -17,15 +17,15 @@ Task: direct user experiment for shared macOS/iOS SwiftUI surfaces
   - Result: `no_ready`; no selector-approved backlog task was available.
 - XcodeBuildMCP `build_run_sim` with scheme `vibetype-iOS`
   - Result: timed out after 300 seconds before producing a screenshot.
-- `/opt/homebrew/bin/timeout 180 xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `/opt/homebrew/bin/timeout 180 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
   - Result: timed out with `BUILD INTERRUPTED`; no compiler diagnostics were
     emitted before timeout.
-- `/opt/homebrew/bin/timeout 180 xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype-iOS -destination 'platform=iOS Simulator,id=6ACF3054-A7EA-4182-8D0D-996004730391' build`
+- `/opt/homebrew/bin/timeout 180 xcodebuild -project vibetype.xcodeproj -scheme vibetype-iOS -destination 'platform=iOS Simulator,id=6ACF3054-A7EA-4182-8D0D-996004730391' build`
   - Result: timed out with `BUILD INTERRUPTED`; no compiler diagnostics were
     emitted before timeout.
-- `/opt/homebrew/bin/timeout 60 zsh -lc 'SDK=$(xcrun --sdk iphonesimulator --show-sdk-path); xcrun swiftc -typecheck -target arm64-apple-ios17.0-simulator -sdk "$SDK" vibetype/Shared/VibeTypeSetupStatusView.swift vibetype/vibetypeIOS/VibeTypeIOSApp.swift'`
+- `/opt/homebrew/bin/timeout 60 zsh -lc 'SDK=$(xcrun --sdk iphonesimulator --show-sdk-path); xcrun swiftc -typecheck -target arm64-apple-ios17.0-simulator -sdk "$SDK" Shared/VibeTypeSetupStatusView.swift vibetypeIOS/VibeTypeIOSApp.swift'`
   - Result: passed.
-- `/opt/homebrew/bin/timeout 60 zsh -lc 'SDK=$(xcrun --sdk macosx --show-sdk-path); xcrun swiftc -typecheck -target arm64-apple-macos26.5 -sdk "$SDK" vibetype/Shared/VibeTypeSetupStatusView.swift vibetype/vibetype/*.swift vibetype/vibetype/Models/*.swift vibetype/vibetype/Services/*.swift'`
+- `/opt/homebrew/bin/timeout 60 zsh -lc 'SDK=$(xcrun --sdk macosx --show-sdk-path); xcrun swiftc -typecheck -target arm64-apple-macos26.5 -sdk "$SDK" Shared/VibeTypeSetupStatusView.swift vibetype/*.swift vibetype/Models/*.swift vibetype/Services/*.swift'`
   - Result: passed.
 
 ## Runtime QA Decision

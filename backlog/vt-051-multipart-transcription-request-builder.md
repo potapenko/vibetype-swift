@@ -8,8 +8,8 @@ parent: VT-050
 dependencies:
   - VT-001
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/**
   - backlog/vt-051-multipart-transcription-request-builder.md
 ---
@@ -36,5 +36,5 @@ Create a testable builder for the OpenAI audio transcription multipart request.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

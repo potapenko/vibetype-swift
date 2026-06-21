@@ -257,14 +257,14 @@ before implementation.
 For Swift behavior changes:
 
 ```sh
-xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build
+xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build
 git diff --check
 ```
 
 For Swift test changes or behavior with test coverage:
 
 ```sh
-xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test
+xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test
 git diff --check
 ```
 

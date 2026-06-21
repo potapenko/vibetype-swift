@@ -8,7 +8,7 @@ parent: VT-010
 dependencies:
   - VT-000
 allowed_paths:
-  - vibetype/vibetype/**
+  - vibetype/**
   - docs/specs/features/settings-and-secret-storage.md
   - backlog/vt-013-settings-menu-opens-placeholder-window.md
 ---
@@ -35,5 +35,5 @@ Add a Settings menu item that opens a native SwiftUI settings window or panel.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`

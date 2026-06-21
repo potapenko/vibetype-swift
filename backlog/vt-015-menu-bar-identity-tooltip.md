@@ -9,8 +9,8 @@ dependencies:
   - VT-000
 allowed_paths:
   - docs/specs/features/menu-bar-app-shell.md
-  - vibetype/vibetype/vibetypeApp.swift
-  - vibetype/vibetype/Assets.xcassets/**
+  - vibetype/vibetypeApp.swift
+  - vibetype/Assets.xcassets/**
   - backlog/vt-015-menu-bar-identity-tooltip.md
 ---
 
@@ -49,7 +49,7 @@ translate only the product need: a recognizable native macOS menu bar item.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`
 
 ## Blocker Evidence
@@ -59,7 +59,7 @@ translate only the product need: a recognizable native macOS menu bar item.
 - Implemented the native SwiftUI menu bar identity and updated the menu bar
   app shell spec, but the required Xcode build gate could not complete on the
   current host.
-- Initial `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype
+- Initial `xcodebuild -project vibetype.xcodeproj -scheme vibetype
   -destination 'platform=macOS' build` stalled in build description/external
   tool probing and then reported `No space left on device` while writing
   DerivedData attachments/logs.
@@ -71,5 +71,5 @@ translate only the product need: a recognizable native macOS menu bar item.
   and retried the build once; the retry again did not reach compilation before
   the bounded cutoff and was interrupted.
 - Narrow evidence passed:
-  `xcrun swiftc -typecheck -parse-as-library $(rg --files vibetype/vibetype -g '*.swift' | sort)`
+  `xcrun swiftc -typecheck -parse-as-library $(rg --files vibetype -g '*.swift' | sort)`
   and `git diff --check`.

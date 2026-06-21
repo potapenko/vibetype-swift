@@ -8,9 +8,9 @@ parent: VT-130
 dependencies:
   - VT-132
 allowed_paths:
-  - vibetype/vibetype/Models/**
-  - vibetype/vibetype/Services/**
-  - vibetype/vibetypeTests/**
+  - vibetype/Models/**
+  - vibetype/Services/**
+  - vibetypeTests/**
   - docs/specs/features/transcript-history.md
   - backlog/vt-133-transcript-history-store.md
 ---
@@ -48,5 +48,5 @@ newest 20, and can clear persistent history.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

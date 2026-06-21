@@ -8,8 +8,8 @@ parent: VT-040
 dependencies:
   - VT-000
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/microphone-text-input.md
   - backlog/vt-041-recorder-protocol-and-fake.md
 ---
@@ -36,7 +36,7 @@ Create the recorder service boundary before adding AVFoundation details.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
 
 ## Blocker Evidence
@@ -44,10 +44,10 @@ Create the recorder service boundary before adding AVFoundation details.
 - Implemented the recorder protocol, status model, reusable fake recorder, and
   fake-backed unit coverage for success, failure, cancellation, and protocol
   consumption.
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
   failed after unit tests passed because `vibetypeUITests-Runner` cannot
   initialize off-console: `User interaction required. Can't authenticate off
   console`.
 - Narrow evidence passed:
-  `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
   and `git diff --check`.

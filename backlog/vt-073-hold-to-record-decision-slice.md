@@ -8,9 +8,9 @@ parent: VT-070
 dependencies:
   - VT-002
 allowed_paths:
-  - vibetype/vibetype/Services/GlobalHotkeyService.swift
-  - vibetype/vibetypeTests/FakeGlobalHotkeyService.swift
-  - vibetype/vibetypeTests/GlobalHotkeyServiceTests.swift
+  - vibetype/Services/GlobalHotkeyService.swift
+  - vibetypeTests/FakeGlobalHotkeyService.swift
+  - vibetypeTests/GlobalHotkeyServiceTests.swift
   - docs/specs/features/**
   - backlog/vt-073-hold-to-record-decision-slice.md
 ---
@@ -45,7 +45,7 @@ model.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
 
 ## Completion Evidence
@@ -60,12 +60,12 @@ model.
 - Expanded the allowed test-helper path to include the existing fake hotkey
   service because it was required to compile the selected fake-backed tests.
 - Verification passed:
-  `xcodebuild -quiet -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests/GlobalHotkeyServiceTests`
+  `xcodebuild -quiet -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests/GlobalHotkeyServiceTests`
 - Verification passed:
-  `xcodebuild -quiet -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+  `xcodebuild -quiet -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - Verification passed: `git diff --check`
 - Full-scheme verification
-  `xcodebuild -quiet -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+  `xcodebuild -quiet -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
   entered the local macOS test runner and then stalled in runner
   materialization/finalization; the run-owned process was interrupted after a
   bounded wait and reported `** TEST INTERRUPTED **`.

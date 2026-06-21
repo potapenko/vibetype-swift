@@ -8,8 +8,8 @@ parent: VT-110
 dependencies:
   - VT-121
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/platform-testing-strategy.md
   - backlog/vt-111-fake-backed-controller-test-harness.md
 ---
@@ -39,5 +39,5 @@ Extend the fake-backed test harness for dictation controller state changes.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

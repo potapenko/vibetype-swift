@@ -8,8 +8,8 @@ parent: VT-020
 dependencies:
   - VT-021
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/settings-and-secret-storage.md
   - backlog/vt-022-keychain-api-key-storage.md
 ---
@@ -38,5 +38,5 @@ key.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

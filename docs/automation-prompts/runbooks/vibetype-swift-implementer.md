@@ -185,14 +185,14 @@ Run the verification named by the selected task. For Swift behavior changes,
 prefer the repository baseline unless the task narrows it:
 
 ```sh
-xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build
+xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build
 git diff --check
 ```
 
 For Swift test changes or test-covered behavior:
 
 ```sh
-xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test
+xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test
 git diff --check
 ```
 

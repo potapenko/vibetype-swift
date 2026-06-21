@@ -8,8 +8,8 @@ parent: VT-130
 dependencies:
   - VT-021
 allowed_paths:
-  - vibetype/vibetype/Models/AppSettings.swift
-  - vibetype/vibetypeTests/AppSettingsTests.swift
+  - vibetype/Models/AppSettings.swift
+  - vibetypeTests/AppSettingsTests.swift
   - docs/specs/features/settings-and-secret-storage.md
   - backlog/vt-131-history-settings-flag.md
 ---
@@ -45,5 +45,5 @@ history writes.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

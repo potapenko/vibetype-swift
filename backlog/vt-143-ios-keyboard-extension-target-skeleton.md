@@ -16,7 +16,7 @@ allowed_paths:
   - backlog/vt-143-ios-keyboard-extension-target-skeleton.md
 verification:
   - git diff --check
-  - xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype-iOS -destination 'platform=iOS Simulator' build
+  - xcodebuild -project vibetype.xcodeproj -scheme vibetype-iOS -destination 'platform=iOS Simulator' build
 ---
 
 # VT-143 - iOS Keyboard Extension Target Skeleton

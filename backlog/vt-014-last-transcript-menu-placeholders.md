@@ -8,7 +8,7 @@ parent: VT-010
 dependencies:
   - VT-000
 allowed_paths:
-  - vibetype/vibetype/**
+  - vibetype/**
   - docs/specs/features/text-output-workflow.md
   - backlog/vt-014-last-transcript-menu-placeholders.md
 ---
@@ -35,5 +35,5 @@ Add native menu placeholders for Last Transcript and Copy Last Transcript.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`

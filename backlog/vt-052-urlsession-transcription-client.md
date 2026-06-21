@@ -9,8 +9,8 @@ dependencies:
   - VT-022
   - VT-051
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/**
   - backlog/vt-052-urlsession-transcription-client.md
 ---
@@ -38,5 +38,5 @@ Add the OpenAI transcription client with an injectable URL loading boundary.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

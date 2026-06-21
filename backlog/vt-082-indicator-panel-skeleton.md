@@ -8,7 +8,7 @@ parent: VT-080
 dependencies:
   - VT-081
 allowed_paths:
-  - vibetype/vibetype/**
+  - vibetype/**
   - docs/specs/features/**
   - backlog/vt-082-indicator-panel-skeleton.md
 ---
@@ -35,5 +35,5 @@ Add the first native floating indicator panel skeleton.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`

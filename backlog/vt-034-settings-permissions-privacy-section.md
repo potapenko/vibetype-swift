@@ -10,8 +10,8 @@ dependencies:
   - VT-031
   - VT-032
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/privacy-and-permissions.md
   - docs/specs/features/settings-and-secret-storage.md
   - backlog/vt-034-settings-permissions-privacy-section.md
@@ -53,5 +53,5 @@ OpenAI transcription privacy state.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`

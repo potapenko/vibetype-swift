@@ -9,8 +9,8 @@ dependencies:
   - VT-032
   - VT-061
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/text-output-workflow.md
   - backlog/vt-062-accessibility-gated-paste-event.md
 ---
@@ -52,5 +52,5 @@ permission allows it.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

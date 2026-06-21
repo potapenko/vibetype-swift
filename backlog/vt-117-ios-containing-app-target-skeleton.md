@@ -48,7 +48,7 @@ real app surface to build.
 ## Verification
 
 - XcodeBuildMCP or Build iOS Apps simulator build/run for the new iOS target.
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`
 
 ## Implementation Notes
@@ -66,24 +66,24 @@ real app surface to build.
 
 ## Blocker Evidence
 
-- `xcodebuild -list -project vibetype/vibetype.xcodeproj` lists targets
+- `xcodebuild -list -project vibetype.xcodeproj` lists targets
   `vibetype`, `vibetype-iOS`, `vibetypeTests`, and `vibetypeUITests`; schemes
   `vibetype` and `vibetype-iOS`.
 - `xmllint --noout
-  vibetype/vibetype.xcodeproj/xcshareddata/xcschemes/vibetype-iOS.xcscheme`
+  vibetype.xcodeproj/xcshareddata/xcschemes/vibetype-iOS.xcscheme`
   passed.
 - `xcrun --sdk iphonesimulator swiftc -typecheck -parse-as-library -target
-  arm64-apple-ios17.0-simulator vibetype/vibetypeIOS/VibeTypeIOSApp.swift`
+  arm64-apple-ios17.0-simulator vibetypeIOS/VibeTypeIOSApp.swift`
   passed.
 - XcodeBuildMCP `list_sims` failed without returning available simulators.
 - XcodeBuildMCP `build_sim` reached Xcode but failed because no concrete
   installed simulator matched the requested destination; Xcode reports only the
   generic `Any iOS Simulator Device` placeholder for the iOS scheme.
-- Direct `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype-iOS
+- Direct `xcodebuild -project vibetype.xcodeproj -scheme vibetype-iOS
   -destination 'generic/platform=iOS Simulator' -derivedDataPath
   /tmp/vibetype-swift-vt117-direct-derived build` was interrupted after a
   bounded wait while stuck in Xcode build-service external-tool probing.
-- Required macOS build `xcodebuild -project vibetype/vibetype.xcodeproj -scheme
+- Required macOS build `xcodebuild -project vibetype.xcodeproj -scheme
   vibetype -destination 'platform=macOS' build` was also interrupted after a
   bounded wait while stuck in the same Xcode build-service external-tool
   probing phase.

@@ -9,7 +9,7 @@ dependencies:
   - VT-013
   - VT-021
 allowed_paths:
-  - vibetype/vibetype/**
+  - vibetype/**
   - docs/specs/features/settings-and-secret-storage.md
   - backlog/vt-024-mvp-settings-toggles.md
 ---
@@ -37,5 +37,5 @@ Expose the core MVP settings toggles in the native settings UI.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`

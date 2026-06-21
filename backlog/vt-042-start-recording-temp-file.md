@@ -9,8 +9,8 @@ dependencies:
   - VT-031
   - VT-041
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/microphone-text-input.md
   - backlog/vt-042-start-recording-temp-file.md
 ---
@@ -38,5 +38,5 @@ file.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

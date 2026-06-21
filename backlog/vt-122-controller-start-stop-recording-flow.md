@@ -9,8 +9,8 @@ dependencies:
   - VT-043
   - VT-121
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/microphone-text-input.md
   - docs/specs/features/menu-bar-app-shell.md
   - backlog/vt-122-controller-start-stop-recording-flow.md
@@ -53,5 +53,5 @@ Wire the controller's start and stop actions through the recording boundary.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

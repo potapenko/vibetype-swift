@@ -8,8 +8,8 @@ parent: VT-050
 dependencies:
   - VT-052
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/**
   - backlog/vt-053-transcription-error-mapping.md
 ---
@@ -38,5 +38,5 @@ messages.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

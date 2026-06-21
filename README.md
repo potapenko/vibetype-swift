@@ -10,6 +10,10 @@ Electron, React, and Node.js.
 This repository is currently set up for spec-first development. Product
 behavior should be specified before implementation code is added.
 
+Open `vibetype.xcodeproj` from the repository root. The Xcode project now sits
+next to `docs/`, `backlog/`, `scripts/`, and `AGENTS.md` so project work and
+spec-first context stay in the same root.
+
 ## Start Here
 
 Before selecting or implementing a non-trivial task:

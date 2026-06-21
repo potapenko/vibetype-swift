@@ -10,8 +10,8 @@ dependencies:
   - VT-053
   - VT-121
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/microphone-text-input.md
   - docs/specs/features/openai-transcription.md
   - backlog/vt-124-controller-failure-cancel-state-flow.md
@@ -50,5 +50,5 @@ previous accepted transcript.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

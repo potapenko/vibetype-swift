@@ -47,9 +47,9 @@ Evidence from the 2026-06-21 automation pass:
 
 - Xcode lists only the `vibetype`, `vibetypeTests`, and `vibetypeUITests`
   targets.
-- `vibetype/vibetype.xcodeproj/project.pbxproj` uses `SDKROOT = macosx` and
+- `vibetype.xcodeproj/project.pbxproj` uses `SDKROOT = macosx` and
   has no `IPHONEOS_DEPLOYMENT_TARGET` or iOS app target.
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype
   -showdestinations` reports only macOS destinations for the `vibetype`
   scheme.
 - XcodeBuildMCP session defaults were empty; `list_sims` failed to return

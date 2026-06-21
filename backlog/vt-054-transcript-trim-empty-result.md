@@ -8,8 +8,8 @@ parent: VT-050
 dependencies:
   - VT-052
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/text-output-workflow.md
   - backlog/vt-054-transcript-trim-empty-result.md
 ---
@@ -36,5 +36,5 @@ Normalize transcription output before it reaches clipboard or paste workflows.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

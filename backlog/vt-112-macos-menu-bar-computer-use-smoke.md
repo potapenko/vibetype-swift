@@ -43,7 +43,7 @@ app surface.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - Bounded Computer Use smoke against the launched app, or a concrete blocker
   report under `docs/qa/macos/`
 - `git diff --check`

@@ -11,9 +11,8 @@ behavior must live in `docs/specs/`.
 dictation utility. The app records microphone input, sends audio to the OpenAI
 transcription API, and inserts returned text into the current active app.
 
-At bootstrap time this repository has no implementation code, but it does have
-a product brief in `docs/openwhispr_
-ui_codex_tz.md`. Treat that brief as
+At bootstrap time this repository had no implementation code, but it does have
+a product brief in `docs/openwhispr_swiftui_codex_tz.md`. Treat that brief as
 source evidence for the initial MVP, then preserve durable product behavior in
 `docs/specs/`.
 
@@ -213,7 +212,7 @@ must avoid indefinite waits and must use bounded timeouts or controllable fakes.
 For Swift behavior changes, the baseline verification is:
 
 ```sh
-xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build
+xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build
 git diff --check
 ```
 

@@ -9,8 +9,8 @@ dependencies:
   - VT-061
   - VT-062
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/text-output-workflow.md
   - backlog/vt-063-clipboard-restore-after-paste.md
 ---
@@ -49,5 +49,5 @@ Restore the previous clipboard after auto-paste when the setting is enabled.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

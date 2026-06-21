@@ -9,8 +9,8 @@ dependencies:
   - VT-024
   - VT-133
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/settings-and-secret-storage.md
   - docs/specs/features/transcript-history.md
   - backlog/vt-135-clear-transcript-history-settings-action.md
@@ -50,5 +50,5 @@ Expose a native settings action that clears only persistent transcript history.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

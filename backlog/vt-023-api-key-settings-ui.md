@@ -9,7 +9,7 @@ dependencies:
   - VT-013
   - VT-022
 allowed_paths:
-  - vibetype/vibetype/**
+  - vibetype/**
   - docs/specs/features/settings-and-secret-storage.md
   - backlog/vt-023-api-key-settings-ui.md
 ---
@@ -36,5 +36,5 @@ Add the native settings field for entering and saving the OpenAI API key.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`

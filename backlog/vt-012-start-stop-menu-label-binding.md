@@ -8,7 +8,7 @@ parent: VT-010
 dependencies:
   - VT-011
 allowed_paths:
-  - vibetype/vibetype/**
+  - vibetype/**
   - docs/specs/features/menu-bar-app-shell.md
   - backlog/vt-012-start-stop-menu-label-binding.md
 ---
@@ -36,5 +36,5 @@ show `Start Recording` or `Stop Recording` at the right time.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`

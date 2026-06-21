@@ -6,8 +6,8 @@ priority: P0
 lane: swift-app-shell
 dependencies:
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetype.xcodeproj/**
+  - vibetype/**
+  - vibetype.xcodeproj/**
   - docs/specs/features/menu-bar-app-shell.md
   - backlog/vt-000-first-menu-bar-item-shell.md
 ---
@@ -40,5 +40,5 @@ item.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`

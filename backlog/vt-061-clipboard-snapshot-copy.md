@@ -8,8 +8,8 @@ parent: VT-060
 dependencies:
   - VT-000
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/text-output-workflow.md
   - backlog/vt-061-clipboard-snapshot-copy.md
 ---
@@ -37,7 +37,7 @@ copying transcript text.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
 
 ## Blocker Evidence
@@ -47,5 +47,5 @@ copying transcript text.
   `vibetypeUITests-Runner` could not initialize off-console:
   `User interaction required. Can't authenticate off console`.
 - Narrow verification passed:
-  `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
 - `git diff --check` passed.

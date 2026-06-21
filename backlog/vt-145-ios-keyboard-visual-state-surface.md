@@ -17,7 +17,7 @@ allowed_paths:
   - backlog/vt-145-ios-keyboard-visual-state-surface.md
 verification:
   - git diff --check
-  - xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype-iOS -destination 'platform=iOS Simulator' build
+  - xcodebuild -project vibetype.xcodeproj -scheme vibetype-iOS -destination 'platform=iOS Simulator' build
 ---
 
 # VT-145 - iOS Keyboard Visual State Surface

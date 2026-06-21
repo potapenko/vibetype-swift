@@ -11,8 +11,8 @@ dependencies:
   - VT-064
   - VT-121
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/openai-transcription.md
   - docs/specs/features/text-output-workflow.md
   - backlog/vt-123-controller-success-output-flow.md
@@ -54,5 +54,5 @@ configured output workflow.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

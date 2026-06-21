@@ -11,8 +11,8 @@ dependencies:
   - VT-052
   - VT-062
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/microphone-text-input.md
   - docs/specs/features/openai-transcription.md
   - docs/specs/features/text-output-workflow.md
@@ -49,5 +49,5 @@ recording, transcription, settings, and output dependencies.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

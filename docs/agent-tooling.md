@@ -34,7 +34,7 @@ Official documentation:
 For this repository, useful defaults are:
 
 ```text
-projectPath: /Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift/vibetype/vibetype.xcodeproj
+projectPath: /Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift/vibetype.xcodeproj
 macOS scheme: vibetype
 iOS scheme: vibetype-iOS
 configuration: Debug

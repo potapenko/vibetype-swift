@@ -10,7 +10,7 @@ dependencies:
   - VT-071
   - VT-073
 allowed_paths:
-  - vibetype/vibetype/**
+  - vibetype/**
   - docs/specs/features/settings-and-secret-storage.md
   - docs/specs/features/global-hotkey.md
   - backlog/vt-026-hotkey-settings-display.md
@@ -50,5 +50,5 @@ window.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`

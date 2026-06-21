@@ -56,13 +56,13 @@ project's MVP constraints:
 1. Fast build after non-trivial Swift edits:
 
    ```sh
-   xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build
+   xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build
    ```
 
 2. Test gate when tests or testable behavior changed:
 
    ```sh
-   xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test
+   xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test
    ```
 
 3. Swift Package Manager gate, only if a `Package.swift` target is introduced:
@@ -98,7 +98,7 @@ Prefer a native macOS functional-core / imperative-shell shape:
 Target source layout:
 
 ```text
-vibetype/vibetype/
+vibetype/
   vibetypeApp.swift
   AppState.swift
   Services/

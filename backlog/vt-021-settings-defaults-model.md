@@ -8,8 +8,8 @@ parent: VT-020
 dependencies:
   - VT-000
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/settings-and-secret-storage.md
   - backlog/vt-021-settings-defaults-model.md
 ---
@@ -37,7 +37,7 @@ Add a small Swift settings model with MVP defaults.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
 
 ## Blocker Evidence
@@ -48,5 +48,5 @@ Add a small Swift settings model with MVP defaults.
   `vibetypeUITests-Runner` could not initialize off-console:
   `User interaction required. Can't authenticate off console`.
 - Narrow verification passed:
-  `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
 - `git diff --check` passed.

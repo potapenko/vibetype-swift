@@ -8,8 +8,8 @@ parent: VT-010
 dependencies:
   - VT-000
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/menu-bar-app-shell.md
   - backlog/vt-011-app-state-recording-status-model.md
 ---
@@ -38,7 +38,7 @@ transcribing, completed, and error states.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
 
 ## Blocker Evidence
@@ -46,7 +46,7 @@ transcribing, completed, and error states.
 2026-06-20:
 
 - The state model implementation is present and the unit-test target passes:
-  `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
 - The required full scheme test command fails before VT-011 assertions because
   `vibetypeUITests-Runner` cannot initialize for UI testing in this off-console
   automation environment: `User interaction required. Can't authenticate off console`.

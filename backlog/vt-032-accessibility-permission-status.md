@@ -8,7 +8,7 @@ parent: VT-030
 dependencies:
   - VT-000
 allowed_paths:
-  - vibetype/vibetype/**
+  - vibetype/**
   - docs/specs/features/privacy-and-permissions.md
   - backlog/vt-032-accessibility-permission-status.md
 ---
@@ -35,5 +35,5 @@ Add a Swift-native accessibility permission status helper for paste automation.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`

@@ -17,7 +17,7 @@ allowed_paths:
   - backlog/vt-146-ios-keyboard-session-handoff.md
 verification:
   - git diff --check
-  - xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype-iOS -destination 'platform=iOS Simulator' build
+  - xcodebuild -project vibetype.xcodeproj -scheme vibetype-iOS -destination 'platform=iOS Simulator' build
 ---
 
 # VT-146 - iOS Keyboard Session Handoff

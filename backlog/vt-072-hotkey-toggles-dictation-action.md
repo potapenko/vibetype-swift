@@ -9,8 +9,8 @@ dependencies:
   - VT-012
   - VT-071
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/**
   - backlog/vt-072-hotkey-toggles-dictation-action.md
 ---
@@ -37,5 +37,5 @@ Wire the hotkey boundary to the same dictation action used by the menu.
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`

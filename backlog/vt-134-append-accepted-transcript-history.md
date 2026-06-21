@@ -10,8 +10,8 @@ dependencies:
   - VT-131
   - VT-133
 allowed_paths:
-  - vibetype/vibetype/**
-  - vibetype/vibetypeTests/**
+  - vibetype/**
+  - vibetypeTests/**
   - docs/specs/features/transcript-history.md
   - docs/specs/features/text-output-workflow.md
   - backlog/vt-134-append-accepted-transcript-history.md
@@ -50,5 +50,5 @@ Connect successful dictation sessions to local history writes when
 
 ## Verification
 
-- `xcodebuild -project vibetype/vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
