@@ -1,7 +1,7 @@
 ---
 id: VT-034
 title: Settings Permissions And Privacy Section
-status: in-progress
+status: done
 priority: P2
 lane: permissions
 parent: VT-030
@@ -19,7 +19,7 @@ allowed_paths:
 
 # VT-034 - Settings Permissions And Privacy Section
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -55,3 +55,20 @@ OpenAI transcription privacy state.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
 - `git diff --check`
+
+## Completion Notes
+
+- Added a Settings privacy and permissions section with microphone status,
+  Accessibility status, bounded next actions, and the OpenAI audio-processing
+  disclosure.
+- Added fake-backed permission-copy tests for the Settings status/action text.
+- Verification:
+  - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+    passed.
+  - `git diff --check` passed.
+  - Full `xcodebuild ... test` compiled and ran `vibetypeTests`, including the
+    new permission tests, but the `vibetypeUITests` runner failed to initialize
+    automation mode with AppleEvent/UI automation timeout.
+- Runtime QA: blocked. The freshly built app launched, but Computer Use
+  `get_app_state` timed out with AppleEvent `-1712` before the Settings window
+  could be inspected.

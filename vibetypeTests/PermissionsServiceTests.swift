@@ -83,6 +83,23 @@ struct PermissionsServiceTests {
         #expect(client.requestCount == 0)
     }
 
+    @Test func microphoneSettingsCopyNamesStatusAndBoundedActions() {
+        #expect(MicrophonePermissionStatus.allowed.settingsStatusText == "Microphone: Allowed")
+        #expect(MicrophonePermissionStatus.allowed.settingsActionTitle == nil)
+        #expect(MicrophonePermissionStatus.allowed.settingsDescription.contains("choose a dictation action"))
+
+        #expect(MicrophonePermissionStatus.denied.settingsStatusText == "Microphone: Not Allowed")
+        #expect(MicrophonePermissionStatus.denied.settingsActionTitle == "Open Microphone Settings")
+        #expect(MicrophonePermissionStatus.denied.settingsDescription.contains("System Settings"))
+
+        #expect(MicrophonePermissionStatus.notDetermined.settingsStatusText == "Microphone: Permission Needed")
+        #expect(MicrophonePermissionStatus.notDetermined.settingsActionTitle == "Request Microphone Access")
+
+        #expect(MicrophonePermissionStatus.unavailable.settingsStatusText == "Microphone: Unavailable")
+        #expect(MicrophonePermissionStatus.unavailable.settingsActionTitle == nil)
+        #expect(MicrophonePermissionStatus.unavailable.settingsDescription.contains("no microphone input"))
+    }
+
     @Test func accessibilityStatusMapsTrustWithoutPrompting() {
         let trustedClient = FakeAccessibilityPermissionClient(isTrusted: true)
         let notTrustedClient = FakeAccessibilityPermissionClient(isTrusted: false)
@@ -106,6 +123,16 @@ struct PermissionsServiceTests {
         #expect(service.openAccessibilitySettings())
         #expect(client.openSettingsCount == 1)
         #expect(client.promptRequests == [false])
+    }
+
+    @Test func accessibilitySettingsCopyNamesStatus() {
+        #expect(AccessibilityPermissionStatus.trusted.settingsStatusText == "Accessibility: Allowed")
+        #expect(AccessibilityPermissionStatus.trusted.settingsSystemImage == "checkmark.circle")
+        #expect(AccessibilityPermissionStatus.trusted.settingsDescription.contains("control the active app"))
+
+        #expect(AccessibilityPermissionStatus.notTrusted.settingsStatusText == "Accessibility: Not Allowed")
+        #expect(AccessibilityPermissionStatus.notTrusted.settingsSystemImage == "exclamationmark.triangle")
+        #expect(AccessibilityPermissionStatus.notTrusted.settingsDescription.contains("copy-only fallback"))
     }
 }
 

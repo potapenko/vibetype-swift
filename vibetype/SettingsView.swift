@@ -8,24 +8,31 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @State private var microphonePermissionStatus: MicrophonePermissionStatus
     @State private var accessibilityPermissionStatus: AccessibilityPermissionStatus
     @State private var appSettings: AppSettings
     @State private var apiKeyInput = ""
     @State private var apiKeyStatus: APIKeySettingsStatus = .unknown
 
+    private let microphonePermissionService: MicrophonePermissionService
     private let accessibilityPermissionService: AccessibilityPermissionService
     private let apiKeyStorage: APIKeyStorage
     private let appSettingsStore: AppSettingsStore
 
     init(
+        microphonePermissionService: MicrophonePermissionService = MicrophonePermissionService(),
         accessibilityPermissionService: AccessibilityPermissionService = AccessibilityPermissionService(),
         apiKeyStorage: APIKeyStorage = KeychainService(),
         appSettingsStore: AppSettingsStore = AppSettingsStore()
     ) {
+        self.microphonePermissionService = microphonePermissionService
         self.accessibilityPermissionService = accessibilityPermissionService
         self.apiKeyStorage = apiKeyStorage
         self.appSettingsStore = appSettingsStore
         _appSettings = State(initialValue: appSettingsStore.load())
+        _microphonePermissionStatus = State(
+            initialValue: microphonePermissionService.currentStatus()
+        )
         _accessibilityPermissionStatus = State(
             initialValue: accessibilityPermissionService.currentStatus()
         )
@@ -115,14 +122,22 @@ struct SettingsView: View {
                 )
             }
 
-            Section("Permissions") {
-                Label(
-                    accessibilityPermissionStatus.settingsDescription,
-                    systemImage: accessibilityPermissionStatus.canPasteIntoActiveApp
-                        ? "checkmark.circle"
-                        : "exclamationmark.triangle"
+            Section("Privacy And Permissions") {
+                PermissionStatusRow(
+                    title: microphonePermissionStatus.settingsStatusText,
+                    description: microphonePermissionStatus.settingsDescription,
+                    systemImage: microphonePermissionStatus.settingsSystemImage
                 )
-                .foregroundStyle(.secondary)
+
+                if let microphoneActionTitle = microphonePermissionStatus.settingsActionTitle {
+                    Button(microphoneActionTitle, action: handleMicrophonePermissionAction)
+                }
+
+                PermissionStatusRow(
+                    title: accessibilityPermissionStatus.settingsStatusText,
+                    description: accessibilityPermissionStatus.settingsDescription,
+                    systemImage: accessibilityPermissionStatus.settingsSystemImage
+                )
 
                 if !accessibilityPermissionStatus.canPasteIntoActiveApp {
                     Button("Open Accessibility Settings") {
@@ -130,6 +145,12 @@ struct SettingsView: View {
                         refreshAccessibilityPermissionStatus()
                     }
                 }
+
+                Label(
+                    "Audio is sent to OpenAI for transcription. VibeType does not retain raw audio by default.",
+                    systemImage: "lock.shield"
+                )
+                .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -137,6 +158,7 @@ struct SettingsView: View {
         .frame(minWidth: 460, minHeight: 400, alignment: .topLeading)
         .onAppear {
             reloadAppSettings()
+            refreshMicrophonePermissionStatus()
             refreshAccessibilityPermissionStatus()
             refreshAPIKeyStatus()
         }
@@ -207,6 +229,26 @@ struct SettingsView: View {
         appSettings = appSettingsStore.load()
     }
 
+    private func refreshMicrophonePermissionStatus() {
+        microphonePermissionStatus = microphonePermissionService.currentStatus()
+    }
+
+    private func handleMicrophonePermissionAction() {
+        switch microphonePermissionStatus {
+        case .allowed, .unavailable:
+            refreshMicrophonePermissionStatus()
+        case .denied:
+            microphonePermissionService.openMicrophoneSettings()
+            refreshMicrophonePermissionStatus()
+        case .notDetermined:
+            microphonePermissionService.requestPermission { newStatus in
+                Task { @MainActor in
+                    microphonePermissionStatus = newStatus
+                }
+            }
+        }
+    }
+
     private func refreshAccessibilityPermissionStatus() {
         accessibilityPermissionStatus = accessibilityPermissionService.currentStatus()
     }
@@ -236,6 +278,22 @@ struct SettingsView: View {
             apiKeyStatus = .missing
         } catch {
             apiKeyStatus = .failure(error.localizedDescription)
+        }
+    }
+}
+
+private struct PermissionStatusRow: View {
+    let title: String
+    let description: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: systemImage)
+
+            Text(description)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 }

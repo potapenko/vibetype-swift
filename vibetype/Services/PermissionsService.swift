@@ -53,6 +53,54 @@ enum MicrophonePermissionStatus: Equatable {
             return "Recording is blocked because no microphone input is available."
         }
     }
+
+    var settingsStatusText: String {
+        switch self {
+        case .allowed:
+            return "Microphone: Allowed"
+        case .denied:
+            return "Microphone: Not Allowed"
+        case .notDetermined:
+            return "Microphone: Permission Needed"
+        case .unavailable:
+            return "Microphone: Unavailable"
+        }
+    }
+
+    var settingsDescription: String {
+        switch self {
+        case .allowed:
+            return "Recording can start after you choose a dictation action."
+        case .denied:
+            return "Recording is blocked until microphone access is allowed in System Settings."
+        case .notDetermined:
+            return "Request microphone access before starting dictation."
+        case .unavailable:
+            return "Recording is blocked because no microphone input is available."
+        }
+    }
+
+    var settingsSystemImage: String {
+        switch self {
+        case .allowed:
+            return "checkmark.circle"
+        case .denied, .unavailable:
+            return "xmark.octagon"
+        case .notDetermined:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    var settingsActionTitle: String? {
+        switch self {
+        case .allowed, .unavailable:
+            return nil
+        case .denied:
+            return "Open Microphone Settings"
+        case .notDetermined:
+            return "Request Microphone Access"
+        }
+    }
 }
 
 enum MicrophoneAuthorizationStatus: Equatable {
@@ -171,6 +219,19 @@ enum AccessibilityPermissionStatus: Equatable {
         case .notTrusted:
             return "Auto-paste needs Accessibility permission. Transcription and copy-only fallback can still work."
         }
+    }
+
+    var settingsStatusText: String {
+        switch self {
+        case .trusted:
+            return "Accessibility: Allowed"
+        case .notTrusted:
+            return "Accessibility: Not Allowed"
+        }
+    }
+
+    var settingsSystemImage: String {
+        canPasteIntoActiveApp ? "checkmark.circle" : "exclamationmark.triangle"
     }
 
     var menuDetailText: String? {
