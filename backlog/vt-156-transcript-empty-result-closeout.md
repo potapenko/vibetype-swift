@@ -1,7 +1,7 @@
 ---
 id: VT-156
 title: Transcript Empty Result Closeout
-status: backlog
+status: in-progress
 priority: P1
 lane: transcription
 dependencies:
@@ -19,7 +19,7 @@ verification:
 
 # VT-156 - Transcript Empty Result Closeout
 
-Status: backlog
+Status: in-progress
 Priority: P1
 Lane: transcription
 Dependencies: VT-052, VT-148
