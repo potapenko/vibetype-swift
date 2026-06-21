@@ -21,9 +21,10 @@ Inventory status: inspected
 | `vibetype-swift-backlog-groomer` | VibeType Swift Backlog Groomer | active | `FREQ=HOURLY;INTERVAL=2` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md` |
 | `vibetype-swift-blocker-resolver` | VibeType Swift Blocker Resolver | active | `FREQ=HOURLY;INTERVAL=1` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md` |
 | `vibetype-swift-implementer` | VibeType Swift Implementer | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-implementer.md` |
+| `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
 
-Installed automation count for this repository: 3.
-Active count for this repository: 3.
+Installed automation count for this repository: 4.
+Active count for this repository: 4.
 Paused count for this repository: 0.
 
 ## Installed Automations
@@ -96,6 +97,26 @@ Paused count for this repository: 0.
   product delta; Computer Use required for bounded app-run QA when visible
   macOS surfaces or user interactions change; no live OpenAI API in normal
   automation; no DB or destructive storage operations
+- Current decision: active
+
+### `vibetype-swift-archive-completed-automation-threads`
+
+- Installed status: `ACTIVE`
+- Schedule: `FREQ=MINUTELY;INTERVAL=15`
+- Model / reasoning effort: `gpt-5.4-mini` / `low`
+- Execution environment: `local`
+- Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
+- Prompt shape: short pointer prompt
+- Versioned runtime contract:
+  `docs/automation-prompts/runbooks/archive-completed-automation-threads.md`
+- Expected output: one current-repository-only archive-housekeeping pass that
+  readback-verifies eligible automation-run threads and sweeps until the
+  remaining eligible tail is at most two
+- Safety/thread contract: use thread-management tools as source of truth;
+  inspect only automation threads for this exact cwd; do not inspect, count, or
+  archive other-repository, active, pending, manual, or ambiguous threads;
+  request current housekeeping thread archive before the final report when the
+  thread-management tool is available
 - Current decision: active
 
 ## Missing Or Paused Roles
