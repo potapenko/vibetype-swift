@@ -62,6 +62,18 @@ Add the native settings field for entering and saving the OpenAI API key.
 - `git diff --check` passed.
 - Runtime QA was blocked because the freshly changed app could not be built
   within the bounded run.
+- 2026-06-21 22:52 CEST: closeout task `VT-151` reran the required recovery
+  and macOS build retry from the current checkout. Recovery succeeded and
+  removed only project-specific DerivedData
+  `/Users/eugenepotapenko/Library/Developer/Xcode/DerivedData/vibetype-cgljxvuvdfxmqbeiqfwkdshvjovc`;
+  no stale processes were matched or terminated.
+- The bounded retry
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' build` again reached
+  `CreateBuildDescription` and the external clang probe, then ended with
+  `** BUILD INTERRUPTED **` before compiler diagnostics or app product output.
+- Runtime QA remains blocked because no fresh launchable app product was
+  produced for Settings inspection.
 
 ## Resolution Path
 
@@ -72,6 +84,10 @@ Add the native settings field for entering and saving the OpenAI API key.
   test execution again, rerun
   `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination
   'platform=macOS' build` plus `git diff --check`.
+- Next automatic recovery action: run
+  `python3 scripts/local_tooling_recover.py --apply --json` before the next
+  bounded retry, then rerun this build gate only after local Xcode health has
+  changed or a blocker-resolution pass is selected.
 - If the build passes, a blocker-resolution pass should launch the freshly
   built app, open Settings, verify the secure API key save/clear/remove states,
   and then mark this task done without additional source edits unless runtime

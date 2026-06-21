@@ -1,7 +1,7 @@
 ---
 id: VT-151
 title: API Key Settings Blocker Closeout
-status: in-progress
+status: blocked
 priority: P1
 lane: settings
 dependencies:
@@ -20,7 +20,7 @@ verification:
 
 # VT-151 - API Key Settings Blocker Closeout
 
-Status: in-progress
+Status: blocked
 Priority: P1
 Lane: settings
 Dependencies: VT-013, VT-022, VT-148
@@ -64,3 +64,35 @@ settings implementation scope.
 - Use standard `xcodebuild` for the macOS build gate.
 - Use Computer Use only for bounded visible Settings verification after a
   fresh app product exists and an inspection surface is available.
+
+## Result
+
+- Ran local tooling recovery before retrying the build gate.
+- Recovery succeeded, matched no stale processes, and removed only
+  project-specific DerivedData:
+  `/Users/eugenepotapenko/Library/Developer/Xcode/DerivedData/vibetype-cgljxvuvdfxmqbeiqfwkdshvjovc`.
+- Retried
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' build`.
+- The build reached Xcode build-description/external-tool probing and ended
+  with `** BUILD INTERRUPTED **` before compiler diagnostics or app product
+  output.
+- Updated `VT-023` with the fresh bounded blocker evidence.
+
+## Runtime QA
+
+- Result: blocked.
+- Reason: no fresh launchable macOS app product was produced, so Settings API
+  key saved/missing/remove states could not be inspected through Computer Use.
+
+## Resolution Path
+
+- Blocker category: local Xcode build service hang.
+- Follow-up task: existing `VT-148`
+  (`backlog/vt-148-xcode-build-service-health.md`).
+- Unblock condition: local Xcode build/test health must reach compiler
+  diagnostics, build output, or test execution after recovery.
+- Next automatic recovery action: rerun
+  `python3 scripts/local_tooling_recover.py --apply --json`, then retry the
+  bounded macOS build gate when a blocker-resolution pass selects the next
+  closeout or Xcode health changes.
