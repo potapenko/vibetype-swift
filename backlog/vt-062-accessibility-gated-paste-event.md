@@ -1,7 +1,7 @@
 ---
 id: VT-062
 title: Accessibility Gated Paste Event
-status: in-progress
+status: done
 priority: P1
 lane: text-output
 parent: VT-060
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-062 - Accessibility Gated Paste Event
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -54,3 +54,15 @@ permission allows it.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Completion Evidence
+
+- 2026-06-21 17:23 CEST: Added `TextInsertionService` with native CGEvent
+  Cmd+V posting behind Accessibility trust, clipboard-settle delay, bounded
+  paste timeout, and copy-only fallback results.
+- Added fake-backed `TextInsertionServiceTests` for trusted paste, missing
+  Accessibility fallback, paste failure fallback, paste timeout fallback,
+  copy-only mode, and disabled output.
+- Verification passed:
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`.
+  `git diff --check` passed.
