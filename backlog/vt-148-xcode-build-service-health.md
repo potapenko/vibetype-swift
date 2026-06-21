@@ -1,7 +1,7 @@
 ---
 id: VT-148
 title: Xcode Build Service Health Check
-status: in-progress
+status: done
 priority: P3
 lane: testing
 parent: VT-110
@@ -13,7 +13,7 @@ allowed_paths:
 
 # VT-148 - Xcode Build Service Health Check
 
-Status: in-progress
+Status: done
 Priority: P3
 Lane: testing
 Dependencies: none
@@ -50,3 +50,15 @@ blocked Swift model/service tasks to finish their normal verification gates.
 
 - `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
 - `git diff --check`
+
+## Result
+
+Completed on 2026-06-21 with fresh bounded health evidence in
+`docs/qa/runs/xcode-build-service-health-2026-06-21.md`.
+
+The macOS unit-test health command timed out after reaching early Xcode
+build-service external-tool probing and did not reach compiler diagnostics,
+test discovery, or test execution. Blocked verification tasks that cite this
+health check, including `VT-023`, are not safe to retry for completion until
+the local Xcode build service can complete a bounded macOS build or unit-test
+command.
