@@ -64,13 +64,34 @@ Expose the core MVP settings toggles in the native settings UI.
   run. Active Computer Use also exposed only a click primitive, with no
   screenshot or semantic inspection surface.
 
+### 2026-06-21 VT-152 Closeout Retry
+
+- Passed: `python3 scripts/local_tooling_recover.py --apply --json` completed
+  successfully, matched no stale processes, and removed no artifacts.
+- Passed: `/opt/homebrew/bin/timeout 300 xcodebuild -project
+  vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+  completed with `** BUILD SUCCEEDED **`.
+- Build product:
+  `/Users/eugenepotapenko/Library/Developer/Xcode/DerivedData/vibetype-cgljxvuvdfxmqbeiqfwkdshvjovc/Build/Products/Debug/vibetype.app`.
+- Runtime QA: blocked. The active Computer Use surface exposed only
+  `mcp__computer_use.click`, with no screenshot, semantic snapshot,
+  accessibility tree, or element discovery tool. The Settings toggles could
+  not be inspected safely, and no coordinate click was attempted because it
+  would not produce reliable Settings evidence.
+- Durable QA note:
+  `docs/qa/runs/settings-toggles-closeout-2026-06-21.md`.
+
 ## Resolution Path
 
-- Blocker category: local Xcode build-service timeout before a macOS app
-  product could be produced.
-- Follow-up: VT-148 (`backlog/vt-148-xcode-build-service-health.md`).
-- Unblock condition: the macOS `vibetype` scheme can complete a bounded build
-  again, after which this task can be rerun to confirm the Settings toggles in
-  the built app and move the task from blocked to done.
-- This run could not finish the task directly because the selected verification
-  command timed out before compiler diagnostics or a launchable app product.
+- Blocker category: macOS Settings runtime inspection unavailable. The prior
+  local Xcode build-service blocker was cleared by the 2026-06-21 VT-152 retry.
+- Existing evidence to reuse: VT-112
+  (`backlog/done/vt-112-macos-menu-bar-computer-use-smoke.md`) and
+  `docs/qa/macos/vt-112-2026-06-21-menu-bar-smoke.md` record the same missing
+  Computer Use screenshot/snapshot/accessibility-tree capability.
+- Unblock condition: run a bounded Settings smoke when Computer Use, or an
+  equivalent macOS UI-reading tool, exposes screenshot, semantic snapshot,
+  accessibility tree, or element discovery. Verify the five MVP Behavior
+  toggles in the built Settings window, then move this task to done.
+- This run could not finish the task directly because the current tool surface
+  could not read or verify the Settings window after the build succeeded.

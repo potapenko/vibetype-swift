@@ -1,7 +1,7 @@
 ---
 id: VT-152
 title: Settings Toggles Blocker Closeout
-status: in-progress
+status: blocked
 priority: P2
 lane: settings
 dependencies:
@@ -20,7 +20,7 @@ verification:
 
 # VT-152 - Settings Toggles Blocker Closeout
 
-Status: in-progress
+Status: blocked
 Priority: P2
 Lane: settings
 Dependencies: VT-013, VT-021, VT-148
@@ -62,3 +62,38 @@ umbrella can progress.
 - Use standard `xcodebuild` for the macOS build gate.
 - Use Computer Use only for bounded visible Settings verification after a
   fresh app product exists and an inspection surface is available.
+
+## Result
+
+- Ran local tooling recovery before retrying the `VT-024` build gate.
+- Recovery succeeded, matched no stale processes, and removed no generated
+  artifacts.
+- Retried `/opt/homebrew/bin/timeout 300 xcodebuild -project
+  vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`.
+- The build completed with `** BUILD SUCCEEDED **` and produced a launchable
+  app at
+  `/Users/eugenepotapenko/Library/Developer/Xcode/DerivedData/vibetype-cgljxvuvdfxmqbeiqfwkdshvjovc/Build/Products/Debug/vibetype.app`.
+- Updated `VT-024` with the fresh build-pass and runtime-QA blocker evidence.
+- Added durable QA note
+  `docs/qa/runs/settings-toggles-closeout-2026-06-21.md`.
+
+## Runtime QA
+
+- Result: blocked.
+- Reason: the active Computer Use surface exposed only
+  `mcp__computer_use.click`, with no screenshot, semantic snapshot,
+  accessibility tree, or element discovery tool. Opening Settings by coordinate
+  click would not produce reliable evidence for the MVP toggles, so no app
+  launch or coordinate click was attempted.
+
+## Resolution Path
+
+- Blocker category: macOS Settings runtime inspection unavailable.
+- Existing evidence to reuse: VT-112
+  (`backlog/done/vt-112-macos-menu-bar-computer-use-smoke.md`) and
+  `docs/qa/macos/vt-112-2026-06-21-menu-bar-smoke.md` already record the same
+  Computer Use capability gap for menu bar and Settings inspection.
+- Unblock condition: rerun the Settings closeout when Computer Use, or an
+  equivalent macOS UI-reading tool, exposes screenshot, semantic snapshot,
+  accessibility tree, or element discovery. Then open Settings and verify the
+  five MVP Behavior toggles listed in `VT-024`.
