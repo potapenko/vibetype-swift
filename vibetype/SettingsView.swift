@@ -9,18 +9,23 @@ import SwiftUI
 
 struct SettingsView: View {
     @State private var accessibilityPermissionStatus: AccessibilityPermissionStatus
+    @State private var appSettings: AppSettings
     @State private var apiKeyInput = ""
     @State private var apiKeyStatus: APIKeySettingsStatus = .unknown
 
     private let accessibilityPermissionService: AccessibilityPermissionService
     private let apiKeyStorage: APIKeyStorage
+    private let appSettingsStore: AppSettingsStore
 
     init(
         accessibilityPermissionService: AccessibilityPermissionService = AccessibilityPermissionService(),
-        apiKeyStorage: APIKeyStorage = KeychainService()
+        apiKeyStorage: APIKeyStorage = KeychainService(),
+        appSettingsStore: AppSettingsStore = AppSettingsStore()
     ) {
         self.accessibilityPermissionService = accessibilityPermissionService
         self.apiKeyStorage = apiKeyStorage
+        self.appSettingsStore = appSettingsStore
+        _appSettings = State(initialValue: appSettingsStore.load())
         _accessibilityPermissionStatus = State(
             initialValue: accessibilityPermissionService.currentStatus()
         )
@@ -49,6 +54,33 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Behavior") {
+                Toggle(
+                    "Paste transcript into active app",
+                    isOn: settingBinding(\.autoPaste)
+                )
+
+                Toggle(
+                    "Copy transcript to clipboard",
+                    isOn: settingBinding(\.copyToClipboard)
+                )
+
+                Toggle(
+                    "Restore previous clipboard after paste",
+                    isOn: settingBinding(\.restoreClipboard)
+                )
+
+                Toggle(
+                    "Play sound on start and stop",
+                    isOn: settingBinding(\.soundEnabled)
+                )
+
+                Toggle(
+                    "Show floating recording indicator",
+                    isOn: settingBinding(\.showFloatingIndicator)
+                )
+            }
+
             Section("Permissions") {
                 Label(
                     accessibilityPermissionStatus.settingsDescription,
@@ -70,9 +102,26 @@ struct SettingsView: View {
         .scenePadding()
         .frame(minWidth: 460, minHeight: 400, alignment: .topLeading)
         .onAppear {
+            reloadAppSettings()
             refreshAccessibilityPermissionStatus()
             refreshAPIKeyStatus()
         }
+    }
+
+    private func settingBinding(_ keyPath: WritableKeyPath<AppSettings, Bool>) -> Binding<Bool> {
+        Binding(
+            get: {
+                appSettings[keyPath: keyPath]
+            },
+            set: { newValue in
+                appSettings[keyPath: keyPath] = newValue
+                appSettingsStore.save(appSettings)
+            }
+        )
+    }
+
+    private func reloadAppSettings() {
+        appSettings = appSettingsStore.load()
     }
 
     private func refreshAccessibilityPermissionStatus() {
