@@ -55,6 +55,11 @@ Create the recorder service boundary before adding AVFoundation details.
   `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
   timed out with `** BUILD INTERRUPTED **` before test execution.
 - `git diff --check` passed after the timeout.
+- Resolver status check on 2026-06-21 19:03 CEST found the local Xcode
+  build-service blocker still present: `SWBBuildService` had been running for
+  `16:05:34` with a child `clang -v -E -dM ... /dev/null` probe running for
+  `04:57:43`. No bounded `xcodebuild` retry was run because the operator-only
+  unblock condition was not met.
 
 ## Resolution Path
 
