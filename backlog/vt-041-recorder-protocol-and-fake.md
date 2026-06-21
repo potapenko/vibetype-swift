@@ -65,6 +65,11 @@ Create the recorder service boundary before adding AVFoundation details.
   `17:04:37` with a child `clang -v -E -dM ... /dev/null` probe running for
   `05:56:46`. No bounded `xcodebuild` retry was run because the operator-only
   unblock condition was still not met.
+- Resolver status check on 2026-06-21 21:03 CEST found the same local Xcode
+  build-service blocker still present: `SWBBuildService` had been running for
+  `18:04:59` with a child `clang -v -E -dM ... /dev/null` probe running for
+  `06:57:08`. No bounded `xcodebuild` retry was run because the operator-only
+  unblock condition was still not met.
 
 ## Resolution Path
 
