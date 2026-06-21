@@ -1,7 +1,7 @@
 ---
 id: VT-054
 title: Transcript Trim Empty Result
-status: backlog
+status: in-progress
 priority: P1
 lane: transcription
 parent: VT-050
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-054 - Transcript Trim Empty Result
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
