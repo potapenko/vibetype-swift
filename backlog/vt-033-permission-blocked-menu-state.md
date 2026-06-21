@@ -1,7 +1,7 @@
 ---
 id: VT-033
 title: Permission Blocked Menu State
-status: backlog
+status: in-progress
 priority: P1
 lane: permissions
 parent: VT-030
@@ -18,7 +18,7 @@ allowed_paths:
 
 # VT-033 - Permission Blocked Menu State
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
