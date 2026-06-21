@@ -70,6 +70,15 @@ Create the recorder service boundary before adding AVFoundation details.
   `18:04:59` with a child `clang -v -E -dM ... /dev/null` probe running for
   `06:57:08`. No bounded `xcodebuild` retry was run under the obsolete
   tooling policy.
+- Resolver recovery/retry on 2026-06-21 22:09 CEST ran
+  `python3 scripts/local_tooling_recover.py --apply --json` before blocked
+  selection; it returned `ok: true` with no matched or terminated processes
+  and no generated artifacts removed. The bounded retry
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  timed out with `** BUILD INTERRUPTED **` after Xcode reached the
+  `clang -v -E -dM ... /dev/null` external-tool probe and before test
+  execution. Post-timeout recovery returned `ok: true`, removed only
+  `scripts/__pycache__`, and found no stale allowlisted Xcode processes.
 
 ## Resolution Path
 
@@ -80,6 +89,12 @@ Create the recorder service boundary before adding AVFoundation details.
   automation-recoverable local tooling blocker, not a user/operator chore.
 - Required automation recovery:
   `python3 scripts/local_tooling_recover.py --apply --json`.
+- Current recovery result: the 2026-06-21 22:09 CEST resolver pass ran local
+  tooling recovery, retried the bounded narrow unit-test command, and still
+  timed out before test execution. The remaining blocker is still classified as
+  local Xcode build/test tooling state because the task implementation and
+  fake-backed unit coverage are present but the bounded unit target cannot
+  reach execution in this environment.
 - Unblock condition: after local tooling recovery, rerun
   `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
   and `git diff --check`. If both pass, apply the `verification-strategy.md`
