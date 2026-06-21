@@ -1,7 +1,7 @@
 ---
 id: VT-010
 title: Menu Bar MVP Umbrella
-status: backlog
+status: in-progress
 priority: P0
 lane: swift-app-shell
 dependencies:
@@ -18,7 +18,7 @@ allowed_paths:
 
 # VT-010 - Menu Bar MVP Umbrella
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
