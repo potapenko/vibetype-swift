@@ -1,7 +1,7 @@
 ---
 id: VT-063
 title: Clipboard Restore After Paste
-status: backlog
+status: in-progress
 priority: P2
 lane: text-output
 parent: VT-060
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-063 - Clipboard Restore After Paste
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
