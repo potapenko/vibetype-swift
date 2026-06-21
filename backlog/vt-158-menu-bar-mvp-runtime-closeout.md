@@ -1,7 +1,7 @@
 ---
 id: VT-158
 title: Menu Bar MVP Runtime Closeout
-status: backlog
+status: in-progress
 priority: P0
 lane: swift-app-shell
 parent: VT-010
@@ -30,7 +30,7 @@ verification:
 
 # VT-158 - Menu Bar MVP Runtime Closeout
 
-Status: backlog
+Status: in-progress
 Priority: P0
 Lane: swift-app-shell
 Dependencies: VT-000, VT-011, VT-012, VT-013, VT-014, VT-015, VT-112
