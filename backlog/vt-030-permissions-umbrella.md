@@ -1,7 +1,7 @@
 ---
 id: VT-030
 title: Permissions Umbrella
-status: backlog
+status: in-progress
 priority: P1
 lane: permissions
 dependencies:
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-030 - Permissions Umbrella
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
