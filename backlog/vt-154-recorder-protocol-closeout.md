@@ -1,7 +1,7 @@
 ---
 id: VT-154
 title: Recorder Protocol Blocker Closeout
-status: in-progress
+status: blocked
 priority: P1
 lane: recording
 dependencies:
@@ -19,7 +19,7 @@ verification:
 
 # VT-154 - Recorder Protocol Blocker Closeout
 
-Status: in-progress
+Status: blocked
 Priority: P1
 Lane: recording
 Dependencies: VT-000, VT-148
@@ -60,3 +60,34 @@ work can become dependency-ready.
 - Use standard `xcodebuild` for the focused macOS unit-test gate.
 - Treat local Xcode/build-service/test-runner problems as
   automation-recoverable before recording a remaining blocker.
+
+## Blocker Evidence
+
+- Local tooling recovery ran on 2026-06-21 23:08 CEST:
+  `python3 scripts/local_tooling_recover.py --apply --json`.
+- Recovery returned `ok: true`, removed project-scoped DerivedData at
+  `/Users/eugenepotapenko/Library/Developer/Xcode/DerivedData/vibetype-cgljxvuvdfxmqbeiqfwkdshvjovc`,
+  and found no stale allowlisted Xcode processes to terminate.
+- The bounded focused unit-test retry
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  reached Xcode's `clang -v -E -dM ... /dev/null` external-tool probe, did not
+  reach compiler diagnostics, test discovery, or test execution, and ended
+  with `** BUILD INTERRUPTED **` / exit code 143 after the timeout.
+- `git diff --check` passed before status updates.
+
+## Resolution Path
+
+- Blocker category: local Xcode build/test tooling timeout before the focused
+  macOS unit target can execute.
+- Recovery attempted: `python3 scripts/local_tooling_recover.py --apply --json`
+  removed generated project DerivedData and found no stale allowlisted
+  processes.
+- Fresh bounded retry result: the focused `vibetypeTests` command still timed
+  out before test execution.
+- Unblock condition: rerun local tooling recovery, then rerun
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
+  If it reaches and passes `vibetypeTests`, mark `VT-041` and this closeout
+  done using the verification-strategy policy for narrow target evidence when
+  only the full UI-test runner requires off-console access. If it still times
+  out before execution, continue automatic local Xcode tooling repair and
+  append fresh recovery/retry evidence.

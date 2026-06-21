@@ -79,6 +79,15 @@ Create the recorder service boundary before adding AVFoundation details.
   `clang -v -E -dM ... /dev/null` external-tool probe and before test
   execution. Post-timeout recovery returned `ok: true`, removed only
   `scripts/__pycache__`, and found no stale allowlisted Xcode processes.
+- VT-154 recovery/retry on 2026-06-21 23:08 CEST ran
+  `python3 scripts/local_tooling_recover.py --apply --json`; it returned
+  `ok: true`, removed project-scoped DerivedData at
+  `/Users/eugenepotapenko/Library/Developer/Xcode/DerivedData/vibetype-cgljxvuvdfxmqbeiqfwkdshvjovc`,
+  and found no stale allowlisted Xcode processes. The bounded retry
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  reached Xcode's `clang -v -E -dM ... /dev/null` external-tool probe, did
+  not reach compiler diagnostics, test discovery, or test execution, and ended
+  with `** BUILD INTERRUPTED **` / exit code 143 after the timeout.
 
 ## Resolution Path
 
@@ -89,12 +98,12 @@ Create the recorder service boundary before adding AVFoundation details.
   automation-recoverable local tooling blocker, not a user/operator chore.
 - Required automation recovery:
   `python3 scripts/local_tooling_recover.py --apply --json`.
-- Current recovery result: the 2026-06-21 22:09 CEST resolver pass ran local
-  tooling recovery, retried the bounded narrow unit-test command, and still
-  timed out before test execution. The remaining blocker is still classified as
-  local Xcode build/test tooling state because the task implementation and
-  fake-backed unit coverage are present but the bounded unit target cannot
-  reach execution in this environment.
+- Current recovery result: the 2026-06-21 23:08 CEST VT-154 closeout pass ran
+  local tooling recovery, retried the bounded narrow unit-test command, and
+  still timed out before compiler diagnostics or test execution. The remaining
+  blocker is still classified as local Xcode build/test tooling state because
+  the task implementation and fake-backed unit coverage are present but the
+  bounded unit target cannot reach execution in this environment.
 - Unblock condition: after local tooling recovery, rerun
   `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
   and `git diff --check`. If both pass, apply the `verification-strategy.md`
