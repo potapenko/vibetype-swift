@@ -51,16 +51,27 @@ Create the recorder service boundary before adding AVFoundation details.
 - Narrow evidence passed:
   `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
   and `git diff --check`.
+- Resolver retry on 2026-06-21:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  timed out with `** BUILD INTERRUPTED **` before test execution.
+- `git diff --check` passed after the timeout.
 
 ## Resolution Path
 
-- Blocker category: full scheme UI-test runner cannot authenticate
-  off-console.
-- Unblock condition: rerun
-  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
-  and `git diff --check`; if they still pass, apply the
-  `verification-strategy.md` policy that accepts narrow target evidence when
-  only the UI-test runner needs off-console interaction.
-- A blocker-resolution pass may then mark this task done without additional
-  source edits because the recorder protocol, fake recorder, and focused unit
-  coverage are already present.
+- Blocker category: local Xcode build-service timeout before unit-test
+  execution, after the earlier full scheme UI-test runner off-console blocker.
+- Existing follow-up evidence: `VT-148` records the same bounded Xcode
+  build-service timeout and concludes that blocked verification tasks are not
+  safe to retry until the local Xcode build service can complete a bounded
+  macOS build or unit-test command.
+- Operator-only status check:
+  `ps -axo pid,ppid,etime,command | egrep 'SWBBuildService|clang -v -E -dM|xcodebuild|xctest'`.
+  If stale Xcode build-service or toolchain-probe processes remain, clear them
+  through the user-owned Xcode/Activity Monitor session or reboot, then rerun
+  the bounded unit-test command.
+- Unblock condition: after local Xcode build-service health is restored, rerun
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  and `git diff --check`. If both pass, apply the `verification-strategy.md`
+  policy that accepts narrow target evidence when only the full UI-test runner
+  needs off-console interaction, then mark this task done without additional
+  source edits.
