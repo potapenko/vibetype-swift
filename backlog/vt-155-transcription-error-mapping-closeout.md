@@ -1,7 +1,7 @@
 ---
 id: VT-155
 title: Transcription Error Mapping Closeout
-status: in-progress
+status: blocked
 priority: P1
 lane: transcription
 dependencies:
@@ -19,7 +19,7 @@ verification:
 
 # VT-155 - Transcription Error Mapping Closeout
 
-Status: in-progress
+Status: blocked
 Priority: P1
 Lane: transcription
 Dependencies: VT-052, VT-148
@@ -62,3 +62,43 @@ handling can unblock controller failure-flow work.
 - Use standard `xcodebuild` for the focused macOS unit-test gate.
 - Treat local Xcode/build-service/test-runner problems as
   automation-recoverable before recording a remaining blocker.
+
+## Result
+
+- Ran local tooling recovery on 2026-06-21 23:24 CEST:
+  `python3 scripts/local_tooling_recover.py --apply --json`.
+- Recovery returned `ok: true`, matched no stale allowlisted Xcode processes,
+  and removed no generated artifacts.
+- Retried the focused fake-backed transcription test gate:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests/OpenAITranscriptionServiceTests`.
+- The command reached Xcode's `clang -v -E -dM ... /dev/null` external-tool
+  probe, did not reach compiler diagnostics, test discovery, or test
+  execution, and ended with `** BUILD INTERRUPTED **` / exit code 124 after
+  the timeout.
+- Updated `VT-053` with the fresh bounded blocker evidence.
+
+## Runtime QA
+
+- Result: not_applicable.
+- Reason: this closeout task exercised fake-backed transcription service unit
+  tests only and did not change visible macOS UI or user interaction.
+
+## Resolution Path
+
+- Blocker category: local Xcode build/test tooling timeout before the focused
+  transcription service tests can execute.
+- Recovery attempted: `python3 scripts/local_tooling_recover.py --apply --json`
+  returned `ok: true`, removed no generated artifacts, and found no stale
+  allowlisted Xcode processes.
+- Fresh bounded retry result: the focused
+  `vibetypeTests/OpenAITranscriptionServiceTests` command still timed out
+  before test execution.
+- Unblock condition: rerun local tooling recovery, then rerun
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests/OpenAITranscriptionServiceTests`. If it reaches
+  and passes the focused tests, mark `VT-053` and this closeout done. If it
+  still times out before execution, continue automatic local Xcode tooling
+  repair and append fresh recovery/retry evidence.

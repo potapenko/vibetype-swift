@@ -77,6 +77,16 @@ messages.
   URL error mapping, empty-audio rejection before upload, and stable compact
   messages/log categories without live OpenAI or real Keychain access.
 - `git diff --check` passed.
+- Closeout retry on 2026-06-21 23:24 CEST in `VT-155`: local tooling
+  recovery returned `ok: true`, matched no stale allowlisted processes, and
+  removed no generated artifacts.
+- The bounded retry
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests/OpenAITranscriptionServiceTests` reached
+  Xcode's `clang -v -E -dM ... /dev/null` external-tool probe, did not reach
+  compiler diagnostics, test discovery, or test execution, and ended with
+  `** BUILD INTERRUPTED **` / exit code 124 after the timeout.
 
 ## Resolution Path
 
@@ -91,3 +101,7 @@ messages.
 - If focused tests pass, a blocker-resolution pass may mark this task done
   without additional source edits because the error presentation boundary,
   mapping tests, service behavior, and spec update are already present.
+- If focused tests still time out before execution after
+  `python3 scripts/local_tooling_recover.py --apply --json`, append fresh
+  recovery/retry evidence to this task and keep `VT-155` blocked for a later
+  closeout retry.
