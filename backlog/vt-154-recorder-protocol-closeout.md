@@ -1,7 +1,7 @@
 ---
 id: VT-154
 title: Recorder Protocol Blocker Closeout
-status: backlog
+status: in-progress
 priority: P1
 lane: recording
 dependencies:
@@ -19,7 +19,7 @@ verification:
 
 # VT-154 - Recorder Protocol Blocker Closeout
 
-Status: backlog
+Status: in-progress
 Priority: P1
 Lane: recording
 Dependencies: VT-000, VT-148
