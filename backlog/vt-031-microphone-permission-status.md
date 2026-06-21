@@ -49,3 +49,16 @@ Add a Swift-native way to read and request microphone permission for the MVP.
 - Narrow verification passed:
   `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
 - `git diff --check` passed.
+
+## Resolution Path
+
+- Blocker category: full scheme UI-test runner cannot authenticate
+  off-console.
+- Unblock condition: rerun
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  and `git diff --check`; if they still pass, apply the
+  `verification-strategy.md` policy that accepts narrow target evidence when
+  only the UI-test runner needs off-console interaction.
+- A blocker-resolution pass may then mark this task done without additional
+  source edits because the microphone permission service and fake-backed tests
+  are already present.

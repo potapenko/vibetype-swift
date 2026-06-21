@@ -62,3 +62,16 @@ Create the small local value model for accepted transcript history rows.
   `xcodebuild` waiting on `clang -v -E -dM ... /dev/null` for over a minute.
 - Narrow sanity evidence passed:
   `xcrun swiftc -typecheck -parse-as-library vibetype/Models/TranscriptHistoryEntry.swift`.
+
+## Resolution Path
+
+- Blocker category: local Xcode test/build service hang.
+- Unblock condition: after the local Xcode build service returns progress,
+  rerun
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  and `git diff --check`.
+- If focused tests pass, a blocker-resolution pass may mark this task done
+  without additional source edits because the transcript history entry model
+  and focused tests are already present.
+- If Xcode still blocks before test execution, record the fresh bounded Xcode
+  blocker and keep the existing `swiftc` check only as narrow sanity evidence.

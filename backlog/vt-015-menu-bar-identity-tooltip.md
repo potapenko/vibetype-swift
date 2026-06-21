@@ -73,3 +73,16 @@ translate only the product need: a recognizable native macOS menu bar item.
 - Narrow evidence passed:
   `xcrun swiftc -typecheck -parse-as-library $(rg --files vibetype -g '*.swift' | sort)`
   and `git diff --check`.
+
+## Resolution Path
+
+- Blocker category: local Xcode build capacity.
+- Unblock condition: free enough local Xcode/DerivedData capacity for the
+  required macOS build to complete, then rerun
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+  and `git diff --check`.
+- If those checks pass, a blocker-resolution pass may mark this task done
+  without additional source edits because the implementation and spec update
+  are already present.
+- If the build still blocks before compiler diagnostics, record the new bounded
+  Xcode blocker and keep downstream menu-bar runtime QA on `VT-112`.

@@ -54,3 +54,17 @@ Add a Swift-native service boundary for global hotkey registration.
   interrupted after bounded waits.
 - Narrow checks completed: app source `swiftc -typecheck` passed, app module
   `swiftc -emit-module -enable-testing` passed, and `git diff --check` passed.
+
+## Resolution Path
+
+- Blocker category: local Xcode test/build service hang.
+- Unblock condition: after the local Xcode build service returns progress,
+  rerun
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  and `git diff --check`.
+- If focused tests pass, a blocker-resolution pass may mark this task done
+  without additional source edits because the hotkey service boundary, default
+  shortcut data, and fake-backed test seam are already present.
+- If Xcode still blocks before test execution, record the fresh bounded Xcode
+  blocker and keep using the existing `swiftc` checks only as narrow sanity
+  evidence.

@@ -59,6 +59,18 @@ Evidence from the 2026-06-21 automation pass:
 Next implementation task: VT-117 must add the first minimal iOS containing-app
 target before this simulator baseline can be retried.
 
+## Resolution Path
+
+- Blocker category: iOS simulator/build environment.
+- Follow-up task: `VT-117`
+  (`backlog/vt-117-ios-containing-app-target-skeleton.md`) adds the first
+  minimal iOS containing-app target.
+- Unblock condition: after `VT-117` is complete and a concrete iOS Simulator
+  device is available to Xcode/XcodeBuildMCP, rerun the simulator baseline
+  command path from `docs/agent-tooling.md` and save any durable blocker or
+  screenshot evidence under `docs/qa/`.
+- No macOS product source edits belong in this simulator baseline task.
+
 ## Verification
 
 - `git diff --check`
