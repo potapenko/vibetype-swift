@@ -1,7 +1,7 @@
 ---
 id: VT-153
 title: Transcription Settings Fields Closeout
-status: in-progress
+status: done
 priority: P2
 lane: settings
 dependencies:
@@ -20,7 +20,7 @@ verification:
 
 # VT-153 - Transcription Settings Fields Closeout
 
-Status: in-progress
+Status: done
 Priority: P2
 Lane: settings
 Dependencies: VT-013, VT-021, VT-148
@@ -64,3 +64,15 @@ implemented transcription settings scope.
 - Use standard `xcodebuild` for the macOS build gate.
 - Use Computer Use only for bounded visible Settings verification after a
   fresh app product exists and an inspection surface is available.
+
+## Result
+
+Completed on 2026-06-22.
+
+- Recovery passed: `python3 scripts/local_tooling_recover.py --apply --json`
+  found no stale processes or generated artifacts to remove.
+- Build passed: `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build` reached `** BUILD SUCCEEDED **`.
+- Runtime QA blocked: Computer Use was present but exposed only `click`, with no
+  screenshot, snapshot, or accessibility-tree reader to inspect the Settings
+  window fields required by `VT-025`.
+- `VT-025` remains blocked with fresh evidence and a narrower resolution path.

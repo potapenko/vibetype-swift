@@ -56,8 +56,10 @@ Expose the MVP transcription settings in the native Settings window.
 
 ## Blocker
 
-The product code and focused validation smoke were implemented, but the
-required macOS Xcode build could not complete in this environment.
+The product code and focused validation smoke were implemented, and the
+required macOS Xcode build now succeeds. The task remains blocked only because
+the required visible Settings runtime QA cannot be inspected from the current
+automation tool surface.
 
 Evidence from 2026-06-21:
 
@@ -70,18 +72,27 @@ Evidence from 2026-06-21:
 - Blocked: direct focused test-source typecheck could not load Swift Testing
   outside Xcode: `no such module 'Testing'`
 
+Fresh closeout evidence from 2026-06-22:
+
+- Passed: `python3 scripts/local_tooling_recover.py --apply --json` completed
+  with no matched, terminated, remaining, or removed processes/artifacts.
+- Passed: `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build` reached `** BUILD SUCCEEDED **`.
+- Blocked: required Settings runtime QA could not inspect the model, language,
+  custom language, and prompt fields because the exposed Computer Use surface
+  for this thread provided only `click` and no screenshot, snapshot, or
+  accessibility-tree reader.
+
 ## Resolution Path
 
-Blocker category: local Xcode build-service health.
+Blocker category: macOS Settings runtime QA tooling.
 
-Follow-up: `VT-148` at `backlog/vt-148-xcode-build-service-health.md`.
+Follow-up: operator/tooling surface, no repository task required yet.
 
-Unblock condition: a bounded macOS `xcodebuild` build or unit-test command
-reaches compiler diagnostics or test execution again. After that, rerun this
-task's required build verification and, because Settings UI changed, perform
-bounded macOS runtime QA through Computer Use if an inspection surface is
-available.
+Unblock condition: rerun this closeout in a thread where Computer Use or an
+equivalent macOS UI inspection surface can capture Settings window state, then
+open Settings and verify the transcription model, language picker, custom
+language field, and prompt field.
 
-This run could not finish the task directly because the required Xcode command
-timed out before compiler diagnostics despite direct Swift compiler evidence
-passing.
+This run could not finish the task directly because the build blocker was
+cleared, but the available Computer Use tool could only click and could not
+read or capture the visible Settings surface required by the QA contract.
