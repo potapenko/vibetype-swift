@@ -1,7 +1,7 @@
 ---
 id: VT-034
 title: Settings Permissions And Privacy Section
-status: backlog
+status: in-progress
 priority: P2
 lane: permissions
 parent: VT-030
@@ -19,7 +19,7 @@ allowed_paths:
 
 # VT-034 - Settings Permissions And Privacy Section
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
