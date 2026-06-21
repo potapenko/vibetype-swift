@@ -1,7 +1,7 @@
 ---
 id: VT-052
 title: URLSession Transcription Client
-status: backlog
+status: in-progress
 priority: P1
 lane: transcription
 parent: VT-050
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-052 - URLSession Transcription Client
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
