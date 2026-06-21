@@ -74,15 +74,37 @@ translate only the product need: a recognizable native macOS menu bar item.
   `xcrun swiftc -typecheck -parse-as-library $(rg --files vibetype -g '*.swift' | sort)`
   and `git diff --check`.
 
+2026-06-21 closeout retry:
+
+- `VT-150` reran the local recovery path from the current checkout before
+  retrying the macOS build gate.
+- Recovery command:
+  `python3 scripts/local_tooling_recover.py --apply --json`.
+- Recovery result: `ok: true`; no stale processes matched; removed generated
+  project DerivedData
+  `/Users/eugenepotapenko/Library/Developer/Xcode/DerivedData/vibetype-cgljxvuvdfxmqbeiqfwkdshvjovc`.
+- Capacity was not the limiting factor on this retry: `df -h /Users /tmp`
+  reported about 101 GiB available on `/System/Volumes/Data`.
+- Bounded build retry:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`.
+- Result: Xcode reached build-description/external-tool probing, including
+  `clang -v -E -dM ... /dev/null`, then timed out before compiler diagnostics
+  or app build output and ended with `** BUILD INTERRUPTED **`.
+
 ## Resolution Path
 
-- Blocker category: local Xcode build capacity.
-- Unblock condition: free enough local Xcode/DerivedData capacity for the
-  required macOS build to complete, then rerun
+- Blocker category: local Xcode build-service timeout before compiler
+  diagnostics.
+- Existing infrastructure evidence: `VT-148`
+  (`backlog/vt-148-xcode-build-service-health.md`) records the same
+  automation-recoverable Xcode build-service timeout class.
+- Unblock condition: local Xcode build-service health must allow the required
+  macOS build to pass, then rerun
   `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
   and `git diff --check`.
 - If those checks pass, a blocker-resolution pass may mark this task done
   without additional source edits because the implementation and spec update
   are already present.
-- If the build still blocks before compiler diagnostics, record the new bounded
-  Xcode blocker and keep downstream menu-bar runtime QA on `VT-112`.
+- If the build still blocks before compiler diagnostics after
+  `python3 scripts/local_tooling_recover.py --apply --json`, record the fresh
+  bounded Xcode blocker and keep downstream menu-bar runtime QA on `VT-112`.

@@ -1,7 +1,7 @@
 ---
 id: VT-150
 title: Menu Bar Identity Blocker Closeout
-status: in-progress
+status: blocked
 priority: P0
 lane: swift-app-shell
 dependencies:
@@ -18,7 +18,7 @@ verification:
 
 # VT-150 - Menu Bar Identity Blocker Closeout
 
-Status: in-progress
+Status: blocked
 Priority: P0
 Lane: swift-app-shell
 Dependencies: VT-000
@@ -61,3 +61,36 @@ has an executable path again.
 - Use standard `xcodebuild` for the macOS build gate.
 - Local Xcode/DerivedData/tooling recovery is automation-owned, not a user
   cleanup chore.
+
+## Blocker Evidence
+
+2026-06-21 22:38 CEST:
+
+- Recovery command passed:
+  `python3 scripts/local_tooling_recover.py --apply --json`.
+- Recovery result: `ok: true`; no stale processes matched; removed generated
+  project DerivedData
+  `/Users/eugenepotapenko/Library/Developer/Xcode/DerivedData/vibetype-cgljxvuvdfxmqbeiqfwkdshvjovc`.
+- Disk capacity was sufficient for this retry: `/Users` and `/tmp` both
+  reported about 101 GiB available.
+- Bounded build retry:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`.
+- Result: Xcode reached build-description/external-tool probing, including
+  `clang -v -E -dM ... /dev/null`, then timed out before compiler diagnostics
+  or app build output and ended with `** BUILD INTERRUPTED **`.
+- `VT-015` remains blocked with the fresh recovery/build evidence above.
+
+## Resolution Path
+
+- Blocker category: local Xcode build-service timeout before compiler
+  diagnostics.
+- Existing infrastructure evidence: `VT-148`
+  (`backlog/vt-148-xcode-build-service-health.md`) records this same
+  automation-recoverable Xcode build-service timeout class.
+- Unblock condition: run
+  `python3 scripts/local_tooling_recover.py --apply --json`, then the bounded
+  macOS build gate must reach a pass or useful compiler diagnostics:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`.
+- Once the build passes, a blocker-resolution closeout can mark `VT-015` done
+  without source edits because the menu-bar identity implementation and spec
+  update are already present.
