@@ -51,9 +51,7 @@ struct MenuBarView: View {
             Divider()
 
             Button(dictationStatus.recordingActionTitle) {
-                dictationStatus = .failure(
-                    message: "Start Recording is a placeholder until the recorder task lands."
-                )
+                dictationStatus = dictationStatus.placeholderRecordingActionResult
             }
             .disabled(!dictationStatus.isRecordingActionEnabled)
 

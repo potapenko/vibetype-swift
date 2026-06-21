@@ -41,6 +41,9 @@ This spec covers:
   current state.
 - Before recording exists, Start Recording may be a visible placeholder, but it
   must clearly state that recording is not available yet.
+- Before recording exists, a placeholder Start/Stop transition may exercise
+  the menu binding, but it must clearly state that microphone input is not
+  captured in that build.
 - The menu should include Settings, Last Transcript, Copy Last Transcript, and
   Quit.
 - Quit must terminate the app cleanly.

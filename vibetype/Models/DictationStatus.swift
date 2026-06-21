@@ -50,7 +50,7 @@ enum DictationStatus: Equatable {
         case .idle:
             return "Recording is not implemented in this build."
         case .recording:
-            return "Listening..."
+            return "Recording placeholder active. Microphone input is not captured in this build."
         case .transcribing:
             return "Transcribing audio..."
         case .success(let transcript):
@@ -83,5 +83,16 @@ enum DictationStatus: Equatable {
         }
 
         return !transcript.isEmpty
+    }
+
+    var placeholderRecordingActionResult: DictationStatus {
+        switch self {
+        case .idle, .success, .failure:
+            return .recording
+        case .recording:
+            return .idle
+        case .transcribing:
+            return .transcribing
+        }
     }
 }
