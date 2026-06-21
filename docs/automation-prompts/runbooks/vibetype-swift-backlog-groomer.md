@@ -48,18 +48,24 @@ tasks.
 
 ## Safety
 
-Run `git status --short` before writing. If there are staged changes, stop
-without editing and report the blocker. If there are unstaged changes, inspect
-whether they overlap files this groomer may edit or materially affect the
-source-shape decision. Stop on overlap. For clearly unrelated unstaged files,
-continue only after recording them as unrelated dirty worktree state, and never
-stage or modify them.
+Run `git status --short` before writing. Dirty Git state is not a blocker. If
+there are staged or unstaged changes, inspect the relevant diff, preserve those
+changes, and continue against the current checkout. Stage and commit only
+groomer-owned backlog/spec/workflow paths. If unrelated changes are already
+staged, use path-limited commit commands such as `git commit --only <owned
+paths>` so the unrelated index does not block grooming.
 
 Before grooming, run the standard selector. It has built-in claim-expiry repair:
 
 ```sh
+python3 scripts/local_tooling_recover.py --apply --json
 python3 scripts/backlog_next.py --json
 ```
+
+Local Xcode/build/test/simulator tooling failures, stale compiler probes,
+generated caches, project-scoped DerivedData, and missing local CLI utilities
+are automation problems. The groomer must recover them automatically before
+reporting a tooling blocker. Do not ask the user to clear local tooling state.
 
 If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,
 stage only those reset task files, create a scoped repair commit such as
@@ -74,7 +80,9 @@ Apply run hygiene: keep MCP inspection task-specific, do not manually kill
 broad MCP process names, and follow `docs/agent-tooling.md` MCP/thread
 lifecycle guidance by requesting archive of the current automation thread
 before the final response when the thread-management tool is available. Clean
-only current-run temporary artifacts that are not durable evidence.
+only current-run temporary artifacts that are not durable evidence. For stale
+local Xcode/build/test tooling, use `scripts/local_tooling_recover.py` rather
+than stopping for user cleanup.
 
 ## Backlog Rules
 
@@ -134,14 +142,15 @@ git diff --check
 
 Stage only backlog/spec/workflow files changed by this groomer run and create a
 scoped checkpoint commit such as `backlog: groom Swift MVP tasks`. Do not stage
-source-code implementation files or unrelated changes.
+source-code implementation files or unrelated changes. Dirty unrelated files
+must be preserved, not treated as a reason to stop.
 
 ## Expected Output
 
 Final report must include created or updated task ids, parent/child grouping
 changes, reference files inspected, selector status and selected task path,
-verification results, tooling assumptions added to tasks when relevant, commit
-hash if created, actual cwd, execution environment, `Thread archive` with
-`requested` or `unavailable` according to the MCP/thread lifecycle action,
-UI/functionality coverage rows updated or explicitly unchanged, unrelated dirty
-files left untouched, and any blocker.
+verification results, local tooling recovery summary, tooling assumptions added
+to tasks when relevant, commit hash if created, actual cwd, execution
+environment, `Thread archive` with `requested` or `unavailable` according to
+the MCP/thread lifecycle action, UI/functionality coverage rows updated or
+explicitly unchanged, unrelated dirty files preserved, and any blocker.

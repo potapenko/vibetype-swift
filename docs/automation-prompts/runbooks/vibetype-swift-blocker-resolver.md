@@ -52,16 +52,16 @@ Do not require optional README files that are absent from the checkout.
 
 ## Safety Gate
 
-Start with a race-aware checkout:
+Start with a race-aware checkout, but do not treat dirty Git state as a
+blocker:
 
 1. Run `git status --short`.
-2. If there are staged changes, stop unless every staged file is clearly owned
-   by the current resolver run.
-3. If there are unstaged changes, inspect whether they overlap the selected
-   blocked task, files needed to verify it, or backlog/spec/workflow files the
-   resolver may edit. Stop on overlap. Clearly unrelated unstaged files may
-   remain in the worktree if the run reports them and does not stage, modify, or
-   rely on them.
+2. If there are staged or unstaged changes, inspect the relevant diff and
+   continue. Preserve all pre-existing changes, including overlapping files, and
+   edit against the current contents.
+3. Stage and commit only resolver-owned paths. If unrelated changes are already
+   staged, use path-limited commit commands such as `git commit --only <owned
+   paths>` so the unrelated index does not block progress.
 4. Run `python3 scripts/backlog_next.py --json` before blocked selection. This
    normal selector expires stale implementation claims by default.
 5. If `expired_in_progress_reset_paths` is non-empty, run `git diff --check`,
@@ -72,6 +72,18 @@ Start with a race-aware checkout:
    to avoid racing the implementer in the canonical checkout.
 7. If the normal selector reports `queue_error`, stop and report the queue
    diagnostics.
+
+8. Before blocked selection, run local tooling recovery:
+
+```sh
+python3 scripts/local_tooling_recover.py --apply --json
+```
+
+This step is mandatory. Local Xcode/build/test/simulator hangs, stale
+`xcodebuild`, `xctest`, `SWBBuildService`, compiler probes, generated caches,
+project-scoped DerivedData, missing local CLI utilities, and stale runner state
+are automation problems. The resolver must fix them automatically instead of
+waiting for the user.
 
 Do not access MongoDB directly. Do not run destructive database or
 object-storage operations. Do not edit sibling repositories unless a selected
@@ -84,7 +96,9 @@ build artifacts before staging; keep only durable reports or explicit evidence.
 Follow `docs/agent-tooling.md` MCP/thread lifecycle guidance: keep MCP
 inspection task-specific, do not manually kill broad MCP process names, and
 request archive of the current automation thread before the final response when
-the thread-management tool is available.
+the thread-management tool is available. For local build/test tooling, use the
+repo recovery helper and local installation/configuration commands when needed;
+do not downgrade local tooling repair to a user/operator action.
 
 ## Blocked Selector
 
@@ -124,6 +138,13 @@ implemented, first rerun the narrow verification named in the task and
 that narrow evidence for the blocker class, mark the selected task `done`
 without creating another follow-up task.
 
+If the selected task mentions Xcode, `xcodebuild`, `xctest`,
+`SWBBuildService`, compiler probes, simulator tooling, local command line tools,
+caches, DerivedData, or test-runner state, the resolver must run local tooling
+recovery and then rerun the narrow bounded verification before deciding the
+task remains blocked. A stale local tooling blocker may not be recorded as
+operator-only without this recovery/retry evidence.
+
 If direct resolution succeeds, mark the selected task `done`, record fresh
 verification evidence, stage only resolver-owned changes, and commit.
 
@@ -146,10 +167,15 @@ Include:
 - unblock condition;
 - why the current run could not finish it directly.
 
-For operator-only blockers, do not create a weak repository task. Record the
-shortest exact operator command, status check, or manual system action that
-would unblock the original task, and explain why no repository change can
-advance it yet.
+For operator-only blockers, do not create a weak repository task. This category
+is only valid after local recovery and bounded retry have been attempted, or
+when the blocker is clearly outside local tooling. Record the shortest exact
+operator command, status check, or manual system action that would unblock the
+original task, and explain why automatic tooling recovery, local installation,
+or repository work cannot advance it. Destructive database/object-storage
+operations, destructive Git rollback, external account login, payment/account
+changes, and manual system privacy approval remain operator-only; stale local
+Xcode/build/simulator state does not.
 
 Do not bulk-edit every blocked task. Do not mark a task `done` merely because a
 follow-up exists. After a follow-up later completes, a future resolver pass
@@ -202,12 +228,12 @@ Stage only files changed for this resolver pass and create a scoped completion
 checkpoint commit when files changed.
 
 Final report must include selected blocked task id/title/path, action taken
-(`directly_resolved`, `follow_up_created`, `follow_up_refined`, or
-`operator_only`), follow-up id/path or operator action, changed files,
-verification results, `Tooling` with the XcodeBuildMCP / `xcodebuild` /
-Computer Use path used when relevant, cleanup performed, `Thread archive` with
-`requested` or `unavailable` according to the MCP/thread lifecycle action,
-completion commit hash if files changed, next blocked selector result if
-checked, actual cwd, execution environment, unrelated dirty files left
-untouched, and confirmation that the canonical checkout now contains the status
-or resolution-path update.
+(`directly_resolved`, `follow_up_created`, `follow_up_refined`,
+`tooling_recovered`, or `operator_only`), follow-up id/path or operator action,
+local tooling recovery summary, changed files, verification results, `Tooling`
+with the XcodeBuildMCP / `xcodebuild` / Computer Use path used when relevant,
+cleanup performed, `Thread archive` with `requested` or `unavailable` according
+to the MCP/thread lifecycle action, completion commit hash if files changed,
+next blocked selector result if checked, actual cwd, execution environment,
+unrelated dirty files preserved, and confirmation that the canonical checkout
+now contains the status or resolution-path update.

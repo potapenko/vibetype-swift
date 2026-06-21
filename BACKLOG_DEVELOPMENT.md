@@ -149,6 +149,40 @@ statuses so stale claims are visible instead of ordinary dependency debt. Ties
 prefer the task that directly unblocks the most other tasks, then the numeric
 task id.
 
+## Local Tooling Recovery
+
+Local Xcode, simulator, build-service, compiler-probe, runner, cache,
+DerivedData, missing local command-line utility, and missing local library
+failures are automation-recoverable unless the task evidence proves that
+recovery would require a real user decision, login, permission grant, or
+destructive operation.
+
+Agents must not classify local tooling as operator-only just because the fix is
+forceful. Before stopping on a local tooling blocker, run the bounded recovery
+helper from the repository root:
+
+```sh
+python3 scripts/local_tooling_recover.py --apply --json
+```
+
+The helper may terminate allowlisted stale local Xcode/build/test tooling
+processes and remove generated VibeType artifacts such as project-scoped
+DerivedData and selector bytecode. Agents may also install or configure missing
+local tools, command-line utilities, Apple platforms, or libraries when needed
+for the selected task. They must not touch source files outside the selected
+scope, Git history/state destructively, databases, remote storage, broad MCP
+server processes, or unrelated projects.
+
+After recovery, rerun the narrow command that originally proved the blocker,
+using a timeout. Only record a remaining blocker after this recovery path has
+run and the fresh bounded command still fails. The blocker evidence must
+include the recovery JSON summary and the rerun command/result.
+
+Operator-only is reserved for actions an agent cannot perform safely even with
+local shell access, such as approving a system privacy prompt, logging into an
+external account, payment/account changes, destructive Git rollback, or
+destructive database/object-storage operations.
+
 ## Oversized Task Decomposition
 
 A normal implementation agent should not execute a task that is obviously
@@ -185,8 +219,17 @@ Before substantive work, claim the selected task:
 4. stage only the selected task file;
 5. create a small claim checkpoint commit.
 
-If the claim cannot be safely committed, stop. Do not implement, inspect
-private task details, or run validation for an unclaimed task.
+Dirty Git state is not a blocker. If unrelated files are modified or staged,
+leave them intact and continue. Use path-limited staging and commits, such as
+`git add <owned paths>` and `git commit --only <owned paths>`, so unrelated
+changes are not included. If a selected file already has edits, read the diff
+and build on the current contents without reverting them. Do not stop merely
+because the worktree or index is dirty.
+
+If the claim still cannot be safely committed after path-limited commit
+handling, record the exact Git command/error and continue only when the task can
+be completed without losing or staging unrelated work. Do not implement,
+inspect private task details, or run validation for an unclaimed task.
 
 ## Execution Rule
 
@@ -203,6 +246,8 @@ After claiming:
 - write durable reports or evidence when the task asks for them;
 - create follow-up task files for downstream or cross-boundary work;
 - keep chat updates short and treat repository files as the durable state.
+- never treat unrelated dirty Git state as a task blocker; preserve it, work
+  around it, and commit only the current task's owned paths.
 
 ## Completion Rule
 
@@ -221,11 +266,13 @@ At the end of the iteration:
    exactly one concrete follow-up task that can remove the blocker, and record
    that task id/path in the blocked task; if a suitable follow-up already
    exists, cite it instead of duplicating it;
-6. for operator-only or external blockers, record the shortest exact operator
+6. for operator-only or external blockers, first prove that the local tooling
+   recovery path above does not apply; then record the shortest exact operator
    action or status check that would unblock the task and explain why no
    repository task is useful yet;
 7. add other follow-up tasks only when they are real next work;
-8. stage only files changed for the iteration;
+8. stage only files changed for the iteration, using path-limited staging and
+   commit commands so pre-existing dirty files are not included;
 9. run `git diff --cached --check`;
 10. create a scoped completion checkpoint commit;
 11. report claim commit, completion commit, verification, changed files, next

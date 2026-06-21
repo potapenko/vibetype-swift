@@ -98,13 +98,25 @@ abandoned claims from stopping the queue forever while preserving an auditable
 repair commit.
 
 If selector status is `select`, claim exactly `selected.path`. If status is
-`no_ready`, stop without changing repository files and report the selector
-summary, `ready_count`, `dependency_pending_count`, and first dependency-pending
-examples, including any `in_progress` and `blocking_in_progress` diagnostics.
-When `no_ready` includes blocked tasks, also run
-`python3 scripts/backlog_blocked_next.py --json` read-only and report the top
-blocked task and whether the blocker resolver should run next. If status is
-`queue_error`, stop without claiming and report the diagnostics.
+`no_ready`, do not stop until local tooling recovery has been considered. Report
+the selector summary, `ready_count`, `dependency_pending_count`, and first
+dependency-pending examples, including any `in_progress` and
+`blocking_in_progress` diagnostics. When `no_ready` includes blocked tasks, also
+run `python3 scripts/backlog_blocked_next.py --json` read-only. If the blocked
+task or dependency examples mention Xcode, `xcodebuild`, `xctest`,
+`SWBBuildService`, compiler probes, simulator tooling, missing local command
+line tools, caches, or DerivedData, the implementer must run:
+
+```sh
+python3 scripts/local_tooling_recover.py --apply --json
+python3 scripts/backlog_next.py --json
+```
+
+If recovery makes a task ready, continue from the new selector result and claim
+the selected task. If recovery does not make a task ready, report the top
+blocked task, the recovery summary, and whether the blocker resolver should run
+next. If status is `queue_error`, stop without claiming and report the
+diagnostics.
 
 Never mark a task `blocked` merely because declared dependencies are not done;
 dependency-pending tasks stay `backlog` and are skipped by the selector.
@@ -142,7 +154,10 @@ behavior into specs or native Swift service boundaries before implementation.
 
 Do not access MongoDB directly. Do not run destructive database or
 object-storage operations. Do not edit sibling repositories unless the selected
-task explicitly authorizes it.
+task explicitly authorizes it. Dirty Git state is not a blocker: inspect the
+diff, preserve existing changes, work against the current contents, and commit
+only the selected task's owned paths. If unrelated changes are already staged,
+use path-limited commit commands such as `git commit --only <owned paths>`.
 
 Apply run hygiene: close run-owned browser sessions, app launches, simulators,
 and dev servers before and after checks when ownership is clear; clean
@@ -151,7 +166,11 @@ staging; keep only durable reports or explicit evidence. Follow
 `docs/agent-tooling.md` MCP/thread lifecycle guidance: keep MCP inspection
 task-specific, do not manually kill broad MCP process names, and request
 archive of the current automation thread before the final response when the
-thread-management tool is available.
+thread-management tool is available. Stale local Xcode/build/test/simulator
+tooling, generated caches, missing local CLI utilities, and project-scoped
+DerivedData are automation problems, not user chores; fix them in the run by
+using `scripts/local_tooling_recover.py`, local package managers, Xcode command
+line tooling, or bounded rebuild/retry commands as needed.
 
 ## Blocked Task Follow-Up Rule
 
@@ -181,10 +200,14 @@ docs/audit/workflow task where no product delta is possible, keep the existing
 product-first rule: block the selected task and create or refine the smallest
 implementation task that would produce the intended app delta.
 
-Operator-only blockers are the exception. If the unblock requires an action the
-agent must not perform, such as destructive cleanup, user-owned system changes,
-or manual permission approval, record the shortest exact operator action or
-status check and explain why no repository follow-up task is useful yet.
+Operator-only blockers are the exception. Do not use this category for local
+tooling just because the fix is forceful. The agent is expected to terminate
+stale local tooling, clear generated project artifacts, install missing local
+CLI utilities/libraries when needed, and retry bounded verification. Use
+operator-only only for actions the agent still must not perform: destructive
+database or object-storage operations, destructive Git rollback, external
+account login, payment/account changes, or manual system privacy approval.
+Record why those limits apply after recovery and retry have been attempted.
 
 ## Verification
 
@@ -276,5 +299,6 @@ name the app behavior, Swift code, tests, build/runtime capability, or bug fix
 delivered. If no product delta was possible, the task must be reported as
 blocked, not done, and the report must name the exact next implementation task
 created or updated. For any blocked result, the report must include
-`Resolution path` with either the follow-up task id/path or the explicit
-operator-only unblock action.
+`Resolution path` with either the follow-up task id/path, the local tooling
+recovery command and fresh bounded retry result, or the explicit operator-only
+unblock action after recovery has been ruled out.

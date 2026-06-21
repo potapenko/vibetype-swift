@@ -5,7 +5,8 @@
 Prevent blocked backlog tasks from becoming abandoned work.
 
 The resolver turns a blocked task into either a completed task, an executable
-follow-up task, or a precise operator-only unblock request.
+follow-up task, an automation-recoverable local tooling repair, or a precise
+operator-only unblock request.
 
 ## Behavior
 
@@ -16,12 +17,15 @@ Each resolver run should:
 3. Select one blocked task through the blocked-task selector.
 4. Read only the selected blocked task and the files needed to understand its
    blocker.
-5. Prefer a direct unblock when the original acceptance criteria are already
+5. Run local tooling recovery before treating Xcode, build-service,
+   compiler-probe, runner, cache, simulator, DerivedData, missing local
+   utility, or missing local library state as a blocker.
+6. Prefer a direct unblock when the original acceptance criteria are already
    satisfied and verification can be rerun safely.
-6. Otherwise create or refine one follow-up backlog task that can remove the
+7. Otherwise create or refine one follow-up backlog task that can remove the
    blocker.
-7. Record a durable resolution path on the blocked task.
-8. Commit only the resolver-owned backlog, spec, workflow, or narrowly scoped
+8. Record a durable resolution path on the blocked task.
+9. Commit only the resolver-owned backlog, spec, workflow, or narrowly scoped
    code changes.
 
 ## Selection
@@ -41,6 +45,16 @@ uses `scripts/backlog_blocked_next.py`.
 Every blocked task must have a resolution path before a run reports it as
 handled.
 
+For automation-recoverable local tooling blockers, the path records:
+
+- the recovery command:
+  `python3 scripts/local_tooling_recover.py --apply --json`;
+- any local install or configuration command used to make the required tool
+  available;
+- the bounded verification command to retry immediately afterward;
+- the fresh recovery and verification result;
+- why the blocker remains if recovery fails.
+
 For repository-solvable blockers, the path cites exactly one follow-up backlog
 task with:
 
@@ -51,7 +65,8 @@ task with:
 - verification.
 
 For operator-only blockers, the path records the exact operator action or
-status check required and why a repository task would not help yet.
+status check required, why local tooling recovery does not apply, and why a
+repository task would not help yet.
 
 ## Non-Goals
 
@@ -59,5 +74,5 @@ status check required and why a repository task would not help yet.
 - Do not bulk-edit every blocked task in one run.
 - Do not create duplicate follow-up tasks.
 - Do not hide external blockers by marking work done without verification.
-- Do not perform destructive cleanup, database operations, or remote storage
-  mutations.
+- Do not perform destructive cleanup, database operations, remote storage
+  mutations, or broad unrelated process cleanup.

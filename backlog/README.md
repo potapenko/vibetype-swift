@@ -94,8 +94,34 @@ cleanup, or closeout.
 - `blocked` - exceptional blocker; skipped by normal executor agents until a
   blocker-resolution pass or human changes it. A blocked task must include a
   durable `## Resolution Path` or equivalent report entry that either cites one
-  concrete follow-up task to remove the blocker or records the exact
+  concrete follow-up task to remove the blocker, names the required
+  automation-recoverable local tooling recovery, or records the exact
   operator-only action/status check needed to unblock it.
 - `done` - terminal and verified for the declared scope.
 
 Do not add other status values.
+
+## Dirty Git State
+
+Dirty worktrees and staged unrelated changes are not backlog blockers. Agents
+must continue work by reading the current diff, preserving unrelated edits, and
+committing only their owned paths. Do not revert user or concurrent agent
+changes. Do not include unrelated changes in a task commit. Use path-limited
+staging and commit commands when the index is dirty.
+
+## Automation-Recoverable Blockers
+
+Xcode, `xcodebuild`, `xctest`, `SWBBuildService`, compiler-probe, DerivedData,
+simulator-runner, generated-cache, missing local utility, and missing local
+library blockers are not human chores by default. Before a task records or
+repeats one of those blockers, the agent must run:
+
+```sh
+python3 scripts/local_tooling_recover.py --apply --json
+```
+
+Then install/configure any missing local tools or libraries needed for the
+selected task, and rerun the narrow bounded verification that failed. Only
+classify a remaining blocker as operator-only if the recovery helper and local
+tool installation/configuration are not applicable or the fresh result proves a
+non-tooling external boundary is still required.

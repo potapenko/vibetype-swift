@@ -38,7 +38,11 @@ Keep MCP use narrow:
   baseline when they satisfy the selected task's verification.
 - Use Computer Use only for changed visible macOS runtime behavior.
 - Do not manually kill broad MCP process names from an automation run; those
-  processes may belong to other active user or automation threads.
+  processes may belong to other active user or automation threads. This does
+  not make stale Xcode build/test tooling operator-only. Use
+  `python3 scripts/local_tooling_recover.py --apply --json` for allowlisted
+  stale `xcodebuild`, `xctest`, `SWBBuildService`, compiler-probe, and
+  project-scoped DerivedData recovery.
 
 At the end of every scheduled automation run, after verification and checkpoint
 handling are complete and before the final response, request archive of the
@@ -83,6 +87,25 @@ Use the repo's normal `xcodebuild` commands when:
   expose a matching macOS build/run/test tool;
 - full build or test logs are needed beyond the structured MCP response;
 - the selected task's verification explicitly names `xcodebuild`.
+
+## Local Xcode Recovery
+
+Agents repair local tooling problems themselves. Before stopping on a local
+Xcode, simulator, build-service, test-runner, compiler-probe, cache, project
+DerivedData, missing command-line utility, missing Apple platform, or missing
+local library blocker, agents must run:
+
+```sh
+python3 scripts/local_tooling_recover.py --apply --json
+```
+
+Then install or configure any missing local utility/library/platform needed for
+the selected task and rerun the narrow bounded verification that originally
+failed. Report the recovery summary, install/configuration action when used,
+and the rerun result. Local Xcode/tooling problems are automation-recoverable;
+reserve `operator-only` for actions that need a real user decision, external
+login, privacy approval, payment/account change, destructive Git rollback, or
+destructive database/object-storage operation.
 
 ## macOS Runtime QA
 

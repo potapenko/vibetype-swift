@@ -21,10 +21,11 @@ Inventory status: inspected
 | `vibetype-swift-backlog-groomer` | VibeType Swift Backlog Groomer | active | `FREQ=HOURLY;INTERVAL=2` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md` |
 | `vibetype-swift-blocker-resolver` | VibeType Swift Blocker Resolver | active | `FREQ=HOURLY;INTERVAL=1` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md` |
 | `vibetype-swift-implementer` | VibeType Swift Implementer | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-implementer.md` |
+| `vibetype-swift-tooling-unblocker` | VibeType Swift Tooling Unblocker | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md` |
 | `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
 
-Installed automation count for this repository: 4.
-Active count for this repository: 4.
+Installed automation count for this repository: 5.
+Active count for this repository: 5.
 Paused count for this repository: 0.
 
 ## Installed Automations
@@ -48,8 +49,8 @@ Paused count for this repository: 0.
   fallback evidence; request current-thread archive before the final report
   when thread management is available
 - Safety/browser evidence contract: no browser requirement; do not implement
-  Swift product code; stop on dirty/staged worktree or in-progress task; no DB
-  or destructive storage operations
+  Swift product code; dirty Git state is not a blocker and must be preserved
+  with path-limited commits; no DB or destructive storage operations
 - Current decision: active
 
 ### `vibetype-swift-blocker-resolver`
@@ -70,9 +71,9 @@ Paused count for this repository: 0.
   final report when thread management is available
 - Tooling contract: read `docs/agent-tooling.md` when a blocker involves
   Xcode, simulator, MCP, runtime QA, or tool-selection decisions
-- Safety/runtime evidence contract: stop on dirty checkout or active
-  in-progress task; avoid duplicate follow-ups; use bounded verification; no
-  DB or destructive storage operations
+- Safety/runtime evidence contract: dirty Git state is not a blocker and must
+  be preserved with path-limited commits; avoid duplicate follow-ups; use
+  bounded verification; no DB or destructive storage operations
 - Current decision: active
 
 ### `vibetype-swift-implementer`
@@ -97,6 +98,28 @@ Paused count for this repository: 0.
   product delta; Computer Use required for bounded app-run QA when visible
   macOS surfaces or user interactions change; no live OpenAI API in normal
   automation; no DB or destructive storage operations
+- Current decision: active
+
+### `vibetype-swift-tooling-unblocker`
+
+- Installed status: `ACTIVE`
+- Schedule: `FREQ=MINUTELY;INTERVAL=15`
+- Model / reasoning effort: `gpt-5.5` / `xhigh`
+- Execution environment: `local`
+- Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
+- Prompt shape: short pointer prompt
+- Versioned runtime contract:
+  `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md`
+- Recovery script:
+  `python3 scripts/local_tooling_recover.py --apply --json`
+- Expected output: one bounded local tooling recovery pass, bounded macOS
+  unit-test health check, selector readback, cleanup report, and current-thread
+  archive status when thread management is available
+- Safety/runtime evidence contract: fix local Xcode/build/test/simulator,
+  cache, DerivedData, missing local utility, and missing local library blockers
+  automatically; do not perform destructive database/storage operations,
+  destructive Git rollback, external account login, payment/account changes, or
+  manual system privacy approval
 - Current decision: active
 
 ### `vibetype-swift-archive-completed-automation-threads`

@@ -31,10 +31,12 @@ blocked Swift model/service tasks to finish their normal verification gates.
   `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`.
 - Include blocked task `VT-023` in the retry assessment when deciding which
   tasks can safely complete after Xcode build/test health returns.
+- Run `python3 scripts/local_tooling_recover.py --apply --json` before the
+  health command so stale local Xcode tooling is repaired automatically.
 - Record a concise QA report under `docs/qa/runs/` with the exact command,
   result, timeout or failure point, and whether blocked tasks can be retried.
 - Do not change app source, tests, product specs, Xcode project settings, or
-  user-owned Xcode/Simulator state.
+  unrelated Xcode/Simulator state.
 
 ## Acceptance
 
@@ -43,8 +45,8 @@ blocked Swift model/service tasks to finish their normal verification gates.
   retry for completion verification, including `VT-023` when macOS app build
   verification is healthy.
 - If the command times out before compiler diagnostics or test execution, the
-  report records the fresh bounded timeout and any exact operator-only action
-  or status check that appears necessary.
+  report records the recovery JSON summary, fresh bounded timeout, and next
+  automatic recovery action.
 
 ## Verification
 
@@ -58,7 +60,8 @@ Completed on 2026-06-21 with fresh bounded health evidence in
 
 The macOS unit-test health command timed out after reaching early Xcode
 build-service external-tool probing and did not reach compiler diagnostics,
-test discovery, or test execution. Blocked verification tasks that cite this
-health check, including `VT-023`, are not safe to retry for completion until
-the local Xcode build service can complete a bounded macOS build or unit-test
-command.
+test discovery, or test execution. This result is now classified as an
+automation-recoverable local tooling blocker. Blocked verification tasks that
+cite this health check, including `VT-023`, should first run
+`python3 scripts/local_tooling_recover.py --apply --json`, then retry the
+bounded macOS build or unit-test command.
