@@ -52,8 +52,12 @@ tasks land.
 - Blocker category: no product delta possible from selected scope.
 - Follow-up task: VT-149
   (`backlog/vt-149-permission-surfaces-runtime-repair.md`).
-- Unblock condition: VT-149 verifies or repairs the built macOS menu and
-  Settings permission surfaces with bounded runtime evidence or records the
-  exact runtime/tooling blocker.
-- Current run cannot finish this directly because VT-030's allowed paths do
-  not permit Swift, test, runtime QA report, or app configuration changes.
+- Current follow-up state: VT-149 is now `done`; it verified or repaired the
+  permission surfaces as far as the bounded runtime tooling allowed.
+- Unblock condition: a blocker-resolution closeout may confirm VT-149 remains
+  done, rerun `python3 scripts/backlog_next.py --json` and `git diff --check`,
+  and close this umbrella without Swift edits unless fresh permission QA
+  evidence names a defect.
+- Current run cannot finish this directly because the groomer must not mark
+  tasks done and VT-030's allowed paths do not permit new Swift, test,
+  runtime QA report, or app configuration changes.

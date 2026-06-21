@@ -41,3 +41,14 @@ contract is in place.
 - Reason: `no product delta possible from selected scope`.
 - Exact next product change refined for the queue:
   `VT-073 - Hold To Record Activation Mode Slice`.
+
+## Resolution Path
+
+- Blocker category: no product delta possible from selected scope.
+- Prior follow-up state: VT-073 is now `done`.
+- Current unblock condition: do not requeue VT-100 for implementer product
+  work. A blocker-resolution closeout may close this workflow umbrella only if
+  repository policy allows metadata-only closeout of workflow tasks.
+- Current product queue blocker: the selector has no dependency-ready product
+  task while verification-gated Swift tasks remain blocked by local Xcode
+  build/test service health.

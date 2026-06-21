@@ -49,9 +49,11 @@ produce the required product delta for this automation.
 
 - Blocker category: no product delta possible from selected scope.
 - Follow-up: VT-082 (`backlog/vt-082-indicator-panel-skeleton.md`).
-- Unblock condition: VT-082 adds the first native floating indicator state
-  model or panel skeleton with build/test evidence, proving the state contract
-  in executable app behavior.
-- Current-run limit: this run could update the state table and task metadata,
-  but it could not safely add Swift app or test code under VT-081's allowed
+- Current follow-up state: VT-082 is now `done`; it added the first native
+  indicator presentation/panel skeleton and executable state mapping.
+- Unblock condition: a blocker-resolution closeout may confirm VT-082 remains
+  done, rerun `python3 scripts/backlog_next.py --json` and `git diff --check`,
+  and close this documentation contract without Swift edits.
+- Current-run limit: this groomer can refine task metadata, but it must not
+  mark tasks done and cannot add Swift app or test code under VT-081's allowed
   paths.

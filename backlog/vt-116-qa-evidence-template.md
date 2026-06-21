@@ -53,8 +53,10 @@ Create a reusable QA evidence template for task-scoped runtime checks.
 - Blocker category: `no product delta possible from selected scope`.
 - Follow-up: `VT-112` in `backlog/vt-112-macos-menu-bar-computer-use-smoke.md`
   is the concrete product/runtime follow-up for this QA lane.
-- Unblock condition: after `VT-112` dependencies are ready, run a bounded
-  macOS app smoke against the real menu bar surface and save task-scoped QA
-  evidence under `docs/qa/`.
-- Current-run limit: `VT-116` only permits template/docs work and forbids the
-  app check needed to produce runtime product evidence.
+- Current follow-up state: VT-112 is now `done`; it saved task-scoped menu-bar
+  smoke evidence under `docs/qa/macos/`.
+- Unblock condition: future runtime QA tasks should use the existing
+  task-scoped QA evidence shape. Do not requeue VT-116 for implementer product
+  work unless a later task explicitly needs a new reusable template.
+- Current-run limit: VT-116 only permits template/docs work and forbids the app
+  check needed to produce runtime product evidence.
