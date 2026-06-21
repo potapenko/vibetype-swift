@@ -1,7 +1,7 @@
 ---
 id: VT-150
 title: Menu Bar Identity Blocker Closeout
-status: backlog
+status: in-progress
 priority: P0
 lane: swift-app-shell
 dependencies:
@@ -18,7 +18,7 @@ verification:
 
 # VT-150 - Menu Bar Identity Blocker Closeout
 
-Status: backlog
+Status: in-progress
 Priority: P0
 Lane: swift-app-shell
 Dependencies: VT-000
