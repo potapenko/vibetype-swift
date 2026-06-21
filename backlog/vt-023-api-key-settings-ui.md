@@ -1,7 +1,7 @@
 ---
 id: VT-023
 title: API Key Settings UI
-status: backlog
+status: in-progress
 priority: P1
 lane: settings
 parent: VT-020
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-023 - API Key Settings UI
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
