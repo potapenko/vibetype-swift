@@ -1,7 +1,7 @@
 ---
 id: VT-155
 title: Transcription Error Mapping Closeout
-status: backlog
+status: in-progress
 priority: P1
 lane: transcription
 dependencies:
@@ -19,7 +19,7 @@ verification:
 
 # VT-155 - Transcription Error Mapping Closeout
 
-Status: backlog
+Status: in-progress
 Priority: P1
 Lane: transcription
 Dependencies: VT-052, VT-148
