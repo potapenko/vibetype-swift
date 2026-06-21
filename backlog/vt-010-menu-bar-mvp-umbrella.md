@@ -52,15 +52,28 @@ Close out the native menu bar MVP shell after its child tasks are implemented.
   configuration, or a verified product bug fix in the current run.
 - Archived completed child tasks `VT-015` and `VT-150` before claim so the
   active selector sees only current queue work.
+- 2026-06-22: `VT-158` produced a concrete product delta by adding executable
+  menu-surface state coverage (`MenuBarPresentation` and
+  `MenuBarPresentationTests`) for identity, permission copy, recording action
+  labels/enabled states, transcript display/copy state, Settings, and Quit.
+  The umbrella remains blocked because required Xcode build/test verification
+  timed out before compiler output or unit-test execution, and runtime menu QA
+  could not run without a fresh build product and a macOS menu interaction
+  tool.
 
 ## Resolution Path
 
-- Blocker category: no product delta possible from selected scope.
-- Follow-up: `VT-158` in `backlog/vt-158-menu-bar-mvp-runtime-closeout.md`.
-- Unblock condition: run `VT-158` to produce a concrete product delta for the
-  menu bar MVP closeout, either by adding executable menu-surface coverage or
-  by completing bounded runtime verification/repair against the built macOS
-  app, then update this umbrella with the resulting evidence.
-- Current run could not finish this directly because `VT-010` explicitly limits
-  allowed paths to backlog/spec closeout files and does not authorize Swift,
-  test, QA evidence, or app-run artifact changes.
+- Blocker category: local Xcode build/test tooling timeout before compiler or
+  unit-test execution; runtime menu QA also requires a build product and a
+  macOS UI interaction surface that can operate the menu bar extra.
+- Follow-up: `VT-158` in `backlog/vt-158-menu-bar-mvp-runtime-closeout.md`
+  now owns the executable closeout evidence and current blocker details.
+- Existing infrastructure evidence: `VT-148`
+  (`backlog/done/vt-148-xcode-build-service-health.md`) records the same
+  automation-recoverable Xcode build-service timeout class.
+- Unblock condition: rerun local tooling recovery, then rerun the VT-158 build
+  and focused unit-test gates until Xcode reaches compiler output and executes
+  `vibetypeTests`; perform bounded menu runtime QA if a macOS UI interaction
+  tool is available.
+- Current run could not mark this umbrella done because the new executable
+  menu coverage could not be verified through the required Xcode gates.

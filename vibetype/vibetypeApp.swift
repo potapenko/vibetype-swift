@@ -11,12 +11,6 @@ enum VibeTypeWindow {
     static let settings = "settings"
 }
 
-private enum VibeTypeMenuBarIdentity {
-    static let title = "VibeType"
-    static let systemImage = "mic.fill"
-    static let helpText = "VibeType Dictation"
-}
-
 @main
 struct VibeTypeApp: App {
     var body: some Scene {

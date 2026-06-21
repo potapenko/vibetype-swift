@@ -45,37 +45,37 @@ struct MenuBarView: View {
 
     var body: some View {
         Group {
-            Text("VibeType")
+            Text(presentation.appTitle)
                 .font(.headline)
 
-            Text(dictationStatus.menuStatusText)
+            Text(presentation.statusText)
                 .foregroundStyle(.secondary)
 
-            Text(microphonePermissionStatus.menuStatusText)
+            Text(presentation.microphoneStatusText)
                 .foregroundStyle(.secondary)
 
-            if let microphoneDetailText = microphonePermissionStatus.menuDetailText {
+            if let microphoneDetailText = presentation.microphoneDetailText {
                 Text(microphoneDetailText)
                     .foregroundStyle(.secondary)
             }
 
-            if microphonePermissionStatus == .denied {
-                Button("Open Microphone Settings") {
+            if let microphoneSettingsActionTitle = presentation.microphoneSettingsActionTitle {
+                Button(microphoneSettingsActionTitle) {
                     microphonePermissionService.openMicrophoneSettings()
                     refreshMicrophonePermissionStatus()
                 }
             }
 
-            Text(accessibilityPermissionStatus.menuStatusText)
+            Text(presentation.accessibilityStatusText)
                 .foregroundStyle(.secondary)
 
-            if let accessibilityDetailText = accessibilityPermissionStatus.menuDetailText {
+            if let accessibilityDetailText = presentation.accessibilityDetailText {
                 Text(accessibilityDetailText)
                     .foregroundStyle(.secondary)
             }
 
-            if !accessibilityPermissionStatus.canPasteIntoActiveApp {
-                Button("Open Accessibility Settings") {
+            if let accessibilitySettingsActionTitle = presentation.accessibilitySettingsActionTitle {
+                Button(accessibilitySettingsActionTitle) {
                     accessibilityPermissionService.openAccessibilitySettings()
                     refreshAccessibilityPermissionStatus()
                 }
@@ -83,38 +83,38 @@ struct MenuBarView: View {
 
             Divider()
 
-            Button(recordingActionTitle) {
+            Button(presentation.recordingActionTitle) {
                 performRecordingAction()
             }
-            .disabled(!isRecordingActionEnabled)
+            .disabled(!presentation.isRecordingActionEnabled)
 
-            if let detailText = dictationStatus.detailText {
+            if let detailText = presentation.dictationDetailText {
                 Text(detailText)
                     .foregroundStyle(.secondary)
             }
 
             Divider()
 
-            Text("Last Transcript")
+            Text(MenuBarPresentation.lastTranscriptTitle)
                 .font(.subheadline)
 
-            Text(dictationStatus.lastTranscriptMenuText)
+            Text(presentation.lastTranscriptText)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
 
-            Button("Copy Last Transcript") {
+            Button(MenuBarPresentation.copyLastTranscriptTitle) {
                 copyLastTranscript()
             }
-            .disabled(!dictationStatus.canCopyLastTranscript)
+            .disabled(!presentation.canCopyLastTranscript)
 
-            if let clipboardStatusText {
+            if let clipboardStatusText = presentation.clipboardStatusText {
                 Text(clipboardStatusText)
                     .foregroundStyle(.secondary)
             }
 
             Divider()
 
-            Button("Settings") {
+            Button(MenuBarPresentation.settingsTitle) {
                 openWindow(id: VibeTypeWindow.settings)
                 NSApplication.shared.activate(ignoringOtherApps: true)
             }
@@ -122,7 +122,7 @@ struct MenuBarView: View {
 
             Divider()
 
-            Button("Quit VibeType") {
+            Button(MenuBarPresentation.quitTitle) {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q")
@@ -152,17 +152,13 @@ struct MenuBarView: View {
         }
     }
 
-    private var recordingActionTitle: String {
-        switch microphonePermissionStatus {
-        case .notDetermined:
-            return "Request Microphone Access"
-        case .allowed, .denied, .unavailable:
-            return dictationStatus.recordingActionTitle
-        }
-    }
-
-    private var isRecordingActionEnabled: Bool {
-        dictationStatus.isRecordingActionEnabled && microphonePermissionStatus.canUseRecordingAction
+    private var presentation: MenuBarPresentation {
+        MenuBarPresentation(
+            dictationStatus: dictationStatus,
+            microphonePermissionStatus: microphonePermissionStatus,
+            accessibilityPermissionStatus: accessibilityPermissionStatus,
+            clipboardStatusText: clipboardStatusText
+        )
     }
 
     private func performRecordingAction() {
