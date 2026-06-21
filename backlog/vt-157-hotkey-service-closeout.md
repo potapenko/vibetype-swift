@@ -1,7 +1,7 @@
 ---
 id: VT-157
 title: Hotkey Service Blocker Closeout
-status: backlog
+status: in-progress
 priority: P2
 lane: hotkey
 dependencies:
@@ -20,7 +20,7 @@ verification:
 
 # VT-157 - Hotkey Service Blocker Closeout
 
-Status: backlog
+Status: in-progress
 Priority: P2
 Lane: hotkey
 Dependencies: VT-000, VT-002, VT-148
