@@ -1,7 +1,7 @@
 ---
 id: VT-151
 title: API Key Settings Blocker Closeout
-status: backlog
+status: in-progress
 priority: P1
 lane: settings
 dependencies:
@@ -20,7 +20,7 @@ verification:
 
 # VT-151 - API Key Settings Blocker Closeout
 
-Status: backlog
+Status: in-progress
 Priority: P1
 Lane: settings
 Dependencies: VT-013, VT-022, VT-148
