@@ -1,7 +1,7 @@
 ---
 id: VT-157
 title: Hotkey Service Blocker Closeout
-status: blocked
+status: done
 priority: P2
 lane: hotkey
 dependencies:
@@ -20,7 +20,7 @@ verification:
 
 # VT-157 - Hotkey Service Blocker Closeout
 
-Status: blocked
+Status: done
 Priority: P2
 Lane: hotkey
 Dependencies: VT-000, VT-002, VT-148
@@ -94,3 +94,15 @@ gate.
 - The current run could not mark `VT-071` or `VT-157` done because the required
   focused unit-test gate still did not execute after recovery and a bounded
   retry.
+
+## Completion Evidence
+
+- 2026-06-22 11:23 CEST: local tooling recovery succeeded, terminated stale
+  `SWBBuildService` pid 3403, and removed run-generated `scripts/__pycache__`
+  plus project-scoped DerivedData.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests` reached and passed the focused macOS unit-test
+  target, including `GlobalHotkeyServiceTests`.
+- `git diff --check` passed.
+- `VT-071` is marked done with current hotkey service boundary evidence.

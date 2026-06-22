@@ -1,7 +1,7 @@
 ---
 id: VT-071
 title: Hotkey Service Interface
-status: blocked
+status: done
 priority: P2
 lane: hotkey
 parent: VT-070
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-071 - Hotkey Service Interface
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -85,3 +85,17 @@ Add a Swift-native service boundary for global hotkey registration.
 - Existing infrastructure evidence: `VT-148`
   (`backlog/done/vt-148-xcode-build-service-health.md`) records the same
   automation-recoverable Xcode external-tool probe timeout class.
+
+## Completion Evidence
+
+- 2026-06-22 11:23 CEST: local tooling recovery succeeded, terminated stale
+  `SWBBuildService` pid 3403, and removed run-generated `scripts/__pycache__`
+  plus project-scoped DerivedData.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests` reached and passed the focused macOS unit-test
+  target, including `GlobalHotkeyServiceTests`.
+- `git diff --check` passed.
+- No source edits were needed; the previously implemented hotkey service
+  boundary, default shortcut data, and fake-backed test seam now have current
+  verification evidence.

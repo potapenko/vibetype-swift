@@ -1,7 +1,7 @@
 ---
 id: VT-041
 title: Recorder Protocol And Fake
-status: blocked
+status: done
 priority: P1
 lane: recording
 parent: VT-040
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-041 - Recorder Protocol And Fake
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -112,3 +112,17 @@ Create the recorder service boundary before adding AVFoundation details.
   source edits. If the command still fails, record the recovery JSON summary,
   the fresh bounded command result, and continue automatic tooling repair before
   recording any non-tooling boundary.
+
+## Completion Evidence
+
+- 2026-06-22 11:23 CEST: local tooling recovery succeeded, terminated stale
+  `SWBBuildService` pid 3403, and removed run-generated `scripts/__pycache__`
+  plus project-scoped DerivedData.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests` reached and passed the focused macOS unit-test
+  target, including `AudioRecorderServiceTests`.
+- `git diff --check` passed.
+- No source edits were needed; the previously implemented recorder protocol,
+  status model, fake recorder, and fake-backed tests now have current
+  verification evidence.

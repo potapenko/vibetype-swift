@@ -20,7 +20,11 @@ Run one bounded blocked-task resolution pass.
 This automation is not the normal implementer and not the backlog groomer. Its
 job is to keep blocked tasks actionable by directly resolving one blocked task
 when safe, or by creating/refining exactly one follow-up task whose completion
-would unblock it.
+would unblock it. When the selected task is a stale verification blocker and a
+single fresh recovery/test pass proves an explicitly linked closeout task or
+other same-cause verification blocker, the resolver may close that small
+verification batch in the same commit instead of leaving stale blocked noise
+behind.
 
 Use the configured canonical checkout as the source of truth. Historical run
 memory is context only; it does not mark tasks complete and must not override
@@ -151,6 +155,18 @@ operator-only without this recovery/retry evidence.
 
 If direct resolution succeeds, mark the selected task `done`, record fresh
 verification evidence, stage only resolver-owned changes, and commit.
+
+For stale verification blockers, do not stop after updating only the originally
+selected task when the repository already contains paired closeout tasks for the
+same blocker. Search the active backlog for the selected task id, `closeout`,
+and the same bounded verification command. If the same recovery/test result
+satisfies those paired closeout tasks, mark the selected original task and the
+paired closeout task `done` together. If several blocked tasks share the same
+local Xcode/build-service timeout and the same passing focused command, the
+resolver may close that narrow batch together, capped to tasks whose resolution
+paths already say they can be marked done after that command passes. This is
+not permission to bulk-edit unrelated blocked tasks, runtime-QA blockers, or
+product-scope blockers.
 
 If direct resolution is not safe or not possible, create or refine exactly one
 follow-up backlog task that can remove the blocker. Before creating a new task,

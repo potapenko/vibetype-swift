@@ -1,7 +1,7 @@
 ---
 id: VT-053
 title: Transcription Error Mapping
-status: blocked
+status: done
 priority: P1
 lane: transcription
 parent: VT-050
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-053 - Transcription Error Mapping
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -105,3 +105,17 @@ messages.
   `python3 scripts/local_tooling_recover.py --apply --json`, append fresh
   recovery/retry evidence to this task and keep `VT-155` blocked for a later
   closeout retry.
+
+## Completion Evidence
+
+- 2026-06-22 11:23 CEST: local tooling recovery succeeded, terminated stale
+  `SWBBuildService` pid 3403, and removed run-generated `scripts/__pycache__`
+  plus project-scoped DerivedData.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests` reached and passed the focused macOS unit-test
+  target, including `OpenAITranscriptionServiceTests`.
+- `git diff --check` passed.
+- No source edits were needed; the previously implemented error mapping,
+  service behavior, spec update, and fake-backed tests now have current
+  verification evidence.

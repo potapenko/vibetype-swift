@@ -1,7 +1,7 @@
 ---
 id: VT-154
 title: Recorder Protocol Blocker Closeout
-status: blocked
+status: done
 priority: P1
 lane: recording
 dependencies:
@@ -19,7 +19,7 @@ verification:
 
 # VT-154 - Recorder Protocol Blocker Closeout
 
-Status: blocked
+Status: done
 Priority: P1
 Lane: recording
 Dependencies: VT-000, VT-148
@@ -91,3 +91,15 @@ work can become dependency-ready.
   only the full UI-test runner requires off-console access. If it still times
   out before execution, continue automatic local Xcode tooling repair and
   append fresh recovery/retry evidence.
+
+## Completion Evidence
+
+- 2026-06-22 11:23 CEST: local tooling recovery succeeded, terminated stale
+  `SWBBuildService` pid 3403, and removed run-generated `scripts/__pycache__`
+  plus project-scoped DerivedData.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests` reached and passed the focused macOS unit-test
+  target.
+- `git diff --check` passed.
+- `VT-041` is marked done with current focused unit-test evidence.

@@ -28,6 +28,14 @@ Each resolver run should:
 9. Commit only the resolver-owned backlog, spec, workflow, or narrowly scoped
    code changes.
 
+If the selected blocker is stale verification debt and the same fresh recovery
+plus bounded verification command satisfies explicitly linked closeout tasks or
+other same-cause verification blockers, the resolver may close that narrow
+verification batch together. The batch must be capped to tasks whose resolution
+paths already say that passing command is enough to mark them done. This does
+not allow bulk-editing unrelated blocked tasks, runtime-QA blockers, or tasks
+that still need product implementation.
+
 ## Selection
 
 Blocked selection is deterministic:

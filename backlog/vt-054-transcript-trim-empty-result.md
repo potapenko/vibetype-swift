@@ -1,7 +1,7 @@
 ---
 id: VT-054
 title: Transcript Trim Empty Result
-status: blocked
+status: done
 priority: P1
 lane: transcription
 parent: VT-050
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-054 - Transcript Trim Empty Result
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -90,3 +90,17 @@ Normalize transcription output before it reaches clipboard or paste workflows.
   wiring, menu/copy guard, spec update, and focused tests are already present.
 - If Xcode still blocks before test execution, record the fresh bounded Xcode
   blocker and keep the `swiftc` check only as narrow sanity evidence.
+
+## Completion Evidence
+
+- 2026-06-22 11:23 CEST: local tooling recovery succeeded, terminated stale
+  `SWBBuildService` pid 3403, and removed run-generated `scripts/__pycache__`
+  plus project-scoped DerivedData.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests` reached and passed the focused macOS unit-test
+  target, including the transcript normalization and menu/copy guard tests.
+- `git diff --check` passed.
+- No source edits were needed; the previously implemented accepted-transcript
+  normalization, service wiring, menu/copy guard, spec update, and tests now
+  have current verification evidence.
