@@ -154,12 +154,12 @@ private extension FloatingIndicatorPresentation.Phase {
         switch self {
         case .recording:
             if colorScheme == .light {
-                return Color(red: 0.0, green: 0.42, blue: 0.52)
+                return Color(red: 0.031, green: 0.545, blue: 0.941)
             }
             return Color(red: 0.22, green: 0.89, blue: 1.0)
         case .transcribing:
             if colorScheme == .light {
-                return Color(red: 0.42, green: 0.13, blue: 0.78)
+                return Color(red: 0.388, green: 0.078, blue: 0.894)
             }
             return Color(red: 0.67, green: 0.34, blue: 1.0)
         }
