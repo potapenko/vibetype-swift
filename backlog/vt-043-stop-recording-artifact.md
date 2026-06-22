@@ -1,7 +1,7 @@
 ---
 id: VT-043
 title: Stop Recording Artifact
-status: in-progress
+status: done
 priority: P1
 lane: recording
 parent: VT-040
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-043 - Stop Recording Artifact
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -39,3 +39,23 @@ transcription.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Completion Evidence
+
+2026-06-22:
+
+- Added `AudioRecordingArtifact` as the stop result for completed recording
+  files, including file URL, duration, and byte-count metadata.
+- Updated the AVFoundation recorder stop path to reject missing, empty, and
+  too-short completed files with controlled recording errors before any
+  transcription upload can consume them.
+- Updated fake recorder/test coverage for successful artifact metadata,
+  missing completed file, empty completed file, and too-short completed file
+  behavior.
+- Updated the microphone text-input spec to make completed recording artifact
+  metadata and invalid-artifact rejection part of the product contract.
+- Verification passed:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`;
+  `git diff --check`.
+- Runtime QA was not applicable because this slice changes non-UI recorder
+  service behavior covered by fake-backed tests and full scheme test evidence.

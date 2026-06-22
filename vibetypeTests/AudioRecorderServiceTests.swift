@@ -13,29 +13,35 @@ import Testing
 struct AudioRecorderServiceTests {
 
     @Test func statusExposesRecordingState() {
+        let artifact = AudioRecordingArtifact(
+            fileURL: URL(fileURLWithPath: "/tmp/vibetype-test.m4a"),
+            duration: 1.2,
+            byteCount: 512
+        )
+
         #expect(AudioRecorderStatus.idle.isRecording == false)
         #expect(AudioRecorderStatus.recording.isRecording)
-        #expect(
-            AudioRecorderStatus.finished(
-                audioFileURL: URL(fileURLWithPath: "/tmp/vibetype-test.m4a")
-            ).isRecording == false
-        )
+        #expect(AudioRecorderStatus.finished(artifact: artifact).isRecording == false)
         #expect(AudioRecorderStatus.cancelled.isRecording == false)
     }
 
     @Test func fakeRecorderTracksSuccessfulLifecycle() async throws {
-        let audioFileURL = URL(fileURLWithPath: "/tmp/vibetype-success.m4a")
-        let recorder = FakeAudioRecorderService(stopResult: .success(audioFileURL))
+        let artifact = AudioRecordingArtifact(
+            fileURL: URL(fileURLWithPath: "/tmp/vibetype-success.m4a"),
+            duration: 1.4,
+            byteCount: 2048
+        )
+        let recorder = FakeAudioRecorderService(stopResult: .success(artifact))
 
         #expect(recorder.currentStatus == .idle)
 
         try await recorder.startRecording()
         #expect(recorder.currentStatus == .recording)
 
-        let stoppedFileURL = try await recorder.stopRecording()
+        let stoppedArtifact = try await recorder.stopRecording()
 
-        #expect(stoppedFileURL == audioFileURL)
-        #expect(recorder.currentStatus == .finished(audioFileURL: audioFileURL))
+        #expect(stoppedArtifact == artifact)
+        #expect(recorder.currentStatus == .finished(artifact: artifact))
         #expect(recorder.startCount == 1)
         #expect(recorder.stopCount == 1)
         #expect(recorder.cancelCount == 0)
@@ -98,14 +104,18 @@ struct AudioRecorderServiceTests {
     }
 
     @Test func appCodeCanDependOnRecorderProtocol() async throws {
-        let audioFileURL = URL(fileURLWithPath: "/tmp/vibetype-protocol.m4a")
-        let recorder = FakeAudioRecorderService(stopResult: .success(audioFileURL))
+        let artifact = AudioRecordingArtifact(
+            fileURL: URL(fileURLWithPath: "/tmp/vibetype-protocol.m4a"),
+            duration: 0.8,
+            byteCount: 300
+        )
+        let recorder = FakeAudioRecorderService(stopResult: .success(artifact))
         let consumer = RecorderConsumer(recorder: recorder)
 
         let result = try await consumer.recordOnce()
 
-        #expect(result == audioFileURL)
-        #expect(recorder.currentStatus == .finished(audioFileURL: audioFileURL))
+        #expect(result == artifact)
+        #expect(recorder.currentStatus == .finished(artifact: artifact))
     }
 
     @Test func avFoundationRecorderRejectsStartWhenMicrophoneIsNotAllowed() async {
@@ -133,15 +143,17 @@ struct AudioRecorderServiceTests {
         )
     }
 
-    @Test func avFoundationRecorderPreparesTemporaryM4ARecordingPath() async throws {
-        let outputFileURL = URL(fileURLWithPath: "/tmp/vibetype-recording-\(UUID().uuidString).m4a")
-        let engine = FakeAudioRecorderEngine()
+    @Test func avFoundationRecorderReturnsCompletedArtifactMetadata() async throws {
+        let outputFileURL = makeTemporaryRecordingFileURL()
+        let fileContents = Data([0x01, 0x02, 0x03, 0x04])
+        let engine = FakeAudioRecorderEngine(currentTime: 1.7)
         let factory = CapturingAudioRecorderEngineFactory(engine: engine)
         let recorder = AVFoundationAudioRecorderService(
             permissionStatusProvider: { .allowed },
             recorderFactory: factory,
             makeRecordingFileURL: { outputFileURL }
         )
+        defer { try? FileManager.default.removeItem(at: outputFileURL) }
 
         try await recorder.startRecording()
 
@@ -153,10 +165,14 @@ struct AudioRecorderServiceTests {
         #expect(engine.recordCallCount == 1)
         #expect(engine.isRecording)
 
-        let stoppedURL = try await recorder.stopRecording()
+        try fileContents.write(to: outputFileURL)
 
-        #expect(stoppedURL == outputFileURL)
-        #expect(recorder.currentStatus == .finished(audioFileURL: outputFileURL))
+        let artifact = try await recorder.stopRecording()
+
+        #expect(artifact.fileURL == outputFileURL)
+        #expect(artifact.duration == 1.7)
+        #expect(artifact.byteCount == Int64(fileContents.count))
+        #expect(recorder.currentStatus == .finished(artifact: artifact))
         #expect(engine.stopCallCount == 1)
     }
 
@@ -211,12 +227,110 @@ struct AudioRecorderServiceTests {
             )
         )
     }
+
+    @Test func avFoundationRecorderRejectsMissingCompletedFile() async throws {
+        let outputFileURL = makeTemporaryRecordingFileURL()
+        let engine = FakeAudioRecorderEngine(currentTime: 1.0)
+        let factory = CapturingAudioRecorderEngineFactory(engine: engine)
+        let recorder = AVFoundationAudioRecorderService(
+            permissionStatusProvider: { .allowed },
+            recorderFactory: factory,
+            makeRecordingFileURL: { outputFileURL }
+        )
+
+        try await recorder.startRecording()
+
+        do {
+            _ = try await recorder.stopRecording()
+            Issue.record("Expected stopRecording to throw")
+        } catch let error as AudioRecorderServiceError {
+            #expect(error == .missingRecordingFile)
+        } catch {
+            Issue.record("Expected AudioRecorderServiceError, got \(error)")
+        }
+
+        #expect(engine.stopCallCount == 1)
+        #expect(engine.deleteCallCount == 1)
+        #expect(
+            recorder.currentStatus == .failed(
+                message: AudioRecorderServiceError.missingRecordingFile.errorDescription ?? ""
+            )
+        )
+    }
+
+    @Test func avFoundationRecorderRejectsEmptyCompletedFile() async throws {
+        let outputFileURL = makeTemporaryRecordingFileURL()
+        let engine = FakeAudioRecorderEngine(currentTime: 1.0)
+        let factory = CapturingAudioRecorderEngineFactory(engine: engine)
+        let recorder = AVFoundationAudioRecorderService(
+            permissionStatusProvider: { .allowed },
+            recorderFactory: factory,
+            makeRecordingFileURL: { outputFileURL }
+        )
+        defer { try? FileManager.default.removeItem(at: outputFileURL) }
+
+        try await recorder.startRecording()
+        try Data().write(to: outputFileURL)
+
+        do {
+            _ = try await recorder.stopRecording()
+            Issue.record("Expected stopRecording to throw")
+        } catch let error as AudioRecorderServiceError {
+            #expect(error == .emptyRecording)
+        } catch {
+            Issue.record("Expected AudioRecorderServiceError, got \(error)")
+        }
+
+        #expect(engine.stopCallCount == 1)
+        #expect(engine.deleteCallCount == 1)
+        #expect(
+            recorder.currentStatus == .failed(
+                message: AudioRecorderServiceError.emptyRecording.errorDescription ?? ""
+            )
+        )
+    }
+
+    @Test func avFoundationRecorderRejectsTooShortCompletedFile() async throws {
+        let outputFileURL = makeTemporaryRecordingFileURL()
+        let engine = FakeAudioRecorderEngine(currentTime: 0.1)
+        let factory = CapturingAudioRecorderEngineFactory(engine: engine)
+        let recorder = AVFoundationAudioRecorderService(
+            permissionStatusProvider: { .allowed },
+            recorderFactory: factory,
+            minimumRecordingDuration: 0.5,
+            makeRecordingFileURL: { outputFileURL }
+        )
+        defer { try? FileManager.default.removeItem(at: outputFileURL) }
+
+        try await recorder.startRecording()
+        try Data([0x01]).write(to: outputFileURL)
+
+        do {
+            _ = try await recorder.stopRecording()
+            Issue.record("Expected stopRecording to throw")
+        } catch let error as AudioRecorderServiceError {
+            #expect(error == .recordingTooShort(duration: 0.1, minimumDuration: 0.5))
+        } catch {
+            Issue.record("Expected AudioRecorderServiceError, got \(error)")
+        }
+
+        #expect(engine.stopCallCount == 1)
+        #expect(engine.deleteCallCount == 1)
+        #expect(
+            recorder.currentStatus == .failed(
+                message: AudioRecorderServiceError.recordingTooShort(
+                    duration: 0.1,
+                    minimumDuration: 0.5
+                ).errorDescription ?? ""
+            )
+        )
+    }
 }
 
 private struct RecorderConsumer {
     let recorder: any AudioRecorderService
 
-    func recordOnce() async throws -> URL {
+    func recordOnce() async throws -> AudioRecordingArtifact {
         try await recorder.startRecording()
         return try await recorder.stopRecording()
     }
@@ -248,12 +362,14 @@ private final class FakeAudioRecorderEngine: AudioRecorderEngine {
     private let recordResult: Bool
 
     private(set) var isRecording = false
+    let currentTime: TimeInterval
     private(set) var recordCallCount = 0
     private(set) var stopCallCount = 0
     private(set) var deleteCallCount = 0
 
-    init(recordResult: Bool = true) {
+    init(recordResult: Bool = true, currentTime: TimeInterval = 1.0) {
         self.recordResult = recordResult
+        self.currentTime = currentTime
     }
 
     func record() -> Bool {
@@ -271,4 +387,10 @@ private final class FakeAudioRecorderEngine: AudioRecorderEngine {
         deleteCallCount += 1
         return true
     }
+}
+
+private func makeTemporaryRecordingFileURL() -> URL {
+    FileManager.default.temporaryDirectory
+        .appendingPathComponent("vibetype-test-recording-\(UUID().uuidString)")
+        .appendingPathExtension("m4a")
 }

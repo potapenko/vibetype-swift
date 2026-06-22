@@ -15,13 +15,17 @@ final class FakeAudioRecorderService: AudioRecorderService {
     private(set) var currentStatus: AudioRecorderStatus
 
     var startResult: Result<Void, AudioRecorderServiceError>
-    var stopResult: Result<URL, AudioRecorderServiceError>
+    var stopResult: Result<AudioRecordingArtifact, AudioRecorderServiceError>
 
     init(
         currentStatus: AudioRecorderStatus = .idle,
         startResult: Result<Void, AudioRecorderServiceError> = .success(()),
-        stopResult: Result<URL, AudioRecorderServiceError> = .success(
-            URL(fileURLWithPath: "/tmp/vibetype-fake-recording.m4a")
+        stopResult: Result<AudioRecordingArtifact, AudioRecorderServiceError> = .success(
+            AudioRecordingArtifact(
+                fileURL: URL(fileURLWithPath: "/tmp/vibetype-fake-recording.m4a"),
+                duration: 1.2,
+                byteCount: 1024
+            )
         )
     ) {
         self.currentStatus = currentStatus
@@ -41,13 +45,13 @@ final class FakeAudioRecorderService: AudioRecorderService {
         }
     }
 
-    func stopRecording() async throws -> URL {
+    func stopRecording() async throws -> AudioRecordingArtifact {
         stopCount += 1
 
         do {
-            let audioFileURL = try stopResult.get()
-            currentStatus = .finished(audioFileURL: audioFileURL)
-            return audioFileURL
+            let artifact = try stopResult.get()
+            currentStatus = .finished(artifact: artifact)
+            return artifact
         } catch let error as AudioRecorderServiceError {
             currentStatus = .failed(message: error.errorDescription ?? error.localizedDescription)
             throw error

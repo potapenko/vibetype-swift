@@ -8,10 +8,16 @@
 import AVFoundation
 import Foundation
 
+struct AudioRecordingArtifact: Equatable {
+    let fileURL: URL
+    let duration: TimeInterval
+    let byteCount: Int64
+}
+
 enum AudioRecorderStatus: Equatable {
     case idle
     case recording
-    case finished(audioFileURL: URL)
+    case finished(artifact: AudioRecordingArtifact)
     case cancelled
     case failed(message: String)
 
@@ -24,7 +30,7 @@ protocol AudioRecorderService {
     var currentStatus: AudioRecorderStatus { get }
 
     func startRecording() async throws
-    func stopRecording() async throws -> URL
+    func stopRecording() async throws -> AudioRecordingArtifact
     func cancelRecording()
 }
 
@@ -36,6 +42,9 @@ enum AudioRecorderServiceError: Error, Equatable, LocalizedError {
     case temporaryFileUnavailable
     case startFailed
     case stopFailed
+    case missingRecordingFile
+    case emptyRecording
+    case recordingTooShort(duration: TimeInterval, minimumDuration: TimeInterval)
 
     var errorDescription: String? {
         switch self {
@@ -53,12 +62,19 @@ enum AudioRecorderServiceError: Error, Equatable, LocalizedError {
             return "Could not start microphone recording."
         case .stopFailed:
             return "Could not finish the current recording."
+        case .missingRecordingFile:
+            return "The completed recording file is missing."
+        case .emptyRecording:
+            return "No audio was captured. Try recording again."
+        case .recordingTooShort:
+            return "Recording was too short. Try speaking for a little longer."
         }
     }
 }
 
 protocol AudioRecorderEngine: AnyObject {
     var isRecording: Bool { get }
+    var currentTime: TimeInterval { get }
 
     func record() -> Bool
     func stop()
@@ -95,6 +111,8 @@ final class AVFoundationAudioRecorderService: AudioRecorderService {
     private let permissionStatusProvider: () -> MicrophonePermissionStatus
     private let recorderFactory: any AudioRecorderEngineFactory
     private let makeRecordingFileURL: () throws -> URL
+    private let fileManager: FileManager
+    private let minimumRecordingDuration: TimeInterval
 
     private var activeRecorder: (any AudioRecorderEngine)?
     private var activeFileURL: URL?
@@ -106,12 +124,16 @@ final class AVFoundationAudioRecorderService: AudioRecorderService {
             MicrophonePermissionService().currentStatus()
         },
         recorderFactory: any AudioRecorderEngineFactory = AVFoundationAudioRecorderEngineFactory(),
+        fileManager: FileManager = .default,
+        minimumRecordingDuration: TimeInterval = 0.3,
         makeRecordingFileURL: @escaping () throws -> URL = {
             try AVFoundationAudioRecorderService.makeDefaultRecordingFileURL()
         }
     ) {
         self.permissionStatusProvider = permissionStatusProvider
         self.recorderFactory = recorderFactory
+        self.fileManager = fileManager
+        self.minimumRecordingDuration = minimumRecordingDuration
         self.makeRecordingFileURL = makeRecordingFileURL
     }
 
@@ -154,16 +176,30 @@ final class AVFoundationAudioRecorderService: AudioRecorderService {
         }
     }
 
-    func stopRecording() async throws -> URL {
+    func stopRecording() async throws -> AudioRecordingArtifact {
         guard let recorder = activeRecorder, let outputFileURL = activeFileURL else {
             throw AudioRecorderServiceError.notRecording
         }
 
+        let duration = max(0, recorder.currentTime)
         recorder.stop()
         activeRecorder = nil
         activeFileURL = nil
-        currentStatus = .finished(audioFileURL: outputFileURL)
-        return outputFileURL
+
+        do {
+            let artifact = try recordingArtifact(at: outputFileURL, duration: duration)
+            currentStatus = .finished(artifact: artifact)
+            return artifact
+        } catch let error as AudioRecorderServiceError {
+            recorder.deleteRecording()
+            fail(with: error)
+            throw error
+        } catch {
+            let serviceError = AudioRecorderServiceError.stopFailed
+            recorder.deleteRecording()
+            fail(with: serviceError)
+            throw serviceError
+        }
     }
 
     func cancelRecording() {
@@ -187,6 +223,38 @@ final class AVFoundationAudioRecorderService: AudioRecorderService {
 
     private func fail(with error: AudioRecorderServiceError) {
         currentStatus = .failed(message: error.errorDescription ?? error.localizedDescription)
+    }
+
+    private func recordingArtifact(at outputFileURL: URL, duration: TimeInterval) throws -> AudioRecordingArtifact {
+        let path = outputFileURL.path
+        var isDirectory: ObjCBool = false
+
+        guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+            throw AudioRecorderServiceError.missingRecordingFile
+        }
+
+        let attributes = try fileManager.attributesOfItem(atPath: path)
+        guard let fileSize = attributes[.size] as? NSNumber else {
+            throw AudioRecorderServiceError.stopFailed
+        }
+
+        let byteCount = fileSize.int64Value
+        guard byteCount > 0 else {
+            throw AudioRecorderServiceError.emptyRecording
+        }
+
+        guard duration >= minimumRecordingDuration else {
+            throw AudioRecorderServiceError.recordingTooShort(
+                duration: duration,
+                minimumDuration: minimumRecordingDuration
+            )
+        }
+
+        return AudioRecordingArtifact(
+            fileURL: outputFileURL,
+            duration: duration,
+            byteCount: byteCount
+        )
     }
 
     private static var recordingSettings: [String: Any] {

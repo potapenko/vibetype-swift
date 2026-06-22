@@ -39,6 +39,9 @@ This spec covers:
 - While microphone capture is active, the app must show an unmistakable
   recording state.
 - The user must be able to stop an active recording session.
+- Stopping an active recording returns a completed local recording artifact
+  with the file URL, captured duration, and byte size before transcription may
+  begin.
 - The user must be able to cancel a session before accepting or handing off the
   generated text.
 - After capture stops, the app may enter a processing state while
@@ -88,6 +91,8 @@ This spec covers:
   stop or fail visibly rather than continue recording invisibly.
 - If the recording is too short, the app should show a clear error instead of
   sending misleading empty input through the normal success path.
+- Missing, empty, or too-short completed recording artifacts must be treated as
+  failed recording results and must not be sent to OpenAI.
 
 ## Route / state / data implications
 
@@ -105,6 +110,9 @@ unless a future persistence or debug spec explicitly says otherwise.
 The recording service should create unique temporary `.m4a` audio artifacts for
 capture attempts and keep those paths local to the current session until stop,
 cancel, cleanup, or failure handling decides their next state.
+Completed recording artifacts carry file URL, duration, and byte-count metadata
+so downstream transcription can validate input without reading raw audio into
+default logs.
 
 ## Verification mapping
 
