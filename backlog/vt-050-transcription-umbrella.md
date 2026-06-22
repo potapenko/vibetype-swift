@@ -1,7 +1,7 @@
 ---
 id: VT-050
 title: OpenAI Transcription Umbrella
-status: backlog
+status: in-progress
 priority: P1
 lane: transcription
 dependencies:
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-050 - OpenAI Transcription Umbrella
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
