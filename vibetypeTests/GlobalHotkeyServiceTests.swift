@@ -14,19 +14,19 @@ struct GlobalHotkeyServiceTests {
         let configuration = GlobalHotkeyConfiguration.defaultDictation
 
         #expect(configuration.shortcut == .defaultDictation)
-        #expect(configuration.shortcut.displayText == "Option+Space")
+        #expect(configuration.shortcut.displayText == "Right Command")
         #expect(configuration.activationMode == .holdToRecord)
         #expect(configuration.stopsRecordingOnKeyUp)
-        #expect(configuration.displayText == "Option+Space - Hold to record")
+        #expect(configuration.displayText == "Right Command - Hold to record")
     }
 
-    @Test func fallbackShortcutUsesControlOptionSpace() {
+    @Test func fallbackShortcutUsesGlobeFn() {
         let configuration = GlobalHotkeyConfiguration.fallbackDictation
 
         #expect(configuration.shortcut == .fallbackDictation)
-        #expect(configuration.shortcut.displayText == "Control+Option+Space")
+        #expect(configuration.shortcut.displayText == "Globe/Fn")
         #expect(configuration.stopsRecordingOnKeyUp)
-        #expect(configuration.displayText == "Control+Option+Space - Hold to record")
+        #expect(configuration.displayText == "Globe/Fn - Hold to record")
     }
 
     @Test func holdToRecordStartsOnKeyDownAndStopsOnMatchingKeyUp() {
@@ -69,7 +69,7 @@ struct GlobalHotkeyServiceTests {
         )
 
         #expect(configuration.stopsRecordingOnKeyUp == false)
-        #expect(configuration.displayText == "Option+Space - Toggle")
+        #expect(configuration.displayText == "Right Command - Toggle")
         #expect(
             configuration.recordingCommand(
                 for: .keyDown,
@@ -152,7 +152,7 @@ struct GlobalHotkeyServiceTests {
     @Test func fakeHotkeyCanSimulateRegistrationFailure() {
         let service = FakeGlobalHotkeyService(
             startListeningResult: .failure(
-                .registrationUnavailable(message: "Option+Space is already in use.")
+                .registrationUnavailable(message: "Right Command is already in use.")
             )
         )
         var receivedActions: [GlobalHotkeyAction] = []
@@ -165,7 +165,7 @@ struct GlobalHotkeyServiceTests {
         } catch let error as GlobalHotkeyServiceError {
             #expect(
                 error == .registrationUnavailable(
-                    message: "Option+Space is already in use."
+                    message: "Right Command is already in use."
                 )
             )
         } catch {
@@ -177,7 +177,7 @@ struct GlobalHotkeyServiceTests {
         #expect(service.startListeningCount == 1)
         #expect(
             service.currentRegistrationStatus == .unavailable(
-                message: "Option+Space is already in use."
+                message: "Right Command is already in use."
             )
         )
         #expect(service.triggeredActions == [.keyDown])

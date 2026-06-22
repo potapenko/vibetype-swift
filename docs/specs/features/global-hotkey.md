@@ -24,14 +24,21 @@ This spec covers:
 
 ## User-visible behavior
 
-- The MVP default shortcut is `Option+Space`.
+- The MVP default dictation shortcut is `Right Command` as a single-key
+  hold-to-record shortcut.
+- The alternate dictation shortcut option is `Globe/Fn` as a single-key
+  hold-to-record shortcut for keyboards that expose that key.
 - The app must not use `Command+Space` as the default because that commonly
   belongs to Spotlight.
+- The app must not use `Option+Space` or `Control+Space` as the default
+  dictation shortcut.
 - The shortcut should use hold-to-record when the native macOS implementation
   can observe both key down and key up reliably.
 - The MVP configuration prefers hold-to-record for both the default shortcut
-  and automatic fallback shortcut; toggle mode is only the fallback when the
-  native event path cannot safely deliver key-up events.
+  and the Globe/Fn alternate; toggle mode is only the fallback when the native
+  event path cannot safely deliver key-up events.
+- The native implementation must distinguish `Right Command` from generic
+  Command before presenting it as the active shortcut.
 - In hold-to-record mode:
   - key down starts one recording session when the app is idle and microphone
     permission is available;
@@ -51,14 +58,14 @@ This spec covers:
 - If the shortcut is unavailable at launch because registration fails or the
   key combination is already owned by the system or another app, VibeType must
   keep menu controls usable and show a clear hotkey-unavailable status.
-- If the implementation supports a safe automatic fallback shortcut, the first
-  fallback candidate is `Control+Option+Space`; the active shortcut shown to the
-  user must update to the fallback value.
+- If the implementation supports a safe automatic fallback or alternate
+  shortcut, the first candidate after `Right Command` is `Globe/Fn`; the active
+  shortcut shown to the user must update to the fallback or alternate value.
 - If no shortcut can be registered, Start Recording and Stop Recording from the
   menu remain the supported manual path.
 - The Settings window should show the active shortcut and activation mode as
-  read-only MVP information, such as `Option+Space - Hold to record` or
-  `Option+Space - Toggle`.
+  read-only MVP information, such as `Right Command - Hold to record`,
+  `Globe/Fn - Hold to record`, or `Right Command - Toggle`.
 - The menu should expose the active shortcut near the Start Recording or Stop
   Recording action when practical.
 - Full shortcut editing is deferred, but future editing must validate and

@@ -29,13 +29,13 @@ enum GlobalHotkeyModifier: String, CaseIterable, Equatable {
 
 struct GlobalHotkeyShortcut: Equatable {
     static let defaultDictation = GlobalHotkeyShortcut(
-        modifiers: [.option],
-        key: "Space"
+        modifiers: [],
+        key: "Right Command"
     )
 
     static let fallbackDictation = GlobalHotkeyShortcut(
-        modifiers: [.control, .option],
-        key: "Space"
+        modifiers: [],
+        key: "Globe/Fn"
     )
 
     var modifiers: [GlobalHotkeyModifier]

@@ -1,6 +1,6 @@
 ---
 id: VT-161
-status: in-progress
+status: done
 priority: P1
 lane: hotkey
 dependencies:
@@ -15,7 +15,7 @@ verification:
 
 # VT-161 - Hotkey Default Shortcut Preferences
 
-Status: in-progress
+Status: done
 Priority: P1
 Lane: hotkey
 Dependencies: none
@@ -47,3 +47,10 @@ as an alternate shortcut option for keyboards that have it.
 - The default configuration displays `Right Command - Hold to record`.
 - The alternate configuration displays `Globe/Fn - Hold to record`.
 - Focused hotkey tests cover both shortcut values.
+
+## Verification
+
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build` passed in the main checkout.
+- `git diff --check` passed in the main checkout.
+- `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test` passed in a temporary clean worktree with only this task's hotkey patch applied.
+- The same test command is currently blocked in the main dirty checkout by a pre-existing unowned compile error in `vibetypeTests/DictationSessionControllerTests.swift`.
