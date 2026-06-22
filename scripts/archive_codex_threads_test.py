@@ -28,6 +28,7 @@ def write_jsonl(
     terminal: bool,
     injected_skill_context: bool = False,
     missing_tool_name: str | None = None,
+    missing_tool_names: list[str] | None = None,
 ) -> None:
     items = [
         {
@@ -82,15 +83,16 @@ def write_jsonl(
                 "payload": {"type": "task_complete"},
             }
         )
-    if missing_tool_name:
+    tool_names = missing_tool_names or ([missing_tool_name] if missing_tool_name else [])
+    for index, tool_name in enumerate(tool_names):
         items.append(
             {
                 "timestamp": "2026-06-22T09:00:03Z",
                 "type": "response_item",
                 "payload": {
                     "type": "function_call",
-                    "call_id": f"call-{thread_id}",
-                    "name": missing_tool_name,
+                    "call_id": f"call-{thread_id}-{index}",
+                    "name": tool_name,
                 },
             }
         )
@@ -188,6 +190,7 @@ class VibeTypeArchiveCodexThreadsTest(unittest.TestCase):
         state_db: Path | None = None,
         injected_skill_context: bool = False,
         missing_tool_name: str | None = None,
+        missing_tool_names: list[str] | None = None,
     ) -> Path:
         rollout_path = (
             self.codex_home
@@ -204,6 +207,7 @@ class VibeTypeArchiveCodexThreadsTest(unittest.TestCase):
             terminal=terminal,
             injected_skill_context=injected_skill_context,
             missing_tool_name=missing_tool_name,
+            missing_tool_names=missing_tool_names,
         )
         first_user = (
             "Automation: VibeType Swift Archive Completed Automation Threads\n"
@@ -408,6 +412,86 @@ class VibeTypeArchiveCodexThreadsTest(unittest.TestCase):
         self.assertEqual(
             report["remaining_eligible"][0]["reason"],
             "self_archive_thread_tool_hung",
+        )
+
+    def test_stale_self_archive_cleanup_hang_is_eligible(self) -> None:
+        self.insert_thread(
+            "019eee69-self-archive-cleanup",
+            "vibetype-swift-implementer",
+            terminal=False,
+            updated_at=1_782_120_000,
+            missing_tool_names=["set_thread_archived", "exec_command"],
+        )
+
+        args = archive_codex_threads.parse_args_for_test(
+            [
+                "--codex-home",
+                str(self.codex_home),
+                "--target-cwd",
+                TARGET_CWD,
+                "--now",
+                "1782123000",
+            ]
+        )
+        report = archive_codex_threads.run(args)
+
+        self.assertEqual(report["remaining_eligible_count"], 1)
+        self.assertEqual(report["allowed_active_count"], 0)
+        self.assertEqual(
+            report["remaining_eligible"][0]["reason"],
+            "stale_self_archive_cleanup_hung",
+        )
+
+    def test_fresh_self_archive_cleanup_hang_stays_active(self) -> None:
+        self.insert_thread(
+            "019eee69-self-archive-cleanup-fresh",
+            "vibetype-swift-implementer",
+            terminal=False,
+            updated_at=1_782_122_990,
+            missing_tool_names=["set_thread_archived", "exec_command"],
+        )
+
+        args = archive_codex_threads.parse_args_for_test(
+            [
+                "--codex-home",
+                str(self.codex_home),
+                "--target-cwd",
+                TARGET_CWD,
+                "--now",
+                "1782123000",
+            ]
+        )
+        report = archive_codex_threads.run(args)
+
+        self.assertEqual(report["remaining_eligible_count"], 0)
+        self.assertEqual(report["allowed_active_count"], 1)
+
+    def test_stale_housekeeping_thread_tool_cleanup_hang_is_eligible(self) -> None:
+        self.insert_thread(
+            "019eee69-housekeeping-cleanup",
+            "vibetype-swift-archive-completed-automation-threads",
+            terminal=False,
+            updated_at=1_782_122_850,
+            missing_tool_names=["list_threads", "exec_command"],
+        )
+
+        args = archive_codex_threads.parse_args_for_test(
+            [
+                "--codex-home",
+                str(self.codex_home),
+                "--target-cwd",
+                TARGET_CWD,
+                "--now",
+                "1782123000",
+            ]
+        )
+        report = archive_codex_threads.run(args)
+
+        self.assertEqual(report["remaining_eligible_count"], 1)
+        self.assertEqual(report["allowed_active_count"], 0)
+        self.assertEqual(
+            report["remaining_eligible"][0]["reason"],
+            "stale_housekeeping_thread_tool_hung",
         )
 
     def test_scans_both_state_database_locations(self) -> None:

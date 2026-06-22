@@ -15,6 +15,7 @@ from typing import Any
 DEFAULT_TARGET_CWD = "/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift"
 HOUSEKEEPING_ID = "vibetype-swift-archive-completed-automation-threads"
 THREAD_TOOL_NAMES = {"list_threads", "read_thread", "set_thread_archived"}
+SELF_ARCHIVE_CLEANUP_TOOL_NAMES = THREAD_TOOL_NAMES | {"exec_command"}
 
 
 @dataclass(frozen=True)
@@ -319,12 +320,30 @@ def classify_row(
     missing_archive_tools_only = bool(missing) and all(
         item.get("name") == "set_thread_archived" for item in missing
     )
+    missing_self_archive_cleanup_tools_only = (
+        bool(missing)
+        and any(item.get("name") == "set_thread_archived" for item in missing)
+        and all(item.get("name") in SELF_ARCHIVE_CLEANUP_TOOL_NAMES for item in missing)
+    )
+    missing_housekeeping_cleanup_tools_only = (
+        bool(missing)
+        and automation.id == HOUSEKEEPING_ID
+        and any(item.get("name") in THREAD_TOOL_NAMES for item in missing)
+        and all(item.get("name") in SELF_ARCHIVE_CLEANUP_TOOL_NAMES for item in missing)
+    )
     no_missing_tools = not missing
     if missing_archive_tools_only:
         return True, "self_archive_thread_tool_hung"
+    if missing_self_archive_cleanup_tools_only and age_seconds >= stale_seconds:
+        return True, "stale_self_archive_cleanup_hung"
     if (
         automation.id == HOUSEKEEPING_ID
         and missing_thread_tools_only
+        and age_seconds >= thread_tool_stale_seconds
+    ):
+        return True, "stale_housekeeping_thread_tool_hung"
+    if (
+        missing_housekeeping_cleanup_tools_only
         and age_seconds >= thread_tool_stale_seconds
     ):
         return True, "stale_housekeeping_thread_tool_hung"
