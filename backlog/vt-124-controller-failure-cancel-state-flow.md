@@ -1,7 +1,7 @@
 ---
 id: VT-124
 title: Controller Failure Cancel State Flow
-status: backlog
+status: in-progress
 priority: P2
 lane: controller
 parent: VT-120
@@ -19,7 +19,7 @@ allowed_paths:
 
 # VT-124 - Controller Failure Cancel State Flow
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
