@@ -1,7 +1,7 @@
 ---
 id: VT-133
 title: Transcript History Store
-status: backlog
+status: in-progress
 priority: P2
 lane: history
 parent: VT-130
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-133 - Transcript History Store
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
