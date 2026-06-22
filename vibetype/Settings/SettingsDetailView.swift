@@ -36,6 +36,8 @@ struct SettingsDetailView: View {
                 )
             case .transcription:
                 TranscriptionSettingsSection(settings: $settings)
+            case .dictionary:
+                DictionarySettingsSection(settings: $settings)
             case .shortcut:
                 KeyboardShortcutSettingsSection(
                     status: hotkeyRegistrationStatus,

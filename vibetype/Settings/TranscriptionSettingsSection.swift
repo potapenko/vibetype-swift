@@ -9,7 +9,6 @@ import SwiftUI
 
 struct TranscriptionSettingsSection: View {
     @Binding var settings: AppSettings
-    @State private var newDictionaryEntry = ""
 
     var body: some View {
         Section("Transcription") {
@@ -45,43 +44,6 @@ struct TranscriptionSettingsSection: View {
                 .lineLimit(2...4)
                 .textFieldStyle(.roundedBorder)
         }
-
-        Section("Dictionary") {
-            HStack {
-                TextField("Add word or phrase", text: $newDictionaryEntry)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(addDictionaryEntries)
-
-                Button(action: addDictionaryEntries) {
-                    Label("Add", systemImage: "plus")
-                }
-                .disabled(!canAddDictionaryEntry)
-            }
-
-            if dictionaryEntries.isEmpty {
-                Label("No custom words yet", systemImage: "book.closed")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(dictionaryEntries, id: \.self) { entry in
-                    HStack {
-                        Text(entry)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-
-                        Spacer()
-
-                        Button {
-                            removeDictionaryEntry(entry)
-                        } label: {
-                            Label("Remove", systemImage: "minus.circle")
-                        }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.borderless)
-                        .help("Remove \(entry)")
-                    }
-                }
-            }
-        }
     }
 
     private var isUsingDefaultTranscriptionModelFallback: Bool {
@@ -107,33 +69,6 @@ struct TranscriptionSettingsSection: View {
 
     private var customLanguageCodeStatusTint: Color {
         settings.customLanguageCodeValidation.isInvalid ? .red : .secondary
-    }
-
-    private var dictionaryEntries: [String] {
-        settings.resolvedCustomDictionaryEntries
-    }
-
-    private var canAddDictionaryEntry: Bool {
-        !AppSettings.parseCustomDictionaryEntries(from: newDictionaryEntry).isEmpty
-    }
-
-    private func addDictionaryEntries() {
-        let currentEntries = settings.resolvedCustomDictionaryEntries
-        let updatedEntries = AppSettings.appendingCustomDictionaryEntries(
-            from: newDictionaryEntry,
-            to: currentEntries
-        )
-
-        guard updatedEntries != currentEntries else {
-            return
-        }
-
-        settings.customDictionary = updatedEntries
-        newDictionaryEntry = ""
-    }
-
-    private func removeDictionaryEntry(_ entry: String) {
-        settings.customDictionary = settings.resolvedCustomDictionaryEntries.filter { $0 != entry }
     }
 }
 

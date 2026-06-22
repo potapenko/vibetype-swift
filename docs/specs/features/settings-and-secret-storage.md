@@ -70,9 +70,9 @@ This spec covers:
   Clear Transcript History action once persistent history is implemented.
 - The Settings window should include an optional prompt field for transcription
   guidance.
-- The Settings window should include a local custom dictionary where the user
-  can manually add and remove words or phrases that should be recognized with
-  exact spelling when spoken.
+- The Settings window should include a dedicated Dictionary section where the
+  user can manually add and remove local words or phrases that should be
+  recognized with exact spelling when spoken.
 - Missing API key should be reported as a user-visible blocked state before
   transcription is attempted.
 - Settings should include a privacy and permissions section that shows

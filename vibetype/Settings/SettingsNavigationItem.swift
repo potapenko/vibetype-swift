@@ -11,6 +11,7 @@ enum SettingsNavigationItem: String, CaseIterable, Identifiable, Hashable {
     case general
     case openAI
     case transcription
+    case dictionary
     case shortcut
     case behavior
     case privacy
@@ -27,6 +28,8 @@ enum SettingsNavigationItem: String, CaseIterable, Identifiable, Hashable {
             return "OpenAI"
         case .transcription:
             return "Transcription"
+        case .dictionary:
+            return "Dictionary"
         case .shortcut:
             return "Shortcut"
         case .behavior:
@@ -44,6 +47,8 @@ enum SettingsNavigationItem: String, CaseIterable, Identifiable, Hashable {
             return "API key"
         case .transcription:
             return "Model and language"
+        case .dictionary:
+            return "Custom words"
         case .shortcut:
             return "Global hotkey"
         case .behavior:
@@ -61,6 +66,8 @@ enum SettingsNavigationItem: String, CaseIterable, Identifiable, Hashable {
             return "key"
         case .transcription:
             return "waveform"
+        case .dictionary:
+            return "book.closed"
         case .shortcut:
             return "keyboard"
         case .behavior:
