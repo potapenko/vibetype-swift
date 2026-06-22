@@ -50,9 +50,9 @@ Run one bounded housekeeping pass that archives temporary Codex threads created
 by recurring automations for this repository after they are no longer live
 work.
 
-The primary eligible case is a completed automation run. A stale interrupted
-automation run is also eligible only when readback proves it is not active work
-and contains no manual continuation.
+The primary eligible case is a completed automation run. Stale interrupted or
+stale hanging in-progress automation runs are also eligible only when readback
+proves they are no longer live work and contain no manual continuation.
 
 Do not archive manual or user-owned discussion threads.
 
@@ -64,9 +64,12 @@ and even when they are also recurring automation runs.
 One scheduled automation invocation must drain pages internally. It must not
 archive one visible page and rely on a later scheduled invocation to expose and
 archive older pages. Within the same run, keep cycling through exact
-current-repository automation id/name searches, readback, and archive calls
-until a fresh post-archive tail check finds at most two remaining
-readback-eligible threads, or until a real tool, readback, active-work, or
+current-repository automation id/name searches, readback, and archive calls.
+Each loop iteration works on the currently visible search-result page. Archive
+the whole visible page when it contains more than two readback-eligible
+threads, then immediately re-list so older pages can surface in the same run.
+Stop only when the next fresh visible page contains two or fewer
+readback-eligible threads, or when a real tool, readback, active-work, or
 safety blocker prevents further progress.
 
 ## Required Tools
@@ -124,14 +127,20 @@ A thread is archive-eligible only when every condition below is true:
 - readback gives positive automation provenance, such as an automation id,
   automation name, automation run marker, or root user prompt matching an
   installed automation prompt from the current-repository automation subset;
-- thread readback shows no active, running, pending, or live unfinished turn;
 - the latest turn is terminal by one of these readback-verified states:
   - `completed`; or
   - `interrupted` and stale: the thread is not active, running, or pending, the
     visible update or start time is at least 30 minutes old, there is no tool
     call still running, no user message after the root automation prompt, no
     final question waiting for the user, and no active repo claim or blocker
-    that the run is still expected to resolve;
+    that the run is still expected to resolve; or
+  - stale hanging `inProgress`: the thread is still marked active/in-progress,
+    but the latest visible progress is at least 30 minutes old, readback shows
+    no running or pending tool call, no user message after the root automation
+    prompt, no final question waiting for the user, and either the run has
+    already reached cleanup/final-report/current-thread-archive wording or the
+    repository has no uncommitted files that can be attributed to that
+    automation run;
 - the thread is not pinned;
 - the thread has no normal back-and-forth manual user conversation;
 - the thread has no unresolved user question or blocker expecting user input;
@@ -150,11 +159,13 @@ If a candidate belongs to another cwd, skip it as `out_of_scope`.
 If a candidate is ambiguous, unreadable, or lacks positive automation
 provenance for the current repository, skip it as `manual_or_unclear`.
 
-If a candidate is active, running, pending, or otherwise not terminal, skip it
-as `active_or_pending` and keep sweeping other candidates. Active or pending
-current-repository automation threads are not archive-eligible, but their
-presence must not block archiving separate readback-verified completed
-automation-run threads in the same visible page.
+If a candidate is active, running, pending, or otherwise not terminal and does
+not pass the stale hanging `inProgress` eligibility gate above, skip it as
+`active_or_pending` and keep sweeping other candidates. Active or pending
+current-repository automation threads that are still live work are not
+archive-eligible, but their presence must not block archiving separate
+readback-verified completed or stale hanging automation-run threads in the same
+visible page.
 
 If archive or readback reports `No Codex thread found` for a visible candidate
 id, count it as `orphaned_or_stale` and continue. Do not report it as active
@@ -180,50 +191,50 @@ invocation.
 6. For each in-scope candidate id, call `read_thread` before deciding.
 7. Archive only candidates that pass the hard safety gate by calling
    `set_thread_archived` with `archived=true` and the explicit candidate id.
-8. After archiving every eligible candidate from the visible batch, immediately
-   run a fresh exact-key search/readback tail check in this same automation
-   invocation.
-9. If the fresh readback-verified eligible tail is more than two threads,
-   immediately start the next loop iteration from step 1. Do not wait for the
-   next scheduled run.
-10. If the fresh readback-verified eligible tail is two or fewer threads, exit
-    the page-drain loop successfully.
+8. Count the readback-eligible candidates on the current visible page.
+9. If the current visible page contains two or fewer readback-eligible
+   candidates, do not archive that page; exit the page-drain loop successfully.
+10. If the current visible page contains more than two readback-eligible
+    candidates, archive every eligible candidate from that visible batch.
+11. Immediately start the next loop iteration from step 1 in this same
+    automation invocation so older pages can surface. Do not wait for the next
+    scheduled run.
 
 Do not stop just because a single list call returned one page, no page, no new
 ids, or exactly the default-size result set. Re-run exact automation-id and
 automation-name searches after each archive batch because archiving one visible
 page can expose older unarchived threads. The two-thread allowance is only the
-single-run loop escape hatch for concurrent automation runs created during
-cleanup; it is not permission to leave additional eligible pages for a future
-scheduled invocation.
+single-run page-stop escape hatch for a small residual visible page; it is not
+permission to archive one large page and leave additional large eligible pages
+for a future scheduled invocation.
 
 ## Tail Exit Rule
 
-After each loop iteration and fresh tail check, calculate:
+During each loop iteration, calculate:
 
 ```text
-remaining_eligible_tail_count
+visible_page_eligible_count
 ```
 
-This count is the number of currently visible, readback-verified,
-archive-eligible current-repository automation-run threads that remain
-unarchived after the sweep, including both completed runs and stale interrupted
-runs that pass the hard safety gate.
+This count is the number of readback-verified archive-eligible
+current-repository automation-run threads in the currently visible page across
+the exact automation id/name searches, including completed, stale interrupted,
+and stale hanging in-progress runs that pass the hard safety gate.
 
 Exit successfully only when:
 
 ```text
-remaining_eligible_tail_count <= 2
+visible_page_eligible_count <= 2
 ```
 
-The two-thread allowance is not permission to skip the first visible batch. It
-only prevents an endless loop after one full page has already been inspected
-and every readback-eligible thread in that page has been archived. If more than
-two eligible threads remain after the fresh tail check, run another page-drain
-loop iteration in the same automation invocation.
+The two-thread allowance is permission to leave a small visible page
+unarchived. It is not permission to skip a visible page with more than two
+eligible threads. If more than two eligible threads are visible, archive that
+page and run another page-drain loop iteration in the same automation
+invocation.
 
-If `remaining_eligible_tail_count > 2` and the latest loop iteration archived
-zero threads after at least one visible batch has been inspected, stop with:
+If `visible_page_eligible_count > 2` and the latest loop iteration archived
+zero threads, stop with:
 
 ```text
 blocker=no_progress_tail_above_threshold
@@ -255,6 +266,7 @@ Report a compact operator summary with these fields:
 - `installed_housekeeping_readback`
 - `sweeps`
 - `archived_count`
+- `visible_page_eligible_count`
 - `remaining_eligible_tail_count`
 - `skipped_out_of_scope`
 - `skipped_manual_or_unclear`
@@ -269,6 +281,7 @@ housekeeping automation id, `status`, `rrule`, `execution_environment`, and
 `cwds` from `/Users/eugenepotapenko/.codex/automations/*/automation.toml`.
 
 If the run exits successfully, `blocker` must be `none` and
-`remaining_eligible_tail_count` must be `0`, `1`, or `2`, and `sweeps` must
-show that the internal page-drain loop completed inside this automation
-invocation.
+`visible_page_eligible_count` must be `0`, `1`, or `2`; `sweeps` must show
+that the internal page-drain loop completed inside this automation invocation.
+`remaining_eligible_tail_count` may repeat the visible-page count when the tool
+does not expose a cursor or total result count.
