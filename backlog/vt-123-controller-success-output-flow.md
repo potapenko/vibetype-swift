@@ -1,7 +1,7 @@
 ---
 id: VT-123
 title: Controller Success Output Flow
-status: backlog
+status: in-progress
 priority: P2
 lane: controller
 parent: VT-120
@@ -20,7 +20,7 @@ allowed_paths:
 
 # VT-123 - Controller Success Output Flow
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
