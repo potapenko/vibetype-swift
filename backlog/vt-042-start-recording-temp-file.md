@@ -1,7 +1,7 @@
 ---
 id: VT-042
 title: Start Recording Temp File
-status: backlog
+status: in-progress
 priority: P1
 lane: recording
 parent: VT-040
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-042 - Start Recording Temp File
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
