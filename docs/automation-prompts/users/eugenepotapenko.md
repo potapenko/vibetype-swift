@@ -7,7 +7,7 @@ status: inspected
 
 # eugenepotapenko Automation Inventory
 
-Inventory date: 2026-06-21
+Inventory date: 2026-06-22
 Inspected user home: `/Users/eugenepotapenko`
 Inspected Codex home: `/Users/eugenepotapenko/.codex`
 Repository cwd:
@@ -18,27 +18,30 @@ Inventory status: inspected
 
 | Automation id | Name | Status | Schedule | Model | Environment | Prompt source |
 | --- | --- | --- | --- | --- | --- | --- |
-| `vibetype-swift-backlog-archiver` | VibeType Swift Backlog Archiver | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-archiver.md` |
-| `vibetype-swift-backlog-groomer` | VibeType Swift Backlog Groomer | active | `FREQ=HOURLY;INTERVAL=2` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md` |
-| `vibetype-swift-blocker-resolver` | VibeType Swift Blocker Resolver | active | `FREQ=HOURLY;INTERVAL=1` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md` |
-| `vibetype-swift-implementer` | VibeType Swift Implementer | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-implementer.md` |
-| `vibetype-swift-tooling-unblocker` | VibeType Swift Tooling Unblocker | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md` |
-| `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
+| `vibetype-swift-backlog-archiver` | VibeType Swift Backlog Archiver | paused | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-archiver.md` |
+| `vibetype-swift-backlog-groomer` | VibeType Swift Backlog Groomer | paused | `FREQ=HOURLY;INTERVAL=2` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md` |
+| `vibetype-swift-blocker-resolver` | VibeType Swift Blocker Resolver | paused | `FREQ=HOURLY;INTERVAL=1` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md` |
+| `vibetype-swift-implementer` | VibeType Swift Implementer | paused | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-implementer.md` |
+| `vibetype-swift-tooling-unblocker` | VibeType Swift Tooling Unblocker | paused | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md` |
+| `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | paused | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
 
 Installed automation count for this repository: 6.
-Active count for this repository: 6.
-Paused count for this repository: 0.
+Active count for this repository: 0.
+Paused count for this repository: 6.
 
-Global final gate: every installed automation prompt now requires hard
-run-owned resource cleanup before the final response, residual resource
-reporting when cleanup cannot terminate something safely, and current-thread
-archive request when thread management is available.
+Global cleanup gate: every installed automation prompt and runbook must call
+`python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json`
+at the start, call
+`python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json`
+before the final response, report residual processes and permission-required
+operator commands when cleanup cannot terminate something safely, and request
+current-thread archive when thread management is available.
 
 ## Installed Automations
 
 ### `vibetype-swift-backlog-archiver`
 
-- Installed status: `ACTIVE`
+- Installed status: `PAUSED`
 - Schedule: `FREQ=MINUTELY;INTERVAL=15`
 - Model / reasoning effort: `gpt-5.4-mini` / `low`
 - Execution environment: `local`
@@ -55,11 +58,12 @@ archive request when thread management is available.
 - Safety contract: move only clean verified `done` task files from top-level
   `backlog/` to `backlog/done/`; do not claim tasks, implement product code,
   resolve blockers, groom tasks, or run destructive database/storage operations
-- Current decision: active
+- Current decision: paused until the cleanup mechanism is verified and the
+  operator explicitly resumes this automation
 
 ### `vibetype-swift-backlog-groomer`
 
-- Installed status: `ACTIVE`
+- Installed status: `PAUSED`
 - Schedule: `FREQ=HOURLY;INTERVAL=2`
 - Model / reasoning effort: `gpt-5.5` / `xhigh`
 - Execution environment: `local`
@@ -78,11 +82,12 @@ archive request when thread management is available.
 - Safety/browser evidence contract: no browser requirement; do not implement
   Swift product code; dirty Git state is not a blocker and must be preserved
   with path-limited commits; no DB or destructive storage operations
-- Current decision: active
+- Current decision: paused until the cleanup mechanism is verified and the
+  operator explicitly resumes this automation
 
 ### `vibetype-swift-blocker-resolver`
 
-- Installed status: `ACTIVE`
+- Installed status: `PAUSED`
 - Schedule: `FREQ=HOURLY;INTERVAL=1`
 - Model / reasoning effort: `gpt-5.5` / `xhigh`
 - Execution environment: `local`
@@ -101,11 +106,12 @@ archive request when thread management is available.
 - Safety/runtime evidence contract: dirty Git state is not a blocker and must
   be preserved with path-limited commits; avoid duplicate follow-ups; use
   bounded verification; no DB or destructive storage operations
-- Current decision: active
+- Current decision: paused until the cleanup mechanism is verified and the
+  operator explicitly resumes this automation
 
 ### `vibetype-swift-implementer`
 
-- Installed status: `ACTIVE`
+- Installed status: `PAUSED`
 - Schedule: `FREQ=MINUTELY;INTERVAL=15`
 - Model / reasoning effort: `gpt-5.5` / `xhigh`
 - Execution environment: `local`
@@ -125,11 +131,12 @@ archive request when thread management is available.
   product delta; Computer Use required for bounded app-run QA when visible
   macOS surfaces or user interactions change; no live OpenAI API in normal
   automation; no DB or destructive storage operations
-- Current decision: active
+- Current decision: paused until the cleanup mechanism is verified and the
+  operator explicitly resumes this automation
 
 ### `vibetype-swift-tooling-unblocker`
 
-- Installed status: `ACTIVE`
+- Installed status: `PAUSED`
 - Schedule: `FREQ=MINUTELY;INTERVAL=15`
 - Model / reasoning effort: `gpt-5.5` / `xhigh`
 - Execution environment: `local`
@@ -147,11 +154,12 @@ archive request when thread management is available.
   automatically; do not perform destructive database/storage operations,
   destructive Git rollback, external account login, payment/account changes, or
   manual system privacy approval
-- Current decision: active
+- Current decision: paused until the cleanup mechanism is verified and the
+  operator explicitly resumes this automation
 
 ### `vibetype-swift-archive-completed-automation-threads`
 
-- Installed status: `ACTIVE`
+- Installed status: `PAUSED`
 - Schedule: `FREQ=MINUTELY;INTERVAL=15`
 - Model / reasoning effort: `gpt-5.4-mini` / `low`
 - Execution environment: `local`
@@ -168,12 +176,13 @@ archive request when thread management is available.
   archive other-repository, active, pending, manual, or ambiguous threads;
   request current housekeeping thread archive before the final report when the
   thread-management tool is available
-- Current decision: active
+- Current decision: paused until the cleanup mechanism is verified and the
+  operator explicitly resumes this automation
 
 ## Missing Or Paused Roles
 
-No installed automation for this repository is paused or missing during this
-inventory pass.
+All installed automations for this repository are paused during this inventory
+pass. No installed automation role is missing.
 
 ## Verification
 

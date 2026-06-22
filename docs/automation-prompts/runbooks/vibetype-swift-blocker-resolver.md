@@ -13,6 +13,26 @@ This runbook is the versioned runtime contract for the current user's
 Configured automation cwd:
 `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
 
+## Resource Cleanup Gate
+
+At the start of the run, before blocked selector work or MCP-heavy tool use,
+run from the repository root:
+
+```sh
+python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json
+```
+
+At the end of the run, after verification/checkpoint handling and immediately
+before the final response, run:
+
+```sh
+python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json
+```
+
+Include both cleanup JSON summaries in the final report. If the script reports
+`permission_required`, `operator_commands`, or remaining processes, report the
+owner, pid, command, and reason instead of claiming cleanup succeeded.
+
 ## Runtime Contract
 
 Run one bounded blocked-task resolution pass.

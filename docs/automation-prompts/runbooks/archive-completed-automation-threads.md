@@ -22,6 +22,26 @@ Codex home:
 /Users/eugenepotapenko/.codex
 ```
 
+## Resource Cleanup Gate
+
+At the start of the run, before thread-tool discovery or MCP-heavy work, run
+from the repository root:
+
+```sh
+python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json
+```
+
+At the end of the run, after verification/report preparation and immediately
+before the final response, run:
+
+```sh
+python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json
+```
+
+Include both cleanup JSON summaries in the final report. If the script reports
+`permission_required`, `operator_commands`, or remaining processes, report the
+owner, pid, command, and reason instead of claiming cleanup succeeded.
+
 ## Goal
 
 Run one bounded housekeeping pass that archives temporary Codex threads created

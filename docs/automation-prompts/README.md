@@ -25,11 +25,14 @@ Shared tooling guidance:
 - `../agent-tooling.md`
 
 Every scheduled automation runbook must follow the hard final resource cleanup
-and MCP/thread lifecycle rules in `../agent-tooling.md`: keep MCP use
-task-specific, terminate or close every resource clearly started by the current
-run, report any residual resource that cannot be terminated, and request
-archive of the current automation thread before the final response when the
-thread-management tool is available.
+and MCP/thread lifecycle rules in `../agent-tooling.md`: run
+`python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json`
+at the start, run
+`python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json`
+before the final response, keep MCP use task-specific, terminate or close every
+resource clearly started by the current run, report any residual resource that
+cannot be terminated, and request archive of the current automation thread
+before the final response when the thread-management tool is available.
 
 Per-user inventories:
 

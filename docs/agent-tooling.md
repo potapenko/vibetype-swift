@@ -37,12 +37,14 @@ Keep MCP use narrow:
 - Prefer the documented shell `xcodebuild` commands for the macOS build/test
   baseline when they satisfy the selected task's verification.
 - Use Computer Use only for changed visible macOS runtime behavior.
-- Do not manually kill broad MCP process names from an automation run; those
-  processes may belong to other active user or automation threads. This does
-  not make stale Xcode build/test tooling operator-only. Use
-  `python3 scripts/local_tooling_recover.py --apply --json` for allowlisted
-  stale `xcodebuild`, `xctest`, `SWBBuildService`, compiler-probe, and
-  project-scoped DerivedData recovery.
+- Do not manually kill broad MCP process names from an automation run. Use the
+  repository cleanup scripts instead:
+  - `python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json`
+    for allowlisted stale Codex helper/MCP processes owned by the current
+    automation user;
+  - `python3 scripts/local_tooling_recover.py --apply --json` for allowlisted
+    stale `xcodebuild`, `xctest`, `SWBBuildService`, compiler-probe, and
+    project-scoped DerivedData recovery.
 
 At the end of every scheduled automation run, after verification and checkpoint
 handling are complete and before the final response, request archive of the
@@ -70,6 +72,31 @@ everything it started or opened during that run:
 - never kill broad process-name matches unless the process is clearly owned by
   the current run, current process tree, selected task, or repository recovery
   helper.
+
+Every scheduled automation run must also run the repository helper cleanup
+script twice from the repository root:
+
+```sh
+python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json
+```
+
+Run it once at the start of the run, before opening MCP-heavy tools, to clear
+stale helpers from previous runs owned by the same automation user. Run it
+again immediately before the final response with:
+
+```sh
+python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json
+```
+
+The script is an allowlist reaper for Codex helper and MCP processes such as
+Computer Use, Playwright MCP, XcodeBuildMCP, Pencil MCP, Codex `node_repl`, and
+Codex browser MCP. It must not be replaced with ad hoc `pkill node`,
+`pkill mcp`, or broad process-name cleanup.
+
+If the cleanup script reports `permission_required` or emits
+`operator_commands` for another user such as `codex2` or `codex3`, do not
+pretend cleanup succeeded. Include the residual owner, pid, command, and exact
+operator command in the final report.
 
 If a process or session cannot be terminated because ownership is ambiguous,
 the OS denies permission, or the tool surface has no scoped close action, the
