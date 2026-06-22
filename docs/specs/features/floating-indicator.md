@@ -12,6 +12,7 @@ recording while keeping the currently active app focused.
 This spec covers:
 
 - indicator visibility during active microphone capture
+- indicator visibility during transcription handoff
 - default placement
 - non-interference with the active app
 - behavior when the floating indicator setting is disabled
@@ -27,11 +28,14 @@ This spec covers:
 
 - The floating indicator is enabled by default through the
   `showFloatingIndicator` setting.
-- When enabled, it appears only while a session is actively recording.
-- While recording, the indicator is a compact visual mark such as a microphone
-  glyph with subtle pulse animation.
-- When recording stops, is cancelled, fails before capture, or moves into
-  transcription, the indicator disappears immediately.
+- When enabled, it appears while a session is actively recording and may remain
+  visible while the completed audio is being transcribed.
+- While recording, the indicator is a compact cyan visual mark with subtle pulse
+  animation.
+- While transcribing, the indicator switches to a compact purple waiting visual
+  with motion distinct from the recording state.
+- When recording is cancelled, fails before capture, completes successfully, or
+  fails after transcription starts, the indicator disappears immediately.
 - The indicator should not show text by default.
 - The indicator should not show the full transcript by default.
 - The default placement is near the bottom-right corner of the active display,
@@ -60,8 +64,8 @@ This spec covers:
 - If recording starts again quickly after a prior session, the indicator should
   appear for the new recording state without showing stale completion or error
   states.
-- If transcription starts after recording stops, the indicator should hide
-  rather than switch to a processing state.
+- If transcription starts after recording stops, the indicator may switch to the
+  transcribing visual without showing transcript content.
 - If the active display changes during a session, the indicator may stay on the
   display where the session began or move to the current active display, as
   long as it remains visible and non-disruptive.
@@ -80,8 +84,8 @@ Product states map to the indicator as follows:
 | App state | Indicator visibility | Display |
 | --- | --- | --- |
 | `idle` | hidden | none |
-| `recording` | visible when enabled | compact microphone indicator |
-| `transcribing` | hidden | none |
+| `recording` | visible when enabled | compact cyan recording indicator |
+| `transcribing` | visible when enabled | compact purple waiting indicator |
 | `done` | hidden | none |
 | `error` | hidden | none |
 

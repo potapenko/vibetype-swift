@@ -10,11 +10,11 @@ import Foundation
 struct FloatingIndicatorPresentation: Equatable {
     enum Phase: Equatable {
         case recording
+        case transcribing
     }
 
     let phase: Phase
     let title: String
-    let systemImage: String
 
     var accessibilityLabel: String {
         "VibeType \(title)"
@@ -34,10 +34,14 @@ struct FloatingIndicatorPresentation: Equatable {
         case .recording:
             return FloatingIndicatorPresentation(
                 phase: .recording,
-                title: "Recording",
-                systemImage: "mic.fill"
+                title: "Recording"
             )
-        case .transcribing, .success, .failure:
+        case .transcribing:
+            return FloatingIndicatorPresentation(
+                phase: .transcribing,
+                title: "Transcribing"
+            )
+        case .success, .failure:
             return nil
         }
     }
