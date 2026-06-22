@@ -11,6 +11,7 @@ struct FloatingIndicatorView: View {
     let presentation: FloatingIndicatorPresentation
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var isPulsing = false
     @State private var isRotating = false
@@ -43,14 +44,14 @@ struct FloatingIndicatorView: View {
     @ViewBuilder
     private var indicator: some View {
         if reduceMotion {
-            Image(presentation.phase.fullAssetName)
+            Image(presentation.phase.fullAssetName(for: colorScheme))
                 .resizable()
                 .scaledToFit()
         } else {
             ZStack {
                 animatedOrbit
 
-                Image(presentation.phase.coreAssetName)
+                Image(presentation.phase.coreAssetName(for: colorScheme))
                     .resizable()
                     .scaledToFit()
                     .scaleEffect(isPulsing ? presentation.phase.corePulseScale : 1)
@@ -74,17 +75,23 @@ struct FloatingIndicatorView: View {
     private var recordingOrbit: some View {
         ZStack {
             Circle()
-                .stroke(presentation.phase.accent.opacity(0.45), lineWidth: 1.1)
+                .stroke(
+                    accent.opacity(colorScheme == .light ? 0.82 : 0.45),
+                    lineWidth: colorScheme == .light ? 1.35 : 1.1
+                )
                 .frame(width: 66, height: 66)
 
             Circle()
-                .stroke(presentation.phase.accent.opacity(0.28), lineWidth: 1)
+                .stroke(
+                    accent.opacity(colorScheme == .light ? 0.58 : 0.28),
+                    lineWidth: colorScheme == .light ? 1.15 : 1
+                )
                 .frame(width: 58, height: 58)
 
             Circle()
-                .fill(presentation.phase.accent)
+                .fill(accent)
                 .frame(width: 7, height: 7)
-                .shadow(color: presentation.phase.accent.opacity(0.8), radius: 4)
+                .shadow(color: accent.opacity(0.8), radius: 4)
                 .offset(y: -33)
         }
     }
@@ -92,13 +99,16 @@ struct FloatingIndicatorView: View {
     private var transcribingOrbit: some View {
         ZStack {
             Circle()
-                .stroke(presentation.phase.accent.opacity(0.35), lineWidth: 1)
+                .stroke(
+                    accent.opacity(colorScheme == .light ? 0.68 : 0.35),
+                    lineWidth: colorScheme == .light ? 1.15 : 1
+                )
                 .frame(width: 62, height: 62)
 
             ForEach(0..<24, id: \.self) { index in
                 Circle()
                     .fill(
-                        presentation.phase.accent.opacity(
+                        accent.opacity(
                             index.isMultiple(of: 3) ? 0.9 : 0.48
                         )
                     )
@@ -111,32 +121,46 @@ struct FloatingIndicatorView: View {
             }
         }
     }
+
+    private var accent: Color {
+        presentation.phase.accent(for: colorScheme)
+    }
 }
 
 private extension FloatingIndicatorPresentation.Phase {
-    var fullAssetName: String {
+    func fullAssetName(for colorScheme: ColorScheme) -> String {
         switch self {
         case .recording:
-            return "ActivityRecordingIndicator"
+            return "ActivityRecordingIndicator\(assetSuffix(for: colorScheme))"
         case .transcribing:
-            return "ActivityTranscribingIndicator"
+            return "ActivityTranscribingIndicator\(assetSuffix(for: colorScheme))"
         }
     }
 
-    var coreAssetName: String {
+    func coreAssetName(for colorScheme: ColorScheme) -> String {
         switch self {
         case .recording:
-            return "ActivityRecordingCore"
+            return "ActivityRecordingCore\(assetSuffix(for: colorScheme))"
         case .transcribing:
-            return "ActivityTranscribingCore"
+            return "ActivityTranscribingCore\(assetSuffix(for: colorScheme))"
         }
     }
 
-    var accent: Color {
+    func assetSuffix(for colorScheme: ColorScheme) -> String {
+        colorScheme == .light ? "Light" : ""
+    }
+
+    func accent(for colorScheme: ColorScheme) -> Color {
         switch self {
         case .recording:
+            if colorScheme == .light {
+                return Color(red: 0.0, green: 0.42, blue: 0.52)
+            }
             return Color(red: 0.22, green: 0.89, blue: 1.0)
         case .transcribing:
+            if colorScheme == .light {
+                return Color(red: 0.42, green: 0.13, blue: 0.78)
+            }
             return Color(red: 0.67, green: 0.34, blue: 1.0)
         }
     }

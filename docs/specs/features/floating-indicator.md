@@ -34,6 +34,8 @@ This spec covers:
   animation.
 - While transcribing, the indicator switches to a compact purple waiting visual
   with motion distinct from the recording state.
+- The indicator may use separate light and dark visual assets to preserve
+  contrast with the current system appearance.
 - When recording is cancelled, fails before capture, completes successfully, or
   fails after transcription starts, the indicator disappears immediately.
 - The indicator should not show text by default.
@@ -90,6 +92,9 @@ Product states map to the indicator as follows:
 | `error` | hidden | none |
 
 The `showFloatingIndicator` setting is local UserDefaults-backed app state.
+Visual theme selection follows the current system appearance and must not
+change recording, transcription, paste, clipboard, settings, or permission
+state.
 
 ## Verification mapping
 
