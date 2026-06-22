@@ -1,7 +1,7 @@
 ---
 id: VT-164
 title: Temporary Transcript Recovery History Panel
-status: backlog
+status: in-progress
 priority: P1
 lane: history
 parent: VT-130
@@ -26,7 +26,7 @@ verification:
 
 # VT-164 - Temporary Transcript Recovery History Panel
 
-Status: backlog
+Status: in-progress
 Priority: P1
 Lane: history
 Dependencies: VT-123, VT-131, VT-133
