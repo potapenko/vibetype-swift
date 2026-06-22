@@ -1,7 +1,7 @@
 ---
 id: VT-060
 title: Text Output Umbrella
-status: backlog
+status: in-progress
 priority: P1
 lane: text-output
 dependencies:
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-060 - Text Output Umbrella
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
