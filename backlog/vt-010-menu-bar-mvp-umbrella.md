@@ -76,6 +76,16 @@ Close out the native menu bar MVP shell after its child tasks are implemented.
   `** BUILD INTERRUPTED **` before test discovery or execution, and final
   recovery again found no stale remnants. `VT-158` remains the single
   follow-up task for this executable closeout blocker.
+- 2026-06-22 03:17 CEST: Blocker resolver reran mandatory local tooling
+  recovery before selection, which removed `scripts/__pycache__` and
+  terminated stale VibeType `timeout`, child `xcodebuild`,
+  `SWBBuildService`, and clang probe processes. The macOS build retry reached
+  the same early clang probe and exited 143 with `** BUILD INTERRUPTED **`
+  before compiler diagnostics. Recovery after the build retry found no stale
+  remnants. The focused `vibetypeTests` retry reached the same probe and
+  exited 143 with `** BUILD INTERRUPTED **` before test discovery or
+  execution, and final recovery again found no stale remnants. `VT-158`
+  remains the single follow-up task for this executable closeout blocker.
 
 ## Resolution Path
 
@@ -91,6 +101,6 @@ Close out the native menu bar MVP shell after its child tasks are implemented.
   and focused unit-test gates until Xcode reaches compiler output and executes
   `vibetypeTests`; perform bounded menu runtime QA if a macOS UI interaction
   tool is available.
-- Current resolver retry could not mark this umbrella done because the new
+- Latest resolver retry could not mark this umbrella done because the new
   executable menu coverage still could not be verified through the required
   Xcode gates after local tooling recovery and bounded build/test retries.
