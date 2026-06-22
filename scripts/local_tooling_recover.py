@@ -25,6 +25,7 @@ from typing import Any
 
 DEFAULT_STALE_AFTER_SECONDS = 3 * 60
 DEFAULT_GRACE_SECONDS = 5
+DEFAULT_PS_TIMEOUT_SECONDS = 60
 
 PROCESS_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("xcodebuild", re.compile(r"(^|/|\s)xcodebuild(\s|$)")),
@@ -110,7 +111,7 @@ def run_ps(command: list[str]) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         check=False,
         text=True,
-        timeout=10,
+        timeout=DEFAULT_PS_TIMEOUT_SECONDS,
     )
 
 
