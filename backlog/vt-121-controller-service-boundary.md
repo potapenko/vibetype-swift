@@ -1,7 +1,7 @@
 ---
 id: VT-121
 title: Controller Service Boundary
-status: in-progress
+status: done
 priority: P2
 lane: controller
 parent: VT-120
@@ -21,7 +21,7 @@ allowed_paths:
 
 # VT-121 - Controller Service Boundary
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -51,3 +51,14 @@ recording, transcription, settings, and output dependencies.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Completion Evidence
+
+- 2026-06-22: Added `DictationSessionController` with injected recorder,
+  transcription, settings, and transcript-output dependencies.
+- Added fake-backed controller tests covering shared recording action start,
+  stop/transcribe/deliver, transcribing no-op, start failure, transcription
+  failure, and output failure with accepted transcript recovery.
+- Verification passed:
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
+  and `git diff --check`.
