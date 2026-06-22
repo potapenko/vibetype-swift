@@ -1,7 +1,7 @@
 ---
 id: VT-111
 title: Fake Backed Controller Test Harness
-status: in-progress
+status: done
 priority: P2
 lane: testing
 parent: VT-110
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-111 - Fake Backed Controller Test Harness
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -41,3 +41,22 @@ Extend the fake-backed test harness for dictation controller state changes.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Completion Notes
+
+- Added fake-backed controller coverage for recorder stop failure: the session
+  moves to a user-visible failure, preserves the previous accepted transcript,
+  clears stale output status, and skips transcription/output handoff.
+- Full `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination
+  'platform=macOS' test` was retried after
+  `python3 scripts/local_tooling_recover.py --apply --json`; the selected
+  app/unit tests passed, but the existing UI launch-performance test failed with
+  `Received unexpected number of metrics: 0 in iteration with index 3`.
+- Verified the selected fake-backed controller harness with
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination
+  'platform=macOS' test -only-testing:vibetypeTests/DictationSessionControllerTests`
+  and the full unit target with
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination
+  'platform=macOS' test -only-testing:vibetypeTests`.
+  Both passed without live microphone, OpenAI, Keychain, clipboard, or paste
+  side effects.

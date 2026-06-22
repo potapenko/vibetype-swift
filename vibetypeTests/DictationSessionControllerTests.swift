@@ -228,6 +228,32 @@ struct DictationSessionControllerTests {
         #expect(transcriptOutput.calls.isEmpty)
     }
 
+    @Test func stopFailureBecomesUserVisibleFailureWithoutTranscription() async {
+        let recorder = FakeAudioRecorderService(
+            currentStatus: .recording,
+            stopResult: .failure(.stopFailed)
+        )
+        let transcriptionService = FakeControllerTranscriptionService()
+        let transcriptOutput = FakeTranscriptOutput()
+        let controller = makeController(
+            recorder: recorder,
+            transcriptionService: transcriptionService,
+            transcriptOutput: transcriptOutput,
+            initialStatus: .recording,
+            lastTranscriptText: "previous transcript",
+            outputStatusText: "Previous output status"
+        )
+
+        await controller.performRecordingAction()
+
+        #expect(controller.status == .failure(message: "Could not finish the current recording."))
+        #expect(controller.lastTranscriptText == "previous transcript")
+        #expect(controller.outputStatusText == nil)
+        #expect(recorder.stopCount == 1)
+        #expect(transcriptionService.calls.isEmpty)
+        #expect(transcriptOutput.calls.isEmpty)
+    }
+
     @Test func transcriptionFailureDoesNotDeliverOutputOrOverwriteSuccess() async {
         let recorder = FakeAudioRecorderService(currentStatus: .recording)
         let transcriptionService = FakeControllerTranscriptionService(result: .failure(.networkUnavailable))
