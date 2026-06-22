@@ -1,7 +1,7 @@
 ---
 id: VT-045
 title: Recording Timeout Guard
-status: backlog
+status: in-progress
 priority: P2
 lane: recording
 parent: VT-040
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-045 - Recording Timeout Guard
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
