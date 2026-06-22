@@ -18,11 +18,13 @@ struct SettingsDetailView: View {
     let microphonePermissionStatus: MicrophonePermissionStatus
     let accessibilityPermissionStatus: AccessibilityPermissionStatus
     let inputMonitoringPermissionStatus: InputMonitoringPermissionStatus
+    let transcriptHistoryCount: Int
     let onSaveAPIKey: () -> Void
     let onRemoveAPIKey: () -> Void
     let onMicrophonePermissionAction: () -> Void
     let onOpenAccessibilitySettings: () -> Void
     let onInputMonitoringPermissionAction: () -> Void
+    let onClearTranscriptHistory: () -> Void
 
     var body: some View {
         Form {
@@ -46,7 +48,11 @@ struct SettingsDetailView: View {
                     preferredConfiguration: preferredHotkeyConfiguration
                 )
             case .behavior:
-                BehaviorSettingsSection(settings: $settings)
+                BehaviorSettingsSection(
+                    settings: $settings,
+                    transcriptHistoryCount: transcriptHistoryCount,
+                    onClearTranscriptHistory: onClearTranscriptHistory
+                )
             case .privacy:
                 PrivacyPermissionsSettingsSection(
                     microphonePermissionStatus: microphonePermissionStatus,
@@ -75,11 +81,13 @@ struct SettingsDetailView: View {
         microphonePermissionStatus: .notDetermined,
         accessibilityPermissionStatus: .notTrusted,
         inputMonitoringPermissionStatus: .notDetermined,
+        transcriptHistoryCount: 0,
         onSaveAPIKey: {},
         onRemoveAPIKey: {},
         onMicrophonePermissionAction: {},
         onOpenAccessibilitySettings: {},
-        onInputMonitoringPermissionAction: {}
+        onInputMonitoringPermissionAction: {},
+        onClearTranscriptHistory: {}
     )
     .frame(width: 520, height: 420)
 }

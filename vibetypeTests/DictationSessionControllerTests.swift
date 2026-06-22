@@ -347,10 +347,12 @@ struct DictationSessionControllerTests {
         let transcriptOutput = FakeTranscriptOutput(
             result: .failure(TextInsertionServiceError.textInsertionTimedOut)
         )
+        let transcriptHistory = FakeTranscriptRecoveryHistory()
         let controller = makeController(
             recorder: recorder,
             transcriptionService: transcriptionService,
             transcriptOutput: transcriptOutput,
+            transcriptHistory: transcriptHistory,
             initialStatus: .recording
         )
 
@@ -360,6 +362,30 @@ struct DictationSessionControllerTests {
         #expect(controller.lastTranscriptText == "Delivered text")
         #expect(controller.outputStatusText == "Inserting text into the active app timed out.")
         #expect(transcriptOutput.calls == [TranscriptOutputCall(transcript: "Delivered text", settings: .defaults)])
+        #expect(transcriptHistory.entries.map(\.transcriptText) == ["Delivered text"])
+        #expect(transcriptHistory.calls.first?.audioDuration == 1.2)
+    }
+
+    @Test func disabledRecoveryHistoryDoesNotWriteAcceptedTranscript() async {
+        let recorder = FakeAudioRecorderService(currentStatus: .recording)
+        let transcriptionService = FakeControllerTranscriptionService(result: .success("  Private text\n"))
+        let transcriptOutput = FakeTranscriptOutput()
+        let transcriptHistory = FakeTranscriptRecoveryHistory()
+        var settings = AppSettings.defaults
+        settings.saveTranscriptHistory = false
+        let controller = makeController(
+            recorder: recorder,
+            transcriptionService: transcriptionService,
+            settings: settings,
+            transcriptOutput: transcriptOutput,
+            transcriptHistory: transcriptHistory,
+            initialStatus: .recording
+        )
+
+        await controller.performRecordingAction()
+
+        #expect(controller.status == .success(transcript: "Private text"))
+        #expect(transcriptHistory.entries.isEmpty)
     }
 
     private func makeController(
@@ -368,11 +394,13 @@ struct DictationSessionControllerTests {
         settings: AppSettings = .defaults,
         transcriptOutput: FakeTranscriptOutput,
         cuePlayer: FakeDictationCuePlayer? = nil,
+        transcriptHistory: FakeTranscriptRecoveryHistory? = nil,
         initialStatus: DictationStatus = .idle,
         lastTranscriptText: String? = nil,
         outputStatusText: String? = nil
     ) -> DictationSessionController {
         let cuePlayer = cuePlayer ?? FakeDictationCuePlayer()
+        let transcriptHistory = transcriptHistory ?? FakeTranscriptRecoveryHistory()
 
         return DictationSessionController(
             recorder: recorder,
@@ -380,6 +408,7 @@ struct DictationSessionControllerTests {
             settingsProvider: { settings },
             transcriptOutput: transcriptOutput,
             cuePlayer: cuePlayer,
+            transcriptHistory: transcriptHistory,
             initialStatus: initialStatus,
             lastTranscriptText: lastTranscriptText,
             outputStatusText: outputStatusText
@@ -411,6 +440,12 @@ private struct TranscriptionCall: Equatable {
 private struct TranscriptOutputCall: Equatable {
     let transcript: String
     let settings: AppSettings
+}
+
+private struct RecoveryHistoryCall: Equatable {
+    let transcript: String
+    let settings: AppSettings
+    let audioDuration: TimeInterval?
 }
 
 private final class FakeControllerTranscriptionService: OpenAITranscriptionServing {
@@ -449,6 +484,43 @@ private final class FakeTranscriptOutput: TranscriptOutputDelivering {
     func deliver(_ transcript: String, settings: AppSettings) async throws -> TextInsertionResult {
         calls.append(TranscriptOutputCall(transcript: transcript, settings: settings))
         return try result.get()
+    }
+}
+
+@MainActor
+private final class FakeTranscriptRecoveryHistory: TranscriptRecoveryHistoryRecording {
+    private(set) var entries: [TranscriptHistoryEntry] = []
+    private(set) var calls: [RecoveryHistoryCall] = []
+
+    func recordAcceptedTranscript(
+        _ transcript: String,
+        settings: AppSettings,
+        audioDuration: TimeInterval?
+    ) throws {
+        calls.append(
+            RecoveryHistoryCall(
+                transcript: transcript,
+                settings: settings,
+                audioDuration: audioDuration
+            )
+        )
+
+        guard settings.saveTranscriptHistory else {
+            return
+        }
+
+        entries = try [
+            TranscriptHistoryEntry(
+                transcriptText: transcript,
+                transcriptionModel: settings.resolvedTranscriptionModel,
+                languageCode: settings.resolvedLanguageCode,
+                audioDuration: audioDuration
+            )
+        ] + entries
+    }
+
+    func clear() {
+        entries = []
     }
 }
 

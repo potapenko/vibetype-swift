@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var apiKeyInput = ""
     @State private var apiKeyStatus: APIKeySettingsStatus = .unknown
     @State private var hotkeyRegistrationStatus: GlobalHotkeyRegistrationStatus
+    @ObservedObject private var transcriptHistoryStore: TranscriptRecoveryHistoryStore
 
     private let microphonePermissionService: MicrophonePermissionService
     private let accessibilityPermissionService: AccessibilityPermissionService
@@ -25,6 +26,7 @@ struct SettingsView: View {
     private let preferredHotkeyConfiguration: GlobalHotkeyConfiguration
     private let hotkeyStatusProvider: () -> GlobalHotkeyRegistrationStatus
 
+    @MainActor
     init(
         microphonePermissionService: MicrophonePermissionService = MicrophonePermissionService(),
         accessibilityPermissionService: AccessibilityPermissionService = AccessibilityPermissionService(),
@@ -32,7 +34,8 @@ struct SettingsView: View {
         apiKeyStorage: APIKeyStorage = KeychainService(),
         appSettingsStore: AppSettingsStore = AppSettingsStore(),
         preferredHotkeyConfiguration: GlobalHotkeyConfiguration = .defaultDictation,
-        hotkeyStatusProvider: @escaping () -> GlobalHotkeyRegistrationStatus = { .notRegistered }
+        hotkeyStatusProvider: @escaping () -> GlobalHotkeyRegistrationStatus = { .notRegistered },
+        transcriptHistoryStore: TranscriptRecoveryHistoryStore? = nil
     ) {
         self.microphonePermissionService = microphonePermissionService
         self.accessibilityPermissionService = accessibilityPermissionService
@@ -41,6 +44,7 @@ struct SettingsView: View {
         self.appSettingsStore = appSettingsStore
         self.preferredHotkeyConfiguration = preferredHotkeyConfiguration
         self.hotkeyStatusProvider = hotkeyStatusProvider
+        self.transcriptHistoryStore = transcriptHistoryStore ?? TranscriptRecoveryHistoryStore.shared
         _appSettings = State(initialValue: appSettingsStore.load())
         _microphonePermissionStatus = State(
             initialValue: microphonePermissionService.currentStatus()
@@ -69,11 +73,13 @@ struct SettingsView: View {
                 microphonePermissionStatus: microphonePermissionStatus,
                 accessibilityPermissionStatus: accessibilityPermissionStatus,
                 inputMonitoringPermissionStatus: inputMonitoringPermissionStatus,
+                transcriptHistoryCount: transcriptHistoryStore.entries.count,
                 onSaveAPIKey: saveAPIKey,
                 onRemoveAPIKey: removeAPIKey,
                 onMicrophonePermissionAction: handleMicrophonePermissionAction,
                 onOpenAccessibilitySettings: handleAccessibilityPermissionAction,
-                onInputMonitoringPermissionAction: handleInputMonitoringPermissionAction
+                onInputMonitoringPermissionAction: handleInputMonitoringPermissionAction,
+                onClearTranscriptHistory: clearTranscriptHistory
             )
         }
         .frame(minWidth: 720, minHeight: 480)
@@ -94,8 +100,14 @@ struct SettingsView: View {
                 appSettings
             },
             set: { newValue in
+                let shouldClearTranscriptHistory = appSettings.saveTranscriptHistory
+                    && !newValue.saveTranscriptHistory
                 appSettings = newValue
                 appSettingsStore.save(newValue)
+
+                if shouldClearTranscriptHistory {
+                    transcriptHistoryStore.clear()
+                }
             }
         )
     }
@@ -179,6 +191,10 @@ struct SettingsView: View {
         } catch {
             apiKeyStatus = .failure(error.localizedDescription)
         }
+    }
+
+    private func clearTranscriptHistory() {
+        transcriptHistoryStore.clear()
     }
 }
 

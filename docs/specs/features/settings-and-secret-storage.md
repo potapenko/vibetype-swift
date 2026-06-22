@@ -15,7 +15,7 @@ This spec covers:
 - UserDefaults-backed non-secret settings
 - Keychain-backed OpenAI API key
 - automatic insertion, app clipboard, recording, and indicator toggles
-- transcript history toggle and clear action
+- transcript recovery history toggle and clear action
 - prompt and custom dictionary settings
 
 ## Non-goals
@@ -70,8 +70,12 @@ This spec covers:
   sounds and the floating recording indicator.
 - Dictation sounds should be short, non-verbal cues. The start cue should make
   recording start noticeable without requiring the user to watch the screen.
-- The Settings window should include a Save Transcript History toggle and a
-  Clear Transcript History action once persistent history is implemented.
+- The Settings window should include a Keep Transcript Recovery History toggle
+  and a Clear Transcript History action once the recovery history surface is
+  implemented.
+- Keep Transcript Recovery History controls session-only recovery entries. When
+  turned off, it immediately clears current recovery entries and stops future
+  history writes until it is turned back on.
 - The Settings window should include an optional prompt field for transcription
   guidance.
 - The Settings window should include a dedicated Dictionary section where the
@@ -96,7 +100,7 @@ The MVP non-secret settings default to:
 - save to VibeType Clipboard: on
 - dictation start/stop sounds: on
 - floating recording indicator: on
-- save transcript history: off
+- keep transcript recovery history: on
 
 The OpenAI API key has no UserDefaults value or default. It is Keychain-only.
 
@@ -147,7 +151,7 @@ Keychain stores:
 
 - OpenAI API key
 
-Transcript history retention and clearing behavior is governed by
+Transcript recovery history retention and clearing behavior is governed by
 `transcript-history.md`.
 
 The selected Settings sidebar entry is window-local UI state. Changing the

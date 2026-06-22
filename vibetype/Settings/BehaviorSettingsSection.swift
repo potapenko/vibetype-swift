@@ -9,6 +9,8 @@ import SwiftUI
 
 struct BehaviorSettingsSection: View {
     @Binding var settings: AppSettings
+    let transcriptHistoryCount: Int
+    let onClearTranscriptHistory: () -> Void
 
     var body: some View {
         Section("Behavior") {
@@ -39,13 +41,29 @@ struct BehaviorSettingsSection: View {
                 "Show floating recording indicator",
                 isOn: $settings.showFloatingIndicator
             )
+
+            Toggle(
+                "Keep transcript recovery history",
+                isOn: $settings.saveTranscriptHistory
+            )
+
+            Text("Keeps recent accepted transcripts in memory until you clear history or quit VibeType.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Button("Clear Transcript History", role: .destructive, action: onClearTranscriptHistory)
+                .disabled(transcriptHistoryCount == 0)
         }
     }
 }
 
 #Preview {
     Form {
-        BehaviorSettingsSection(settings: .constant(.defaults))
+        BehaviorSettingsSection(
+            settings: .constant(.defaults),
+            transcriptHistoryCount: 0,
+            onClearTranscriptHistory: {}
+        )
     }
     .formStyle(.grouped)
     .padding()

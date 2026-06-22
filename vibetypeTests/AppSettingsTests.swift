@@ -27,7 +27,7 @@ struct AppSettingsTests {
         #expect(settings.saveTranscriptsToAppClipboard)
         #expect(settings.soundEnabled)
         #expect(settings.showFloatingIndicator)
-        #expect(settings.saveTranscriptHistory == false)
+        #expect(settings.saveTranscriptHistory)
     }
 
     @Test func resolvesBlankModelAndPromptWithoutMutatingStoredValues() {

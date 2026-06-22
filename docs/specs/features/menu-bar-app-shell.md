@@ -52,8 +52,8 @@ This spec covers:
 - Before recording exists, a placeholder Start/Stop transition may exercise
   the menu binding, but it must clearly state that microphone input is not
   captured in that build.
-- The menu should include Settings, Last Transcript, Save to VibeType
-  Clipboard, and Quit.
+- The menu should include Settings, Transcript History, Last Transcript, Save
+  to VibeType Clipboard, and Quit.
 - Quit must terminate the app cleanly.
 - The app should show status changes during recording and transcription.
 - Settings should be available from the menu bar.
@@ -95,6 +95,10 @@ Core visible states are:
 
 Settings window state is separate from recording state. Opening or closing
 settings must not start, stop, or cancel recording by itself.
+
+Transcript History window state is separate from recording state. Opening,
+closing, or clearing history must not start, stop, or cancel recording by
+itself.
 
 ## Verification mapping
 

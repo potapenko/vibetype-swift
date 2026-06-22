@@ -79,7 +79,7 @@ struct AppSettings: Equatable {
         saveTranscriptsToAppClipboard: true,
         soundEnabled: true,
         showFloatingIndicator: true,
-        saveTranscriptHistory: false
+        saveTranscriptHistory: true
     )
 
     var transcriptionModel: String

@@ -7,13 +7,14 @@
 
 enum VibeTypeMenuBarIdentity {
     static let title = "VibeType"
-    static let systemImage = "mic.fill"
+    static let iconAssetName = "VibeTypeMenuBarIcon"
     static let helpText = "VibeType Dictation"
 }
 
 struct MenuBarPresentation: Equatable {
     static let lastTranscriptTitle = "Last Transcript"
     static let saveLastTranscriptTitle = "Save to VibeType Clipboard"
+    static let historyTitle = "Transcript History"
     static let settingsTitle = "Settings"
     static let quitTitle = "Quit VibeType"
 

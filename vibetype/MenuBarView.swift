@@ -116,6 +116,11 @@ struct MenuBarView: View {
 
             Divider()
 
+            Button(MenuBarPresentation.historyTitle) {
+                openWindow(id: VibeTypeWindow.history)
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
+
             Button(MenuBarPresentation.settingsTitle) {
                 openWindow(id: VibeTypeWindow.settings)
                 NSApplication.shared.activate(ignoringOtherApps: true)

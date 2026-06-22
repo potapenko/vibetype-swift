@@ -73,9 +73,9 @@ This spec covers:
   recoverable in the current session.
 - Last Transcript is current-session state and does not require persistent
   transcript history to be enabled.
-- Optional persistent history is governed by `transcript-history.md`. Enabling
-  history must not change the VibeType Clipboard save or paste behavior for the
-  current transcript.
+- Optional transcript recovery history is governed by `transcript-history.md`.
+  Enabling history must not change the VibeType Clipboard save or paste
+  behavior for the current transcript.
 
 ## Invariants
 
@@ -115,8 +115,8 @@ This spec covers:
   app session when the setting is enabled.
 - Automatic insertion is a local UserDefaults-backed behavior setting and
   defaults on for the MVP.
-- If optional transcript history is enabled, accepted transcripts may also be
-  written to local persistent history under `transcript-history.md`.
+- If transcript recovery history is enabled, accepted transcripts may also be
+  kept in session-only recovery history under `transcript-history.md`.
 - Output handoff may require platform permissions such as Accessibility control
   or keyboard event simulation.
 - Persistent drafts outside transcript history require a separate storage spec.

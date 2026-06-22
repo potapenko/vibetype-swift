@@ -50,8 +50,8 @@ This spec covers:
   plain text files.
 - The MVP must not require accounts, subscriptions, telemetry, analytics,
   server-side state, or cloud sync.
-- The default product contract is no retained audio. Transcript history is
-  opt-in, local-only, disabled by default, and governed by
+- The default product contract is no retained audio. Transcript recovery
+  history is session-only, local-only, enabled by default, and governed by
   `transcript-history.md`.
 - Debug logging must not include raw dictated text, raw audio payloads, tokens,
   credentials, or full provider responses in the default product log stream.
@@ -141,7 +141,7 @@ This spec covers:
   language, prompt, latency, and error behavior.
 - Settings may be stored in UserDefaults, but the API key belongs in Keychain.
 - Local storage of audio needs separate spec coverage before implementation.
-  Transcript history storage is governed by `transcript-history.md`.
+  Transcript recovery history storage is governed by `transcript-history.md`.
 
 ## Verification mapping
 

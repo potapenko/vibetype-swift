@@ -20,6 +20,7 @@ final class DictationSessionController {
     private let settingsProvider: () -> AppSettings
     private let transcriptOutput: any TranscriptOutputDelivering
     private let cuePlayer: any DictationCuePlaying
+    private let transcriptHistory: any TranscriptRecoveryHistoryRecording
 
     private var isPerformingAction = false
     private var nextSessionID = 0
@@ -35,6 +36,7 @@ final class DictationSessionController {
         settingsProvider: @escaping () -> AppSettings = { AppSettingsStore().load() },
         transcriptOutput: any TranscriptOutputDelivering = TextInsertionService(),
         cuePlayer: any DictationCuePlaying = NativeDictationCuePlayer.shared,
+        transcriptHistory: (any TranscriptRecoveryHistoryRecording)? = nil,
         initialStatus: DictationStatus = .idle,
         lastTranscriptText: String? = nil,
         outputStatusText: String? = nil
@@ -44,6 +46,7 @@ final class DictationSessionController {
         self.settingsProvider = settingsProvider
         self.transcriptOutput = transcriptOutput
         self.cuePlayer = cuePlayer
+        self.transcriptHistory = transcriptHistory ?? TranscriptRecoveryHistoryStore.shared
         self.status = initialStatus
         self.lastTranscriptText = lastTranscriptText.flatMap {
             AcceptedTranscript.nonEmptyNormalizedText(from: $0)
@@ -171,6 +174,11 @@ final class DictationSessionController {
             let acceptedTranscript = try Self.acceptedTranscript(from: rawTranscript)
             lastTranscriptText = acceptedTranscript.text
             status = .success(transcript: acceptedTranscript.text)
+            recordRecoveryHistory(
+                acceptedTranscript.text,
+                settings: settings,
+                audioDuration: artifact.duration
+            )
 
             do {
                 outputStatusText = try await transcriptOutput.deliver(
@@ -202,6 +210,22 @@ final class DictationSessionController {
         }
 
         cuePlayer.play(cue)
+    }
+
+    private func recordRecoveryHistory(
+        _ transcript: String,
+        settings: AppSettings,
+        audioDuration: TimeInterval?
+    ) {
+        do {
+            try transcriptHistory.recordAcceptedTranscript(
+                transcript,
+                settings: settings,
+                audioDuration: audioDuration
+            )
+        } catch {
+            outputStatusText = Self.userFacingMessage(for: error)
+        }
     }
 
     private static func acceptedTranscript(from rawText: String) throws -> AcceptedTranscript {

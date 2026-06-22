@@ -1,7 +1,7 @@
 ---
 id: VT-164
 title: Temporary Transcript Recovery History Panel
-status: in-progress
+status: blocked
 priority: P1
 lane: history
 parent: VT-130
@@ -26,7 +26,7 @@ verification:
 
 # VT-164 - Temporary Transcript Recovery History Panel
 
-Status: in-progress
+Status: blocked
 Priority: P1
 Lane: history
 Dependencies: VT-123, VT-131, VT-133
@@ -76,3 +76,59 @@ or the target input changes.
   Keychain secrets, audio cleanup state, or Last Transcript.
 - Quitting the app clears current recovery entries.
 - Default logs do not include transcript text.
+
+## Implementation Notes
+
+- Updated transcript history specs to define session-only recovery history,
+  enabled by default because transcript text is kept in memory only.
+- Added `TranscriptRecoveryHistoryStore` as the app-owned in-memory recovery
+  history surface with max-20 retention and clear support.
+- Connected accepted dictation controller output to recovery history before
+  active-app output handoff.
+- Added a native Transcript History window, menu item, clear action, row save
+  action, and row insert action through the existing active-app insertion
+  boundary.
+- Added Settings copy/control for keeping recovery history and clearing current
+  entries.
+- Added focused tests for settings defaults, recovery store behavior,
+  controller output-failure recovery, menu title, and recovered insertion.
+
+## Verification Notes
+
+- Passed: `git diff --check`.
+- Passed: `xcrun swiftc -typecheck -parse-as-library $(find vibetype Shared -name '*.swift' -print | sort)`.
+  It emitted only pre-existing warnings for `MenuBarView` `onChange` and
+  `SpecialClipboardHotkeyService` `hotKeyID`.
+- Blocked: `timeout 600 xcodebuild -project vibetype.xcodeproj -scheme
+  vibetype -destination 'platform=macOS' test` reached Xcode external-tool
+  probing and ended with `** BUILD INTERRUPTED **` / exit 124.
+- Recovery: `python3 scripts/local_tooling_recover.py --apply --json`
+  terminated stale `SWBBuildService` pid 2043 and removed project DerivedData.
+- Blocked after recovery: the same `timeout 600 xcodebuild ... test` retry
+  again reached early external-tool probing and ended with
+  `** BUILD INTERRUPTED **` / exit 143.
+- Recovery retry: `python3 scripts/local_tooling_recover.py --apply --json`
+  removed project DerivedData and found no stale Xcode processes.
+- Blocked final narrowed attempt: `timeout 300 xcodebuild -project
+  vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS,arch=arm64'
+  -derivedDataPath tmp/vt164-deriveddata test` reached external-tool probing
+  and ended with `** BUILD INTERRUPTED **` / exit 124.
+- Tooling: XcodeBuildMCP checked, but the exposed tool surface only provided
+  simulator-oriented build/test tools, not macOS build/test.
+
+## Resolution Path
+
+Blocker category: local Xcode build/test tooling timeout before Swift compiler
+diagnostics, test discovery, or test execution.
+
+Existing infrastructure evidence: `VT-148` and
+`docs/qa/runs/xcode-build-service-health-2026-06-21.md` cover this
+automation-recoverable Xcode build-service timeout class, so this task cites
+that path instead of creating a duplicate tooling task.
+
+Unblock condition: rerun local tooling recovery, then rerun
+`xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination
+'platform=macOS' test`. If it reaches compiler/test execution and passes, set
+this task to `done` with the fresh verification evidence. If it times out again
+before compiler diagnostics, continue automatic local Xcode tooling repair and
+append the fresh bounded command result here.

@@ -259,6 +259,50 @@ struct TextInsertionServiceTests {
         #expect(await poster.postedTexts() == ["stored transcript"])
     }
 
+    @Test func recoveredTranscriptInsertIgnoresAutomaticInsertionSetting() async throws {
+        let store = FakeTranscriptClipboardStore()
+        let poster = FakeTextEventPoster()
+        let service = makeDeliveryService(
+            store: store,
+            accessibilityIsTrusted: true,
+            textEventPoster: poster
+        )
+
+        let result = try await service.insertRecoveredTranscript(
+            "history row",
+            settings: makeSettings(
+                automaticallyInsertTranscripts: false,
+                saveTranscriptsToAppClipboard: true
+            )
+        )
+
+        #expect(result == .insertedAndSavedToAppClipboard)
+        #expect(await store.currentText() == "history row")
+        #expect(await store.savedTexts() == ["history row"])
+        #expect(await poster.postedTexts() == ["history row"])
+    }
+
+    @Test func recoveredTranscriptInsertDoesNotClearDisabledAppClipboard() async throws {
+        let store = FakeTranscriptClipboardStore(initialText: "previous recovery")
+        let poster = FakeTextEventPoster()
+        let service = makeDeliveryService(
+            store: store,
+            accessibilityIsTrusted: true,
+            textEventPoster: poster
+        )
+
+        let result = try await service.insertRecoveredTranscript(
+            "history row",
+            settings: makeSettings(saveTranscriptsToAppClipboard: false)
+        )
+
+        #expect(result == .inserted)
+        #expect(await store.currentText() == "previous recovery")
+        #expect(await store.savedTexts().isEmpty)
+        #expect(await store.clearCount() == 0)
+        #expect(await poster.postedTexts() == ["history row"])
+    }
+
     private func makePasteService(
         store: FakeTranscriptClipboardStore,
         accessibilityIsTrusted: Bool,

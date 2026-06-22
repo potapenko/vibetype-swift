@@ -18,7 +18,7 @@ struct MenuBarPresentationTests {
         )
 
         #expect(presentation.appTitle == "VibeType")
-        #expect(VibeTypeMenuBarIdentity.systemImage == "mic.fill")
+        #expect(VibeTypeMenuBarIdentity.iconAssetName == "VibeTypeMenuBarIcon")
         #expect(VibeTypeMenuBarIdentity.helpText == "VibeType Dictation")
         #expect(presentation.statusText == "Ready")
         #expect(presentation.microphoneStatusText == "Microphone: Allowed")
@@ -34,6 +34,7 @@ struct MenuBarPresentationTests {
         #expect(presentation.canSaveLastTranscript == false)
         #expect(MenuBarPresentation.lastTranscriptTitle == "Last Transcript")
         #expect(MenuBarPresentation.saveLastTranscriptTitle == "Save to VibeType Clipboard")
+        #expect(MenuBarPresentation.historyTitle == "Transcript History")
         #expect(MenuBarPresentation.settingsTitle == "Settings")
         #expect(MenuBarPresentation.quitTitle == "Quit VibeType")
     }

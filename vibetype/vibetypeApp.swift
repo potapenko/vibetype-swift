@@ -9,6 +9,7 @@ import AppKit
 import SwiftUI
 
 enum VibeTypeWindow {
+    static let history = "history"
     static let settings = "settings"
 }
 
@@ -20,12 +21,10 @@ struct VibeTypeApp: App {
         MenuBarExtra {
             MenuBarView()
         } label: {
-            Label(
-                VibeTypeMenuBarIdentity.title,
-                systemImage: VibeTypeMenuBarIdentity.systemImage
-            )
-            .accessibilityLabel(VibeTypeMenuBarIdentity.title)
-            .help(VibeTypeMenuBarIdentity.helpText)
+            Image(VibeTypeMenuBarIdentity.iconAssetName)
+                .renderingMode(.template)
+                .accessibilityLabel(VibeTypeMenuBarIdentity.title)
+                .help(VibeTypeMenuBarIdentity.helpText)
         }
         .menuBarExtraStyle(.menu)
 
@@ -33,6 +32,11 @@ struct VibeTypeApp: App {
             SettingsView()
         }
         .defaultSize(width: 760, height: 520)
+
+        Window("Transcript History", id: VibeTypeWindow.history) {
+            TranscriptHistoryView()
+        }
+        .defaultSize(width: 760, height: 560)
     }
 }
 
@@ -45,6 +49,7 @@ final class VibeTypeAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        TranscriptRecoveryHistoryStore.shared.clear()
         specialClipboardHotkeyCoordinator.stop()
     }
 }
