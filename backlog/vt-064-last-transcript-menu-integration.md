@@ -1,7 +1,7 @@
 ---
 id: VT-064
 title: Last Transcript Menu Integration
-status: backlog
+status: in-progress
 priority: P2
 lane: text-output
 parent: VT-060
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-064 - Last Transcript Menu Integration
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
