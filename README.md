@@ -37,8 +37,6 @@ File-changing task-solving chats should end with a scoped checkpoint commit.
 - `docs/agent-onboarding.md` - short agent startup checklist
 - `docs/specs/brownfield-discovery.md` - current implementation snapshot
 - `docs/specs/backlog.md` - first spec backlog and open decisions
-- `docs/openwhispr_swiftui_codex_tz.md` - original product brief used as
-  bootstrap evidence
 - `docs/specs/features/menu-bar-app-shell.md` - first-pass menu bar and app
   state behavior
 - `docs/specs/features/microphone-text-input.md` - first-pass capture and
@@ -50,13 +48,6 @@ File-changing task-solving chats should end with a scoped checkpoint commit.
 - `docs/specs/features/text-output-workflow.md` - first-pass VibeType
   Clipboard and text handoff behavior
 - `docs/specs/templates/feature-spec.md` - reusable feature spec template
-
-## Reference Material
-
-- `references/openwhispr-main/` - copied OpenWhispr source used only as
-  behavior evidence for the native Swift rewrite
-- `references/README.md` - rules for using the copied reference without
-  importing Electron/React/Node architecture
 
 ## Prompt Pack
 
