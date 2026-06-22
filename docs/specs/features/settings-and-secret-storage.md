@@ -14,7 +14,7 @@ This spec covers:
 - settings visible in the Settings window
 - UserDefaults-backed non-secret settings
 - Keychain-backed OpenAI API key
-- app clipboard, recording, and indicator toggles
+- automatic insertion, app clipboard, recording, and indicator toggles
 - transcript history toggle and clear action
 - prompt and custom dictionary settings
 
@@ -58,10 +58,14 @@ This spec covers:
 - The Settings window should include hotkey display.
 - The hotkey row is read-only for MVP and shows the active shortcut,
   activation mode, and unavailable/fallback status when known.
+- The Settings window should include an Insert transcripts automatically
+  toggle.
+- Insert transcripts automatically controls whether accepted transcripts are
+  inserted into the active app after transcription succeeds.
 - The Settings window should include a Save to VibeType Clipboard toggle.
 - Save to VibeType Clipboard controls the app-owned clipboard used by
   `Control+Command+V`. It must not copy transcripts to the macOS system
-  clipboard.
+  clipboard and must not disable automatic insertion.
 - The Settings window should include toggles for short dictation start/stop
   sounds and the floating recording indicator.
 - Dictation sounds should be short, non-verbal cues. The start cue should make
@@ -88,6 +92,7 @@ The MVP non-secret settings default to:
 - custom language code: empty
 - prompt: empty
 - custom dictionary: empty
+- insert transcripts automatically: on
 - save to VibeType Clipboard: on
 - dictation start/stop sounds: on
 - floating recording indicator: on
@@ -130,6 +135,7 @@ UserDefaults may store:
 
 - selected model
 - language
+- automaticallyInsertTranscripts
 - saveTranscriptsToAppClipboard
 - soundEnabled
 - showFloatingIndicator

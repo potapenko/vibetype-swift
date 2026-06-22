@@ -75,6 +75,7 @@ struct AppSettings: Equatable {
         customLanguageCode: "",
         prompt: "",
         customDictionary: [],
+        automaticallyInsertTranscripts: true,
         saveTranscriptsToAppClipboard: true,
         soundEnabled: true,
         showFloatingIndicator: true,
@@ -86,6 +87,7 @@ struct AppSettings: Equatable {
     var customLanguageCode: String
     var prompt: String
     var customDictionary: [String] = []
+    var automaticallyInsertTranscripts: Bool
     var saveTranscriptsToAppClipboard: Bool
     var soundEnabled: Bool
     var showFloatingIndicator: Bool
@@ -208,6 +210,7 @@ struct AppSettingsStore {
         Key.customLanguageCode,
         Key.prompt,
         Key.customDictionary,
+        Key.automaticallyInsertTranscripts,
         Key.saveTranscriptsToAppClipboard,
         Key.soundEnabled,
         Key.showFloatingIndicator,
@@ -220,6 +223,7 @@ struct AppSettingsStore {
         static let customLanguageCode = keyPrefix + "customLanguageCode"
         static let prompt = keyPrefix + "prompt"
         static let customDictionary = keyPrefix + "customDictionary"
+        static let automaticallyInsertTranscripts = keyPrefix + "automaticallyInsertTranscripts"
         static let saveTranscriptsToAppClipboard = keyPrefix + "saveTranscriptsToAppClipboard"
         static let soundEnabled = keyPrefix + "soundEnabled"
         static let showFloatingIndicator = keyPrefix + "showFloatingIndicator"
@@ -246,6 +250,8 @@ struct AppSettingsStore {
                 userDefaults.stringArray(forKey: Key.customDictionary)
                     ?? defaultSettings.customDictionary
             ),
+            automaticallyInsertTranscripts: optionalBool(forKey: Key.automaticallyInsertTranscripts)
+                ?? defaultSettings.automaticallyInsertTranscripts,
             saveTranscriptsToAppClipboard: optionalBool(forKey: Key.saveTranscriptsToAppClipboard)
                 ?? defaultSettings.saveTranscriptsToAppClipboard,
             soundEnabled: optionalBool(forKey: Key.soundEnabled) ?? defaultSettings.soundEnabled,
@@ -264,6 +270,10 @@ struct AppSettingsStore {
         userDefaults.set(
             AppSettings.normalizedCustomDictionary(settings.customDictionary),
             forKey: Key.customDictionary
+        )
+        userDefaults.set(
+            settings.automaticallyInsertTranscripts,
+            forKey: Key.automaticallyInsertTranscripts
         )
         userDefaults.set(
             settings.saveTranscriptsToAppClipboard,

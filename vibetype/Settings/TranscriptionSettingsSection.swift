@@ -82,6 +82,7 @@ struct TranscriptionSettingsSection: View {
                     customLanguageCode: "ru",
                     prompt: "Prefer product vocabulary.",
                     customDictionary: ["OpenWhispr", "Synty", "The word is VibeType"],
+                    automaticallyInsertTranscripts: true,
                     saveTranscriptsToAppClipboard: true,
                     soundEnabled: true,
                     showFloatingIndicator: true,

@@ -17,10 +17,12 @@ struct SettingsDetailView: View {
     let preferredHotkeyConfiguration: GlobalHotkeyConfiguration
     let microphonePermissionStatus: MicrophonePermissionStatus
     let accessibilityPermissionStatus: AccessibilityPermissionStatus
+    let inputMonitoringPermissionStatus: InputMonitoringPermissionStatus
     let onSaveAPIKey: () -> Void
     let onRemoveAPIKey: () -> Void
     let onMicrophonePermissionAction: () -> Void
     let onOpenAccessibilitySettings: () -> Void
+    let onInputMonitoringPermissionAction: () -> Void
 
     var body: some View {
         Form {
@@ -49,8 +51,10 @@ struct SettingsDetailView: View {
                 PrivacyPermissionsSettingsSection(
                     microphonePermissionStatus: microphonePermissionStatus,
                     accessibilityPermissionStatus: accessibilityPermissionStatus,
+                    inputMonitoringPermissionStatus: inputMonitoringPermissionStatus,
                     onMicrophonePermissionAction: onMicrophonePermissionAction,
-                    onOpenAccessibilitySettings: onOpenAccessibilitySettings
+                    onOpenAccessibilitySettings: onOpenAccessibilitySettings,
+                    onInputMonitoringPermissionAction: onInputMonitoringPermissionAction
                 )
             }
         }
@@ -70,10 +74,12 @@ struct SettingsDetailView: View {
         preferredHotkeyConfiguration: .defaultDictation,
         microphonePermissionStatus: .notDetermined,
         accessibilityPermissionStatus: .notTrusted,
+        inputMonitoringPermissionStatus: .notDetermined,
         onSaveAPIKey: {},
         onRemoveAPIKey: {},
         onMicrophonePermissionAction: {},
-        onOpenAccessibilitySettings: {}
+        onOpenAccessibilitySettings: {},
+        onInputMonitoringPermissionAction: {}
     )
     .frame(width: 520, height: 420)
 }

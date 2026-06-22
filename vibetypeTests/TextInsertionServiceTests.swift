@@ -11,36 +11,143 @@ import Testing
 
 struct TextInsertionServiceTests {
 
-    @Test func enabledOutputSavesTranscriptToAppClipboard() async throws {
+    @Test func deliverySavesTranscriptAndInsertsWhenBothOutputsAreEnabled() async throws {
         let store = FakeTranscriptClipboardStore()
-        let service = TextInsertionService(transcriptClipboardStore: store)
+        let poster = FakeTextEventPoster()
+        let service = makeDeliveryService(
+            store: store,
+            accessibilityIsTrusted: true,
+            textEventPoster: poster
+        )
 
         let result = try await service.deliver(
             "hello active app",
-            settings: makeSettings(saveTranscriptsToAppClipboard: true)
+            settings: makeSettings(
+                automaticallyInsertTranscripts: true,
+                saveTranscriptsToAppClipboard: true
+            )
         )
 
-        #expect(result == .savedToAppClipboard)
-        #expect(result.statusText.contains("VibeType Clipboard"))
+        #expect(result == .insertedAndSavedToAppClipboard)
+        #expect(result.statusText.contains("Recovery shortcut"))
         #expect(await store.currentText() == "hello active app")
         #expect(await store.savedTexts() == ["hello active app"])
         #expect(await store.clearCount() == 0)
+        #expect(await poster.postedTexts() == ["hello active app"])
     }
 
-    @Test func disabledOutputClearsAppClipboardAndSkipsSystemClipboardFallback() async throws {
+    @Test func deliveryInsertsAndClearsAppClipboardWhenRecoveryIsDisabled() async throws {
         let store = FakeTranscriptClipboardStore(initialText: "previous transcript")
-        let service = TextInsertionService(transcriptClipboardStore: store)
-
-        let result = try await service.deliver(
-            "unused text",
-            settings: makeSettings(saveTranscriptsToAppClipboard: false)
+        let poster = FakeTextEventPoster()
+        let service = makeDeliveryService(
+            store: store,
+            accessibilityIsTrusted: true,
+            textEventPoster: poster
         )
 
-        #expect(result == .skipped(reason: .appClipboardDisabled))
-        #expect(result.statusText == "VibeType Clipboard is disabled.")
+        let result = try await service.deliver(
+            "insert only",
+            settings: makeSettings(
+                automaticallyInsertTranscripts: true,
+                saveTranscriptsToAppClipboard: false
+            )
+        )
+
+        #expect(result == .inserted)
         #expect(await store.currentText() == nil)
         #expect(await store.savedTexts().isEmpty)
         #expect(await store.clearCount() == 1)
+        #expect(await poster.postedTexts() == ["insert only"])
+    }
+
+    @Test func deliverySavesOnlyWhenAutomaticInsertionIsDisabled() async throws {
+        let store = FakeTranscriptClipboardStore()
+        let poster = FakeTextEventPoster()
+        let service = makeDeliveryService(
+            store: store,
+            accessibilityIsTrusted: true,
+            textEventPoster: poster
+        )
+
+        let result = try await service.deliver(
+            "recover later",
+            settings: makeSettings(
+                automaticallyInsertTranscripts: false,
+                saveTranscriptsToAppClipboard: true
+            )
+        )
+
+        #expect(result == .savedToAppClipboard)
+        #expect(await store.currentText() == "recover later")
+        #expect(await poster.postedTexts().isEmpty)
+    }
+
+    @Test func deliverySkipsWhenBothAutomaticInsertionAndRecoveryAreDisabled() async throws {
+        let store = FakeTranscriptClipboardStore(initialText: "previous transcript")
+        let poster = FakeTextEventPoster()
+        let service = makeDeliveryService(
+            store: store,
+            accessibilityIsTrusted: true,
+            textEventPoster: poster
+        )
+
+        let result = try await service.deliver(
+            "unused text",
+            settings: makeSettings(
+                automaticallyInsertTranscripts: false,
+                saveTranscriptsToAppClipboard: false
+            )
+        )
+
+        #expect(result == .skipped(reason: .outputDisabled))
+        #expect(result.statusText == "Automatic insertion and VibeType Clipboard are disabled.")
+        #expect(await store.currentText() == nil)
+        #expect(await poster.postedTexts().isEmpty)
+    }
+
+    @Test func deliveryKeepsRecoveryTextWhenAccessibilityIsMissing() async throws {
+        let store = FakeTranscriptClipboardStore()
+        let poster = FakeTextEventPoster()
+        let service = makeDeliveryService(
+            store: store,
+            accessibilityIsTrusted: false,
+            textEventPoster: poster
+        )
+
+        let result = try await service.deliver(
+            "needs recovery",
+            settings: makeSettings(
+                automaticallyInsertTranscripts: true,
+                saveTranscriptsToAppClipboard: true
+            )
+        )
+
+        #expect(result == .failed(reason: .accessibilityNotTrusted, savedToAppClipboard: true))
+        #expect(result.statusText.contains("Saved to VibeType Clipboard"))
+        #expect(await store.currentText() == "needs recovery")
+        #expect(await poster.postedTexts().isEmpty)
+    }
+
+    @Test func deliveryReportsInsertionFailureAndKeepsRecoveryText() async throws {
+        let store = FakeTranscriptClipboardStore()
+        let poster = FakeTextEventPoster(mode: .throwError)
+        let service = makeDeliveryService(
+            store: store,
+            accessibilityIsTrusted: true,
+            textEventPoster: poster
+        )
+
+        let result = try await service.deliver(
+            "still recoverable",
+            settings: makeSettings(
+                automaticallyInsertTranscripts: true,
+                saveTranscriptsToAppClipboard: true
+            )
+        )
+
+        #expect(result == .failed(reason: .textInsertionFailed, savedToAppClipboard: true))
+        #expect(await store.currentText() == "still recoverable")
+        #expect(await poster.postedTexts() == ["still recoverable"])
     }
 
     @Test func pasteShortcutInsertsCurrentAppClipboardTextWhenTrustedAndEnabled() async {
@@ -170,12 +277,35 @@ struct TextInsertionServiceTests {
         )
     }
 
-    private func makeSettings(saveTranscriptsToAppClipboard: Bool) -> AppSettings {
+    private func makeDeliveryService(
+        store: FakeTranscriptClipboardStore,
+        accessibilityIsTrusted: Bool,
+        textEventPoster: FakeTextEventPoster,
+        insertTimeout: TimeInterval = 1
+    ) -> TextInsertionService {
+        TextInsertionService(
+            transcriptClipboardStore: store,
+            accessibilityPermissionService: AccessibilityPermissionService(
+                client: FakeTextInsertionAccessibilityPermissionClient(
+                    isTrusted: accessibilityIsTrusted
+                )
+            ),
+            textEventPoster: textEventPoster,
+            insertTimeout: insertTimeout
+        )
+    }
+
+    private func makeSettings(
+        automaticallyInsertTranscripts: Bool = true,
+        saveTranscriptsToAppClipboard: Bool
+    ) -> AppSettings {
         AppSettings(
             transcriptionModel: AppSettings.defaultTranscriptionModel,
             language: .automatic,
             customLanguageCode: "",
             prompt: "",
+            customDictionary: [],
+            automaticallyInsertTranscripts: automaticallyInsertTranscripts,
             saveTranscriptsToAppClipboard: saveTranscriptsToAppClipboard,
             soundEnabled: true,
             showFloatingIndicator: true,

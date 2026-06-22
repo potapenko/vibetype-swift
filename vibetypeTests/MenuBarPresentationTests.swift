@@ -95,7 +95,7 @@ struct MenuBarPresentationTests {
         #expect(presentation.isRecordingActionEnabled == false)
     }
 
-    @Test func accessibilityNotTrustedExplainsAppClipboardPasteBlock() {
+    @Test func accessibilityNotTrustedExplainsTextInsertionBlock() {
         let presentation = MenuBarPresentation(
             dictationStatus: .idle,
             microphonePermissionStatus: .allowed,
@@ -103,7 +103,7 @@ struct MenuBarPresentationTests {
         )
 
         #expect(presentation.accessibilityStatusText == "Accessibility: Not Allowed")
-        #expect(presentation.accessibilityDetailText?.contains("VibeType Clipboard paste") == true)
+        #expect(presentation.accessibilityDetailText?.contains("Text insertion") == true)
         #expect(presentation.accessibilitySettingsActionTitle == "Open Accessibility Settings")
     }
 

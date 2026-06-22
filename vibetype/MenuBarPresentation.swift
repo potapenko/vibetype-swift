@@ -48,7 +48,7 @@ struct MenuBarPresentation: Equatable {
             : nil
         accessibilityStatusText = accessibilityPermissionStatus.menuStatusText
         accessibilityDetailText = accessibilityPermissionStatus.menuDetailText
-        accessibilitySettingsActionTitle = accessibilityPermissionStatus.canPasteIntoActiveApp
+        accessibilitySettingsActionTitle = accessibilityPermissionStatus.canInsertTextIntoActiveApp
             ? nil
             : "Open Accessibility Settings"
         recordingActionTitle = Self.recordingActionTitle(

@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var selectedItem: SettingsNavigationItem? = .general
     @State private var microphonePermissionStatus: MicrophonePermissionStatus
     @State private var accessibilityPermissionStatus: AccessibilityPermissionStatus
+    @State private var inputMonitoringPermissionStatus: InputMonitoringPermissionStatus
     @State private var appSettings: AppSettings
     @State private var apiKeyInput = ""
     @State private var apiKeyStatus: APIKeySettingsStatus = .unknown
@@ -18,6 +19,7 @@ struct SettingsView: View {
 
     private let microphonePermissionService: MicrophonePermissionService
     private let accessibilityPermissionService: AccessibilityPermissionService
+    private let inputMonitoringPermissionService: InputMonitoringPermissionService
     private let apiKeyStorage: APIKeyStorage
     private let appSettingsStore: AppSettingsStore
     private let preferredHotkeyConfiguration: GlobalHotkeyConfiguration
@@ -26,6 +28,7 @@ struct SettingsView: View {
     init(
         microphonePermissionService: MicrophonePermissionService = MicrophonePermissionService(),
         accessibilityPermissionService: AccessibilityPermissionService = AccessibilityPermissionService(),
+        inputMonitoringPermissionService: InputMonitoringPermissionService = InputMonitoringPermissionService(),
         apiKeyStorage: APIKeyStorage = KeychainService(),
         appSettingsStore: AppSettingsStore = AppSettingsStore(),
         preferredHotkeyConfiguration: GlobalHotkeyConfiguration = .defaultDictation,
@@ -33,6 +36,7 @@ struct SettingsView: View {
     ) {
         self.microphonePermissionService = microphonePermissionService
         self.accessibilityPermissionService = accessibilityPermissionService
+        self.inputMonitoringPermissionService = inputMonitoringPermissionService
         self.apiKeyStorage = apiKeyStorage
         self.appSettingsStore = appSettingsStore
         self.preferredHotkeyConfiguration = preferredHotkeyConfiguration
@@ -43,6 +47,9 @@ struct SettingsView: View {
         )
         _accessibilityPermissionStatus = State(
             initialValue: accessibilityPermissionService.currentStatus()
+        )
+        _inputMonitoringPermissionStatus = State(
+            initialValue: inputMonitoringPermissionService.currentStatus()
         )
         _hotkeyRegistrationStatus = State(initialValue: hotkeyStatusProvider())
     }
@@ -61,10 +68,12 @@ struct SettingsView: View {
                 preferredHotkeyConfiguration: preferredHotkeyConfiguration,
                 microphonePermissionStatus: microphonePermissionStatus,
                 accessibilityPermissionStatus: accessibilityPermissionStatus,
+                inputMonitoringPermissionStatus: inputMonitoringPermissionStatus,
                 onSaveAPIKey: saveAPIKey,
                 onRemoveAPIKey: removeAPIKey,
                 onMicrophonePermissionAction: handleMicrophonePermissionAction,
-                onOpenAccessibilitySettings: handleAccessibilityPermissionAction
+                onOpenAccessibilitySettings: handleAccessibilityPermissionAction,
+                onInputMonitoringPermissionAction: handleInputMonitoringPermissionAction
             )
         }
         .frame(minWidth: 720, minHeight: 480)
@@ -73,6 +82,7 @@ struct SettingsView: View {
             reloadAppSettings()
             refreshMicrophonePermissionStatus()
             refreshAccessibilityPermissionStatus()
+            refreshInputMonitoringPermissionStatus()
             refreshHotkeyRegistrationStatus()
             refreshAPIKeyStatus()
         }
@@ -121,6 +131,22 @@ struct SettingsView: View {
     private func handleAccessibilityPermissionAction() {
         accessibilityPermissionService.openAccessibilitySettings()
         refreshAccessibilityPermissionStatus()
+    }
+
+    private func refreshInputMonitoringPermissionStatus() {
+        inputMonitoringPermissionStatus = inputMonitoringPermissionService.currentStatus()
+    }
+
+    private func handleInputMonitoringPermissionAction() {
+        switch inputMonitoringPermissionStatus {
+        case .allowed:
+            refreshInputMonitoringPermissionStatus()
+        case .denied:
+            inputMonitoringPermissionService.openInputMonitoringSettings()
+            refreshInputMonitoringPermissionStatus()
+        case .notDetermined:
+            inputMonitoringPermissionStatus = inputMonitoringPermissionService.requestPermission()
+        }
     }
 
     private func refreshHotkeyRegistrationStatus() {

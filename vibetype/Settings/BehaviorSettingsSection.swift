@@ -13,11 +13,20 @@ struct BehaviorSettingsSection: View {
     var body: some View {
         Section("Behavior") {
             Toggle(
-                "Save transcripts to VibeType Clipboard",
+                "Insert transcripts automatically",
+                isOn: $settings.automaticallyInsertTranscripts
+            )
+
+            Text("After transcription, insert accepted text into the active app at the cursor.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Toggle(
+                "Keep last transcript in VibeType Clipboard",
                 isOn: $settings.saveTranscriptsToAppClipboard
             )
 
-            Text("Use Control+Command+V to insert the saved VibeType Clipboard text into the active app.")
+            Text("Use Control+Command+V to recover the saved text in the active app.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 

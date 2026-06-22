@@ -23,6 +23,7 @@ struct AppSettingsTests {
         #expect(settings.customDictionary.isEmpty)
         #expect(settings.resolvedCustomDictionaryEntries.isEmpty)
         #expect(settings.resolvedCustomDictionaryPrompt == nil)
+        #expect(settings.automaticallyInsertTranscripts)
         #expect(settings.saveTranscriptsToAppClipboard)
         #expect(settings.soundEnabled)
         #expect(settings.showFloatingIndicator)
@@ -116,6 +117,7 @@ struct AppSettingsTests {
             customLanguageCode: "de",
             prompt: "Product names",
             customDictionary: ["OpenWhispr", "Synty"],
+            automaticallyInsertTranscripts: false,
             saveTranscriptsToAppClipboard: false,
             soundEnabled: false,
             showFloatingIndicator: true,

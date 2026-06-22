@@ -8,6 +8,7 @@
 import AppKit
 import ApplicationServices
 import AVFoundation
+import IOKit.hid
 
 enum MicrophonePermissionStatus: Equatable {
     case allowed
@@ -199,8 +200,12 @@ enum AccessibilityPermissionStatus: Equatable {
     case trusted
     case notTrusted
 
-    var canPasteIntoActiveApp: Bool {
+    var canInsertTextIntoActiveApp: Bool {
         self == .trusted
+    }
+
+    var canPasteIntoActiveApp: Bool {
+        canInsertTextIntoActiveApp
     }
 
     var menuStatusText: String {
@@ -215,9 +220,9 @@ enum AccessibilityPermissionStatus: Equatable {
     var settingsDescription: String {
         switch self {
         case .trusted:
-            return "VibeType Clipboard paste can insert text into the active app."
+            return "Automatic insertion and VibeType Clipboard paste can insert text into the active app."
         case .notTrusted:
-            return "VibeType Clipboard paste needs Accessibility permission. Transcription can still save app clipboard text."
+            return "Automatic insertion and VibeType Clipboard paste need Accessibility permission. Transcription can still save recovery text."
         }
     }
 
@@ -231,7 +236,7 @@ enum AccessibilityPermissionStatus: Equatable {
     }
 
     var settingsSystemImage: String {
-        canPasteIntoActiveApp ? "checkmark.circle" : "exclamationmark.triangle"
+        canInsertTextIntoActiveApp ? "checkmark.circle" : "exclamationmark.triangle"
     }
 
     var menuDetailText: String? {
@@ -239,7 +244,7 @@ enum AccessibilityPermissionStatus: Equatable {
         case .trusted:
             return nil
         case .notTrusted:
-            return "VibeType Clipboard paste is unavailable until Accessibility is allowed."
+            return "Text insertion is unavailable until Accessibility is allowed."
         }
     }
 }
@@ -285,5 +290,125 @@ struct AccessibilityPermissionService {
     @discardableResult
     func openAccessibilitySettings() -> Bool {
         client.openAccessibilitySettings()
+    }
+}
+
+enum InputMonitoringAuthorizationStatus: Equatable {
+    case allowed
+    case denied
+    case notDetermined
+}
+
+enum InputMonitoringPermissionStatus: Equatable {
+    case allowed
+    case denied
+    case notDetermined
+
+    var settingsStatusText: String {
+        switch self {
+        case .allowed:
+            return "Input Monitoring: Allowed"
+        case .denied:
+            return "Input Monitoring: Not Allowed"
+        case .notDetermined:
+            return "Input Monitoring: Permission Needed"
+        }
+    }
+
+    var settingsDescription: String {
+        switch self {
+        case .allowed:
+            return "Global dictation shortcuts can listen for key presses outside VibeType."
+        case .denied:
+            return "Global dictation shortcuts may be blocked until Input Monitoring is allowed in System Settings."
+        case .notDetermined:
+            return "Allow Input Monitoring when prompted if global dictation shortcuts need it."
+        }
+    }
+
+    var settingsSystemImage: String {
+        switch self {
+        case .allowed:
+            return "checkmark.circle"
+        case .denied:
+            return "xmark.octagon"
+        case .notDetermined:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    var settingsActionTitle: String? {
+        switch self {
+        case .allowed:
+            return nil
+        case .denied:
+            return "Open Input Monitoring Settings"
+        case .notDetermined:
+            return "Request Input Monitoring Access"
+        }
+    }
+}
+
+protocol InputMonitoringPermissionClient {
+    func authorizationStatus() -> InputMonitoringAuthorizationStatus
+    func requestAccess() -> Bool
+    func openInputMonitoringSettings() -> Bool
+}
+
+struct IOHIDInputMonitoringPermissionClient: InputMonitoringPermissionClient {
+    func authorizationStatus() -> InputMonitoringAuthorizationStatus {
+        let accessType = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
+
+        if accessType == kIOHIDAccessTypeGranted {
+            return .allowed
+        }
+
+        if accessType == kIOHIDAccessTypeDenied {
+            return .denied
+        }
+
+        return .notDetermined
+    }
+
+    func requestAccess() -> Bool {
+        IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+    }
+
+    func openInputMonitoringSettings() -> Bool {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+        ) else {
+            return false
+        }
+
+        return NSWorkspace.shared.open(url)
+    }
+}
+
+struct InputMonitoringPermissionService {
+    private let client: InputMonitoringPermissionClient
+
+    init(client: InputMonitoringPermissionClient = IOHIDInputMonitoringPermissionClient()) {
+        self.client = client
+    }
+
+    func currentStatus() -> InputMonitoringPermissionStatus {
+        switch client.authorizationStatus() {
+        case .allowed:
+            return .allowed
+        case .denied:
+            return .denied
+        case .notDetermined:
+            return .notDetermined
+        }
+    }
+
+    func requestPermission() -> InputMonitoringPermissionStatus {
+        client.requestAccess() ? .allowed : currentStatus()
+    }
+
+    @discardableResult
+    func openInputMonitoringSettings() -> Bool {
+        client.openInputMonitoringSettings()
     }
 }

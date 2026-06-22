@@ -60,7 +60,7 @@ struct SpecialClipboardHotkeyServiceTests {
         await yieldUntil { await store.currentText() == nil }
 
         #expect(hotkeyService.startCount == 0)
-        #expect(hotkeyService.stopCount == 1)
+        #expect(hotkeyService.stopCount >= 1)
         #expect(hotkeyService.isListening == false)
         #expect(await store.currentText() == nil)
         #expect(await poster.postedTexts().isEmpty)

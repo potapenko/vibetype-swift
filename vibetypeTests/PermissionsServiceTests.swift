@@ -130,6 +130,8 @@ struct PermissionsServiceTests {
         #expect(
             AccessibilityPermissionService(client: notTrustedClient).currentStatus() == .notTrusted
         )
+        #expect(AccessibilityPermissionStatus.trusted.canInsertTextIntoActiveApp)
+        #expect(AccessibilityPermissionStatus.notTrusted.canInsertTextIntoActiveApp == false)
         #expect(AccessibilityPermissionStatus.trusted.canPasteIntoActiveApp)
         #expect(AccessibilityPermissionStatus.notTrusted.canPasteIntoActiveApp == false)
         #expect(trustedClient.promptRequests == [false])
@@ -154,7 +156,7 @@ struct PermissionsServiceTests {
 
         #expect(AccessibilityPermissionStatus.notTrusted.settingsStatusText == "Accessibility: Not Allowed")
         #expect(AccessibilityPermissionStatus.notTrusted.settingsSystemImage == "exclamationmark.triangle")
-        #expect(AccessibilityPermissionStatus.notTrusted.settingsDescription.contains("app clipboard"))
+        #expect(AccessibilityPermissionStatus.notTrusted.settingsDescription.contains("Automatic insertion"))
     }
 
     @Test func accessibilityMenuCopyExplainsAppClipboardPasteBlock() {
@@ -163,8 +165,60 @@ struct PermissionsServiceTests {
         #expect(AccessibilityPermissionStatus.trusted.canPasteIntoActiveApp)
 
         #expect(AccessibilityPermissionStatus.notTrusted.menuStatusText == "Accessibility: Not Allowed")
-        #expect(AccessibilityPermissionStatus.notTrusted.menuDetailText?.contains("VibeType Clipboard paste") == true)
+        #expect(AccessibilityPermissionStatus.notTrusted.menuDetailText?.contains("Text insertion") == true)
         #expect(AccessibilityPermissionStatus.notTrusted.canPasteIntoActiveApp == false)
+    }
+
+    @Test func inputMonitoringStatusMapsAuthorizationStates() {
+        #expect(
+            InputMonitoringPermissionService(
+                client: FakeInputMonitoringPermissionClient(authorizationStatus: .allowed)
+            ).currentStatus() == .allowed
+        )
+        #expect(
+            InputMonitoringPermissionService(
+                client: FakeInputMonitoringPermissionClient(authorizationStatus: .denied)
+            ).currentStatus() == .denied
+        )
+        #expect(
+            InputMonitoringPermissionService(
+                client: FakeInputMonitoringPermissionClient(authorizationStatus: .notDetermined)
+            ).currentStatus() == .notDetermined
+        )
+    }
+
+    @Test func inputMonitoringRequestAndSettingsActionsAreBounded() {
+        let notDeterminedClient = FakeInputMonitoringPermissionClient(
+            authorizationStatus: .notDetermined,
+            requestResult: true
+        )
+        let deniedClient = FakeInputMonitoringPermissionClient(
+            authorizationStatus: .denied,
+            opensSettings: true
+        )
+
+        #expect(
+            InputMonitoringPermissionService(client: notDeterminedClient).requestPermission()
+                == .allowed
+        )
+        #expect(notDeterminedClient.requestCount == 1)
+
+        let deniedService = InputMonitoringPermissionService(client: deniedClient)
+        #expect(deniedService.openInputMonitoringSettings())
+        #expect(deniedClient.openSettingsCount == 1)
+    }
+
+    @Test func inputMonitoringSettingsCopyNamesStatusAndActions() {
+        #expect(InputMonitoringPermissionStatus.allowed.settingsStatusText == "Input Monitoring: Allowed")
+        #expect(InputMonitoringPermissionStatus.allowed.settingsActionTitle == nil)
+        #expect(InputMonitoringPermissionStatus.allowed.settingsSystemImage == "checkmark.circle")
+
+        #expect(InputMonitoringPermissionStatus.denied.settingsStatusText == "Input Monitoring: Not Allowed")
+        #expect(InputMonitoringPermissionStatus.denied.settingsActionTitle == "Open Input Monitoring Settings")
+        #expect(InputMonitoringPermissionStatus.denied.settingsDescription.contains("System Settings"))
+
+        #expect(InputMonitoringPermissionStatus.notDetermined.settingsStatusText == "Input Monitoring: Permission Needed")
+        #expect(InputMonitoringPermissionStatus.notDetermined.settingsActionTitle == "Request Input Monitoring Access")
     }
 }
 
@@ -216,6 +270,42 @@ private final class FakeAccessibilityPermissionClient: AccessibilityPermissionCl
     }
 
     func openAccessibilitySettings() -> Bool {
+        openSettingsCount += 1
+        return opensSettings
+    }
+}
+
+private final class FakeInputMonitoringPermissionClient: InputMonitoringPermissionClient {
+    private(set) var requestCount = 0
+    private(set) var openSettingsCount = 0
+
+    private var currentAuthorizationStatus: InputMonitoringAuthorizationStatus
+    private let requestResult: Bool
+    private let opensSettings: Bool
+
+    init(
+        authorizationStatus: InputMonitoringAuthorizationStatus,
+        requestResult: Bool = false,
+        opensSettings: Bool = false
+    ) {
+        currentAuthorizationStatus = authorizationStatus
+        self.requestResult = requestResult
+        self.opensSettings = opensSettings
+    }
+
+    func authorizationStatus() -> InputMonitoringAuthorizationStatus {
+        currentAuthorizationStatus
+    }
+
+    func requestAccess() -> Bool {
+        requestCount += 1
+        if requestResult {
+            currentAuthorizationStatus = .allowed
+        }
+        return requestResult
+    }
+
+    func openInputMonitoringSettings() -> Bool {
         openSettingsCount += 1
         return opensSettings
     }

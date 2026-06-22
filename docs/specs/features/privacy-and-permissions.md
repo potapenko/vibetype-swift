@@ -15,6 +15,7 @@ This spec covers:
 
 - microphone consent
 - Accessibility consent for active-app paste automation
+- Input Monitoring consent when native global-hotkey listening requires it
 - recording visibility
 - OpenAI remote-service disclosure
 - local persistence defaults
@@ -34,8 +35,11 @@ This spec covers:
 
 - The app must request microphone permission through the platform's normal
   permission flow before recording.
-- The app must explain Accessibility permission when VibeType Clipboard paste
-  requires keyboard event simulation or control of the active app.
+- The app must explain Accessibility permission when automatic insertion or
+  VibeType Clipboard paste requires keyboard event simulation or control of the
+  active app.
+- The app must explain Input Monitoring permission when the native global
+  hotkey implementation listens for key presses outside VibeType.
 - The app must not imply that recording is active unless microphone capture has
   actually started.
 - The product must disclose that audio is sent to OpenAI when OpenAI
@@ -57,9 +61,9 @@ This spec covers:
   Missing or denied microphone permission must block recording and show the
   shortest available next action, such as requesting access or opening the
   Microphone pane in System Settings.
-- Settings should show microphone and Accessibility status using product
-  language and provide a bounded next action such as requesting permission or
-  opening the relevant System Settings pane.
+- Settings should show microphone, Accessibility, and Input Monitoring status
+  using product language and provide a bounded next action such as requesting
+  permission or opening the relevant System Settings pane.
 - Microphone permission state must be represented as one of four product
   states:
   - `allowed`: recording may start after an explicit user action.
@@ -73,12 +77,20 @@ This spec covers:
   boundary instead of requiring a real system prompt.
 - Accessibility permission state must be represented as one of two product
   states:
-  - `trusted`: VibeType Clipboard paste may control the active app.
-  - `not trusted`: VibeType Clipboard paste must not simulate insertion into
-    the active app.
+  - `trusted`: automatic insertion and VibeType Clipboard paste may control the
+    active app.
+  - `not trusted`: automatic insertion and VibeType Clipboard paste must not
+    simulate insertion into the active app.
 - Querying Accessibility permission must use the non-prompting status check by
   default. The app may provide a separate action to open the Accessibility pane
   in System Settings.
+- Input Monitoring permission state must be represented as one of three product
+  states:
+  - `allowed`: native global hotkey listening may observe the needed key
+    events outside VibeType.
+  - `denied`: native global hotkey listening may be blocked until the user
+    changes system permission.
+  - `not determined`: the app may request permission through the platform flow.
 - The MVP settings surface must not expose analytics, cloud-backup, local-model
   management, system-audio capture, or persistent raw-audio retention controls
   copied from the reference app.
@@ -98,8 +110,8 @@ This spec covers:
 - If permission is denied or restricted by device policy, the app should show a
   recoverable blocked state instead of repeatedly prompting.
 - If Accessibility permission is not trusted, the app should explain that
-  VibeType Clipboard paste is blocked and provide a way to open the relevant
-  System Settings pane when possible.
+  automatic insertion and VibeType Clipboard paste are blocked and provide a
+  way to open the relevant System Settings pane when possible.
 - If Accessibility permission is not trusted, transcription itself should remain
   available when other requirements are met. The app must not fall back to the
   macOS system clipboard.
@@ -109,16 +121,22 @@ This spec covers:
   should turn it back off after verification.
 - If a crash or interruption happens during recording, the app must not retain
   audio as an undocumented recovery artifact.
-- If Accessibility permission is denied, VibeType Clipboard paste should show a
-  clear status or error when a visible surface is available.
+- If Accessibility permission is denied, automatic insertion and VibeType
+  Clipboard paste should show a clear status or error when a visible surface is
+  available.
+- If Input Monitoring permission is denied, the app should explain that global
+  dictation hotkey listening may be blocked and provide a way to open the
+  relevant System Settings pane when possible.
 
 ## Route / state / data implications
 
 - Permission state is part of the product state model and must be visible to
   flows that start recording.
 - Accessibility trust state is part of the product state model and must be
-  visible to flows that decide whether VibeType Clipboard paste can insert text
-  into the active app.
+  visible to flows that decide whether automatic insertion or VibeType
+  Clipboard paste can insert text into the active app.
+- Input Monitoring state is part of the product state model for native global
+  hotkey flows that need to listen for keyboard events outside the app.
 - Provider configuration is product behavior because it changes model,
   language, prompt, latency, and error behavior.
 - Settings may be stored in UserDefaults, but the API key belongs in Keychain.

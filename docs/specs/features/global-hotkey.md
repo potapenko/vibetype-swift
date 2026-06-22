@@ -82,6 +82,8 @@ This spec covers:
   available.
 - The VibeType Clipboard paste shortcut must not write transcript text to the
   macOS system clipboard.
+- If native dictation hotkey listening requires Input Monitoring permission,
+  Settings must expose that permission state and a bounded next action.
 
 ## Invariants
 
@@ -108,8 +110,12 @@ This spec covers:
 - If microphone permission is denied, a shortcut press should show the same
   blocked state as the menu start action and must not enter recording.
 - Accessibility permission is not required to start recording. If it is missing
-  after transcription, output follows the copy-to-clipboard fallback defined by
-  the text output workflow spec.
+  after transcription, automatic insertion and VibeType Clipboard paste follow
+  the recovery behavior defined by the text output workflow spec without using
+  the macOS system clipboard.
+- Input Monitoring permission may be required for native global hotkey
+  listening, depending on the implementation path. Missing Input Monitoring
+  must not imply hidden recording or prevent menu-driven recording controls.
 - If registration fails for both default and fallback shortcuts, Settings should
   show that no global hotkey is active.
 

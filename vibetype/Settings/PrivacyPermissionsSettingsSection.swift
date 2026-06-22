@@ -10,8 +10,10 @@ import SwiftUI
 struct PrivacyPermissionsSettingsSection: View {
     let microphonePermissionStatus: MicrophonePermissionStatus
     let accessibilityPermissionStatus: AccessibilityPermissionStatus
+    let inputMonitoringPermissionStatus: InputMonitoringPermissionStatus
     let onMicrophonePermissionAction: () -> Void
     let onOpenAccessibilitySettings: () -> Void
+    let onInputMonitoringPermissionAction: () -> Void
 
     var body: some View {
         Section("Privacy And Permissions") {
@@ -31,8 +33,18 @@ struct PrivacyPermissionsSettingsSection: View {
                 systemImage: accessibilityPermissionStatus.settingsSystemImage
             )
 
-            if !accessibilityPermissionStatus.canPasteIntoActiveApp {
+            if !accessibilityPermissionStatus.canInsertTextIntoActiveApp {
                 Button("Open Accessibility Settings", action: onOpenAccessibilitySettings)
+            }
+
+            PermissionStatusRow(
+                title: inputMonitoringPermissionStatus.settingsStatusText,
+                description: inputMonitoringPermissionStatus.settingsDescription,
+                systemImage: inputMonitoringPermissionStatus.settingsSystemImage
+            )
+
+            if let inputMonitoringActionTitle = inputMonitoringPermissionStatus.settingsActionTitle {
+                Button(inputMonitoringActionTitle, action: onInputMonitoringPermissionAction)
             }
 
             Label(
@@ -65,8 +77,10 @@ private struct PermissionStatusRow: View {
         PrivacyPermissionsSettingsSection(
             microphonePermissionStatus: .notDetermined,
             accessibilityPermissionStatus: .notTrusted,
+            inputMonitoringPermissionStatus: .notDetermined,
             onMicrophonePermissionAction: {},
-            onOpenAccessibilitySettings: {}
+            onOpenAccessibilitySettings: {},
+            onInputMonitoringPermissionAction: {}
         )
     }
     .formStyle(.grouped)

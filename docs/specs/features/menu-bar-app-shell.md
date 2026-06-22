@@ -46,7 +46,7 @@ This spec covers:
   menu must expose the next recoverable action when one exists.
 - Accessibility permission must not block transcription or VibeType Clipboard
   saves. When Accessibility is not trusted, the menu should explain that
-  VibeType Clipboard paste is unavailable.
+  automatic insertion and VibeType Clipboard paste are unavailable.
 - Before recording exists, Start Recording may be a visible placeholder, but it
   must clearly state that recording is not available yet.
 - Before recording exists, a placeholder Start/Stop transition may exercise
