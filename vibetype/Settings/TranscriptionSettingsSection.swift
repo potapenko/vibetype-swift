@@ -81,9 +81,7 @@ struct TranscriptionSettingsSection: View {
                     language: .custom,
                     customLanguageCode: "ru",
                     prompt: "Prefer product vocabulary.",
-                    autoPaste: true,
-                    copyToClipboard: true,
-                    restoreClipboard: true,
+                    saveTranscriptsToAppClipboard: true,
                     soundEnabled: true,
                     showFloatingIndicator: true,
                     saveTranscriptHistory: false

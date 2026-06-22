@@ -14,7 +14,7 @@ This spec covers:
 - settings visible in the Settings window
 - UserDefaults-backed non-secret settings
 - Keychain-backed OpenAI API key
-- copy, paste, recording, and indicator toggles
+- app clipboard, recording, and indicator toggles
 - transcript history toggle and clear action
 - prompt or vocabulary hint setting
 
@@ -56,9 +56,14 @@ This spec covers:
 - The Settings window should include hotkey display.
 - The hotkey row is read-only for MVP and shows the active shortcut,
   activation mode, and unavailable/fallback status when known.
-- The Settings window should include toggles for auto-paste, copy to clipboard,
-  restoring the previous clipboard, sound on start/stop, and floating recording
-  indicator.
+- The Settings window should include a Save to VibeType Clipboard toggle.
+- Save to VibeType Clipboard controls the app-owned clipboard used by
+  `Control+Command+V`. It must not copy transcripts to the macOS system
+  clipboard.
+- The Settings window should include toggles for short dictation start/stop
+  sounds and the floating recording indicator.
+- Dictation sounds should be short, non-verbal cues. The start cue should make
+  recording start noticeable without requiring the user to watch the screen.
 - The Settings window should include a Save Transcript History toggle and a
   Clear Transcript History action once persistent history is implemented.
 - The Settings window should include an optional prompt or vocabulary hint
@@ -77,10 +82,8 @@ The MVP non-secret settings default to:
 - language: Auto
 - custom language code: empty
 - prompt or vocabulary hint: empty
-- auto-paste: on
-- copy to clipboard: on
-- restore previous clipboard: on
-- sound on start/stop: on
+- save to VibeType Clipboard: on
+- dictation start/stop sounds: on
 - floating recording indicator: on
 - save transcript history: off
 
@@ -117,9 +120,7 @@ UserDefaults may store:
 
 - selected model
 - language
-- autoPaste
-- copyToClipboard
-- restoreClipboard
+- saveTranscriptsToAppClipboard
 - soundEnabled
 - showFloatingIndicator
 - saveTranscriptHistory

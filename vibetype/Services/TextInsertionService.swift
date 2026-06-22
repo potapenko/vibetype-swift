@@ -8,27 +8,124 @@
 import AppKit
 import Foundation
 
-protocol PasteEventPosting: Sendable {
-    func postPasteShortcut() async throws
+protocol TranscriptClipboardStoring: Sendable {
+    func save(_ text: String) async throws
+    func clear() async
+    func currentText() async -> String?
 }
 
-struct CGEventPasteEventPoster: PasteEventPosting {
-    private let keyUpDelay: TimeInterval
+actor AppTranscriptClipboardStore: TranscriptClipboardStoring {
+    static let shared = AppTranscriptClipboardStore()
 
-    init(keyUpDelay: TimeInterval = 0.008) {
-        self.keyUpDelay = keyUpDelay
-    }
+    private var text: String?
 
-    func postPasteShortcut() async throws {
-        guard
-            let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x09, keyDown: true),
-            let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x09, keyDown: false)
-        else {
-            throw TextInsertionServiceError.pasteEventUnavailable
+    func save(_ text: String) async throws {
+        guard !text.isEmpty else {
+            throw TextInsertionServiceError.emptyAppClipboardText
         }
 
-        keyDown.flags = .maskCommand
-        keyUp.flags = .maskCommand
+        self.text = text
+    }
+
+    func clear() async {
+        text = nil
+    }
+
+    func currentText() async -> String? {
+        text
+    }
+}
+
+struct TextInsertionService {
+    private let transcriptClipboardStore: any TranscriptClipboardStoring
+
+    init(transcriptClipboardStore: any TranscriptClipboardStoring = AppTranscriptClipboardStore.shared) {
+        self.transcriptClipboardStore = transcriptClipboardStore
+    }
+
+    func deliver(_ transcript: String, settings: AppSettings) async throws -> TextInsertionResult {
+        guard settings.saveTranscriptsToAppClipboard else {
+            await transcriptClipboardStore.clear()
+            return .skipped(reason: .appClipboardDisabled)
+        }
+
+        try await transcriptClipboardStore.save(transcript)
+        return .savedToAppClipboard
+    }
+}
+
+enum TextInsertionResult: Equatable {
+    case savedToAppClipboard
+    case skipped(reason: TextInsertionSkipReason)
+
+    var statusText: String {
+        switch self {
+        case .savedToAppClipboard:
+            return "Saved to VibeType Clipboard. Press Control+Command+V to insert."
+        case .skipped(let reason):
+            return reason.statusText
+        }
+    }
+}
+
+enum TextInsertionSkipReason: Equatable {
+    case appClipboardDisabled
+
+    var statusText: String {
+        switch self {
+        case .appClipboardDisabled:
+            return "VibeType Clipboard is disabled."
+        }
+    }
+}
+
+protocol TextEventPosting: Sendable {
+    func postText(_ text: String) async throws
+}
+
+struct CGEventTextEventPoster: TextEventPosting {
+    private let keyUpDelay: TimeInterval
+    private let characterDelay: TimeInterval
+
+    init(keyUpDelay: TimeInterval = 0.004, characterDelay: TimeInterval = 0.001) {
+        self.keyUpDelay = max(0, keyUpDelay)
+        self.characterDelay = max(0, characterDelay)
+    }
+
+    func postText(_ text: String) async throws {
+        guard !text.isEmpty else {
+            throw TextInsertionServiceError.emptyAppClipboardText
+        }
+
+        for character in text {
+            try await post(character)
+
+            if characterDelay > 0 {
+                try await TaskTextInsertionSleeper().sleep(seconds: characterDelay)
+            }
+        }
+    }
+
+    private func post(_ character: Character) async throws {
+        guard
+            let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true),
+            let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false)
+        else {
+            throw TextInsertionServiceError.textEventUnavailable
+        }
+
+        let utf16Units = Array(String(character).utf16)
+        utf16Units.withUnsafeBufferPointer { buffer in
+            keyDown.keyboardSetUnicodeString(
+                stringLength: utf16Units.count,
+                unicodeString: buffer.baseAddress
+            )
+            keyUp.keyboardSetUnicodeString(
+                stringLength: utf16Units.count,
+                unicodeString: buffer.baseAddress
+            )
+        }
+
         keyDown.post(tap: .cgSessionEventTap)
         try await TaskTextInsertionSleeper().sleep(seconds: keyUpDelay)
         keyUp.post(tap: .cgSessionEventTap)
@@ -50,107 +147,57 @@ struct TaskTextInsertionSleeper: TextInsertionSleeping {
     }
 }
 
-struct TextInsertionService {
-    static let defaultClipboardSettleDelay: TimeInterval = 0.12
-    static let defaultClipboardRestoreDelay: TimeInterval = 0.45
-    static let defaultPasteTimeout: TimeInterval = 3
+struct SpecialClipboardPasteService {
+    static let defaultInsertTimeout: TimeInterval = 5
 
-    private let clipboardService: ClipboardService
+    private let transcriptClipboardStore: any TranscriptClipboardStoring
     private let accessibilityPermissionService: AccessibilityPermissionService
-    private let pasteEventPoster: any PasteEventPosting
-    private let sleeper: any TextInsertionSleeping
-    private let clipboardSettleDelay: TimeInterval
-    private let clipboardRestoreDelay: TimeInterval
-    private let pasteTimeout: TimeInterval
+    private let textEventPoster: any TextEventPosting
+    private let insertTimeout: TimeInterval
 
     init(
-        clipboardService: ClipboardService = ClipboardService(),
+        transcriptClipboardStore: any TranscriptClipboardStoring = AppTranscriptClipboardStore.shared,
         accessibilityPermissionService: AccessibilityPermissionService = AccessibilityPermissionService(),
-        pasteEventPoster: any PasteEventPosting = CGEventPasteEventPoster(),
-        sleeper: any TextInsertionSleeping = TaskTextInsertionSleeper(),
-        clipboardSettleDelay: TimeInterval = Self.defaultClipboardSettleDelay,
-        clipboardRestoreDelay: TimeInterval = Self.defaultClipboardRestoreDelay,
-        pasteTimeout: TimeInterval = Self.defaultPasteTimeout
+        textEventPoster: any TextEventPosting = CGEventTextEventPoster(),
+        insertTimeout: TimeInterval = Self.defaultInsertTimeout
     ) {
-        self.clipboardService = clipboardService
+        self.transcriptClipboardStore = transcriptClipboardStore
         self.accessibilityPermissionService = accessibilityPermissionService
-        self.pasteEventPoster = pasteEventPoster
-        self.sleeper = sleeper
-        self.clipboardSettleDelay = max(0, clipboardSettleDelay)
-        self.clipboardRestoreDelay = max(0, clipboardRestoreDelay)
-        self.pasteTimeout = pasteTimeout > 0 ? pasteTimeout : Self.defaultPasteTimeout
+        self.textEventPoster = textEventPoster
+        self.insertTimeout = insertTimeout > 0 ? insertTimeout : Self.defaultInsertTimeout
     }
 
-    func deliver(_ transcript: String, settings: AppSettings) async throws -> TextInsertionResult {
-        if settings.autoPaste {
-            return try await pasteOrCopyFallback(
-                transcript,
-                shouldRestorePreviousClipboard: settings.restoreClipboard
-            )
+    func pasteFromAppClipboard(settings: AppSettings) async -> SpecialClipboardPasteResult {
+        guard settings.saveTranscriptsToAppClipboard else {
+            return .skipped(reason: .appClipboardDisabled)
         }
 
-        guard settings.copyToClipboard else {
-            return .skipped(reason: .outputDisabled)
+        guard let text = await transcriptClipboardStore.currentText(), !text.isEmpty else {
+            return .skipped(reason: .appClipboardEmpty)
         }
-
-        let snapshot = try clipboardService.copyPlainText(transcript)
-        return .copiedToClipboard(reason: .autoPasteDisabled, snapshot: snapshot)
-    }
-
-    private func pasteOrCopyFallback(
-        _ transcript: String,
-        shouldRestorePreviousClipboard: Bool
-    ) async throws -> TextInsertionResult {
-        let snapshot = try clipboardService.copyPlainText(transcript)
 
         guard accessibilityPermissionService.currentStatus().canPasteIntoActiveApp else {
-            return .copiedToClipboard(reason: .accessibilityNotTrusted, snapshot: snapshot)
+            return .failed(reason: .accessibilityNotTrusted)
         }
 
         do {
-            try await sleeper.sleep(seconds: clipboardSettleDelay)
-            try await postPasteWithTimeout()
-            let restoreStatus = await restorePreviousClipboardIfNeeded(
-                from: snapshot,
-                enabled: shouldRestorePreviousClipboard
-            )
-            return .pasted(snapshot: snapshot, restoreStatus: restoreStatus)
-        } catch TextInsertionServiceError.pasteTimedOut {
-            return .copiedToClipboard(reason: .pasteTimedOut, snapshot: snapshot)
+            try await postTextWithTimeout(text)
+            return .inserted
+        } catch TextInsertionServiceError.textInsertionTimedOut {
+            return .failed(reason: .textInsertionTimedOut)
         } catch {
-            return .copiedToClipboard(reason: .pasteFailed, snapshot: snapshot)
+            return .failed(reason: .textInsertionFailed)
         }
     }
 
-    private func restorePreviousClipboardIfNeeded(
-        from snapshot: ClipboardSnapshot,
-        enabled: Bool
-    ) async -> TextInsertionRestoreStatus {
-        guard enabled else {
-            return .disabled
-        }
-
-        guard snapshot.canRestorePlainText else {
-            return .skippedNoPreviousPlainText
-        }
-
-        do {
-            try await sleeper.sleep(seconds: clipboardRestoreDelay)
-            try clipboardService.restorePlainText(from: snapshot)
-            return .restored
-        } catch {
-            return .failed
-        }
-    }
-
-    private func postPasteWithTimeout() async throws {
+    private func postTextWithTimeout(_ text: String) async throws {
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
-                try await pasteEventPoster.postPasteShortcut()
+                try await textEventPoster.postText(text)
             }
             group.addTask {
-                try await TaskTextInsertionSleeper().sleep(seconds: pasteTimeout)
-                throw TextInsertionServiceError.pasteTimedOut
+                try await TaskTextInsertionSleeper().sleep(seconds: insertTimeout)
+                throw TextInsertionServiceError.textInsertionTimedOut
             }
 
             defer {
@@ -158,91 +205,76 @@ struct TextInsertionService {
             }
 
             guard let _ = try await group.next() else {
-                throw TextInsertionServiceError.pasteFailed
+                throw TextInsertionServiceError.textInsertionFailed
             }
         }
     }
 }
 
-enum TextInsertionResult: Equatable {
-    case pasted(snapshot: ClipboardSnapshot, restoreStatus: TextInsertionRestoreStatus)
-    case copiedToClipboard(reason: TextInsertionCopyOnlyReason, snapshot: ClipboardSnapshot)
-    case skipped(reason: TextInsertionSkipReason)
+enum SpecialClipboardPasteResult: Equatable {
+    case inserted
+    case skipped(reason: SpecialClipboardPasteSkipReason)
+    case failed(reason: SpecialClipboardPasteFailureReason)
 
     var statusText: String {
         switch self {
-        case .pasted(_, let restoreStatus):
-            return restoreStatus.statusText
-        case .copiedToClipboard(let reason, _):
-            return reason.statusText
+        case .inserted:
+            return "Inserted from VibeType Clipboard."
         case .skipped(let reason):
             return reason.statusText
+        case .failed(let reason):
+            return reason.statusText
         }
     }
 }
 
-enum TextInsertionRestoreStatus: Equatable {
-    case disabled
-    case skippedNoPreviousPlainText
-    case restored
-    case failed
+enum SpecialClipboardPasteSkipReason: Equatable {
+    case appClipboardDisabled
+    case appClipboardEmpty
 
     var statusText: String {
         switch self {
-        case .disabled, .skippedNoPreviousPlainText:
-            return "Transcript pasted."
-        case .restored:
-            return "Transcript pasted. Previous clipboard restored."
-        case .failed:
-            return "Transcript pasted, but the previous clipboard could not be restored."
+        case .appClipboardDisabled:
+            return "VibeType Clipboard is disabled."
+        case .appClipboardEmpty:
+            return "No VibeType Clipboard text is available."
         }
     }
 }
 
-enum TextInsertionCopyOnlyReason: Equatable {
-    case autoPasteDisabled
+enum SpecialClipboardPasteFailureReason: Equatable {
     case accessibilityNotTrusted
-    case pasteFailed
-    case pasteTimedOut
+    case textInsertionFailed
+    case textInsertionTimedOut
 
     var statusText: String {
         switch self {
-        case .autoPasteDisabled:
-            return "Transcript copied."
         case .accessibilityNotTrusted:
-            return "Accessibility permission is needed for auto-paste. Transcript copied."
-        case .pasteFailed:
-            return "Auto-paste failed. Transcript copied."
-        case .pasteTimedOut:
-            return "Auto-paste timed out. Transcript copied."
-        }
-    }
-}
-
-enum TextInsertionSkipReason: Equatable {
-    case outputDisabled
-
-    var statusText: String {
-        switch self {
-        case .outputDisabled:
-            return "Transcript output is disabled."
+            return "Accessibility permission is needed to paste from VibeType Clipboard."
+        case .textInsertionFailed:
+            return "Could not insert VibeType Clipboard text into the active app."
+        case .textInsertionTimedOut:
+            return "Inserting VibeType Clipboard text timed out."
         }
     }
 }
 
 enum TextInsertionServiceError: Error, Equatable, LocalizedError {
-    case pasteEventUnavailable
-    case pasteFailed
-    case pasteTimedOut
+    case emptyAppClipboardText
+    case textEventUnavailable
+    case textInsertionFailed
+    case textInsertionTimedOut
 
     var errorDescription: String? {
         switch self {
-        case .pasteEventUnavailable:
-            return "Could not create the paste keyboard event."
-        case .pasteFailed:
-            return "Could not paste into the active app."
-        case .pasteTimedOut:
-            return "Paste into the active app timed out."
+        case .emptyAppClipboardText:
+            return "No VibeType Clipboard text is available."
+        case .textEventUnavailable:
+            return "Could not create a text insertion keyboard event."
+        case .textInsertionFailed:
+            return "Could not insert text into the active app."
+        case .textInsertionTimedOut:
+            return "Inserting text into the active app timed out."
         }
     }
 }

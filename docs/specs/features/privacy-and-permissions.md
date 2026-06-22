@@ -34,8 +34,8 @@ This spec covers:
 
 - The app must request microphone permission through the platform's normal
   permission flow before recording.
-- The app must explain Accessibility permission when auto-paste requires
-  simulated Cmd+V or control of the active app.
+- The app must explain Accessibility permission when VibeType Clipboard paste
+  requires keyboard event simulation or control of the active app.
 - The app must not imply that recording is active unless microphone capture has
   actually started.
 - The product must disclose that audio is sent to OpenAI when OpenAI
@@ -73,8 +73,9 @@ This spec covers:
   boundary instead of requiring a real system prompt.
 - Accessibility permission state must be represented as one of two product
   states:
-  - `trusted`: auto-paste may control the active app.
-  - `not trusted`: auto-paste must not simulate paste into the active app.
+  - `trusted`: VibeType Clipboard paste may control the active app.
+  - `not trusted`: VibeType Clipboard paste must not simulate insertion into
+    the active app.
 - Querying Accessibility permission must use the non-prompting status check by
   default. The app may provide a separate action to open the Accessibility pane
   in System Settings.
@@ -97,27 +98,27 @@ This spec covers:
 - If permission is denied or restricted by device policy, the app should show a
   recoverable blocked state instead of repeatedly prompting.
 - If Accessibility permission is not trusted, the app should explain that
-  auto-paste is blocked and provide a way to open the relevant System Settings
-  pane when possible.
+  VibeType Clipboard paste is blocked and provide a way to open the relevant
+  System Settings pane when possible.
 - If Accessibility permission is not trusted, transcription itself should remain
-  available when other requirements are met, and the app should fall back to a
-  copy-only path instead of simulating paste into the active app.
+  available when other requirements are met. The app must not fall back to the
+  macOS system clipboard.
 - If OpenAI is unavailable, the app should fail the current
   attempt with a visible error and allow a later retry.
 - If debug logging is temporarily enabled for investigation, the developer
   should turn it back off after verification.
 - If a crash or interruption happens during recording, the app must not retain
   audio as an undocumented recovery artifact.
-- If Accessibility permission is denied, auto-paste should fall back to copy to
-  clipboard and show a clear status or error.
+- If Accessibility permission is denied, VibeType Clipboard paste should show a
+  clear status or error when a visible surface is available.
 
 ## Route / state / data implications
 
 - Permission state is part of the product state model and must be visible to
   flows that start recording.
 - Accessibility trust state is part of the product state model and must be
-  visible to flows that decide between auto-paste and copy-to-clipboard
-  fallback.
+  visible to flows that decide whether VibeType Clipboard paste can insert text
+  into the active app.
 - Provider configuration is product behavior because it changes model,
   language, prompt, latency, and error behavior.
 - Settings may be stored in UserDefaults, but the API key belongs in Keychain.

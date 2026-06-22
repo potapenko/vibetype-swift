@@ -72,9 +72,7 @@ struct AppSettings: Equatable {
         language: .automatic,
         customLanguageCode: "",
         prompt: "",
-        autoPaste: true,
-        copyToClipboard: true,
-        restoreClipboard: true,
+        saveTranscriptsToAppClipboard: true,
         soundEnabled: true,
         showFloatingIndicator: true,
         saveTranscriptHistory: false
@@ -84,9 +82,7 @@ struct AppSettings: Equatable {
     var language: TranscriptionLanguage
     var customLanguageCode: String
     var prompt: String
-    var autoPaste: Bool
-    var copyToClipboard: Bool
-    var restoreClipboard: Bool
+    var saveTranscriptsToAppClipboard: Bool
     var soundEnabled: Bool
     var showFloatingIndicator: Bool
     var saveTranscriptHistory: Bool
@@ -151,9 +147,7 @@ struct AppSettingsStore {
         Key.language,
         Key.customLanguageCode,
         Key.prompt,
-        Key.autoPaste,
-        Key.copyToClipboard,
-        Key.restoreClipboard,
+        Key.saveTranscriptsToAppClipboard,
         Key.soundEnabled,
         Key.showFloatingIndicator,
         Key.saveTranscriptHistory,
@@ -164,9 +158,7 @@ struct AppSettingsStore {
         static let language = keyPrefix + "language"
         static let customLanguageCode = keyPrefix + "customLanguageCode"
         static let prompt = keyPrefix + "prompt"
-        static let autoPaste = keyPrefix + "autoPaste"
-        static let copyToClipboard = keyPrefix + "copyToClipboard"
-        static let restoreClipboard = keyPrefix + "restoreClipboard"
+        static let saveTranscriptsToAppClipboard = keyPrefix + "saveTranscriptsToAppClipboard"
         static let soundEnabled = keyPrefix + "soundEnabled"
         static let showFloatingIndicator = keyPrefix + "showFloatingIndicator"
         static let saveTranscriptHistory = keyPrefix + "saveTranscriptHistory"
@@ -188,11 +180,8 @@ struct AppSettingsStore {
             customLanguageCode: userDefaults.string(forKey: Key.customLanguageCode)
                 ?? defaultSettings.customLanguageCode,
             prompt: userDefaults.string(forKey: Key.prompt) ?? defaultSettings.prompt,
-            autoPaste: optionalBool(forKey: Key.autoPaste) ?? defaultSettings.autoPaste,
-            copyToClipboard: optionalBool(forKey: Key.copyToClipboard)
-                ?? defaultSettings.copyToClipboard,
-            restoreClipboard: optionalBool(forKey: Key.restoreClipboard)
-                ?? defaultSettings.restoreClipboard,
+            saveTranscriptsToAppClipboard: optionalBool(forKey: Key.saveTranscriptsToAppClipboard)
+                ?? defaultSettings.saveTranscriptsToAppClipboard,
             soundEnabled: optionalBool(forKey: Key.soundEnabled) ?? defaultSettings.soundEnabled,
             showFloatingIndicator: optionalBool(forKey: Key.showFloatingIndicator)
                 ?? defaultSettings.showFloatingIndicator,
@@ -206,12 +195,15 @@ struct AppSettingsStore {
         userDefaults.set(settings.language.rawValue, forKey: Key.language)
         userDefaults.set(settings.customLanguageCode, forKey: Key.customLanguageCode)
         userDefaults.set(settings.prompt, forKey: Key.prompt)
-        userDefaults.set(settings.autoPaste, forKey: Key.autoPaste)
-        userDefaults.set(settings.copyToClipboard, forKey: Key.copyToClipboard)
-        userDefaults.set(settings.restoreClipboard, forKey: Key.restoreClipboard)
+        userDefaults.set(
+            settings.saveTranscriptsToAppClipboard,
+            forKey: Key.saveTranscriptsToAppClipboard
+        )
         userDefaults.set(settings.soundEnabled, forKey: Key.soundEnabled)
         userDefaults.set(settings.showFloatingIndicator, forKey: Key.showFloatingIndicator)
         userDefaults.set(settings.saveTranscriptHistory, forKey: Key.saveTranscriptHistory)
+
+        NotificationCenter.default.post(name: .appSettingsDidChange, object: nil)
     }
 
     private func loadLanguage(defaultValue: TranscriptionLanguage) -> TranscriptionLanguage {
@@ -225,4 +217,8 @@ struct AppSettingsStore {
     private func optionalBool(forKey key: String) -> Bool? {
         userDefaults.object(forKey: key) as? Bool
     }
+}
+
+extension Notification.Name {
+    static let appSettingsDidChange = Notification.Name("vibetype.appSettingsDidChange")
 }

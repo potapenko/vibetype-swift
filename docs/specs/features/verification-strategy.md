@@ -99,14 +99,14 @@ This spec covers:
   Keychain-failure tests.
 - Tests must prove the API key is not stored in UserDefaults and is not logged.
 
-### Text output and clipboard
+### Text output and VibeType Clipboard
 
-- Use fake clipboard and paste clients for output decision tests.
-- Cover auto-paste enabled, copy-only mode, missing Accessibility fallback,
-  empty transcript suppression, clipboard restore success, clipboard restore
-  failure, and paste failure.
-- Real active-app paste behavior is bounded runtime smoke or manual QA only
-  when a task changes the paste adapter or visible output flow.
+- Use fake app-clipboard and text-insertion clients for output decision tests.
+- Cover VibeType Clipboard save enabled, disabled behavior, missing
+  Accessibility, empty transcript suppression, insertion failure, and insertion
+  timeout.
+- Real active-app VibeType Clipboard paste behavior is bounded runtime smoke or
+  manual QA only when a task changes the paste adapter or visible output flow.
 
 ### Global hotkey
 

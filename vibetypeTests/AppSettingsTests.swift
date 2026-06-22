@@ -20,9 +20,7 @@ struct AppSettingsTests {
         #expect(settings.resolvedLanguageCode == nil)
         #expect(settings.customLanguageCode.isEmpty)
         #expect(settings.resolvedPrompt == nil)
-        #expect(settings.autoPaste)
-        #expect(settings.copyToClipboard)
-        #expect(settings.restoreClipboard)
+        #expect(settings.saveTranscriptsToAppClipboard)
         #expect(settings.soundEnabled)
         #expect(settings.showFloatingIndicator)
         #expect(settings.saveTranscriptHistory == false)
@@ -90,9 +88,7 @@ struct AppSettingsTests {
             language: .custom,
             customLanguageCode: "de",
             prompt: "Product names",
-            autoPaste: false,
-            copyToClipboard: true,
-            restoreClipboard: false,
+            saveTranscriptsToAppClipboard: false,
             soundEnabled: false,
             showFloatingIndicator: true,
             saveTranscriptHistory: true

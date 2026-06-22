@@ -31,9 +31,9 @@ struct MenuBarPresentationTests {
         #expect(presentation.isRecordingActionEnabled)
         #expect(presentation.dictationDetailText == "Recording is not implemented in this build.")
         #expect(presentation.lastTranscriptText == "No transcript yet.")
-        #expect(presentation.canCopyLastTranscript == false)
+        #expect(presentation.canSaveLastTranscript == false)
         #expect(MenuBarPresentation.lastTranscriptTitle == "Last Transcript")
-        #expect(MenuBarPresentation.copyLastTranscriptTitle == "Copy Last Transcript")
+        #expect(MenuBarPresentation.saveLastTranscriptTitle == "Save to VibeType Clipboard")
         #expect(MenuBarPresentation.settingsTitle == "Settings")
         #expect(MenuBarPresentation.quitTitle == "Quit VibeType")
     }
@@ -95,7 +95,7 @@ struct MenuBarPresentationTests {
         #expect(presentation.isRecordingActionEnabled == false)
     }
 
-    @Test func accessibilityNotTrustedExplainsCopyFallback() {
+    @Test func accessibilityNotTrustedExplainsAppClipboardPasteBlock() {
         let presentation = MenuBarPresentation(
             dictationStatus: .idle,
             microphonePermissionStatus: .allowed,
@@ -103,24 +103,34 @@ struct MenuBarPresentationTests {
         )
 
         #expect(presentation.accessibilityStatusText == "Accessibility: Not Allowed")
-        #expect(presentation.accessibilityDetailText?.contains("Auto-paste is unavailable") == true)
-        #expect(presentation.accessibilityDetailText?.contains("copied") == true)
+        #expect(presentation.accessibilityDetailText?.contains("VibeType Clipboard paste") == true)
         #expect(presentation.accessibilitySettingsActionTitle == "Open Accessibility Settings")
     }
 
-    @Test func successTranscriptNormalizesLastTranscriptAndEnablesCopy() {
+    @Test func successTranscriptNormalizesLastTranscriptAndEnablesAppClipboardSave() {
         let presentation = MenuBarPresentation(
             dictationStatus: .success(transcript: "  Typed text\n"),
             microphonePermissionStatus: .allowed,
             accessibilityPermissionStatus: .notTrusted,
-            clipboardStatusText: "Last transcript copied."
+            clipboardStatusText: "Saved to VibeType Clipboard."
         )
 
         #expect(presentation.statusText == "Done")
         #expect(presentation.lastTranscriptText == "Typed text")
-        #expect(presentation.canCopyLastTranscript)
+        #expect(presentation.canSaveLastTranscript)
         #expect(presentation.dictationDetailText == "Typed text")
-        #expect(presentation.clipboardStatusText == "Last transcript copied.")
+        #expect(presentation.clipboardStatusText == "Saved to VibeType Clipboard.")
+    }
+
+    @Test func disabledAppClipboardDisablesSaveAction() {
+        let presentation = MenuBarPresentation(
+            dictationStatus: .success(transcript: "Typed text"),
+            microphonePermissionStatus: .allowed,
+            accessibilityPermissionStatus: .trusted,
+            appClipboardEnabled: false
+        )
+
+        #expect(presentation.canSaveLastTranscript == false)
     }
 
     @Test func longTranscriptUsesCompactMenuText() {
@@ -132,6 +142,6 @@ struct MenuBarPresentationTests {
         )
 
         #expect(presentation.lastTranscriptText == "\(String(repeating: "a", count: 140))...")
-        #expect(presentation.canCopyLastTranscript)
+        #expect(presentation.canSaveLastTranscript)
     }
 }

@@ -46,9 +46,9 @@ struct DictationSessionControllerTests {
             result: .success("  Shared controller transcript \n")
         )
         let transcriptOutput = FakeTranscriptOutput(
-            result: .success(.skipped(reason: .outputDisabled))
+            result: .success(.skipped(reason: .appClipboardDisabled))
         )
-        let settings = makeSettings(copyToClipboard: false)
+        let settings = makeSettings(saveTranscriptsToAppClipboard: false)
         let controller = makeController(
             recorder: recorder,
             transcriptionService: transcriptionService,
@@ -62,7 +62,7 @@ struct DictationSessionControllerTests {
         #expect(controller.status == .success(transcript: "Shared controller transcript"))
         #expect(controller.lastTranscriptText == "Shared controller transcript")
         #expect(controller.status.lastTranscriptText == "Shared controller transcript")
-        #expect(controller.outputStatusText == "Transcript output is disabled.")
+        #expect(controller.outputStatusText == "VibeType Clipboard is disabled.")
         #expect(recorder.stopCount == 1)
         #expect(transcriptionService.calls == [TranscriptionCall(audioFileURL: artifact.fileURL, settings: settings)])
         #expect(transcriptOutput.calls == [TranscriptOutputCall(transcript: "Shared controller transcript", settings: settings)])
@@ -244,7 +244,9 @@ struct DictationSessionControllerTests {
     @Test func outputFailureKeepsAcceptedTranscriptRecoverable() async {
         let recorder = FakeAudioRecorderService(currentStatus: .recording)
         let transcriptionService = FakeControllerTranscriptionService(result: .success("  Delivered text\n"))
-        let transcriptOutput = FakeTranscriptOutput(result: .failure(TextInsertionServiceError.pasteTimedOut))
+        let transcriptOutput = FakeTranscriptOutput(
+            result: .failure(TextInsertionServiceError.textInsertionTimedOut)
+        )
         let controller = makeController(
             recorder: recorder,
             transcriptionService: transcriptionService,
@@ -256,7 +258,7 @@ struct DictationSessionControllerTests {
 
         #expect(controller.status == .success(transcript: "Delivered text"))
         #expect(controller.lastTranscriptText == "Delivered text")
-        #expect(controller.outputStatusText == "Paste into the active app timed out.")
+        #expect(controller.outputStatusText == "Inserting text into the active app timed out.")
         #expect(transcriptOutput.calls == [TranscriptOutputCall(transcript: "Delivered text", settings: .defaults)])
     }
 
@@ -280,9 +282,9 @@ struct DictationSessionControllerTests {
         )
     }
 
-    private func makeSettings(copyToClipboard: Bool = true) -> AppSettings {
+    private func makeSettings(saveTranscriptsToAppClipboard: Bool = true) -> AppSettings {
         var settings = AppSettings.defaults
-        settings.copyToClipboard = copyToClipboard
+        settings.saveTranscriptsToAppClipboard = saveTranscriptsToAppClipboard
         return settings
     }
 }
@@ -315,7 +317,7 @@ private final class FakeTranscriptOutput: TranscriptOutputDelivering {
     private let result: Result<TextInsertionResult, Error>
     private(set) var calls: [TranscriptOutputCall] = []
 
-    init(result: Result<TextInsertionResult, Error> = .success(.skipped(reason: .outputDisabled))) {
+    init(result: Result<TextInsertionResult, Error> = .success(.skipped(reason: .appClipboardDisabled))) {
         self.result = result
     }
 

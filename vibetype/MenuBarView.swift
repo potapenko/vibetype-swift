@@ -13,27 +13,29 @@ struct MenuBarView: View {
 
     @State private var dictationStatus = DictationStatus.idle
     @State private var appSettings: AppSettings
-    @State private var lastClipboardSnapshot: ClipboardSnapshot?
     @State private var clipboardStatusText: String?
     @State private var microphonePermissionStatus: MicrophonePermissionStatus
     @State private var accessibilityPermissionStatus: AccessibilityPermissionStatus
     @State private var floatingIndicatorPanel = FloatingIndicatorPanelController()
 
-    private let clipboardService: ClipboardService
+    private let transcriptClipboardStore: any TranscriptClipboardStoring
     private let microphonePermissionService: MicrophonePermissionService
     private let accessibilityPermissionService: AccessibilityPermissionService
     private let appSettingsStore: AppSettingsStore
+    private let cuePlayer: any DictationCuePlaying
 
     init(
-        clipboardService: ClipboardService = ClipboardService(),
+        transcriptClipboardStore: any TranscriptClipboardStoring = AppTranscriptClipboardStore.shared,
         microphonePermissionService: MicrophonePermissionService = MicrophonePermissionService(),
         accessibilityPermissionService: AccessibilityPermissionService = AccessibilityPermissionService(),
-        appSettingsStore: AppSettingsStore = AppSettingsStore()
+        appSettingsStore: AppSettingsStore = AppSettingsStore(),
+        cuePlayer: any DictationCuePlaying = NativeDictationCuePlayer.shared
     ) {
-        self.clipboardService = clipboardService
+        self.transcriptClipboardStore = transcriptClipboardStore
         self.microphonePermissionService = microphonePermissionService
         self.accessibilityPermissionService = accessibilityPermissionService
         self.appSettingsStore = appSettingsStore
+        self.cuePlayer = cuePlayer
         _appSettings = State(initialValue: appSettingsStore.load())
         _microphonePermissionStatus = State(
             initialValue: microphonePermissionService.currentStatus()
@@ -102,10 +104,10 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
 
-            Button(MenuBarPresentation.copyLastTranscriptTitle) {
-                copyLastTranscript()
+            Button(MenuBarPresentation.saveLastTranscriptTitle) {
+                saveLastTranscriptToAppClipboard()
             }
-            .disabled(!presentation.canCopyLastTranscript)
+            .disabled(!presentation.canSaveLastTranscript)
 
             if let clipboardStatusText = presentation.clipboardStatusText {
                 Text(clipboardStatusText)
@@ -136,19 +138,34 @@ struct MenuBarView: View {
         .onChange(of: dictationStatus) { _ in
             updateFloatingIndicator()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .appSettingsDidChange)) { _ in
+            reloadAppSettings()
+            updateFloatingIndicator()
+        }
     }
 
-    private func copyLastTranscript() {
-        guard let transcript = dictationStatus.lastTranscriptText else {
-            clipboardStatusText = ClipboardServiceError.emptyText.localizedDescription
+    private func saveLastTranscriptToAppClipboard() {
+        guard appSettings.saveTranscriptsToAppClipboard else {
+            clipboardStatusText = TextInsertionSkipReason.appClipboardDisabled.statusText
             return
         }
 
-        do {
-            lastClipboardSnapshot = try clipboardService.copyPlainText(transcript)
-            clipboardStatusText = "Last transcript copied."
-        } catch {
-            clipboardStatusText = error.localizedDescription
+        guard let transcript = dictationStatus.lastTranscriptText else {
+            clipboardStatusText = TextInsertionServiceError.emptyAppClipboardText.localizedDescription
+            return
+        }
+
+        Task {
+            do {
+                try await transcriptClipboardStore.save(transcript)
+                await MainActor.run {
+                    clipboardStatusText = "Saved to VibeType Clipboard."
+                }
+            } catch {
+                await MainActor.run {
+                    clipboardStatusText = error.localizedDescription
+                }
+            }
         }
     }
 
@@ -157,6 +174,7 @@ struct MenuBarView: View {
             dictationStatus: dictationStatus,
             microphonePermissionStatus: microphonePermissionStatus,
             accessibilityPermissionStatus: accessibilityPermissionStatus,
+            appClipboardEnabled: appSettings.saveTranscriptsToAppClipboard,
             clipboardStatusText: clipboardStatusText
         )
     }
@@ -164,13 +182,28 @@ struct MenuBarView: View {
     private func performRecordingAction() {
         switch microphonePermissionStatus {
         case .allowed:
-            dictationStatus = dictationStatus.placeholderRecordingActionResult
+            let previousStatus = dictationStatus
+            let newStatus = dictationStatus.placeholderRecordingActionResult
+            dictationStatus = newStatus
+            playRecordingCue(from: previousStatus, to: newStatus)
         case .notDetermined:
             requestMicrophonePermission()
         case .denied, .unavailable:
             if let microphoneDetailText = microphonePermissionStatus.menuDetailText {
                 dictationStatus = .failure(message: microphoneDetailText)
             }
+        }
+    }
+
+    private func playRecordingCue(from previousStatus: DictationStatus, to newStatus: DictationStatus) {
+        guard appSettings.soundEnabled else {
+            return
+        }
+
+        if previousStatus != .recording, newStatus == .recording {
+            cuePlayer.play(.startRecording)
+        } else if previousStatus == .recording, newStatus != .recording {
+            cuePlayer.play(.stopRecording)
         }
     }
 

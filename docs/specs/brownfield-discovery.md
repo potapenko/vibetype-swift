@@ -52,7 +52,7 @@ Current source files:
 - OpenAI transcription
 - Keychain storage
 - global hotkey
-- clipboard and auto-paste
+- VibeType Clipboard paste shortcut
 - floating indicator
 - transcript history
 - product-specific tests

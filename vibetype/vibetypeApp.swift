@@ -5,6 +5,7 @@
 //  Created by Eugene Potapenko on 6/20/26.
 //
 
+import AppKit
 import SwiftUI
 
 enum VibeTypeWindow {
@@ -13,6 +14,8 @@ enum VibeTypeWindow {
 
 @main
 struct VibeTypeApp: App {
+    @NSApplicationDelegateAdaptor(VibeTypeAppDelegate.self) private var appDelegate
+
     var body: some Scene {
         MenuBarExtra {
             MenuBarView()
@@ -30,5 +33,18 @@ struct VibeTypeApp: App {
             SettingsView()
         }
         .defaultSize(width: 760, height: 520)
+    }
+}
+
+@MainActor
+final class VibeTypeAppDelegate: NSObject, NSApplicationDelegate {
+    private let specialClipboardHotkeyCoordinator = SpecialClipboardHotkeyCoordinator()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        specialClipboardHotkeyCoordinator.start()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        specialClipboardHotkeyCoordinator.stop()
     }
 }

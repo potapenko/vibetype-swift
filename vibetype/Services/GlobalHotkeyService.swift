@@ -38,6 +38,11 @@ struct GlobalHotkeyShortcut: Equatable {
         key: "Globe/Fn"
     )
 
+    static let appClipboardPaste = GlobalHotkeyShortcut(
+        modifiers: [.control, .command],
+        key: "V"
+    )
+
     var modifiers: [GlobalHotkeyModifier]
     var key: String
 

@@ -13,22 +13,16 @@ struct BehaviorSettingsSection: View {
     var body: some View {
         Section("Behavior") {
             Toggle(
-                "Paste transcript into active app",
-                isOn: $settings.autoPaste
+                "Save transcripts to VibeType Clipboard",
+                isOn: $settings.saveTranscriptsToAppClipboard
             )
 
-            Toggle(
-                "Copy transcript to clipboard",
-                isOn: $settings.copyToClipboard
-            )
+            Text("Use Control+Command+V to insert the saved VibeType Clipboard text into the active app.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
 
             Toggle(
-                "Restore previous clipboard after paste",
-                isOn: $settings.restoreClipboard
-            )
-
-            Toggle(
-                "Play sound on start and stop",
+                "Play recording start and stop sounds",
                 isOn: $settings.soundEnabled
             )
 

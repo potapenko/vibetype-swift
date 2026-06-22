@@ -215,9 +215,9 @@ enum AccessibilityPermissionStatus: Equatable {
     var settingsDescription: String {
         switch self {
         case .trusted:
-            return "Auto-paste can control the active app."
+            return "VibeType Clipboard paste can insert text into the active app."
         case .notTrusted:
-            return "Auto-paste needs Accessibility permission. Transcription and copy-only fallback can still work."
+            return "VibeType Clipboard paste needs Accessibility permission. Transcription can still save app clipboard text."
         }
     }
 
@@ -239,7 +239,7 @@ enum AccessibilityPermissionStatus: Equatable {
         case .trusted:
             return nil
         case .notTrusted:
-            return "Auto-paste is unavailable; transcripts can still be copied."
+            return "VibeType Clipboard paste is unavailable until Accessibility is allowed."
         }
     }
 }

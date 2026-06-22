@@ -5,9 +5,8 @@
 Define how generated text becomes useful after a microphone transcription
 session.
 
-The MVP is optimized for fast dictation into the currently active macOS app,
-with copy-to-clipboard fallback when direct insertion is unavailable or
-disabled.
+The MVP is optimized for fast dictation with an app-owned VibeType Clipboard
+that can be pasted into the currently active macOS app on demand.
 
 ## Scope
 
@@ -16,9 +15,8 @@ This spec covers:
 - last transcript visibility
 - relationship to optional transcript history
 - output handoff actions
-- auto-paste behavior
-- copy-to-clipboard fallback
-- clipboard restoration behavior
+- VibeType Clipboard save behavior
+- VibeType Clipboard paste shortcut
 - failure behavior around output delivery
 
 ## Non-goals
@@ -33,72 +31,62 @@ This spec covers:
 
 - A successful transcription must be visible as the last transcript in the menu
   bar UI or settings surface.
-- Last Transcript and Copy Last Transcript must use text after trimming leading
+- Last Transcript and Save Last Transcript must use text after trimming leading
   and trailing whitespace and newlines.
-- The menu may show a compact preview for long transcripts, but Copy Last
-  Transcript must still copy the full normalized transcript text.
+- The menu may show a compact preview for long transcripts, but Save Last
+  Transcript must still save the full normalized transcript text.
 - Before any successful transcription exists, the menu must show a clear
   empty-state placeholder instead of hiding the Last Transcript area.
-- The menu must provide a Copy Last Transcript action.
-- Copy Last Transcript must be disabled or safely no-op when no non-empty last
+- The menu may provide a Save Last Transcript to VibeType Clipboard action.
+- Save Last Transcript must be disabled or safely no-op when no non-empty last
   transcript is available.
-- If `autoPaste` is enabled and Accessibility permission is available, the app
-  should insert the transcript into the current active app at the cursor.
-- MVP auto-paste uses the clipboard plus simulated Cmd+V.
-- Clipboard replacement should snapshot the previous plain-text clipboard value
-  when available so a later restore step can put that text back.
-- If `autoPaste` is disabled and `copyToClipboard` is enabled, the transcript
-  should be copied to clipboard.
-- If Accessibility permission is missing, auto-paste should fall back to copy
-  to clipboard and show a clear status or error.
-- If `restorePreviousClipboard` is enabled and auto-paste succeeds, the app
-  should restore the prior plain-text clipboard after a short delay when a
-  plain-text snapshot exists.
-- Auto-paste should write the transcript to the clipboard before sending the
-  paste event, then wait a short bounded clipboard-settle delay before posting
-  Cmd+V.
-- macOS auto-paste should use an Accessibility-gated native keyboard event
-  boundary. The MVP must not depend on Electron, Node.js, or AppleScript paste
-  helpers for the Swift implementation.
-- If the paste event fails or times out, the transcript should remain on the
-  clipboard, the app should show a copy-only fallback status, and a bounded
-  retry may happen only if it will not duplicate a successful paste.
-- Clipboard restore should happen only after a successful paste. Copy-only and
-  failed-paste fallback leave the transcript on the clipboard.
+- If `saveTranscriptsToAppClipboard` is enabled, every accepted transcript is
+  saved to the VibeType Clipboard after transcription succeeds.
+- The VibeType Clipboard is app-owned current-session state. It is not the
+  macOS system clipboard and must not overwrite `NSPasteboard.general`.
+- `Control+Command+V` should insert the current VibeType Clipboard text into
+  the current active app at the cursor when the setting is enabled.
+- Turning `saveTranscriptsToAppClipboard` off disables new transcript saves and
+  disables the VibeType Clipboard paste shortcut.
+- If Accessibility permission is missing, `Control+Command+V` must not insert
+  text into the active app and must not fall back to the macOS system clipboard.
+- The macOS VibeType Clipboard paste path should use an Accessibility-gated
+  native text-insertion boundary. The MVP must not depend on Electron, Node.js,
+  AppleScript paste helpers, or system clipboard fallback behavior.
+- If the paste event fails or times out, the transcript should remain in the
+  VibeType Clipboard and the app should show a recoverable paste status when a
+  visible surface is available.
 - If output delivery fails, the last transcript should remain visible or
   recoverable in the current session.
 - Last Transcript is current-session state and does not require persistent
   transcript history to be enabled.
 - Optional persistent history is governed by `transcript-history.md`. Enabling
-  history must not change the copy or paste behavior for the current transcript.
+  history must not change the VibeType Clipboard save or paste behavior for the
+  current transcript.
 
 ## Invariants
 
-- Auto-paste must target the current active app at the cursor, not an internal
-  hidden destination.
+- VibeType Clipboard paste must target the current active app at the cursor,
+  not an internal hidden destination.
 - Failed handoff must not discard the transcript.
 - Copy and paste actions must not log transcript content by default.
 - Clipboard, accessibility, or host-app automation must be treated as
   user-visible behavior, not hidden implementation detail.
-- Auto-paste must have a settings-controlled off switch.
+- VibeType Clipboard save and paste must have a settings-controlled off switch.
+- The app must not use the macOS system clipboard as transcript storage,
+  fallback storage, or restoreable state for this workflow.
 
 ## Edge cases and failure policy
 
 - If transcription output is empty or whitespace-only after trimming, the app
-  should show a clear error instead of copying or pasting empty text as a
+  should show a clear error instead of saving or pasting empty text as a
   successful result.
-- If the clipboard or host app is unavailable, the app should show a recoverable
-  output error.
-- If the previous clipboard cannot be restored, the app should not crash or
-  treat the paste as failed, but it must surface that restore failure when
-  restore behavior was enabled.
-- Paste and restore delays must be bounded. The first native macOS adapter may
-  use roughly a 100-150ms paste delay after writing the clipboard and roughly a
-  400-500ms restore delay after a successful paste, refined by QA only when the
-  product behavior changes.
-- Clipboard snapshot and restore behavior is plain-text only for the MVP.
-  Rich clipboard formats may be replaced during copy or paste handoff until a
-  future spec defines richer preservation.
+- If the VibeType Clipboard is empty, the paste shortcut should safely no-op and
+  report that no app clipboard text is available when a visible surface is
+  available.
+- If the host app is unavailable or text insertion fails, the app should show a
+  recoverable output error when a visible surface is available.
+- Paste delays and event posting must be bounded.
 - If the active app changes between recording start and paste time, the paste
   should follow the product's current-active-app rule unless a future spec pins
   the target at recording start.
@@ -107,21 +95,21 @@ This spec covers:
 
 - The app stores the last transcript in current app state and may expose it in
   the menu or settings.
+- The app may store one VibeType Clipboard text value in memory for the current
+  app session when the setting is enabled.
 - If optional transcript history is enabled, accepted transcripts may also be
   written to local persistent history under `transcript-history.md`.
-- Output handoff may require platform permissions such as clipboard access,
-  accessibility control, or keyboard event simulation.
+- Output handoff may require platform permissions such as Accessibility control
+  or keyboard event simulation.
 - Persistent drafts outside transcript history require a separate storage spec.
 
 ## Verification mapping
 
-- Add tests or manual QA for successful paste, copy-only mode, missing
-  Accessibility fallback, empty output, clipboard restoration, and handoff
-  failure when implementation exists.
+- Add tests or manual QA for VibeType Clipboard save, disabled setting behavior,
+  successful `Control+Command+V` paste, missing Accessibility behavior, empty
+  output, and handoff failure when implementation exists.
 
 ## Unknowns requiring confirmation
 
-- Whether `autoPaste` should default to on or off.
-- Whether `copyToClipboard` should always happen even when auto-paste succeeds.
 - Whether the app needs command phrases for punctuation, formatting, or editing.
 - Whether target app should be captured at recording start or paste time.

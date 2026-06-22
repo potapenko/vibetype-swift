@@ -105,6 +105,7 @@ vibetype/
     AudioRecorderService.swift
     OpenAITranscriptionService.swift
     TextInsertionService.swift
+    SpecialClipboardHotkeyService.swift
     GlobalHotkeyService.swift
     KeychainService.swift
     PermissionsService.swift
@@ -121,7 +122,6 @@ vibetype/
     FloatingIndicatorView.swift
     TranscriptHistoryView.swift
   Utilities/
-    ClipboardSnapshot.swift
     Logger.swift
 ```
 
@@ -153,11 +153,12 @@ enough:
 
 - menu bar behavior may use `MenuBarExtra` or `NSStatusItem`;
 - floating recording indicators may use `NSPanel` with SwiftUI content;
-- auto-paste may use pasteboard plus `CGEvent`;
+- VibeType Clipboard paste may use Accessibility-gated `CGEvent` text insertion;
 - permission checks may use AVFoundation, Accessibility APIs, and system
   settings deep links;
 - Keychain access should stay in `KeychainService`;
-- global hotkeys should stay in `GlobalHotkeyService`.
+- global hotkeys should stay in `GlobalHotkeyService` or a focused hotkey
+  service for a separate app shortcut.
 
 Interop code should be narrow, testable where practical, and documented when it
 depends on platform quirks.

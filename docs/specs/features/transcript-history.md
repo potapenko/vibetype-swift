@@ -41,18 +41,18 @@ This spec covers:
   Last Transcript, but they must not be written to persistent history.
 - When history is on, each accepted non-empty transcript is added to local
   history after transcription succeeds.
-- A failed paste or copy handoff must not discard the current Last Transcript.
-  If history is enabled, the accepted transcript may still be saved because the
-  transcription itself succeeded.
+- A failed VibeType Clipboard paste must not discard the current Last
+  Transcript. If history is enabled, the accepted transcript may still be saved
+  because the transcription itself succeeded.
 - History keeps at most the 20 most recent accepted transcripts. Older entries
   are removed automatically when the limit is exceeded.
 - Settings should provide a Clear Transcript History action once persistent
   history exists.
 - Turning history off stops future history writes. Existing saved entries remain
   until the user clears history, and the UI must make that behavior clear.
-- Copy Last Transcript copies the current Last Transcript, not necessarily the
-  newest persistent history row.
-- Future history-row copy actions should copy only the selected row's text.
+- Save Last Transcript saves the current Last Transcript to the VibeType
+  Clipboard, not necessarily the newest persistent history row.
+- Future history-row save actions should save only the selected row's text.
 
 ## Stored fields
 

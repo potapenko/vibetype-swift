@@ -29,6 +29,14 @@ struct GlobalHotkeyServiceTests {
         #expect(configuration.displayText == "Globe/Fn - Hold to record")
     }
 
+    @Test func appClipboardPasteShortcutUsesControlCommandV() {
+        let shortcut = GlobalHotkeyShortcut.appClipboardPaste
+
+        #expect(shortcut.modifiers == [.control, .command])
+        #expect(shortcut.key == "V")
+        #expect(shortcut.displayText == "Control+Command+V")
+    }
+
     @Test func holdToRecordStartsOnKeyDownAndStopsOnMatchingKeyUp() {
         let configuration = GlobalHotkeyConfiguration.defaultDictation
 

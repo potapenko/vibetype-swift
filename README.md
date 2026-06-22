@@ -47,8 +47,8 @@ File-changing task-solving chats should end with a scoped checkpoint commit.
   microphone, and data handling rules
 - `docs/specs/features/settings-and-secret-storage.md` - first-pass settings
   and Keychain behavior
-- `docs/specs/features/text-output-workflow.md` - first-pass auto-paste and
-  clipboard handoff behavior
+- `docs/specs/features/text-output-workflow.md` - first-pass VibeType
+  Clipboard and text handoff behavior
 - `docs/specs/templates/feature-spec.md` - reusable feature spec template
 
 ## Reference Material

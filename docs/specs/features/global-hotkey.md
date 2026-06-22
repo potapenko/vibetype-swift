@@ -14,6 +14,7 @@ This spec covers:
 - repeated key events and race prevention
 - shortcut registration failure and collision behavior
 - menu and Settings display for the active shortcut
+- app clipboard paste shortcut
 
 ## Non-goals
 
@@ -70,6 +71,17 @@ This spec covers:
   Recording action when practical.
 - Full shortcut editing is deferred, but future editing must validate and
   register a candidate before persisting it.
+- The VibeType Clipboard paste shortcut is `Control+Command+V`.
+- `Control+Command+V` is not a dictation shortcut. It inserts the current
+  VibeType Clipboard text into the current active app when Save to VibeType
+  Clipboard is enabled.
+- Turning Save to VibeType Clipboard off must disable the
+  `Control+Command+V` VibeType Clipboard paste behavior.
+- If the VibeType Clipboard is empty, `Control+Command+V` should safely no-op
+  and report that no app clipboard text is available when a visible surface is
+  available.
+- The VibeType Clipboard paste shortcut must not write transcript text to the
+  macOS system clipboard.
 
 ## Invariants
 

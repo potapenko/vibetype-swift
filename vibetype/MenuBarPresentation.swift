@@ -13,7 +13,7 @@ enum VibeTypeMenuBarIdentity {
 
 struct MenuBarPresentation: Equatable {
     static let lastTranscriptTitle = "Last Transcript"
-    static let copyLastTranscriptTitle = "Copy Last Transcript"
+    static let saveLastTranscriptTitle = "Save to VibeType Clipboard"
     static let settingsTitle = "Settings"
     static let quitTitle = "Quit VibeType"
 
@@ -29,13 +29,14 @@ struct MenuBarPresentation: Equatable {
     let isRecordingActionEnabled: Bool
     let dictationDetailText: String?
     let lastTranscriptText: String
-    let canCopyLastTranscript: Bool
+    let canSaveLastTranscript: Bool
     let clipboardStatusText: String?
 
     init(
         dictationStatus: DictationStatus,
         microphonePermissionStatus: MicrophonePermissionStatus,
         accessibilityPermissionStatus: AccessibilityPermissionStatus,
+        appClipboardEnabled: Bool = true,
         clipboardStatusText: String? = nil
     ) {
         appTitle = VibeTypeMenuBarIdentity.title
@@ -58,7 +59,7 @@ struct MenuBarPresentation: Equatable {
             && microphonePermissionStatus.canUseRecordingAction
         dictationDetailText = dictationStatus.detailText
         lastTranscriptText = dictationStatus.lastTranscriptMenuText
-        canCopyLastTranscript = dictationStatus.canCopyLastTranscript
+        canSaveLastTranscript = appClipboardEnabled && dictationStatus.canSaveLastTranscript
         self.clipboardStatusText = clipboardStatusText
     }
 

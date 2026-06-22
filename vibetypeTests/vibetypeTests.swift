@@ -43,20 +43,20 @@ struct DictationStatusTests {
         #expect(status.detailText == "Typed text")
     }
 
-    @Test func longTranscriptUsesCompactMenuPreviewWithoutChangingCopyText() {
+    @Test func longTranscriptUsesCompactMenuPreviewWithoutChangingSavedText() {
         let transcript = String(repeating: "a", count: 160)
         let status = DictationStatus.success(transcript: transcript)
 
         #expect(status.lastTranscriptText == transcript)
         #expect(status.lastTranscriptMenuText == "\(String(repeating: "a", count: 140))...")
-        #expect(status.canCopyLastTranscript)
+        #expect(status.canSaveLastTranscript)
     }
 
-    @Test func onlyNonEmptyNormalizedSuccessTranscriptCanBeCopied() {
-        #expect(DictationStatus.idle.canCopyLastTranscript == false)
-        #expect(DictationStatus.success(transcript: "").canCopyLastTranscript == false)
-        #expect(DictationStatus.success(transcript: "  \n\t  ").canCopyLastTranscript == false)
-        #expect(DictationStatus.success(transcript: "Typed text").canCopyLastTranscript == true)
+    @Test func onlyNonEmptyNormalizedSuccessTranscriptCanBeSaved() {
+        #expect(DictationStatus.idle.canSaveLastTranscript == false)
+        #expect(DictationStatus.success(transcript: "").canSaveLastTranscript == false)
+        #expect(DictationStatus.success(transcript: "  \n\t  ").canSaveLastTranscript == false)
+        #expect(DictationStatus.success(transcript: "Typed text").canSaveLastTranscript == true)
     }
 
     @Test func whitespaceOnlySuccessTranscriptShowsEmptyState() {

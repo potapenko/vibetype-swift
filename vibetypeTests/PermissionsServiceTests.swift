@@ -150,21 +150,20 @@ struct PermissionsServiceTests {
     @Test func accessibilitySettingsCopyNamesStatus() {
         #expect(AccessibilityPermissionStatus.trusted.settingsStatusText == "Accessibility: Allowed")
         #expect(AccessibilityPermissionStatus.trusted.settingsSystemImage == "checkmark.circle")
-        #expect(AccessibilityPermissionStatus.trusted.settingsDescription.contains("control the active app"))
+        #expect(AccessibilityPermissionStatus.trusted.settingsDescription.contains("insert text"))
 
         #expect(AccessibilityPermissionStatus.notTrusted.settingsStatusText == "Accessibility: Not Allowed")
         #expect(AccessibilityPermissionStatus.notTrusted.settingsSystemImage == "exclamationmark.triangle")
-        #expect(AccessibilityPermissionStatus.notTrusted.settingsDescription.contains("copy-only fallback"))
+        #expect(AccessibilityPermissionStatus.notTrusted.settingsDescription.contains("app clipboard"))
     }
 
-    @Test func accessibilityMenuCopyKeepsCopyFallbackAvailable() {
+    @Test func accessibilityMenuCopyExplainsAppClipboardPasteBlock() {
         #expect(AccessibilityPermissionStatus.trusted.menuStatusText == "Accessibility: Allowed")
         #expect(AccessibilityPermissionStatus.trusted.menuDetailText == nil)
         #expect(AccessibilityPermissionStatus.trusted.canPasteIntoActiveApp)
 
         #expect(AccessibilityPermissionStatus.notTrusted.menuStatusText == "Accessibility: Not Allowed")
-        #expect(AccessibilityPermissionStatus.notTrusted.menuDetailText?.contains("Auto-paste is unavailable") == true)
-        #expect(AccessibilityPermissionStatus.notTrusted.menuDetailText?.contains("copied") == true)
+        #expect(AccessibilityPermissionStatus.notTrusted.menuDetailText?.contains("VibeType Clipboard paste") == true)
         #expect(AccessibilityPermissionStatus.notTrusted.canPasteIntoActiveApp == false)
     }
 }

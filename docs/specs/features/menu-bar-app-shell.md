@@ -44,16 +44,16 @@ This spec covers:
   should request microphone access instead of pretending to record. If
   microphone access is denied or unavailable, recording must be blocked and the
   menu must expose the next recoverable action when one exists.
-- Accessibility permission must not block transcription or copy-only flows.
-  When Accessibility is not trusted, the menu should explain that auto-paste is
-  unavailable while transcripts can still be copied.
+- Accessibility permission must not block transcription or VibeType Clipboard
+  saves. When Accessibility is not trusted, the menu should explain that
+  VibeType Clipboard paste is unavailable.
 - Before recording exists, Start Recording may be a visible placeholder, but it
   must clearly state that recording is not available yet.
 - Before recording exists, a placeholder Start/Stop transition may exercise
   the menu binding, but it must clearly state that microphone input is not
   captured in that build.
-- The menu should include Settings, Last Transcript, Copy Last Transcript, and
-  Quit.
+- The menu should include Settings, Last Transcript, Save to VibeType
+  Clipboard, and Quit.
 - Quit must terminate the app cleanly.
 - The app should show status changes during recording and transcription.
 - Settings should be available from the menu bar.
@@ -99,8 +99,8 @@ settings must not start, stop, or cancel recording by itself.
 ## Verification mapping
 
 - Add UI or manual app-run checks for menu presence, Start/Stop label changes,
-  Settings opening, Last Transcript display, Copy Last Transcript, Quit, and
-  state display when implementation exists.
+  Settings opening, Last Transcript display, Save to VibeType Clipboard, Quit,
+  and state display when implementation exists.
 
 ## Unknowns requiring confirmation
 

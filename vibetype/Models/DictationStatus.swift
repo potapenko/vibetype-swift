@@ -87,7 +87,7 @@ enum DictationStatus: Equatable {
         return "\(transcript[..<previewEndIndex])..."
     }
 
-    var canCopyLastTranscript: Bool {
+    var canSaveLastTranscript: Bool {
         lastTranscriptText != nil
     }
 
