@@ -1,7 +1,7 @@
 ---
 id: VT-133
 title: Transcript History Store
-status: in-progress
+status: done
 priority: P2
 lane: history
 parent: VT-130
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-133 - Transcript History Store
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -50,3 +50,11 @@ newest 20, and can clear persistent history.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Result
+
+- Added a `UserDefaults`-backed transcript history store with load, append,
+  clear, max-20 retention, and recoverable storage errors.
+- Added fake-backed tests for append/load, retention, clear scoping, empty
+  transcript rejection, unreadable stored data, and persistence failures.
+- Runtime QA: not applicable; this task changes non-UI service/model behavior.
