@@ -36,6 +36,10 @@ This spec covers:
 - Before concrete settings fields exist, Settings may open a native placeholder
   window titled for VibeType settings. The placeholder must not show fake or
   nonfunctional form controls.
+- The Settings window should use sidebar navigation once it contains multiple
+  settings groups. The sidebar should provide stable entries for General,
+  OpenAI, Transcription, Shortcut, Behavior, and Privacy, with the selected
+  entry shown in the detail pane.
 - The Settings window should include OpenAI API Key.
 - The OpenAI API key should be saved locally in macOS Keychain.
 - Saving an API key should clear the entry field and show only saved, missing,
@@ -127,6 +131,9 @@ Keychain stores:
 
 Transcript history retention and clearing behavior is governed by
 `transcript-history.md`.
+
+The selected Settings sidebar entry is window-local UI state. Changing the
+selected entry must not start, stop, cancel, or otherwise affect dictation.
 
 ## Verification mapping
 

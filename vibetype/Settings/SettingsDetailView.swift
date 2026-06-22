@@ -1,0 +1,77 @@
+//
+//  SettingsDetailView.swift
+//  vibetype
+//
+//  Created by Codex on 6/22/26.
+//
+
+import SwiftUI
+
+struct SettingsDetailView: View {
+    let item: SettingsNavigationItem
+
+    @Binding var apiKeyInput: String
+    let apiKeyStatus: APIKeySettingsStatus
+    @Binding var settings: AppSettings
+    let hotkeyRegistrationStatus: GlobalHotkeyRegistrationStatus
+    let preferredHotkeyConfiguration: GlobalHotkeyConfiguration
+    let microphonePermissionStatus: MicrophonePermissionStatus
+    let accessibilityPermissionStatus: AccessibilityPermissionStatus
+    let onSaveAPIKey: () -> Void
+    let onRemoveAPIKey: () -> Void
+    let onMicrophonePermissionAction: () -> Void
+    let onOpenAccessibilitySettings: () -> Void
+
+    var body: some View {
+        Form {
+            switch item {
+            case .general:
+                SettingsSetupStatusSection()
+            case .openAI:
+                OpenAISettingsSection(
+                    apiKeyInput: $apiKeyInput,
+                    apiKeyStatus: apiKeyStatus,
+                    onSaveAPIKey: onSaveAPIKey,
+                    onRemoveAPIKey: onRemoveAPIKey
+                )
+            case .transcription:
+                TranscriptionSettingsSection(settings: $settings)
+            case .shortcut:
+                KeyboardShortcutSettingsSection(
+                    status: hotkeyRegistrationStatus,
+                    preferredConfiguration: preferredHotkeyConfiguration
+                )
+            case .behavior:
+                BehaviorSettingsSection(settings: $settings)
+            case .privacy:
+                PrivacyPermissionsSettingsSection(
+                    microphonePermissionStatus: microphonePermissionStatus,
+                    accessibilityPermissionStatus: accessibilityPermissionStatus,
+                    onMicrophonePermissionAction: onMicrophonePermissionAction,
+                    onOpenAccessibilitySettings: onOpenAccessibilitySettings
+                )
+            }
+        }
+        .formStyle(.grouped)
+        .scenePadding()
+        .navigationTitle(item.title)
+    }
+}
+
+#Preview("Privacy") {
+    SettingsDetailView(
+        item: .privacy,
+        apiKeyInput: .constant(""),
+        apiKeyStatus: .missing,
+        settings: .constant(.defaults),
+        hotkeyRegistrationStatus: .registered(.defaultDictation),
+        preferredHotkeyConfiguration: .defaultDictation,
+        microphonePermissionStatus: .notDetermined,
+        accessibilityPermissionStatus: .notTrusted,
+        onSaveAPIKey: {},
+        onRemoveAPIKey: {},
+        onMicrophonePermissionAction: {},
+        onOpenAccessibilitySettings: {}
+    )
+    .frame(width: 520, height: 420)
+}

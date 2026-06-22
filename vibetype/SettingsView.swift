@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @State private var selectedItem: SettingsNavigationItem? = .general
     @State private var microphonePermissionStatus: MicrophonePermissionStatus
     @State private var accessibilityPermissionStatus: AccessibilityPermissionStatus
     @State private var appSettings: AppSettings
@@ -47,36 +48,28 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        Form {
-            SettingsSetupStatusSection()
-
-            OpenAISettingsSection(
+        NavigationSplitView {
+            SettingsSidebarView(selection: $selectedItem)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
+        } detail: {
+            SettingsDetailView(
+                item: selectedItem ?? .general,
                 apiKeyInput: $apiKeyInput,
                 apiKeyStatus: apiKeyStatus,
-                onSaveAPIKey: saveAPIKey,
-                onRemoveAPIKey: removeAPIKey
-            )
-
-            TranscriptionSettingsSection(settings: appSettingsBinding)
-
-            KeyboardShortcutSettingsSection(
-                status: hotkeyRegistrationStatus,
-                preferredConfiguration: preferredHotkeyConfiguration
-            )
-
-            BehaviorSettingsSection(settings: appSettingsBinding)
-
-            PrivacyPermissionsSettingsSection(
+                settings: appSettingsBinding,
+                hotkeyRegistrationStatus: hotkeyRegistrationStatus,
+                preferredHotkeyConfiguration: preferredHotkeyConfiguration,
                 microphonePermissionStatus: microphonePermissionStatus,
                 accessibilityPermissionStatus: accessibilityPermissionStatus,
+                onSaveAPIKey: saveAPIKey,
+                onRemoveAPIKey: removeAPIKey,
                 onMicrophonePermissionAction: handleMicrophonePermissionAction,
                 onOpenAccessibilitySettings: handleAccessibilityPermissionAction
             )
         }
-        .formStyle(.grouped)
-        .scenePadding()
-        .frame(minWidth: 460, minHeight: 400, alignment: .topLeading)
+        .frame(minWidth: 720, minHeight: 480)
         .onAppear {
+            selectedItem = selectedItem ?? .general
             reloadAppSettings()
             refreshMicrophonePermissionStatus()
             refreshAccessibilityPermissionStatus()
