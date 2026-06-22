@@ -63,13 +63,16 @@ and even when they are also recurring automation runs.
 
 One scheduled automation invocation must drain pages internally. It must not
 archive one visible page and rely on a later scheduled invocation to expose and
-archive older pages. Within the same run, keep cycling through exact
-current-repository automation id/name searches, readback, and archive calls.
-Each loop iteration works on the currently visible search-result page. Archive
-the whole visible page when it contains more than two readback-eligible
-threads, then immediately re-list so older pages can surface in the same run.
-Stop only when the next fresh visible page contains two or fewer
-readback-eligible threads, or when a real tool, readback, active-work, or
+archive older pages. Within the same run, keep cycling through the currently
+visible sidebar page, readback, and archive calls. The primary discovery source
+is `list_threads` without a query, filtered by exact cwd and
+readback-verified automation provenance. Exact automation id/name searches are
+only supplemental fallback discovery; they must not replace the general
+visible-page pass because exact search can miss sidebar-visible rows. Archive
+the whole visible eligible page when it contains more than two
+readback-eligible threads, then immediately re-list so older pages can surface
+in the same run. Stop only when the next fresh visible page contains two or
+fewer readback-eligible threads, or when a real tool, readback, active-work, or
 safety blocker prevents further progress.
 
 ## Required Tools
@@ -80,6 +83,13 @@ truth for thread state:
 - `list_threads`
 - `read_thread`
 - `set_thread_archived`
+
+Do not inspect Codex SQLite state files or use filesystem helpers that infer
+thread state from `state_5.sqlite` or similar files. The live sidebar can use a
+different state database than a filesystem helper selects, so `list_threads`
+readback is the only valid cleanup source of truth. If any helper output
+conflicts with `list_threads`, ignore the helper output and continue from the
+thread-management tools.
 
 If these tools are not already visible in the active tool list, use tool
 discovery first. If discovery cannot expose all three tools, stop and report:
@@ -140,7 +150,14 @@ A thread is archive-eligible only when every condition below is true:
     prompt, no final question waiting for the user, and either the run has
     already reached cleanup/final-report/current-thread-archive wording or the
     repository has no uncommitted files that can be attributed to that
-    automation run;
+    automation run; or
+  - self-archive hanging `inProgress`: the thread is still marked
+    active/in-progress, but readback shows the run has reached the final
+    thread-archive request step, no tool call is running or pending, there is
+    no user message after the root automation prompt, and there is no unresolved
+    user question. This case is eligible without waiting 30 minutes because the
+    run has already declared its work complete and is stuck only on archiving
+    itself;
 - the thread is not pinned;
 - the thread has no normal back-and-forth manual user conversation;
 - the thread has no unresolved user question or blocker expecting user input;
@@ -160,12 +177,12 @@ If a candidate is ambiguous, unreadable, or lacks positive automation
 provenance for the current repository, skip it as `manual_or_unclear`.
 
 If a candidate is active, running, pending, or otherwise not terminal and does
-not pass the stale hanging `inProgress` eligibility gate above, skip it as
-`active_or_pending` and keep sweeping other candidates. Active or pending
-current-repository automation threads that are still live work are not
-archive-eligible, but their presence must not block archiving separate
-readback-verified completed or stale hanging automation-run threads in the same
-visible page.
+not pass the stale hanging or self-archive hanging `inProgress` eligibility
+gates above, skip it as `active_or_pending` and keep sweeping other candidates.
+Active or pending current-repository automation threads that are still live
+work are not archive-eligible, but their presence must not block archiving
+separate readback-verified completed, stale hanging, or self-archive hanging
+automation-run threads in the same visible page.
 
 If archive or readback reports `No Codex thread found` for a visible candidate
 id, count it as `orphaned_or_stale` and continue. Do not report it as active
@@ -176,37 +193,43 @@ work.
 Run discovery and archiving as an internal loop inside this single automation
 invocation.
 
-1. Build the search key set only from installed automation ids and names in the
-   current-repository subset.
-2. For each search key, call `list_threads` with that exact key and the largest
-   practical `limit` supported by the tool so the sweep is not capped at the
-   default recent-thread page.
-3. Also call `list_threads` for the housekeeping automation id and name when
-   the housekeeping automation definition belongs to the current repository.
-4. De-duplicate candidate thread ids across all search results in the current
-   sweep.
+1. Call `list_threads` without a query using the largest practical `limit`
+   supported by the tool. This unfiltered call is mandatory because it mirrors
+   the sidebar page and can reveal current-repository automation rows that
+   exact text searches miss.
+2. Keep only list results whose `cwd` is exactly the configured repository cwd
+   or whose cwd is missing/ambiguous and needs readback to decide.
+3. Add supplemental candidates from exact installed automation id/name searches
+   only after the unfiltered visible-page pass has run. These supplemental
+   searches may catch rows absent from the unfiltered page, but they do not
+   define the page-stop condition.
+4. De-duplicate candidate thread ids across the unfiltered visible page and
+   supplemental exact-key results.
 5. For each candidate id whose list result reports another cwd, skip it as
    `out_of_scope` without readback unless readback is needed to disambiguate a
    missing cwd.
 6. For each in-scope candidate id, call `read_thread` before deciding.
-7. Archive only candidates that pass the hard safety gate by calling
-   `set_thread_archived` with `archived=true` and the explicit candidate id.
-8. Count the readback-eligible candidates on the current visible page.
-9. If the current visible page contains two or fewer readback-eligible
+7. Count the readback-eligible candidates from the mandatory unfiltered
+   visible-page pass. Supplemental exact-key candidates may be archived in the
+   same batch, but they do not reduce or inflate this visible-page count.
+8. If the current visible page contains two or fewer readback-eligible
    candidates, do not archive that page; exit the page-drain loop successfully.
-10. If the current visible page contains more than two readback-eligible
+9. If the current visible page contains more than two readback-eligible
     candidates, archive every eligible candidate from that visible batch.
+10. Also archive any supplemental exact-key candidates that pass the hard
+    safety gate in this batch, unless doing so would archive one of the small
+    residual visible-page candidates that the page-stop rule allowed to remain.
 11. Immediately start the next loop iteration from step 1 in this same
     automation invocation so older pages can surface. Do not wait for the next
     scheduled run.
 
 Do not stop just because a single list call returned one page, no page, no new
-ids, or exactly the default-size result set. Re-run exact automation-id and
-automation-name searches after each archive batch because archiving one visible
-page can expose older unarchived threads. The two-thread allowance is only the
-single-run page-stop escape hatch for a small residual visible page; it is not
-permission to archive one large page and leave additional large eligible pages
-for a future scheduled invocation.
+ids, or exactly the default-size result set. Re-run the unfiltered
+`list_threads` visible-page pass after each archive batch because archiving one
+visible page can expose older unarchived threads. The two-thread allowance is
+only the single-run page-stop escape hatch for a small residual visible page;
+it is not permission to archive one large page and leave additional large
+eligible pages for a future scheduled invocation.
 
 ## Tail Exit Rule
 
@@ -217,9 +240,10 @@ visible_page_eligible_count
 ```
 
 This count is the number of readback-verified archive-eligible
-current-repository automation-run threads in the currently visible page across
-the exact automation id/name searches, including completed, stale interrupted,
-and stale hanging in-progress runs that pass the hard safety gate.
+current-repository automation-run threads in the mandatory unfiltered
+`list_threads` visible page, including completed, stale interrupted, stale
+hanging in-progress, and self-archive hanging in-progress runs that pass the
+hard safety gate.
 
 Exit successfully only when:
 
