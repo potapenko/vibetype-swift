@@ -1,7 +1,7 @@
 ---
 id: VT-026
 title: Hotkey Settings Display
-status: backlog
+status: in-progress
 priority: P2
 lane: settings
 parent: VT-020
@@ -18,7 +18,7 @@ allowed_paths:
 
 # VT-026 - Hotkey Settings Display
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
