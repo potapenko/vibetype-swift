@@ -2,25 +2,23 @@
 
 ## Goal
 
-Define the optional floating status surface for VibeType recording and
-transcription sessions.
+Define the optional floating recording surface for VibeType dictation sessions.
 
 The indicator gives the user immediate confidence that the menu bar app is
-recording or processing while keeping the currently active app focused.
+recording while keeping the currently active app focused.
 
 ## Scope
 
 This spec covers:
 
-- indicator visibility across recording, transcribing, done, and error states
-- default placement and display duration
+- indicator visibility during active microphone capture
+- default placement
 - non-interference with the active app
 - behavior when the floating indicator setting is disabled
 - fallback behavior when the indicator cannot be shown
 
 ## Non-goals
 
-- final visual styling
 - implementation details for `NSPanel`, `NSWindow`, or SwiftUI view structure
 - transcript editing, history, or review workflows
 - notification-center behavior
@@ -29,25 +27,19 @@ This spec covers:
 
 - The floating indicator is enabled by default through the
   `showFloatingIndicator` setting.
-- When enabled, it appears while a session is recording.
-- While recording, the indicator uses short recording copy such as
-  `Recording`.
-- After recording stops and transcription is in progress, the indicator stays
-  visible and changes to short processing copy such as `Transcribing`.
-- A successful session may show a brief done state such as `Done` after output
-  handoff completes.
-- The done state should dismiss automatically after about two seconds.
-- A failed session may show a brief product-language error summary.
-- The error indicator should dismiss automatically after about six seconds or
-  when a new session starts, while the durable error remains available in the
-  menu or settings surface.
+- When enabled, it appears only while a session is actively recording.
+- While recording, the indicator is a compact visual mark such as a microphone
+  glyph with subtle pulse animation.
+- When recording stops, is cancelled, fails before capture, or moves into
+  transcription, the indicator disappears immediately.
+- The indicator should not show text by default.
 - The indicator should not show the full transcript by default.
-- The default placement is near the top center of the active display, below the
-  macOS menu bar and inside the visible screen area.
+- The default placement is near the bottom-right corner of the active display,
+  inside the visible screen area.
 - The indicator may adjust placement to stay on screen and avoid covering
   system UI.
 - If `showFloatingIndicator` is disabled, no floating indicator should appear
-  for recording, transcribing, done, or error states.
+  during recording.
 - Disabling the indicator must not disable menu status, recording,
   transcription, clipboard, or paste behavior.
 
@@ -55,10 +47,9 @@ This spec covers:
 
 - The floating indicator must not steal focus.
 - The floating indicator must not make VibeType the active app during normal
-  recording, transcribing, done, or error display.
+  recording display.
 - The floating indicator must not intercept keyboard input meant for the active
   app.
-- The floating indicator must not be the only place where an error is exposed.
 - Core menu bar controls must remain usable if the indicator is hidden,
   disabled, or fails to appear.
 - The indicator must not display API keys, raw audio paths, provider payloads,
@@ -66,10 +57,11 @@ This spec covers:
 
 ## Edge cases and failure policy
 
-- If recording starts again before a prior done or error indicator dismisses,
-  the indicator should switch immediately to the new recording state.
-- If transcription starts after recording stops, the indicator should update in
-  place rather than flashing through idle.
+- If recording starts again quickly after a prior session, the indicator should
+  appear for the new recording state without showing stale completion or error
+  states.
+- If transcription starts after recording stops, the indicator should hide
+  rather than switch to a processing state.
 - If the active display changes during a session, the indicator may stay on the
   display where the session began or move to the current active display, as
   long as it remains visible and non-disruptive.
@@ -85,27 +77,24 @@ transcription, paste, clipboard, settings, or permission state.
 
 Product states map to the indicator as follows:
 
-| App state | Indicator visibility | Display copy | Dismissal |
-| --- | --- | --- | --- |
-| `idle` | hidden | none | immediate |
-| `recording` | visible when enabled | `Recording` | when recording stops or fails |
-| `transcribing` | visible when enabled | `Transcribing` | when transcription completes or fails |
-| `done` | briefly visible when enabled | `Done` | automatic after about two seconds |
-| `error` | briefly visible when enabled | short product-language error summary | automatic after about six seconds or when a new session starts |
+| App state | Indicator visibility | Display |
+| --- | --- | --- |
+| `idle` | hidden | none |
+| `recording` | visible when enabled | compact microphone indicator |
+| `transcribing` | hidden | none |
+| `done` | hidden | none |
+| `error` | hidden | none |
 
 The `showFloatingIndicator` setting is local UserDefaults-backed app state.
 
 ## Verification mapping
 
-- Unit or model coverage should verify state-to-indicator visibility decisions
-  once an indicator model exists.
-- macOS runtime smoke should verify that the indicator appears for recording or
-  transcribing and does not steal focus once the platform surface exists.
+- Unit or model coverage should verify state-to-indicator visibility decisions.
+- macOS runtime smoke should verify that the indicator appears for recording
+  and does not steal focus once the platform surface exists.
 - Build or runtime verification should confirm that disabling the setting hides
   the indicator without disabling menu status or session behavior.
 
 ## Unknowns requiring confirmation
 
-- Final visual style, size, and iconography.
 - Whether the user can drag or reposition the indicator.
-- Whether success and error durations should be user-configurable.

@@ -10,18 +10,11 @@ import Foundation
 struct FloatingIndicatorPresentation: Equatable {
     enum Phase: Equatable {
         case recording
-        case transcribing
-        case success
-        case failure
     }
-
-    static let successDismissalDelay: TimeInterval = 2
-    static let failureDismissalDelay: TimeInterval = 6
 
     let phase: Phase
     let title: String
     let systemImage: String
-    let dismissalDelay: TimeInterval?
 
     var accessibilityLabel: String {
         "VibeType \(title)"
@@ -42,46 +35,10 @@ struct FloatingIndicatorPresentation: Equatable {
             return FloatingIndicatorPresentation(
                 phase: .recording,
                 title: "Recording",
-                systemImage: "mic.fill",
-                dismissalDelay: nil
+                systemImage: "mic.fill"
             )
-        case .transcribing:
-            return FloatingIndicatorPresentation(
-                phase: .transcribing,
-                title: "Transcribing",
-                systemImage: "waveform",
-                dismissalDelay: nil
-            )
-        case .success:
-            return FloatingIndicatorPresentation(
-                phase: .success,
-                title: "Done",
-                systemImage: "checkmark.circle.fill",
-                dismissalDelay: successDismissalDelay
-            )
-        case .failure(let message):
-            return FloatingIndicatorPresentation(
-                phase: .failure,
-                title: shortFailureTitle(from: message),
-                systemImage: "exclamationmark.triangle.fill",
-                dismissalDelay: failureDismissalDelay
-            )
+        case .transcribing, .success, .failure:
+            return nil
         }
-    }
-
-    private static func shortFailureTitle(from message: String) -> String {
-        let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedMessage.isEmpty else {
-            return "Error"
-        }
-
-        let maximumCharacterCount = 72
-        guard trimmedMessage.count > maximumCharacterCount else {
-            return trimmedMessage
-        }
-
-        let prefix = String(trimmedMessage.prefix(maximumCharacterCount))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return "\(prefix)..."
     }
 }

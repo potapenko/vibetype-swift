@@ -19,6 +19,7 @@ final class DictationSessionController {
     private let transcriptionService: any OpenAITranscriptionServing
     private let settingsProvider: () -> AppSettings
     private let transcriptOutput: any TranscriptOutputDelivering
+    private let cuePlayer: any DictationCuePlaying
 
     private var isPerformingAction = false
 
@@ -31,6 +32,7 @@ final class DictationSessionController {
         transcriptionService: any OpenAITranscriptionServing = OpenAITranscriptionService(),
         settingsProvider: @escaping () -> AppSettings = { AppSettingsStore().load() },
         transcriptOutput: any TranscriptOutputDelivering = TextInsertionService(),
+        cuePlayer: any DictationCuePlaying = NativeDictationCuePlayer.shared,
         initialStatus: DictationStatus = .idle,
         lastTranscriptText: String? = nil,
         outputStatusText: String? = nil
@@ -39,6 +41,7 @@ final class DictationSessionController {
         self.transcriptionService = transcriptionService
         self.settingsProvider = settingsProvider
         self.transcriptOutput = transcriptOutput
+        self.cuePlayer = cuePlayer
         self.status = initialStatus
         self.lastTranscriptText = lastTranscriptText.flatMap {
             AcceptedTranscript.nonEmptyNormalizedText(from: $0)
@@ -83,10 +86,12 @@ final class DictationSessionController {
 
     private func startRecording() async {
         outputStatusText = nil
+        let settings = settingsProvider()
 
         do {
             try await recorder.startRecording()
             status = .recording
+            playCue(.startRecording, settings: settings)
         } catch {
             status = .failure(message: Self.userFacingMessage(for: error))
         }
@@ -98,6 +103,7 @@ final class DictationSessionController {
         do {
             let artifact = try await recorder.stopRecording()
             let settings = settingsProvider()
+            playCue(.stopRecording, settings: settings)
             status = .transcribing
 
             let rawTranscript = try await transcriptionService.transcribe(
@@ -119,6 +125,14 @@ final class DictationSessionController {
         } catch {
             status = .failure(message: Self.userFacingMessage(for: error))
         }
+    }
+
+    private func playCue(_ cue: DictationCue, settings: AppSettings) {
+        guard settings.soundEnabled else {
+            return
+        }
+
+        cuePlayer.play(cue)
     }
 
     private static func acceptedTranscript(from rawText: String) throws -> AcceptedTranscript {

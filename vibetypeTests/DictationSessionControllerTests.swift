@@ -16,10 +16,12 @@ struct DictationSessionControllerTests {
         let recorder = FakeAudioRecorderService()
         let transcriptionService = FakeControllerTranscriptionService()
         let transcriptOutput = FakeTranscriptOutput()
+        let cuePlayer = FakeDictationCuePlayer()
         let controller = makeController(
             recorder: recorder,
             transcriptionService: transcriptionService,
-            transcriptOutput: transcriptOutput
+            transcriptOutput: transcriptOutput,
+            cuePlayer: cuePlayer
         )
 
         await controller.performRecordingAction()
@@ -30,6 +32,7 @@ struct DictationSessionControllerTests {
         #expect(recorder.stopCount == 0)
         #expect(transcriptionService.calls.isEmpty)
         #expect(transcriptOutput.calls.isEmpty)
+        #expect(cuePlayer.playedCues == [.startRecording])
     }
 
     @Test func recordingActionStopsTranscribesAndDeliversAcceptedTranscript() async {
@@ -48,12 +51,14 @@ struct DictationSessionControllerTests {
         let transcriptOutput = FakeTranscriptOutput(
             result: .success(.skipped(reason: .appClipboardDisabled))
         )
+        let cuePlayer = FakeDictationCuePlayer()
         let settings = makeSettings(saveTranscriptsToAppClipboard: false)
         let controller = makeController(
             recorder: recorder,
             transcriptionService: transcriptionService,
             settings: settings,
             transcriptOutput: transcriptOutput,
+            cuePlayer: cuePlayer,
             initialStatus: .recording
         )
 
@@ -66,6 +71,7 @@ struct DictationSessionControllerTests {
         #expect(recorder.stopCount == 1)
         #expect(transcriptionService.calls == [TranscriptionCall(audioFileURL: artifact.fileURL, settings: settings)])
         #expect(transcriptOutput.calls == [TranscriptOutputCall(transcript: "Shared controller transcript", settings: settings)])
+        #expect(cuePlayer.playedCues == [.stopRecording])
     }
 
     @Test func transcribingStateIgnoresRecordingAction() async {
@@ -155,10 +161,12 @@ struct DictationSessionControllerTests {
         let recorder = FakeAudioRecorderService(startResult: .failure(.recordingUnavailable))
         let transcriptionService = FakeControllerTranscriptionService()
         let transcriptOutput = FakeTranscriptOutput()
+        let cuePlayer = FakeDictationCuePlayer()
         let controller = makeController(
             recorder: recorder,
             transcriptionService: transcriptionService,
-            transcriptOutput: transcriptOutput
+            transcriptOutput: transcriptOutput,
+            cuePlayer: cuePlayer
         )
 
         await controller.performRecordingAction()
@@ -168,6 +176,28 @@ struct DictationSessionControllerTests {
         #expect(recorder.stopCount == 0)
         #expect(transcriptionService.calls.isEmpty)
         #expect(transcriptOutput.calls.isEmpty)
+        #expect(cuePlayer.playedCues.isEmpty)
+    }
+
+    @Test func disabledSoundSettingSuppressesRecordingCues() async {
+        let recorder = FakeAudioRecorderService()
+        let transcriptionService = FakeControllerTranscriptionService()
+        let transcriptOutput = FakeTranscriptOutput()
+        let cuePlayer = FakeDictationCuePlayer()
+        var settings = AppSettings.defaults
+        settings.soundEnabled = false
+        let controller = makeController(
+            recorder: recorder,
+            transcriptionService: transcriptionService,
+            settings: settings,
+            transcriptOutput: transcriptOutput,
+            cuePlayer: cuePlayer
+        )
+
+        await controller.performRecordingAction()
+
+        #expect(controller.status == .recording)
+        #expect(cuePlayer.playedCues.isEmpty)
     }
 
     @Test func recordingTimeoutBecomesUserVisibleFailureWithoutTranscription() async {
@@ -267,15 +297,19 @@ struct DictationSessionControllerTests {
         transcriptionService: FakeControllerTranscriptionService,
         settings: AppSettings = .defaults,
         transcriptOutput: FakeTranscriptOutput,
+        cuePlayer: FakeDictationCuePlayer? = nil,
         initialStatus: DictationStatus = .idle,
         lastTranscriptText: String? = nil,
         outputStatusText: String? = nil
     ) -> DictationSessionController {
-        DictationSessionController(
+        let cuePlayer = cuePlayer ?? FakeDictationCuePlayer()
+
+        return DictationSessionController(
             recorder: recorder,
             transcriptionService: transcriptionService,
             settingsProvider: { settings },
             transcriptOutput: transcriptOutput,
+            cuePlayer: cuePlayer,
             initialStatus: initialStatus,
             lastTranscriptText: lastTranscriptText,
             outputStatusText: outputStatusText
@@ -324,5 +358,14 @@ private final class FakeTranscriptOutput: TranscriptOutputDelivering {
     func deliver(_ transcript: String, settings: AppSettings) async throws -> TextInsertionResult {
         calls.append(TranscriptOutputCall(transcript: transcript, settings: settings))
         return try result.get()
+    }
+}
+
+@MainActor
+private final class FakeDictationCuePlayer: DictationCuePlaying {
+    private(set) var playedCues: [DictationCue] = []
+
+    func play(_ cue: DictationCue) {
+        playedCues.append(cue)
     }
 }

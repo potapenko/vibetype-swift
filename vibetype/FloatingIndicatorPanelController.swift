@@ -9,16 +9,13 @@ import AppKit
 import SwiftUI
 
 final class FloatingIndicatorPanelController {
-    private let panelSize = CGSize(width: 220, height: 58)
+    private let panelSize = CGSize(width: 72, height: 72)
+    private let screenMargin: CGFloat = 18
 
     private var panel: NSPanel?
-    private var dismissalWorkItem: DispatchWorkItem?
 
     @MainActor
     func update(with presentation: FloatingIndicatorPresentation?) {
-        dismissalWorkItem?.cancel()
-        dismissalWorkItem = nil
-
         guard let presentation else {
             hide()
             return
@@ -32,25 +29,10 @@ final class FloatingIndicatorPanelController {
         panel.setContentSize(panelSize)
         position(panel)
         panel.orderFrontRegardless()
-
-        if let dismissalDelay = presentation.dismissalDelay {
-            let workItem = DispatchWorkItem { [weak self] in
-                Task { @MainActor in
-                    self?.hide()
-                }
-            }
-            dismissalWorkItem = workItem
-            DispatchQueue.main.asyncAfter(
-                deadline: .now() + dismissalDelay,
-                execute: workItem
-            )
-        }
     }
 
     @MainActor
     func hide() {
-        dismissalWorkItem?.cancel()
-        dismissalWorkItem = nil
         panel?.orderOut(nil)
     }
 
@@ -78,8 +60,8 @@ final class FloatingIndicatorPanelController {
         let screen = screenForIndicator()
         let visibleFrame = screen.visibleFrame
         let origin = CGPoint(
-            x: visibleFrame.midX - panelSize.width / 2,
-            y: visibleFrame.maxY - panelSize.height - 18
+            x: visibleFrame.maxX - panelSize.width - screenMargin,
+            y: visibleFrame.minY + screenMargin
         )
         panel.setFrame(CGRect(origin: origin, size: panelSize), display: true)
     }
