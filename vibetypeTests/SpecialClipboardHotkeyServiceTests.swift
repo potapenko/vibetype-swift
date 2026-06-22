@@ -34,9 +34,9 @@ struct SpecialClipboardHotkeyServiceTests {
         #expect(hotkeyService.isListening)
 
         hotkeyService.trigger()
-        try await Task.sleep(nanoseconds: 20_000_000)
 
-        #expect(await poster.postedTexts() == ["stored transcript"])
+        #expect(try await waitForPostedTexts(from: poster) == ["stored transcript"])
+        await yieldUntil { coordinator.lastStatusText != nil }
         #expect(coordinator.lastStatusText == "Inserted from VibeType Clipboard.")
     }
 
@@ -103,7 +103,41 @@ struct SpecialClipboardHotkeyServiceTests {
         settings.saveTranscriptsToAppClipboard = saveTranscriptsToAppClipboard
         return settings
     }
+
+    private func waitForPostedTexts(
+        from poster: FakeCoordinatorTextEventPoster,
+        timeoutNanoseconds: UInt64 = 1_000_000_000
+    ) async throws -> [String] {
+        try await withThrowingTaskGroup(of: [String].self) { group in
+            group.addTask {
+                await poster.waitForPostedTexts()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                throw WaitForPostedTextsTimeout()
+            }
+
+            guard let result = try await group.next() else {
+                return []
+            }
+
+            group.cancelAll()
+            return result
+        }
+    }
+
+    private func yieldUntil(_ condition: () -> Bool) async {
+        for _ in 0..<20 {
+            if condition() {
+                return
+            }
+
+            await Task.yield()
+        }
+    }
 }
+
+private struct WaitForPostedTextsTimeout: Error {}
 
 private final class FakeSpecialClipboardHotkeyService: SpecialClipboardHotkeyListening {
     let shortcut = GlobalHotkeyShortcut.appClipboardPaste
@@ -168,12 +202,31 @@ private final class FakeCoordinatorAccessibilityPermissionClient: AccessibilityP
 
 private actor FakeCoordinatorTextEventPoster: TextEventPosting {
     private var texts: [String] = []
+    private var continuations: [CheckedContinuation<[String], Never>] = []
 
     func postText(_ text: String) async throws {
         texts.append(text)
+
+        let currentTexts = texts
+        let waitingContinuations = continuations
+        continuations.removeAll()
+
+        for continuation in waitingContinuations {
+            continuation.resume(returning: currentTexts)
+        }
     }
 
     func postedTexts() async -> [String] {
         texts
+    }
+
+    func waitForPostedTexts() async -> [String] {
+        if !texts.isEmpty {
+            return texts
+        }
+
+        return await withCheckedContinuation { continuation in
+            continuations.append(continuation)
+        }
     }
 }

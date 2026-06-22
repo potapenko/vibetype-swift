@@ -61,54 +61,47 @@ This runbook is scoped only to the configured automation cwd above. Threads
 from any other cwd are out of scope even when they are visible in thread search
 and even when they are also recurring automation runs.
 
-One scheduled automation invocation must drain pages internally. It must not
-archive one visible page and rely on a later scheduled invocation to expose and
-archive older pages. Within the same run, keep cycling through the currently
-visible sidebar page, readback, and archive calls. The primary discovery source
-is `list_threads` without a query, filtered by exact cwd and
-readback-verified automation provenance. Exact automation id/name searches are
-only supplemental fallback discovery; they must not replace the general
-visible-page pass because exact search can miss sidebar-visible rows. The
-first visible eligible page is mandatory: archive every readback-eligible
-thread from that first page, even when it contains only one or two eligible
-threads. The two-thread allowance applies only after at least one eligible
-visible page has been archived in this invocation, when deciding whether to
-start another page-drain pass. After each archive batch, immediately re-list so
-older pages can surface in the same run. Stop only when the next fresh visible
-page contains two or fewer readback-eligible threads, or when a real tool,
-readback, active-work, or safety blocker prevents further progress.
+One scheduled automation invocation must drain the local registry internally.
+It must not archive one thread and rely on a later scheduled invocation to
+expose or archive older rows. The primary discovery and apply source is the
+repository helper in the Local Registry Sweep section below, because cron
+thread-management calls can be visible but still hang before fallback. A
+successful run is one helper invocation whose internal passes finish with
+`remaining_eligible_count=0`.
+
+The historical visible-page rule is now only a safety model implemented by the
+helper. Do not call `list_threads` or `read_thread` before the helper. Do not
+start with a visible sidebar page and do not depend on exact automation
+searches for the main sweep.
 
 ## Thread Tools And Registry Fallback
 
-Use thread-management tools as the first source of truth for thread state when
-they are available:
+The local registry helper is the first source of truth for this automation.
+Thread-management tools are optional lifecycle tools, not the primary archive
+sweep path:
 
 - `list_threads`
 - `read_thread`
 - `set_thread_archived`
 
-Cron automation sessions may not expose these thread tools. When they are not
-available, use only the repository helper below as the fallback source of
-truth. Do not write ad hoc SQLite queries or use a helper that scans only one
-`state_5.sqlite` location. The fallback helper must scan every supported local
-Codex state DB it knows about, currently both
+Cron automation sessions may expose these tools but still hang while calling
+them. Therefore the scheduled housekeeping run must not call `list_threads` or
+`read_thread` before the registry helper. Do not write ad hoc SQLite queries or
+use a helper that scans only one `state_5.sqlite` location. The helper must scan
+every supported local Codex state DB it knows about, currently both
 `/Users/eugenepotapenko/.codex/sqlite/state_5.sqlite` and
 `/Users/eugenepotapenko/.codex/state_5.sqlite`, because the live sidebar may be
 backed by either location during Codex app migrations.
 
-Thread-management calls must be sequential. Do not call `list_threads`,
-`read_thread`, or `set_thread_archived` through parallel tool wrappers, and do
-not run them in parallel with shell/file reads. Wait for each thread-management
-call to return before issuing the next thread-management call. If a
-thread-management call appears to hang, continue only through the readback gates
-below; do not start duplicate archive calls for the same candidate.
+If a thread-management tool is used at all, call it sequentially. Do not call
+`list_threads`, `read_thread`, or `set_thread_archived` through parallel tool
+wrappers, and do not run them in parallel with shell/file reads. The normal
+scheduled path should use only `set_thread_archived` at the end to request
+archive of the current housekeeping run; if that call hangs or is unavailable,
+the next registry helper pass must archive the current run as cleanup residue.
 
-If these tools are not already visible in the active tool list, use tool
-discovery first. If discovery cannot expose all three tools, run the local
-registry fallback sweep instead of reporting success or guessing.
-
-Do not treat an empty initial discovery result as success. Try exact searches
-by installed automation id and name before declaring that no candidates exist.
+Do not treat an empty visible/sidebar discovery result as success. Success is
+only the helper's `remaining_eligible_count=0`.
 
 ## Installed Automation Inventory
 
@@ -264,14 +257,14 @@ page and leave additional large eligible pages for a future scheduled
 invocation, or finish a run without archiving currently visible eligible
 threads.
 
-## Local Registry Fallback Sweep
+## Local Registry Sweep
 
-If thread-management tools are unavailable in the cron session, or after a
-thread-tool sweep needs full-registry verification, run the local registry
-helper from the repository root. This helper scans all supported local Codex
+Run the local registry helper from the repository root at the start of every
+scheduled housekeeping invocation. This helper scans all supported local Codex
 state DBs for the exact configured cwd and installed current-repository
 automation ids/names, so it is not limited to the currently visible
-`list_threads` page.
+`list_threads` page and does not depend on thread-management tools being
+healthy.
 
 Dry-run command:
 
