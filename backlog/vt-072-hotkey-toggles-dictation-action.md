@@ -1,7 +1,7 @@
 ---
 id: VT-072
 title: Hotkey Toggles Dictation Action
-status: backlog
+status: in-progress
 priority: P2
 lane: hotkey
 parent: VT-070
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-072 - Hotkey Toggles Dictation Action
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
