@@ -1,7 +1,7 @@
 ---
 id: VT-122
 title: Controller Start Stop Recording Flow
-status: backlog
+status: in-progress
 priority: P2
 lane: controller
 parent: VT-120
@@ -18,7 +18,7 @@ allowed_paths:
 
 # VT-122 - Controller Start Stop Recording Flow
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
