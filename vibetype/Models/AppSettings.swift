@@ -66,12 +66,15 @@ enum CustomLanguageCodeValidation: Equatable {
 
 struct AppSettings: Equatable {
     static let defaultTranscriptionModel = "gpt-4o-transcribe"
+    static let customDictionaryPromptPrefix =
+        "Custom Dictionary (use these exact spellings when they appear in the text): "
 
     static let defaults = AppSettings(
         transcriptionModel: defaultTranscriptionModel,
         language: .automatic,
         customLanguageCode: "",
         prompt: "",
+        customDictionary: [],
         saveTranscriptsToAppClipboard: true,
         soundEnabled: true,
         showFloatingIndicator: true,
@@ -82,6 +85,7 @@ struct AppSettings: Equatable {
     var language: TranscriptionLanguage
     var customLanguageCode: String
     var prompt: String
+    var customDictionary: [String] = []
     var saveTranscriptsToAppClipboard: Bool
     var soundEnabled: Bool
     var showFloatingIndicator: Bool
@@ -94,7 +98,31 @@ struct AppSettings: Equatable {
 
     var resolvedPrompt: String? {
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedPrompt.isEmpty ? nil : trimmedPrompt
+        var promptParts: [String] = []
+
+        if !trimmedPrompt.isEmpty {
+            promptParts.append(trimmedPrompt)
+        }
+
+        if let customDictionaryPrompt = resolvedCustomDictionaryPrompt {
+            promptParts.append(Self.customDictionaryPromptPrefix + customDictionaryPrompt)
+        }
+
+        let resolvedPrompt = promptParts.joined(separator: "\n\n")
+        return resolvedPrompt.isEmpty ? nil : resolvedPrompt
+    }
+
+    var resolvedCustomDictionaryEntries: [String] {
+        Self.normalizedCustomDictionary(customDictionary)
+    }
+
+    var resolvedCustomDictionaryPrompt: String? {
+        let entries = resolvedCustomDictionaryEntries
+        guard !entries.isEmpty else {
+            return nil
+        }
+
+        return entries.joined(separator: ", ")
     }
 
     var resolvedLanguageCode: String? {
@@ -137,6 +165,38 @@ struct AppSettings: Equatable {
             (65...90).contains(scalar.value) || (97...122).contains(scalar.value)
         }
     }
+
+    static func parseCustomDictionaryEntries(from text: String) -> [String] {
+        text.components(separatedBy: CharacterSet(charactersIn: ",\n"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    static func normalizedCustomDictionary(_ entries: [String]) -> [String] {
+        var normalizedEntries: [String] = []
+        var seenEntryKeys = Set<String>()
+
+        for entry in entries {
+            let trimmedEntry = entry.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedEntry.isEmpty else {
+                continue
+            }
+
+            let entryKey = trimmedEntry.lowercased()
+            guard !seenEntryKeys.contains(entryKey) else {
+                continue
+            }
+
+            seenEntryKeys.insert(entryKey)
+            normalizedEntries.append(trimmedEntry)
+        }
+
+        return normalizedEntries
+    }
+
+    static func appendingCustomDictionaryEntries(from text: String, to entries: [String]) -> [String] {
+        normalizedCustomDictionary(entries + parseCustomDictionaryEntries(from: text))
+    }
 }
 
 struct AppSettingsStore {
@@ -147,6 +207,7 @@ struct AppSettingsStore {
         Key.language,
         Key.customLanguageCode,
         Key.prompt,
+        Key.customDictionary,
         Key.saveTranscriptsToAppClipboard,
         Key.soundEnabled,
         Key.showFloatingIndicator,
@@ -158,6 +219,7 @@ struct AppSettingsStore {
         static let language = keyPrefix + "language"
         static let customLanguageCode = keyPrefix + "customLanguageCode"
         static let prompt = keyPrefix + "prompt"
+        static let customDictionary = keyPrefix + "customDictionary"
         static let saveTranscriptsToAppClipboard = keyPrefix + "saveTranscriptsToAppClipboard"
         static let soundEnabled = keyPrefix + "soundEnabled"
         static let showFloatingIndicator = keyPrefix + "showFloatingIndicator"
@@ -180,6 +242,10 @@ struct AppSettingsStore {
             customLanguageCode: userDefaults.string(forKey: Key.customLanguageCode)
                 ?? defaultSettings.customLanguageCode,
             prompt: userDefaults.string(forKey: Key.prompt) ?? defaultSettings.prompt,
+            customDictionary: AppSettings.normalizedCustomDictionary(
+                userDefaults.stringArray(forKey: Key.customDictionary)
+                    ?? defaultSettings.customDictionary
+            ),
             saveTranscriptsToAppClipboard: optionalBool(forKey: Key.saveTranscriptsToAppClipboard)
                 ?? defaultSettings.saveTranscriptsToAppClipboard,
             soundEnabled: optionalBool(forKey: Key.soundEnabled) ?? defaultSettings.soundEnabled,
@@ -195,6 +261,10 @@ struct AppSettingsStore {
         userDefaults.set(settings.language.rawValue, forKey: Key.language)
         userDefaults.set(settings.customLanguageCode, forKey: Key.customLanguageCode)
         userDefaults.set(settings.prompt, forKey: Key.prompt)
+        userDefaults.set(
+            AppSettings.normalizedCustomDictionary(settings.customDictionary),
+            forKey: Key.customDictionary
+        )
         userDefaults.set(
             settings.saveTranscriptsToAppClipboard,
             forKey: Key.saveTranscriptsToAppClipboard

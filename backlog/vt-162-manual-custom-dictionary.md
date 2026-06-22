@@ -1,6 +1,6 @@
 ---
 id: VT-162
-status: in-progress
+status: done
 priority: P1
 lane: app
 dependencies:
@@ -25,7 +25,7 @@ verification:
 
 # Manual Custom Dictionary
 
-Status: in-progress
+Status: done
 Priority: P1
 Lane: app
 Dependencies: VT-001, VT-023, VT-025
@@ -65,3 +65,18 @@ context.
 - The multipart request includes a dictionary hint in the `prompt` field when
   entries exist.
 - Unit tests cover settings persistence, prompt composition, and echo detection.
+
+## Completion Notes
+
+- Implemented manual local custom dictionary storage, Settings add/remove UI,
+  OpenAI prompt composition, and dictionary echo rejection.
+- Ran `python3 scripts/local_tooling_recover.py --apply --json` after the first
+  full `xcodebuild ... test` attempt hung while finalizing UI test logs.
+- Retried full `xcodebuild -project vibetype.xcodeproj -scheme vibetype
+  -destination 'platform=macOS' test`; app/unit tests passed, but the existing
+  UI launch performance test failed with `Received unexpected number of
+  metrics: 0 in iteration with index 3`.
+- Verified the changed model/service/request behavior with
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination
+  'platform=macOS' test -only-testing:vibetypeTests`.
+- Ran `git diff --check`.

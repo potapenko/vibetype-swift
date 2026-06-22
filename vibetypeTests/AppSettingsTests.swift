@@ -20,6 +20,9 @@ struct AppSettingsTests {
         #expect(settings.resolvedLanguageCode == nil)
         #expect(settings.customLanguageCode.isEmpty)
         #expect(settings.resolvedPrompt == nil)
+        #expect(settings.customDictionary.isEmpty)
+        #expect(settings.resolvedCustomDictionaryEntries.isEmpty)
+        #expect(settings.resolvedCustomDictionaryPrompt == nil)
         #expect(settings.saveTranscriptsToAppClipboard)
         #expect(settings.soundEnabled)
         #expect(settings.showFloatingIndicator)
@@ -30,10 +33,34 @@ struct AppSettingsTests {
         var settings = AppSettings.defaults
         settings.transcriptionModel = "  "
         settings.prompt = "  release names, Swift symbols  "
+        settings.customDictionary = [" OpenWhispr ", "openwhispr", "", "Synty"]
 
         #expect(settings.transcriptionModel == "  ")
         #expect(settings.resolvedTranscriptionModel == AppSettings.defaultTranscriptionModel)
-        #expect(settings.resolvedPrompt == "release names, Swift symbols")
+        #expect(settings.resolvedCustomDictionaryEntries == ["OpenWhispr", "Synty"])
+        #expect(settings.resolvedCustomDictionaryPrompt == "OpenWhispr, Synty")
+        #expect(
+            settings.resolvedPrompt ==
+                """
+                release names, Swift symbols
+
+                Custom Dictionary (use these exact spellings when they appear in the text): OpenWhispr, Synty
+                """
+        )
+    }
+
+    @Test func parsesAndAppendsCustomDictionaryEntries() {
+        let parsedEntries = AppSettings.parseCustomDictionaryEntries(
+            from: " OpenWhispr, Synty\nThe word is VibeType,, "
+        )
+
+        #expect(parsedEntries == ["OpenWhispr", "Synty", "The word is VibeType"])
+        #expect(
+            AppSettings.appendingCustomDictionaryEntries(
+                from: "openwhispr, Sinead",
+                to: ["OpenWhispr"]
+            ) == ["OpenWhispr", "Sinead"]
+        )
     }
 
     @Test func mapsLanguageModesToTranscriptionCodes() {
@@ -88,6 +115,7 @@ struct AppSettingsTests {
             language: .custom,
             customLanguageCode: "de",
             prompt: "Product names",
+            customDictionary: ["OpenWhispr", "Synty"],
             saveTranscriptsToAppClipboard: false,
             soundEnabled: false,
             showFloatingIndicator: true,

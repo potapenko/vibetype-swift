@@ -77,6 +77,33 @@ struct OpenAITranscriptionRequestBuilderTests {
         #expect(bodyText.contains("Content-Type: audio/wav"))
     }
 
+    @Test func includesCustomDictionaryInPromptContext() throws {
+        let audioFileURL = try makeTemporaryAudioFile(
+            named: "recording.m4a",
+            contents: Data("fake audio bytes".utf8)
+        )
+        defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
+
+        var settings = AppSettings.defaults
+        settings.prompt = "  Prefer product casing.  "
+        settings.customDictionary = [" OpenWhispr ", "openwhispr", "Synty"]
+
+        let request = try OpenAITranscriptionRequestBuilder(boundary: "Boundary-Test")
+            .makeRequest(audioFileURL: audioFileURL, settings: settings)
+        let bodyText = try #require(request.multipartBodyText)
+
+        #expect(bodyText.contains("Content-Disposition: form-data; name=\"prompt\""))
+        #expect(
+            bodyText.contains(
+                """
+                Prefer product casing.
+
+                Custom Dictionary (use these exact spellings when they appear in the text): OpenWhispr, Synty
+                """
+            )
+        )
+    }
+
     @Test func omitsEmptyCustomLanguageAsAutomaticFallback() throws {
         let audioFileURL = try makeTemporaryAudioFile(
             named: "recording.wav",

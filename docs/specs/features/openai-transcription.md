@@ -13,7 +13,7 @@ requests. It does not use realtime microphone streaming.
 This spec covers:
 
 - the OpenAI transcription request and response contract
-- model, language, and prompt or vocabulary-hint settings
+- model, language, prompt, and custom dictionary settings
 - timeout and retry behavior
 - user-visible errors for common provider failures
 - privacy and logging constraints for API keys, audio, prompts, and transcripts
@@ -26,6 +26,8 @@ This spec covers:
 - using the translations endpoint, realtime transcription, diarization, speaker
   labels, timestamps, subtitles, or streaming transcript deltas
 - retaining audio for history, analytics, telemetry, or recovery
+- auto-learning dictionary entries from edits in other apps
+- snippets, text expansion, or cloud-synced dictionary behavior
 
 ## Evidence
 
@@ -55,11 +57,18 @@ This spec covers:
   accepted by the implementation's validation. An empty custom value falls back
   to Auto. An invalid non-empty custom value blocks transcription with a
   settings error before upload.
-- The optional prompt or vocabulary hint is sent only when non-empty after
-  trimming whitespace.
+- The optional prompt is sent only when non-empty after trimming whitespace.
 - Prompt text should guide spelling, vocabulary, and style. It must not be
   treated as secret, but it may contain user content and must not be logged by
   default.
+- The app may maintain a local custom dictionary of user-provided words or
+  phrases that should be recognized with exact spelling when spoken.
+- Custom dictionary entries are sent as transcription prompt context when at
+  least one entry remains after trimming and duplicate removal.
+- If both a freeform prompt and dictionary entries exist, the request prompt
+  should include both, with the dictionary appended as spelling context.
+- If the provider returns only, or almost only, the dictionary hint itself, the
+  app must reject the result instead of accepting it as dictated text.
 - The MVP requests the normal JSON transcription response and reads the
   returned `text` field.
 - A successful non-empty transcript becomes the app's last transcript and is
@@ -72,8 +81,9 @@ This spec covers:
 - The OpenAI API key is read from Keychain and sent only as an authorization
   header for the transcription request.
 - Missing or inaccessible API key blocks before upload.
-- API keys, authorization headers, raw audio, prompt text, raw transcript text,
-  and full provider responses must not appear in default logs.
+- API keys, authorization headers, raw audio, prompt text, custom dictionary
+  entries, raw transcript text, and full provider responses must not appear in
+  default logs.
 - Default logs should report only compact outcomes, such as transcription
   started, succeeded, timed out, or failed with a short error category.
 - Transcription must have an explicit maximum wait time and must never wait
@@ -125,8 +135,8 @@ This spec covers:
 
 - The central dictation state should enter `transcribing` only after recording
   stops and an uploadable file exists.
-- OpenAI settings include model, language mode, custom language code, and
-  prompt or vocabulary hint.
+- OpenAI settings include model, language mode, custom language code, prompt,
+  and custom dictionary entries.
 - Provider failures map to product errors before they reach menu, settings, or
   output views.
 - Product errors expose a compact user-facing message plus a stable
@@ -141,8 +151,8 @@ This spec covers:
 
 - Add fake-backed tests for missing key, invalid key, rate limit, timeout,
   network failure, bad settings, unsupported or empty audio, server failure,
-  empty transcript, successful response parsing, compact error messages, and
-  log redaction when implementation exists.
+  empty transcript, dictionary echo rejection, successful response parsing,
+  compact error messages, and log redaction when implementation exists.
 - Use controllable URLSession or service fakes rather than live OpenAI calls.
 - Test timeout behavior with an injectable delay or clock so verification stays
   bounded.
@@ -156,3 +166,5 @@ This spec covers:
   first user trials.
 - Whether custom language input should accept only ISO-639-1 codes or a wider
   set when the UI is implemented.
+- Whether dictionary auto-learn should be added after active-app text insertion
+  is stable enough to observe user corrections safely.

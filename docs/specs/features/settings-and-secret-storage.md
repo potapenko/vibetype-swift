@@ -16,7 +16,7 @@ This spec covers:
 - Keychain-backed OpenAI API key
 - app clipboard, recording, and indicator toggles
 - transcript history toggle and clear action
-- prompt or vocabulary hint setting
+- prompt and custom dictionary settings
 
 ## Non-goals
 
@@ -30,6 +30,8 @@ This spec covers:
 - usage analytics, telemetry, billing, or cloud-backup controls
 - persistent raw-audio retention settings
 - secure enclave or enterprise secrets management
+- cloud dictionary sync
+- automatic learning from corrections in other apps
 
 ## User-visible behavior
 
@@ -66,8 +68,11 @@ This spec covers:
   recording start noticeable without requiring the user to watch the screen.
 - The Settings window should include a Save Transcript History toggle and a
   Clear Transcript History action once persistent history is implemented.
-- The Settings window should include an optional prompt or vocabulary hint
-  field.
+- The Settings window should include an optional prompt field for transcription
+  guidance.
+- The Settings window should include a local custom dictionary where the user
+  can manually add and remove words or phrases that should be recognized with
+  exact spelling when spoken.
 - Missing API key should be reported as a user-visible blocked state before
   transcription is attempted.
 - Settings should include a privacy and permissions section that shows
@@ -81,7 +86,8 @@ The MVP non-secret settings default to:
 - transcription model: `gpt-4o-transcribe`
 - language: Auto
 - custom language code: empty
-- prompt or vocabulary hint: empty
+- prompt: empty
+- custom dictionary: empty
 - save to VibeType Clipboard: on
 - dictation start/stop sounds: on
 - floating recording indicator: on
@@ -93,6 +99,7 @@ The OpenAI API key has no UserDefaults value or default. It is Keychain-only.
 
 - API key must not be stored in UserDefaults.
 - API key must not be logged.
+- Prompt text and custom dictionary entries must not be logged by default.
 - Settings should be local-only for the MVP.
 - No account, subscription, analytics, or telemetry setting should appear in the
   MVP.
@@ -113,6 +120,9 @@ The OpenAI API key has no UserDefaults value or default. It is Keychain-only.
   should show a clear validation error.
 - If model is empty, the app should use the configured default model or show a
   setup-needed state.
+- Custom dictionary entries should trim surrounding whitespace, ignore empty
+  entries, and remove duplicates case-insensitively while preserving the first
+  spelling the user entered.
 
 ## Route / state / data implications
 
@@ -124,7 +134,8 @@ UserDefaults may store:
 - soundEnabled
 - showFloatingIndicator
 - saveTranscriptHistory
-- prompt or vocabulary hint
+- prompt
+- custom dictionary entries
 
 Keychain stores:
 

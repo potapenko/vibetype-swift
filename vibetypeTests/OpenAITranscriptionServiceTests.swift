@@ -181,6 +181,50 @@ struct OpenAITranscriptionServiceTests {
         }
     }
 
+    @Test func dictionaryEchoTranscriptIsRejected() async throws {
+        let audioFileURL = try makeTemporaryAudioFile()
+        defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
+
+        var settings = AppSettings.defaults
+        settings.customDictionary = ["OpenWhispr", "Parakeet", "Alcahest"]
+
+        let service = makeService(
+            loader: FakeURLLoader(
+                result: .success(
+                    Data(#"{"text":"OpenWhispr, Parakeet, Alcahest."}"#.utf8),
+                    makeHTTPResponse(statusCode: 200)
+                )
+            )
+        )
+
+        await expectTranscriptionError(.dictionaryEcho) {
+            try await service.transcribe(audioFileURL: audioFileURL, settings: settings)
+        }
+    }
+
+    @Test func dictionaryEchoFilterDistinguishesEchoFromLegitimateSpeech() {
+        #expect(
+            DictionaryEchoFilter.matches(
+                transcript: "OpenWhispr, Parakeet, Alcahest",
+                dictionaryPrompt: "OpenWhispr, Parakeet, Alcahest"
+            )
+        )
+        #expect(
+            DictionaryEchoFilter.matches(
+                transcript: "openwhispr parakeet alcahest",
+                dictionaryPrompt: "OpenWhispr, Parakeet, Alcahest"
+            )
+        )
+        #expect(
+            DictionaryEchoFilter.matches(
+                transcript: "I just installed OpenWhispr and it works great",
+                dictionaryPrompt: "OpenWhispr, Parakeet, Alcahest"
+            ) == false
+        )
+        #expect(DictionaryEchoFilter.matches(transcript: nil, dictionaryPrompt: "OpenWhispr") == false)
+        #expect(DictionaryEchoFilter.matches(transcript: "OpenWhispr", dictionaryPrompt: nil) == false)
+    }
+
     @Test func invalidResponseIsRejected() async throws {
         let audioFileURL = try makeTemporaryAudioFile()
         defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
@@ -290,6 +334,11 @@ struct OpenAITranscriptionServiceTests {
                 .emptyTranscript,
                 "No speech text was detected.",
                 "empty_transcript"
+            ),
+            (
+                .dictionaryEcho,
+                "Only dictionary hints were detected.",
+                "dictionary_echo"
             ),
         ]
 

@@ -57,7 +57,7 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
 
         let (data, response) = try await loadWithTimeout(request)
         try validateHTTPResponse(response)
-        return try parseTranscript(from: data)
+        return try parseTranscript(from: data, settings: settings)
     }
 
     private func loadAPIKey() throws -> String {
@@ -145,10 +145,18 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
         }
     }
 
-    private func parseTranscript(from data: Data) throws -> String {
+    private func parseTranscript(from data: Data, settings: AppSettings) throws -> String {
         do {
             let response = try decoder.decode(OpenAITranscriptionResponse.self, from: data)
-            return try AcceptedTranscript(rawText: response.text).text
+            let transcript = try AcceptedTranscript(rawText: response.text).text
+            guard !DictionaryEchoFilter.matches(
+                transcript: transcript,
+                dictionaryPrompt: settings.resolvedCustomDictionaryPrompt
+            ) else {
+                throw OpenAITranscriptionServiceError.dictionaryEcho
+            }
+
+            return transcript
         } catch AcceptedTranscript.ValidationError.emptyText {
             throw OpenAITranscriptionServiceError.emptyTranscript
         } catch let error as OpenAITranscriptionServiceError {
@@ -169,6 +177,41 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
         default:
             return .networkFailure
         }
+    }
+}
+
+struct DictionaryEchoFilter {
+    static func matches(transcript: String?, dictionaryPrompt: String?) -> Bool {
+        guard let transcript, let dictionaryPrompt else {
+            return false
+        }
+
+        let transcriptWords = Set(normalizedWords(in: transcript))
+        let dictionaryWords = Set(normalizedWords(in: dictionaryPrompt))
+        guard !transcriptWords.isEmpty, !dictionaryWords.isEmpty else {
+            return false
+        }
+
+        let matchingWordCount = transcriptWords.intersection(dictionaryWords).count
+        let textComposition = Double(matchingWordCount) / Double(transcriptWords.count)
+        let dictionaryUsage = Double(matchingWordCount) / Double(dictionaryWords.count)
+
+        return textComposition >= 0.9 && dictionaryUsage >= 0.7
+    }
+
+    private static func normalizedWords(in text: String) -> [String] {
+        var scalars = String.UnicodeScalarView()
+        let space = UnicodeScalar(" ")
+
+        for scalar in text.lowercased().unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) {
+                scalars.append(scalar)
+            } else {
+                scalars.append(space)
+            }
+        }
+
+        return String(scalars).split(separator: " ").map(String.init)
     }
 }
 
@@ -201,6 +244,7 @@ enum OpenAITranscriptionServiceError: Error, Equatable, LocalizedError {
     case providerRejected(statusCode: Int)
     case invalidResponse
     case emptyTranscript
+    case dictionaryEcho
 
     var errorDescription: String? {
         userFacingMessage
@@ -238,6 +282,8 @@ enum OpenAITranscriptionServiceError: Error, Equatable, LocalizedError {
             return "OpenAI returned an unreadable transcription response."
         case .emptyTranscript:
             return "No speech text was detected."
+        case .dictionaryEcho:
+            return "Only dictionary hints were detected."
         }
     }
 
@@ -273,6 +319,8 @@ enum OpenAITranscriptionServiceError: Error, Equatable, LocalizedError {
             return "invalid_response"
         case .emptyTranscript:
             return "empty_transcript"
+        case .dictionaryEcho:
+            return "dictionary_echo"
         }
     }
 }
