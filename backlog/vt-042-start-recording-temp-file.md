@@ -1,7 +1,7 @@
 ---
 id: VT-042
 title: Start Recording Temp File
-status: in-progress
+status: done
 priority: P1
 lane: recording
 parent: VT-040
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-042 - Start Recording Temp File
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -40,3 +40,21 @@ file.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Completion Evidence
+
+2026-06-22:
+
+- Added `AVFoundationAudioRecorderService`, backed by `AVAudioRecorder`, that
+  checks microphone permission before preparing a unique temporary `.m4a`
+  capture path.
+- Repeated starts are rejected with `alreadyRecording` while preserving the
+  active recording state; start failures surface typed errors and delete the
+  prepared recorder artifact.
+- Updated the microphone text-input spec to make permission-gated temporary
+  audio artifacts part of the recording-start contract.
+- Verification passed:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`;
+  `git diff --check`.
+- Runtime QA was not applicable because this slice adds non-UI recorder service
+  behavior covered by fake-backed tests and full scheme test evidence.

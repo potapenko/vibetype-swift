@@ -31,6 +31,8 @@ This spec covers:
 
 - The app must not capture microphone input until the user takes an explicit
   start action and required permissions are available.
+- A recording start action may prepare a temporary local audio file only after
+  microphone permission is allowed.
 - Start/stop must be available from the menu bar menu.
 - A global hotkey should start and stop recording once the hotkey feature is
   implemented.
@@ -100,6 +102,9 @@ The product-level session states are:
 
 Audio and raw transcription artifacts are treated as ephemeral session data
 unless a future persistence or debug spec explicitly says otherwise.
+The recording service should create unique temporary `.m4a` audio artifacts for
+capture attempts and keep those paths local to the current session until stop,
+cancel, cleanup, or failure handling decides their next state.
 
 ## Verification mapping
 
