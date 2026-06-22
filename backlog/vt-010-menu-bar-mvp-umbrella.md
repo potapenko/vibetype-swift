@@ -1,7 +1,7 @@
 ---
 id: VT-010
 title: Menu Bar MVP Umbrella
-status: blocked
+status: done
 priority: P0
 lane: swift-app-shell
 dependencies:
@@ -18,7 +18,7 @@ allowed_paths:
 
 # VT-010 - Menu Bar MVP Umbrella
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -163,22 +163,31 @@ Close out the native menu bar MVP shell after its child tasks are implemented.
   execution. Final recovery found no remaining stale processes or artifacts.
   `VT-158` remains the single follow-up task for this executable closeout
   blocker.
+- 2026-06-22 10:26 CEST: Blocker resolver reran mandatory local tooling
+  recovery, confirmed XcodeBuildMCP still exposed no matching macOS build/test
+  action, and used bounded shell `xcodebuild`. The macOS build reached
+  `** BUILD SUCCEEDED **`. The focused
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  gate reached `** TEST SUCCEEDED **` and executed the menu presentation test
+  suite. Runtime menu QA remains recorded as blocked because Computer Use
+  failed with `Transport closed` while inspecting the freshly launched app, but
+  the executable menu-surface product delta from `VT-158` is now verified.
+  `VT-158` is done and this umbrella is closed.
 
 ## Resolution Path
 
-- Blocker category: local Xcode build/test tooling timeout before compiler or
-  unit-test execution; runtime menu QA also requires a build product and a
-  macOS UI interaction surface that can operate the menu bar extra.
-- Follow-up: `VT-158` in `backlog/vt-158-menu-bar-mvp-runtime-closeout.md`
-  now owns the executable closeout evidence and current blocker details.
+- Resolved on 2026-06-22 10:26 CEST by `VT-158`
+  (`backlog/vt-158-menu-bar-mvp-runtime-closeout.md`).
+- Former blocker category: local Xcode build/test tooling timeout before
+  compiler or unit-test execution; runtime menu QA required a fresh build
+  product and a macOS UI interaction surface that could operate the menu bar
+  extra.
 - Existing infrastructure evidence: `VT-148`
   (`backlog/done/vt-148-xcode-build-service-health.md`) records the same
   automation-recoverable Xcode build-service timeout class.
-- Unblock condition: rerun local tooling recovery, then rerun the VT-158 build
-  and focused unit-test gates until Xcode reaches compiler output and executes
-  `vibetypeTests`; perform bounded menu runtime QA if a macOS UI interaction
-  tool is available.
-- Latest resolver retry at 2026-06-22 09:25 CEST could not mark this umbrella
-  done because the new executable menu coverage still could not be verified
-  through the required Xcode gates after local tooling recovery and bounded
-  build/test retries.
+- Unblock evidence: after `python3 scripts/local_tooling_recover.py --apply
+  --json`, the bounded macOS build passed and the focused `vibetypeTests`
+  command executed successfully, including `MenuBarPresentationTests`.
+- Runtime QA note: the freshly built app launched as run-owned pid `71663`, but
+  Computer Use returned `Transport closed` on `get_app_state`; the app process
+  was terminated and no screenshot was produced.

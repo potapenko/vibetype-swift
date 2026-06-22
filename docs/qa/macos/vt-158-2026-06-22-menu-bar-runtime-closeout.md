@@ -1,5 +1,59 @@
 # macOS QA Run Report
 
+## Refresh - 2026-06-22 10:26 CEST
+
+Task: VT-158 - Menu Bar MVP Runtime Closeout
+Build/Test:
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build` passed with `** BUILD SUCCEEDED **`.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests` passed with `** TEST SUCCEEDED **`.
+Runtime QA: blocked
+Tool: Computer Use
+
+### Scenario
+
+Close out the menu bar MVP shell by verifying executable menu-surface coverage
+and, if possible, inspecting the freshly built macOS menu bar app.
+
+### Actions
+
+1. Ran mandatory local tooling recovery before selection and again before
+   verification.
+2. Checked tool discovery. XcodeBuildMCP exposed no matching macOS build/test
+   action, so bounded shell `xcodebuild` was used.
+3. Built the macOS app successfully.
+4. Ran the focused macOS unit-test gate successfully, including
+   `MenuBarPresentationTests`.
+5. Launched the freshly built app product as run-owned pid `71663`.
+6. Called Computer Use `get_app_state` for the fresh app product.
+7. Terminated run-owned pid `71663`.
+
+### Expected
+
+- Xcode builds the app.
+- Focused `vibetypeTests` execute the menu presentation coverage.
+- If Computer Use can inspect the app, the menu bar extra is opened or observed
+  for the MVP menu entries.
+
+### Observed
+
+- Build and focused tests passed.
+- Computer Use failed before UI inspection with `Transport closed`.
+- No screenshot was produced.
+- The launched app process was terminated after the failed Computer Use attempt.
+
+### Result
+
+PASS for required Xcode build/test verification. BLOCKED for runtime UI
+inspection because the Computer Use transport closed before app-state capture.
+
+### Evidence
+
+- Product delta: `MenuBarPresentation` and `MenuBarPresentationTests`.
+- Xcode build result: `** BUILD SUCCEEDED **`.
+- Focused test result: `** TEST SUCCEEDED **`; `MenuBarPresentationTests`
+  executed.
+- Runtime QA screenshot(s): none; Computer Use failed before capture.
+
 Date: 2026-06-22 00:46 CEST
 Task: VT-158 - Menu Bar MVP Runtime Closeout
 Build/Test:

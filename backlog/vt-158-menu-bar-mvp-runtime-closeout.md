@@ -1,7 +1,7 @@
 ---
 id: VT-158
 title: Menu Bar MVP Runtime Closeout
-status: blocked
+status: done
 priority: P0
 lane: swift-app-shell
 parent: VT-010
@@ -30,7 +30,7 @@ verification:
 
 # VT-158 - Menu Bar MVP Runtime Closeout
 
-Status: blocked
+Status: done
 Priority: P0
 Lane: swift-app-shell
 Dependencies: VT-000, VT-011, VT-012, VT-013, VT-014, VT-015, VT-112
@@ -87,7 +87,8 @@ behavior.
 
 ## Result
 
-Blocked on 2026-06-22 after adding executable menu-surface coverage.
+Done on 2026-06-22 after adding executable menu-surface coverage and verifying
+it through the required macOS build and focused unit-test gates.
 
 - Product delta: added `MenuBarPresentation` so the menu bar MVP shell has a
   deterministic, testable state contract for app identity, permission status
@@ -322,22 +323,47 @@ Verification evidence:
 - Runtime QA remains blocked because no fresh macOS app build product was
   produced.
 
+2026-06-22 10:26 CEST blocker resolver closeout:
+
+- Passed: `python3 scripts/local_tooling_recover.py --apply --json` before
+  blocked-task selection found no stale Xcode/build/test processes and no
+  generated artifacts to remove.
+- Passed: a second recovery immediately before verification removed generated
+  `scripts/__pycache__` and found no stale Xcode/build/test processes.
+- Tooling surface checked: XcodeBuildMCP was available, but the exposed tool
+  set did not provide a matching macOS build/test action for the selected
+  `xcodebuild` verification, so the resolver used bounded shell `xcodebuild`.
+- Passed:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+  reached `** BUILD SUCCEEDED **` and produced a fresh macOS app product.
+- Passed:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  reached `** TEST SUCCEEDED **` and executed `MenuBarPresentationTests`.
+- Runtime QA: blocked. The fresh app product launched as run-owned pid `71663`,
+  but Computer Use failed on `get_app_state` with `Transport closed` before the
+  menu bar extra could be inspected. The run terminated pid `71663`.
+- `VT-010` was updated to `done` because the executable menu-surface product
+  delta is now verified through the required Xcode gates, and the remaining
+  runtime QA gap is a tool transport blocker rather than missing repository
+  work.
+
 Durable QA note:
 
 - `docs/qa/macos/vt-158-2026-06-22-menu-bar-runtime-closeout.md`
 
 ## Resolution Path
 
-- Blocker category: local Xcode build/test tooling timeout before compiler or
-  unit-test execution; macOS runtime menu QA also remains blocked until a build
-  product exists and the tool surface can operate the menu bar extra.
+- Resolved on 2026-06-22 10:26 CEST.
+- Former blocker category: local Xcode build/test tooling timeout before
+  compiler or unit-test execution; macOS runtime menu QA also needed a build
+  product and a tool surface that could operate the menu bar extra.
 - Existing infrastructure evidence: `VT-148`
-  (`backlog/done/vt-148-xcode-build-service-health.md`) records the same
+  (`backlog/done/vt-148-xcode-build-service-health.md`) records the prior
   automation-recoverable Xcode build-service timeout class.
-- Unblock condition: local Xcode build/test health must reach compiler output
-  and focused `vibetypeTests` execution after `scripts/local_tooling_recover.py
-  --apply --json`; then rerun the VT-158 build, focused unit tests, and menu
-  runtime QA if a macOS UI interaction tool is available.
-- The latest resolver run at 2026-06-22 09:25 CEST could not finish directly
-  because both required Xcode commands timed out after local recovery, before
-  they could build the app or execute the new menu presentation tests.
+- Unblock evidence: after local tooling recovery, bounded shell `xcodebuild`
+  reached `** BUILD SUCCEEDED **`, and the focused `vibetypeTests` command
+  reached `** TEST SUCCEEDED **` with `MenuBarPresentationTests` executed.
+- Remaining runtime QA gap: Computer Use returned `Transport closed` before UI
+  inspection. This does not require a new repository follow-up because the
+  task's executable menu-surface coverage is now verified and the run-owned app
+  process was terminated.
