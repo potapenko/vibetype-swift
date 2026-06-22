@@ -122,4 +122,16 @@ struct MenuBarPresentationTests {
         #expect(presentation.dictationDetailText == "Typed text")
         #expect(presentation.clipboardStatusText == "Last transcript copied.")
     }
+
+    @Test func longTranscriptUsesCompactMenuText() {
+        let transcript = String(repeating: "a", count: 160)
+        let presentation = MenuBarPresentation(
+            dictationStatus: .success(transcript: transcript),
+            microphonePermissionStatus: .allowed,
+            accessibilityPermissionStatus: .trusted
+        )
+
+        #expect(presentation.lastTranscriptText == "\(String(repeating: "a", count: 140))...")
+        #expect(presentation.canCopyLastTranscript)
+    }
 }

@@ -43,6 +43,15 @@ struct DictationStatusTests {
         #expect(status.detailText == "Typed text")
     }
 
+    @Test func longTranscriptUsesCompactMenuPreviewWithoutChangingCopyText() {
+        let transcript = String(repeating: "a", count: 160)
+        let status = DictationStatus.success(transcript: transcript)
+
+        #expect(status.lastTranscriptText == transcript)
+        #expect(status.lastTranscriptMenuText == "\(String(repeating: "a", count: 140))...")
+        #expect(status.canCopyLastTranscript)
+    }
+
     @Test func onlyNonEmptyNormalizedSuccessTranscriptCanBeCopied() {
         #expect(DictationStatus.idle.canCopyLastTranscript == false)
         #expect(DictationStatus.success(transcript: "").canCopyLastTranscript == false)

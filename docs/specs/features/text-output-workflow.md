@@ -35,6 +35,8 @@ This spec covers:
   bar UI or settings surface.
 - Last Transcript and Copy Last Transcript must use text after trimming leading
   and trailing whitespace and newlines.
+- The menu may show a compact preview for long transcripts, but Copy Last
+  Transcript must still copy the full normalized transcript text.
 - Before any successful transcription exists, the menu must show a clear
   empty-state placeholder instead of hiding the Last Transcript area.
 - The menu must provide a Copy Last Transcript action.

@@ -6,6 +6,8 @@
 //
 
 enum DictationStatus: Equatable {
+    private static let lastTranscriptPreviewLimit = 140
+
     case idle
     case recording
     case transcribing
@@ -70,11 +72,19 @@ enum DictationStatus: Equatable {
     }
 
     var lastTranscriptMenuText: String {
-        guard let transcript = lastTranscriptText, !transcript.isEmpty else {
+        guard let transcript = lastTranscriptText else {
             return "No transcript yet."
         }
 
-        return transcript
+        guard transcript.count > Self.lastTranscriptPreviewLimit else {
+            return transcript
+        }
+
+        let previewEndIndex = transcript.index(
+            transcript.startIndex,
+            offsetBy: Self.lastTranscriptPreviewLimit
+        )
+        return "\(transcript[..<previewEndIndex])..."
     }
 
     var canCopyLastTranscript: Bool {
