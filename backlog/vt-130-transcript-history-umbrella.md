@@ -10,6 +10,7 @@ dependencies:
   - VT-133
   - VT-134
   - VT-135
+  - VT-164
 allowed_paths:
   - backlog/**
   - docs/specs/features/transcript-history.md
@@ -33,6 +34,7 @@ controller append, and clear-history slices are complete.
 - VT-133 transcript history store
 - VT-134 append accepted transcript to history
 - VT-135 clear transcript history settings action
+- VT-164 temporary transcript recovery history panel
 
 ## Source Evidence
 
