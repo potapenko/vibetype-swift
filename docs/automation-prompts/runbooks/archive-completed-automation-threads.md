@@ -27,7 +27,7 @@ Codex home:
 Expected schedule:
 
 ```text
-FREQ=MINUTELY;INTERVAL=15
+FREQ=MINUTELY;INTERVAL=1
 ```
 
 ## Resource Cleanup Gate

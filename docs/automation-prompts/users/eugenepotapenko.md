@@ -18,22 +18,22 @@ Inventory status: inspected
 
 | Automation id | Name | Status | Schedule | Model | Environment | Prompt source |
 | --- | --- | --- | --- | --- | --- | --- |
-| `vibetype-swift-backlog-archiver` | VibeType Swift Backlog Archiver | paused | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-archiver.md` |
-| `vibetype-swift-backlog-groomer` | VibeType Swift Backlog Groomer | paused | `FREQ=HOURLY;INTERVAL=2` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md` |
-| `vibetype-swift-blocker-resolver` | VibeType Swift Blocker Resolver | paused | `FREQ=HOURLY;INTERVAL=1` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md` |
-| `vibetype-swift-implementer` | VibeType Swift Implementer | paused | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-implementer.md` |
-| `vibetype-swift-tooling-unblocker` | VibeType Swift Tooling Unblocker | paused | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md` |
-| `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
+| `vibetype-swift-backlog-archiver` | VibeType Swift Backlog Archiver | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-archiver.md` |
+| `vibetype-swift-backlog-groomer` | VibeType Swift Backlog Groomer | active | `FREQ=HOURLY;INTERVAL=2` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md` |
+| `vibetype-swift-blocker-resolver` | VibeType Swift Blocker Resolver | active | `FREQ=HOURLY;INTERVAL=1` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md` |
+| `vibetype-swift-implementer` | VibeType Swift Implementer | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-implementer.md` |
+| `vibetype-swift-tooling-unblocker` | VibeType Swift Tooling Unblocker | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md` |
+| `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | active | `FREQ=MINUTELY;INTERVAL=1` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
 
 Installed automation count for this repository: 6.
-Active count for this repository: 1.
-Paused count for this repository: 5.
+Active count for this repository: 6.
+Paused count for this repository: 0.
 
 Current-user MCP cleanup gate: only two installed automations may call
 `python3 scripts/automation_resource_cleanup.py`:
 `vibetype-swift-implementer`, once at the end of an implementation run, and
 `vibetype-swift-archive-completed-automation-threads`, once at the end of each
-15-minute housekeeping run. The script takes no parameters, ignores processes
+one-minute housekeeping run. The script takes no parameters, ignores processes
 owned by other OS users, and runs current-user killall cleanup for the
 allowlisted Codex helper/MCP process names.
 
@@ -46,7 +46,7 @@ current-thread archive when thread management is available.
 
 ### `vibetype-swift-backlog-archiver`
 
-- Installed status: `PAUSED`
+- Installed status: `ACTIVE`
 - Schedule: `FREQ=MINUTELY;INTERVAL=15`
 - Model / reasoning effort: `gpt-5.4-mini` / `low`
 - Execution environment: `local`
@@ -63,12 +63,12 @@ current-thread archive when thread management is available.
 - Safety contract: move only clean verified `done` task files from top-level
   `backlog/` to `backlog/done/`; do not claim tasks, implement product code,
   resolve blockers, groom tasks, or run destructive database/storage operations
-- Current decision: paused until the cleanup mechanism is verified and the
-  operator explicitly resumes this automation
+- Current decision: active with current-thread self-archive requested before
+  the final report when thread management is available
 
 ### `vibetype-swift-backlog-groomer`
 
-- Installed status: `PAUSED`
+- Installed status: `ACTIVE`
 - Schedule: `FREQ=HOURLY;INTERVAL=2`
 - Model / reasoning effort: `gpt-5.5` / `xhigh`
 - Execution environment: `local`
@@ -88,12 +88,12 @@ current-thread archive when thread management is available.
 - Safety/browser evidence contract: no browser requirement; do not implement
   Swift product code; dirty Git state is not a blocker and must be preserved
   with path-limited commits; no DB or destructive storage operations
-- Current decision: paused until the cleanup mechanism is verified and the
-  operator explicitly resumes this automation
+- Current decision: active with current-thread self-archive requested before
+  the final report when thread management is available
 
 ### `vibetype-swift-blocker-resolver`
 
-- Installed status: `PAUSED`
+- Installed status: `ACTIVE`
 - Schedule: `FREQ=HOURLY;INTERVAL=1`
 - Model / reasoning effort: `gpt-5.5` / `xhigh`
 - Execution environment: `local`
@@ -113,12 +113,12 @@ current-thread archive when thread management is available.
 - Safety/runtime evidence contract: dirty Git state is not a blocker and must
   be preserved with path-limited commits; avoid duplicate follow-ups; use
   bounded verification; no DB or destructive storage operations
-- Current decision: paused until the cleanup mechanism is verified and the
-  operator explicitly resumes this automation
+- Current decision: active with current-thread self-archive requested before
+  the final report when thread management is available
 
 ### `vibetype-swift-implementer`
 
-- Installed status: `PAUSED`
+- Installed status: `ACTIVE`
 - Schedule: `FREQ=MINUTELY;INTERVAL=15`
 - Model / reasoning effort: `gpt-5.5` / `xhigh`
 - Execution environment: `local`
@@ -139,12 +139,13 @@ current-thread archive when thread management is available.
   product delta; Computer Use required for bounded app-run QA when visible
   macOS surfaces or user interactions change; no live OpenAI API in normal
   automation; no DB or destructive storage operations
-- Current decision: paused until the cleanup mechanism is verified and the
-  operator explicitly resumes this automation
+- Current decision: active with mandatory final cleanup and current-thread
+  self-archive requested before the final report when thread management is
+  available
 
 ### `vibetype-swift-tooling-unblocker`
 
-- Installed status: `PAUSED`
+- Installed status: `ACTIVE`
 - Schedule: `FREQ=MINUTELY;INTERVAL=15`
 - Model / reasoning effort: `gpt-5.5` / `xhigh`
 - Execution environment: `local`
@@ -163,13 +164,13 @@ current-thread archive when thread management is available.
   automatically; do not perform destructive database/storage operations,
   destructive Git rollback, external account login, payment/account changes, or
   manual system privacy approval
-- Current decision: paused until the cleanup mechanism is verified and the
-  operator explicitly resumes this automation
+- Current decision: active with current-thread self-archive requested before
+  the final report when thread management is available
 
 ### `vibetype-swift-archive-completed-automation-threads`
 
 - Installed status: `ACTIVE`
-- Schedule: `FREQ=MINUTELY;INTERVAL=15`
+- Schedule: `FREQ=MINUTELY;INTERVAL=1`
 - Model / reasoning effort: `gpt-5.4-mini` / `low`
 - Execution environment: `local`
 - Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
@@ -200,13 +201,13 @@ current-thread archive when thread management is available.
   request current housekeeping thread archive before the final report when the
   thread-management tool is available
 - Current decision: active as the only scheduled non-implementer cleanup
-  automation, running every 15 minutes
+  automation, running every minute
 
 ## Missing Or Paused Roles
 
-Five installed work automations for this repository are paused during this
-inventory pass. The archive-housekeeping cleanup automation is active. No
-installed automation role is missing.
+All six installed automations for this repository are active. The
+archive-housekeeping cleanup automation runs every minute. No installed
+automation role is missing.
 
 ## Verification
 
