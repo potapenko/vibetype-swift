@@ -104,6 +104,59 @@ struct OpenAITranscriptionRequestBuilderTests {
         )
     }
 
+    @Test func includesActiveTextContextWhenEnabled() throws {
+        let audioFileURL = try makeTemporaryAudioFile(
+            named: "recording.m4a",
+            contents: Data("fake audio bytes".utf8)
+        )
+        defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
+
+        var settings = AppSettings.defaults
+        settings.prompt = "Prefer direct prose."
+        settings.useActiveTextContext = true
+        let context = try #require(
+            TranscriptionPromptContext("We are writing about VibeType settings.")
+        )
+
+        let request = try OpenAITranscriptionRequestBuilder(boundary: "Boundary-Test")
+            .makeRequest(audioFileURL: audioFileURL, settings: settings, context: context)
+        let bodyText = try #require(request.multipartBodyText)
+
+        #expect(bodyText.contains("Content-Disposition: form-data; name=\"prompt\""))
+        #expect(
+            bodyText.contains(
+                """
+                Prefer direct prose.
+
+                Current writing context near the cursor. Use this only for continuity; transcribe only the new speech:
+                We are writing about VibeType settings.
+                """
+            )
+        )
+    }
+
+    @Test func omitsActiveTextContextWhenDisabled() throws {
+        let audioFileURL = try makeTemporaryAudioFile(
+            named: "recording.m4a",
+            contents: Data("fake audio bytes".utf8)
+        )
+        defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
+
+        var settings = AppSettings.defaults
+        settings.prompt = "Prefer direct prose."
+        settings.useActiveTextContext = false
+        let context = try #require(
+            TranscriptionPromptContext("We are writing about VibeType settings.")
+        )
+
+        let request = try OpenAITranscriptionRequestBuilder(boundary: "Boundary-Test")
+            .makeRequest(audioFileURL: audioFileURL, settings: settings, context: context)
+        let bodyText = try #require(request.multipartBodyText)
+
+        #expect(bodyText.contains("Prefer direct prose."))
+        #expect(bodyText.contains("We are writing about VibeType settings.") == false)
+    }
+
     @Test func omitsEmptyCustomLanguageAsAutomaticFallback() throws {
         let audioFileURL = try makeTemporaryAudioFile(
             named: "recording.wav",

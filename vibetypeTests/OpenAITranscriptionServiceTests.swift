@@ -225,6 +225,54 @@ struct OpenAITranscriptionServiceTests {
         #expect(DictionaryEchoFilter.matches(transcript: "OpenWhispr", dictionaryPrompt: nil) == false)
     }
 
+    @Test func activeTextContextEchoTranscriptIsRejected() async throws {
+        let audioFileURL = try makeTemporaryAudioFile()
+        defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
+
+        var settings = AppSettings.defaults
+        settings.useActiveTextContext = true
+        let context = try #require(
+            TranscriptionPromptContext("We are already writing about contextual dictation quality.")
+        )
+        let service = makeService(
+            loader: FakeURLLoader(
+                result: .success(
+                    Data(#"{"text":"already writing about contextual dictation"}"#.utf8),
+                    makeHTTPResponse(statusCode: 200)
+                )
+            )
+        )
+
+        await expectTranscriptionError(.contextEcho) {
+            try await service.transcribe(
+                audioFileURL: audioFileURL,
+                settings: settings,
+                context: context
+            )
+        }
+    }
+
+    @Test func activeTextContextEchoFilterDistinguishesEchoFromLegitimateSpeech() {
+        #expect(
+            ActiveTextContextEchoFilter.matches(
+                transcript: "already writing about contextual dictation",
+                contextText: "We are already writing about contextual dictation quality."
+            )
+        )
+        #expect(
+            ActiveTextContextEchoFilter.matches(
+                transcript: "contextual dictation quality is better now",
+                contextText: "We are already writing about contextual dictation quality."
+            ) == false
+        )
+        #expect(
+            ActiveTextContextEchoFilter.matches(
+                transcript: "contextual dictation",
+                contextText: "We are already writing about contextual dictation quality."
+            ) == false
+        )
+    }
+
     @Test func invalidResponseIsRejected() async throws {
         let audioFileURL = try makeTemporaryAudioFile()
         defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
@@ -339,6 +387,11 @@ struct OpenAITranscriptionServiceTests {
                 .dictionaryEcho,
                 "Only dictionary hints were detected.",
                 "dictionary_echo"
+            ),
+            (
+                .contextEcho,
+                "Only nearby context was detected.",
+                "context_echo"
             ),
         ]
 

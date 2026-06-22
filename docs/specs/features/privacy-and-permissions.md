@@ -46,6 +46,9 @@ This spec covers:
   transcription is used.
 - Settings must include a concise OpenAI audio-processing disclosure near the
   relevant transcription or privacy controls.
+- If the user enables nearby text context, the product must disclose that a
+  short excerpt from the active editable text field may also be sent to OpenAI
+  with the recording to improve continuation quality.
 - API keys must be stored locally in macOS Keychain, not in UserDefaults or
   plain text files.
 - The MVP must not require accounts, subscriptions, telemetry, analytics,
@@ -53,6 +56,9 @@ This spec covers:
 - The default product contract is no retained audio. Transcript recovery
   history is session-only, local-only, enabled by default, and governed by
   `transcript-history.md`.
+- Nearby text context is current-request-only. It must not be written to
+  transcript history, UserDefaults, local files, debug payloads, or default
+  logs.
 - Debug logging must not include raw dictated text, raw audio payloads, tokens,
   credentials, or full provider responses in the default product log stream.
 - If a user denies microphone permission, the app should remain usable enough
@@ -103,6 +109,7 @@ This spec covers:
   user-visible disclosure.
 - No persistent audio without an explicit spec.
 - Default logs must be short, scannable, and free of sensitive dictated content.
+- Default logs must not include active-text context captured from other apps.
 - API keys must never be logged.
 
 ## Edge cases and failure policy
@@ -115,6 +122,9 @@ This spec covers:
 - If Accessibility permission is not trusted, transcription itself should remain
   available when other requirements are met. The app must not fall back to the
   macOS system clipboard.
+- If Accessibility permission is not trusted, nearby text context must be
+  omitted and transcription should continue with the user's normal prompt and
+  dictionary settings.
 - If OpenAI is unavailable, the app should fail the current
   attempt with a visible error and allow a later retry.
 - If debug logging is temporarily enabled for investigation, the developer
@@ -134,7 +144,8 @@ This spec covers:
   flows that start recording.
 - Accessibility trust state is part of the product state model and must be
   visible to flows that decide whether automatic insertion or VibeType
-  Clipboard paste can insert text into the active app.
+  Clipboard paste can insert text into the active app or whether nearby text
+  context can be read.
 - Input Monitoring state is part of the product state model for native global
   hotkey flows that need to listen for keyboard events outside the app.
 - Provider configuration is product behavior because it changes model,
@@ -149,10 +160,11 @@ This spec covers:
   permission granted after denial, and unavailable microphone when implementation
   exists.
 - Add tests or review checks that default logs do not include raw dictated
-  content.
+  content or nearby active-text context.
 
 ## Unknowns requiring confirmation
 
 - Whether the app needs a formal onboarding screen before first recording.
 - Whether temporary debug audio retention is allowed in debug builds.
 - Exact wording and placement for OpenAI audio-processing disclosure.
+- Exact wording and placement for nearby active-text context disclosure.

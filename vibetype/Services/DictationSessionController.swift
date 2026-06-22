@@ -21,6 +21,7 @@ final class DictationSessionController {
     private let transcriptOutput: any TranscriptOutputDelivering
     private let cuePlayer: any DictationCuePlaying
     private let transcriptHistory: any TranscriptRecoveryHistoryRecording
+    private let activeTextContextReader: any ActiveTextContextReading
 
     private var isPerformingAction = false
     private var nextSessionID = 0
@@ -37,6 +38,7 @@ final class DictationSessionController {
         transcriptOutput: any TranscriptOutputDelivering = TextInsertionService(),
         cuePlayer: any DictationCuePlaying = NativeDictationCuePlayer.shared,
         transcriptHistory: (any TranscriptRecoveryHistoryRecording)? = nil,
+        activeTextContextReader: any ActiveTextContextReading = ActiveTextContextService(),
         initialStatus: DictationStatus = .idle,
         lastTranscriptText: String? = nil,
         outputStatusText: String? = nil
@@ -47,6 +49,7 @@ final class DictationSessionController {
         self.transcriptOutput = transcriptOutput
         self.cuePlayer = cuePlayer
         self.transcriptHistory = transcriptHistory ?? TranscriptRecoveryHistoryStore.shared
+        self.activeTextContextReader = activeTextContextReader
         self.status = initialStatus
         self.lastTranscriptText = lastTranscriptText.flatMap {
             AcceptedTranscript.nonEmptyNormalizedText(from: $0)
@@ -163,9 +166,11 @@ final class DictationSessionController {
             playCue(.stopRecording, settings: settings)
             status = .transcribing
 
+            let context = activeTextContextReader.currentContext(settings: settings)
             let rawTranscript = try await transcriptionService.transcribe(
                 audioFileURL: artifact.fileURL,
-                settings: settings
+                settings: settings,
+                context: context
             )
             guard isCurrentSession(sessionID) else {
                 return

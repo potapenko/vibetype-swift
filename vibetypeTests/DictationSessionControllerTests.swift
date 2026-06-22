@@ -74,6 +74,46 @@ struct DictationSessionControllerTests {
         #expect(cuePlayer.playedCues == [.stopRecording])
     }
 
+    @Test func recordingActionPassesActiveTextContextToTranscription() async throws {
+        let artifact = AudioRecordingArtifact(
+            fileURL: URL(fileURLWithPath: "/tmp/vibetype-controller-context.m4a"),
+            duration: 1.3,
+            byteCount: 2048
+        )
+        let recorder = FakeAudioRecorderService(
+            currentStatus: .recording,
+            stopResult: .success(artifact)
+        )
+        let transcriptionService = FakeControllerTranscriptionService(
+            result: .success("  continued transcript \n")
+        )
+        var settings = AppSettings.defaults
+        settings.useActiveTextContext = true
+        let context = try #require(TranscriptionPromptContext("Existing text near the cursor."))
+        let contextReader = FakeActiveTextContextReader(context: context)
+        let controller = makeController(
+            recorder: recorder,
+            transcriptionService: transcriptionService,
+            settings: settings,
+            transcriptOutput: FakeTranscriptOutput(),
+            activeTextContextReader: contextReader,
+            initialStatus: .recording
+        )
+
+        await controller.performRecordingAction()
+
+        #expect(contextReader.settingsCalls == [settings])
+        #expect(
+            transcriptionService.calls == [
+                TranscriptionCall(
+                    audioFileURL: artifact.fileURL,
+                    settings: settings,
+                    context: context
+                )
+            ]
+        )
+    }
+
     @Test func transcribingStateIgnoresRecordingAction() async {
         let recorder = FakeAudioRecorderService()
         let transcriptionService = FakeControllerTranscriptionService()
@@ -395,6 +435,7 @@ struct DictationSessionControllerTests {
         transcriptOutput: FakeTranscriptOutput,
         cuePlayer: FakeDictationCuePlayer? = nil,
         transcriptHistory: FakeTranscriptRecoveryHistory? = nil,
+        activeTextContextReader: FakeActiveTextContextReader? = nil,
         initialStatus: DictationStatus = .idle,
         lastTranscriptText: String? = nil,
         outputStatusText: String? = nil
@@ -409,6 +450,7 @@ struct DictationSessionControllerTests {
             transcriptOutput: transcriptOutput,
             cuePlayer: cuePlayer,
             transcriptHistory: transcriptHistory,
+            activeTextContextReader: activeTextContextReader ?? FakeActiveTextContextReader(),
             initialStatus: initialStatus,
             lastTranscriptText: lastTranscriptText,
             outputStatusText: outputStatusText
@@ -435,6 +477,17 @@ struct DictationSessionControllerTests {
 private struct TranscriptionCall: Equatable {
     let audioFileURL: URL
     let settings: AppSettings
+    let context: TranscriptionPromptContext?
+
+    init(
+        audioFileURL: URL,
+        settings: AppSettings,
+        context: TranscriptionPromptContext? = nil
+    ) {
+        self.audioFileURL = audioFileURL
+        self.settings = settings
+        self.context = context
+    }
 }
 
 private struct TranscriptOutputCall: Equatable {
@@ -462,8 +515,12 @@ private final class FakeControllerTranscriptionService: OpenAITranscriptionServi
         self.beforeResult = beforeResult
     }
 
-    func transcribe(audioFileURL: URL, settings: AppSettings) async throws -> String {
-        calls.append(TranscriptionCall(audioFileURL: audioFileURL, settings: settings))
+    func transcribe(
+        audioFileURL: URL,
+        settings: AppSettings,
+        context: TranscriptionPromptContext?
+    ) async throws -> String {
+        calls.append(TranscriptionCall(audioFileURL: audioFileURL, settings: settings, context: context))
         await beforeResult?()
         return try result.get()
     }
@@ -521,6 +578,21 @@ private final class FakeTranscriptRecoveryHistory: TranscriptRecoveryHistoryReco
 
     func clear() {
         entries = []
+    }
+}
+
+@MainActor
+private final class FakeActiveTextContextReader: ActiveTextContextReading {
+    private let context: TranscriptionPromptContext?
+    private(set) var settingsCalls: [AppSettings] = []
+
+    init(context: TranscriptionPromptContext? = nil) {
+        self.context = context
+    }
+
+    func currentContext(settings: AppSettings) -> TranscriptionPromptContext? {
+        settingsCalls.append(settings)
+        return context
     }
 }
 

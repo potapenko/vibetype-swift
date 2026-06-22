@@ -43,6 +43,14 @@ struct TranscriptionSettingsSection: View {
             TextField("Prompt", text: $settings.prompt, axis: .vertical)
                 .lineLimit(2...4)
                 .textFieldStyle(.roundedBorder)
+
+            Toggle("Use nearby text as transcription context", isOn: $settings.useActiveTextContext)
+
+            Text(
+                "When enabled, VibeType can read a short excerpt near the active cursor and send it to OpenAI with the recording."
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -82,6 +90,7 @@ struct TranscriptionSettingsSection: View {
                     customLanguageCode: "ru",
                     prompt: "Prefer product vocabulary.",
                     customDictionary: ["OpenWhispr", "Synty", "The word is VibeType"],
+                    useActiveTextContext: true,
                     automaticallyInsertTranscripts: true,
                     saveTranscriptsToAppClipboard: true,
                     soundEnabled: true,

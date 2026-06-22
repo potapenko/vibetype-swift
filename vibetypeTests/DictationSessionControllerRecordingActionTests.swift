@@ -247,7 +247,11 @@ private final class RecordingActionTranscriptionService: OpenAITranscriptionServ
         self.result = result
     }
 
-    func transcribe(audioFileURL: URL, settings: AppSettings) async throws -> String {
+    func transcribe(
+        audioFileURL: URL,
+        settings: AppSettings,
+        context: TranscriptionPromptContext?
+    ) async throws -> String {
         calls.append(audioFileURL)
         return result
     }

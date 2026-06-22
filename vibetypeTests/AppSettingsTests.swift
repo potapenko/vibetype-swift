@@ -23,6 +23,7 @@ struct AppSettingsTests {
         #expect(settings.customDictionary.isEmpty)
         #expect(settings.resolvedCustomDictionaryEntries.isEmpty)
         #expect(settings.resolvedCustomDictionaryPrompt == nil)
+        #expect(settings.useActiveTextContext == false)
         #expect(settings.automaticallyInsertTranscripts)
         #expect(settings.saveTranscriptsToAppClipboard)
         #expect(settings.soundEnabled)
@@ -48,6 +49,41 @@ struct AppSettingsTests {
                 Custom Dictionary (use these exact spellings when they appear in the text): OpenWhispr, Synty
                 """
         )
+    }
+
+    @Test func includesActiveTextContextOnlyWhenEnabled() throws {
+        var disabledSettings = AppSettings.defaults
+        disabledSettings.prompt = "Prefer project vocabulary."
+        disabledSettings.useActiveTextContext = false
+        let context = try #require(
+            TranscriptionPromptContext("The user is already writing about macOS Accessibility.")
+        )
+
+        #expect(disabledSettings.resolvedPrompt(context: context) == "Prefer project vocabulary.")
+
+        var enabledSettings = disabledSettings
+        enabledSettings.useActiveTextContext = true
+        enabledSettings.customDictionary = ["VibeType"]
+
+        #expect(
+            enabledSettings.resolvedPrompt(context: context) ==
+                """
+                Prefer project vocabulary.
+
+                Current writing context near the cursor. Use this only for continuity; transcribe only the new speech:
+                The user is already writing about macOS Accessibility.
+
+                Custom Dictionary (use these exact spellings when they appear in the text): VibeType
+                """
+        )
+    }
+
+    @Test func boundsActiveTextContextPrompt() throws {
+        let context = try #require(
+            TranscriptionPromptContext("abcdef", maximumCharacterCount: 3)
+        )
+
+        #expect(context.text == "def")
     }
 
     @Test func parsesAndAppendsCustomDictionaryEntries() {
@@ -117,6 +153,7 @@ struct AppSettingsTests {
             customLanguageCode: "de",
             prompt: "Product names",
             customDictionary: ["OpenWhispr", "Synty"],
+            useActiveTextContext: true,
             automaticallyInsertTranscripts: false,
             saveTranscriptsToAppClipboard: false,
             soundEnabled: false,

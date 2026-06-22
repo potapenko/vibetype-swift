@@ -78,6 +78,11 @@ This spec covers:
   history writes until it is turned back on.
 - The Settings window should include an optional prompt field for transcription
   guidance.
+- The Settings window should include a Use Nearby Text Context toggle for the
+  OpenAI transcription prompt. It is off by default.
+- When Use Nearby Text Context is enabled, VibeType may read a bounded excerpt
+  from the active editable text field through Accessibility and send that
+  excerpt to OpenAI as prompt context for the current transcription only.
 - The Settings window should include a dedicated Dictionary section where the
   user can manually add and remove local words or phrases that should be
   recognized with exact spelling when spoken.
@@ -96,6 +101,7 @@ The MVP non-secret settings default to:
 - custom language code: empty
 - prompt: empty
 - custom dictionary: empty
+- use nearby text context: off
 - insert transcripts automatically: on
 - save to VibeType Clipboard: on
 - dictation start/stop sounds: on
@@ -108,7 +114,8 @@ The OpenAI API key has no UserDefaults value or default. It is Keychain-only.
 
 - API key must not be stored in UserDefaults.
 - API key must not be logged.
-- Prompt text and custom dictionary entries must not be logged by default.
+- Prompt text, nearby active-text context, and custom dictionary entries must
+  not be logged by default.
 - Settings should be local-only for the MVP.
 - No account, subscription, analytics, or telemetry setting should appear in the
   MVP.
@@ -132,6 +139,9 @@ The OpenAI API key has no UserDefaults value or default. It is Keychain-only.
 - Custom dictionary entries should trim surrounding whitespace, ignore empty
   entries, and remove duplicates case-insensitively while preserving the first
   spelling the user entered.
+- If nearby text context is enabled but Accessibility is not trusted or the
+  active field cannot be read safely, transcription should proceed without that
+  context.
 
 ## Route / state / data implications
 
@@ -146,6 +156,7 @@ UserDefaults may store:
 - saveTranscriptHistory
 - prompt
 - custom dictionary entries
+- use nearby text context
 
 Keychain stores:
 

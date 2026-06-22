@@ -14,6 +14,7 @@ This spec covers:
 
 - the OpenAI transcription request and response contract
 - model, language, prompt, and custom dictionary settings
+- optional nearby active-text context for continuation quality
 - timeout and retry behavior
 - user-visible errors for common provider failures
 - privacy and logging constraints for API keys, audio, prompts, and transcripts
@@ -67,8 +68,22 @@ This spec covers:
   least one entry remains after trimming and duplicate removal.
 - If both a freeform prompt and dictionary entries exist, the request prompt
   should include both, with the dictionary appended as spelling context.
+- When Use Nearby Text Context is enabled, the app may read a short excerpt
+  from the currently focused editable text field and include it in the
+  transcription prompt so continued dictation keeps topic, spelling,
+  punctuation, and language continuity.
+- Nearby text context is optional and best-effort. If Accessibility permission
+  is missing, the focused app does not expose editable text, the field is
+  secure, or the excerpt is empty, transcription continues with only the
+  normal prompt and dictionary context.
+- Nearby text context must be bounded to a short excerpt near the cursor. It is
+  not a full-document import and must not read unrelated app content.
+- The composed prompt should order context as: user prompt, nearby active-text
+  context, custom dictionary spelling context.
 - If the provider returns only, or almost only, the dictionary hint itself, the
   app must reject the result instead of accepting it as dictated text.
+- If the provider returns only a copied excerpt of nearby active-text context,
+  the app must reject the result instead of accepting it as new dictated text.
 - The MVP requests the normal JSON transcription response and reads the
   returned `text` field.
 - A successful non-empty transcript becomes the app's last transcript and is
@@ -81,9 +96,9 @@ This spec covers:
 - The OpenAI API key is read from Keychain and sent only as an authorization
   header for the transcription request.
 - Missing or inaccessible API key blocks before upload.
-- API keys, authorization headers, raw audio, prompt text, custom dictionary
-  entries, raw transcript text, and full provider responses must not appear in
-  default logs.
+- API keys, authorization headers, raw audio, prompt text, nearby active-text
+  context, custom dictionary entries, raw transcript text, and full provider
+  responses must not appear in default logs.
 - Default logs should report only compact outcomes, such as transcription
   started, succeeded, timed out, or failed with a short error category.
 - Transcription must have an explicit maximum wait time and must never wait
@@ -136,7 +151,7 @@ This spec covers:
 - The central dictation state should enter `transcribing` only after recording
   stops and an uploadable file exists.
 - OpenAI settings include model, language mode, custom language code, prompt,
-  and custom dictionary entries.
+  custom dictionary entries, and whether nearby active-text context is enabled.
 - Provider failures map to product errors before they reach menu, settings, or
   output views.
 - Product errors expose a compact user-facing message plus a stable
@@ -156,6 +171,8 @@ This spec covers:
 - Use controllable URLSession or service fakes rather than live OpenAI calls.
 - Test timeout behavior with an injectable delay or clock so verification stays
   bounded.
+- Test active-text context with fake Accessibility/context readers. Normal tests
+  must not read live focused app contents.
 - Keep app-run or manual QA for real microphone and provider behavior separate
   from normal automation.
 
@@ -168,3 +185,5 @@ This spec covers:
   set when the UI is implemented.
 - Whether dictionary auto-learn should be added after active-app text insertion
   is stable enough to observe user corrections safely.
+- Whether nearby active-text context should become default-on after real-user
+  privacy copy and host-app compatibility are validated.

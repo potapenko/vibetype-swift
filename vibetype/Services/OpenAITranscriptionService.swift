@@ -8,11 +8,19 @@
 import Foundation
 
 protocol OpenAITranscriptionServing {
-    func transcribe(audioFileURL: URL, settings: AppSettings) async throws -> String
+    func transcribe(
+        audioFileURL: URL,
+        settings: AppSettings,
+        context: TranscriptionPromptContext?
+    ) async throws -> String
     func cancelActiveTranscription()
 }
 
 extension OpenAITranscriptionServing {
+    func transcribe(audioFileURL: URL, settings: AppSettings) async throws -> String {
+        try await transcribe(audioFileURL: audioFileURL, settings: settings, context: nil)
+    }
+
     func cancelActiveTranscription() {}
 }
 
@@ -50,11 +58,16 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
         self.decoder = decoder
     }
 
-    func transcribe(audioFileURL: URL, settings: AppSettings) async throws -> String {
+    func transcribe(
+        audioFileURL: URL,
+        settings: AppSettings,
+        context: TranscriptionPromptContext? = nil
+    ) async throws -> String {
         let apiKey = try loadAPIKey()
         var request = try makeAuthorizedRequest(
             audioFileURL: audioFileURL,
             settings: settings,
+            context: context,
             apiKey: apiKey
         )
 
@@ -62,7 +75,7 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
 
         let (data, response) = try await loadWithTimeout(request)
         try validateHTTPResponse(response)
-        return try parseTranscript(from: data, settings: settings)
+        return try parseTranscript(from: data, settings: settings, context: context)
     }
 
     private func loadAPIKey() throws -> String {
@@ -83,10 +96,15 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
     private func makeAuthorizedRequest(
         audioFileURL: URL,
         settings: AppSettings,
+        context: TranscriptionPromptContext?,
         apiKey: String
     ) throws -> URLRequest {
         do {
-            var request = try requestBuilder.makeRequest(audioFileURL: audioFileURL, settings: settings)
+            var request = try requestBuilder.makeRequest(
+                audioFileURL: audioFileURL,
+                settings: settings,
+                context: context
+            )
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
             return request
         } catch let error as OpenAITranscriptionRequestBuilderError {
@@ -150,7 +168,11 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
         }
     }
 
-    private func parseTranscript(from data: Data, settings: AppSettings) throws -> String {
+    private func parseTranscript(
+        from data: Data,
+        settings: AppSettings,
+        context: TranscriptionPromptContext?
+    ) throws -> String {
         do {
             let response = try decoder.decode(OpenAITranscriptionResponse.self, from: data)
             let transcript = try AcceptedTranscript(rawText: response.text).text
@@ -159,6 +181,13 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
                 dictionaryPrompt: settings.resolvedCustomDictionaryPrompt
             ) else {
                 throw OpenAITranscriptionServiceError.dictionaryEcho
+            }
+
+            guard !ActiveTextContextEchoFilter.matches(
+                transcript: transcript,
+                contextText: context?.text
+            ) else {
+                throw OpenAITranscriptionServiceError.contextEcho
             }
 
             return transcript
@@ -220,6 +249,44 @@ struct DictionaryEchoFilter {
     }
 }
 
+struct ActiveTextContextEchoFilter {
+    static func matches(transcript: String?, contextText: String?) -> Bool {
+        guard let transcript, let contextText else {
+            return false
+        }
+
+        let transcriptWords = normalizedWords(in: transcript)
+        let contextWords = normalizedWords(in: contextText)
+        guard transcriptWords.count >= 4, contextWords.count >= transcriptWords.count else {
+            return false
+        }
+
+        for startIndex in 0...(contextWords.count - transcriptWords.count) {
+            let endIndex = startIndex + transcriptWords.count
+            if Array(contextWords[startIndex..<endIndex]) == transcriptWords {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private static func normalizedWords(in text: String) -> [String] {
+        var scalars = String.UnicodeScalarView()
+        let space = UnicodeScalar(" ")
+
+        for scalar in text.lowercased().unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) {
+                scalars.append(scalar)
+            } else {
+                scalars.append(space)
+            }
+        }
+
+        return String(scalars).split(separator: " ").map(String.init)
+    }
+}
+
 extension URLSession: URLLoading {
     func loadData(for request: URLRequest) async throws -> (Data, URLResponse) {
         try await data(for: request)
@@ -250,6 +317,7 @@ enum OpenAITranscriptionServiceError: Error, Equatable, LocalizedError {
     case invalidResponse
     case emptyTranscript
     case dictionaryEcho
+    case contextEcho
 
     var errorDescription: String? {
         userFacingMessage
@@ -289,6 +357,8 @@ enum OpenAITranscriptionServiceError: Error, Equatable, LocalizedError {
             return "No speech text was detected."
         case .dictionaryEcho:
             return "Only dictionary hints were detected."
+        case .contextEcho:
+            return "Only nearby context was detected."
         }
     }
 
@@ -326,6 +396,8 @@ enum OpenAITranscriptionServiceError: Error, Equatable, LocalizedError {
             return "empty_transcript"
         case .dictionaryEcho:
             return "dictionary_echo"
+        case .contextEcho:
+            return "context_echo"
         }
     }
 }

@@ -24,9 +24,13 @@ struct OpenAITranscriptionRequestBuilder {
         self.fileManager = fileManager
     }
 
-    func makeRequest(audioFileURL: URL, settings: AppSettings) throws -> URLRequest {
+    func makeRequest(
+        audioFileURL: URL,
+        settings: AppSettings,
+        context: TranscriptionPromptContext? = nil
+    ) throws -> URLRequest {
         let audioFile = try validatedAudioFile(at: audioFileURL)
-        let body = try makeMultipartBody(audioFile: audioFile, settings: settings)
+        let body = try makeMultipartBody(audioFile: audioFile, settings: settings, context: context)
 
         var request = URLRequest(url: endpointURL)
         request.httpMethod = "POST"
@@ -82,7 +86,11 @@ struct OpenAITranscriptionRequestBuilder {
         }
     }
 
-    private func makeMultipartBody(audioFile: AudioFilePart, settings: AppSettings) throws -> Data {
+    private func makeMultipartBody(
+        audioFile: AudioFilePart,
+        settings: AppSettings,
+        context: TranscriptionPromptContext?
+    ) throws -> Data {
         var body = Data()
 
         body.appendFormField(name: "model", value: settings.resolvedTranscriptionModel, boundary: boundary)
@@ -92,7 +100,7 @@ struct OpenAITranscriptionRequestBuilder {
             body.appendFormField(name: "language", value: languageCode, boundary: boundary)
         }
 
-        if let prompt = settings.resolvedPrompt {
+        if let prompt = settings.resolvedPrompt(context: context) {
             body.appendFormField(name: "prompt", value: prompt, boundary: boundary)
         }
 

@@ -68,6 +68,8 @@ struct AppSettings: Equatable {
     static let defaultTranscriptionModel = "gpt-4o-transcribe"
     static let customDictionaryPromptPrefix =
         "Custom Dictionary (use these exact spellings when they appear in the text): "
+    static let activeTextContextPromptPrefix =
+        "Current writing context near the cursor. Use this only for continuity; transcribe only the new speech:"
 
     static let defaults = AppSettings(
         transcriptionModel: defaultTranscriptionModel,
@@ -75,6 +77,7 @@ struct AppSettings: Equatable {
         customLanguageCode: "",
         prompt: "",
         customDictionary: [],
+        useActiveTextContext: false,
         automaticallyInsertTranscripts: true,
         saveTranscriptsToAppClipboard: true,
         soundEnabled: true,
@@ -87,6 +90,7 @@ struct AppSettings: Equatable {
     var customLanguageCode: String
     var prompt: String
     var customDictionary: [String] = []
+    var useActiveTextContext: Bool = false
     var automaticallyInsertTranscripts: Bool
     var saveTranscriptsToAppClipboard: Bool
     var soundEnabled: Bool
@@ -99,11 +103,19 @@ struct AppSettings: Equatable {
     }
 
     var resolvedPrompt: String? {
+        resolvedPrompt(context: nil)
+    }
+
+    func resolvedPrompt(context: TranscriptionPromptContext?) -> String? {
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         var promptParts: [String] = []
 
         if !trimmedPrompt.isEmpty {
             promptParts.append(trimmedPrompt)
+        }
+
+        if useActiveTextContext, let activeTextPrompt = context?.promptText {
+            promptParts.append(activeTextPrompt)
         }
 
         if let customDictionaryPrompt = resolvedCustomDictionaryPrompt {
@@ -210,6 +222,7 @@ struct AppSettingsStore {
         Key.customLanguageCode,
         Key.prompt,
         Key.customDictionary,
+        Key.useActiveTextContext,
         Key.automaticallyInsertTranscripts,
         Key.saveTranscriptsToAppClipboard,
         Key.soundEnabled,
@@ -223,6 +236,7 @@ struct AppSettingsStore {
         static let customLanguageCode = keyPrefix + "customLanguageCode"
         static let prompt = keyPrefix + "prompt"
         static let customDictionary = keyPrefix + "customDictionary"
+        static let useActiveTextContext = keyPrefix + "useActiveTextContext"
         static let automaticallyInsertTranscripts = keyPrefix + "automaticallyInsertTranscripts"
         static let saveTranscriptsToAppClipboard = keyPrefix + "saveTranscriptsToAppClipboard"
         static let soundEnabled = keyPrefix + "soundEnabled"
@@ -250,6 +264,8 @@ struct AppSettingsStore {
                 userDefaults.stringArray(forKey: Key.customDictionary)
                     ?? defaultSettings.customDictionary
             ),
+            useActiveTextContext: optionalBool(forKey: Key.useActiveTextContext)
+                ?? defaultSettings.useActiveTextContext,
             automaticallyInsertTranscripts: optionalBool(forKey: Key.automaticallyInsertTranscripts)
                 ?? defaultSettings.automaticallyInsertTranscripts,
             saveTranscriptsToAppClipboard: optionalBool(forKey: Key.saveTranscriptsToAppClipboard)
@@ -271,6 +287,7 @@ struct AppSettingsStore {
             AppSettings.normalizedCustomDictionary(settings.customDictionary),
             forKey: Key.customDictionary
         )
+        userDefaults.set(settings.useActiveTextContext, forKey: Key.useActiveTextContext)
         userDefaults.set(
             settings.automaticallyInsertTranscripts,
             forKey: Key.automaticallyInsertTranscripts
