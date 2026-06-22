@@ -1,7 +1,7 @@
 ---
 id: VT-124
 title: Controller Failure Cancel State Flow
-status: in-progress
+status: done
 priority: P2
 lane: controller
 parent: VT-120
@@ -19,7 +19,7 @@ allowed_paths:
 
 # VT-124 - Controller Failure Cancel State Flow
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -52,3 +52,15 @@ previous accepted transcript.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Completion Notes
+
+- Added controller session invalidation for recording and transcription
+  cancellation so late transcription results are discarded after cancel.
+- Added fake-backed controller coverage that cancels during gated transcription,
+  preserves the previous accepted transcript, clears stale output status, and
+  skips output delivery after the late result resolves.
+- Stabilized the existing disabled VibeType Clipboard hotkey test by waiting for
+  its async clipboard clear before asserting the disabled state.
+- Verified with `xcodebuild -project vibetype.xcodeproj -scheme vibetype
+  -destination 'platform=macOS' test` and `git diff --check`.

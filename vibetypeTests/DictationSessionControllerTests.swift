@@ -103,12 +103,14 @@ struct DictationSessionControllerTests {
             transcriptionService: transcriptionService,
             transcriptOutput: transcriptOutput,
             initialStatus: .recording,
+            lastTranscriptText: "previous transcript",
             outputStatusText: "Previous output status"
         )
 
         controller.cancelRecording()
 
         #expect(controller.status == .idle)
+        #expect(controller.lastTranscriptText == "previous transcript")
         #expect(controller.outputStatusText == nil)
         #expect(recorder.cancelCount == 1)
         #expect(recorder.stopCount == 0)
@@ -154,6 +156,48 @@ struct DictationSessionControllerTests {
         #expect(controller.status == .success(transcript: "previous"))
         #expect(recorder.cancelCount == 0)
         #expect(transcriptionService.calls.isEmpty)
+        #expect(transcriptOutput.calls.isEmpty)
+    }
+
+    @Test func cancelDuringTranscriptionDiscardsLateTranscript() async {
+        let gate = ControllerAsyncGate()
+        let recorder = FakeAudioRecorderService(currentStatus: .recording)
+        let transcriptionService = FakeControllerTranscriptionService(
+            result: .success(" late transcript "),
+            beforeResult: {
+                await gate.wait()
+            }
+        )
+        let transcriptOutput = FakeTranscriptOutput()
+        let controller = makeController(
+            recorder: recorder,
+            transcriptionService: transcriptionService,
+            transcriptOutput: transcriptOutput,
+            initialStatus: .recording,
+            lastTranscriptText: "previous accepted transcript",
+            outputStatusText: "Previous output status"
+        )
+
+        let stopTask = Task { @MainActor in
+            await controller.performRecordingAction()
+        }
+        await yieldUntil {
+            controller.status == .transcribing && transcriptionService.calls.count == 1
+        }
+
+        controller.cancelRecording()
+
+        #expect(controller.status == .idle)
+        #expect(controller.lastTranscriptText == "previous accepted transcript")
+        #expect(controller.outputStatusText == nil)
+        #expect(transcriptionService.cancelCount == 1)
+
+        await gate.open()
+        await stopTask.value
+
+        #expect(controller.status == .idle)
+        #expect(controller.lastTranscriptText == "previous accepted transcript")
+        #expect(controller.outputStatusText == nil)
         #expect(transcriptOutput.calls.isEmpty)
     }
 
@@ -347,6 +391,16 @@ struct DictationSessionControllerTests {
         settings.saveTranscriptsToAppClipboard = saveTranscriptsToAppClipboard
         return settings
     }
+
+    private func yieldUntil(_ condition: @MainActor () -> Bool) async {
+        for _ in 0..<20 {
+            if condition() {
+                return
+            }
+
+            await Task.yield()
+        }
+    }
 }
 
 private struct TranscriptionCall: Equatable {
@@ -361,15 +415,26 @@ private struct TranscriptOutputCall: Equatable {
 
 private final class FakeControllerTranscriptionService: OpenAITranscriptionServing {
     private let result: Result<String, OpenAITranscriptionServiceError>
+    private let beforeResult: (() async -> Void)?
     private(set) var calls: [TranscriptionCall] = []
+    private(set) var cancelCount = 0
 
-    init(result: Result<String, OpenAITranscriptionServiceError> = .success("Controller transcript")) {
+    init(
+        result: Result<String, OpenAITranscriptionServiceError> = .success("Controller transcript"),
+        beforeResult: (() async -> Void)? = nil
+    ) {
         self.result = result
+        self.beforeResult = beforeResult
     }
 
     func transcribe(audioFileURL: URL, settings: AppSettings) async throws -> String {
         calls.append(TranscriptionCall(audioFileURL: audioFileURL, settings: settings))
+        await beforeResult?()
         return try result.get()
+    }
+
+    func cancelActiveTranscription() {
+        cancelCount += 1
     }
 }
 
@@ -393,5 +458,30 @@ private final class FakeDictationCuePlayer: DictationCuePlaying {
 
     func play(_ cue: DictationCue) {
         playedCues.append(cue)
+    }
+}
+
+private actor ControllerAsyncGate {
+    private var isOpen = false
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if isOpen {
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            continuations.append(continuation)
+        }
+    }
+
+    func open() {
+        isOpen = true
+        let waitingContinuations = continuations
+        continuations.removeAll()
+
+        for continuation in waitingContinuations {
+            continuation.resume()
+        }
     }
 }

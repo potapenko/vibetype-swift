@@ -22,6 +22,8 @@ final class DictationSessionController {
     private let cuePlayer: any DictationCuePlaying
 
     private var isPerformingAction = false
+    private var nextSessionID = 0
+    private var activeSessionID: Int?
 
     private(set) var status: DictationStatus
     private(set) var lastTranscriptText: String?
@@ -69,39 +71,91 @@ final class DictationSessionController {
     }
 
     func cancelRecording() {
-        guard !isPerformingAction, status == .recording else {
+        switch status {
+        case .recording:
+            guard !isPerformingAction else {
+                return
+            }
+
+            recorder.cancelRecording()
+            cancelActiveSession()
+            outputStatusText = nil
+
+            switch recorder.currentStatus {
+            case .failed(let message):
+                status = .failure(message: message)
+            default:
+                status = .idle
+            }
+        case .transcribing:
+            transcriptionService.cancelActiveTranscription()
+            cancelActiveSession()
+            outputStatusText = nil
+            status = .idle
+        default:
+            return
+        }
+    }
+
+    private func beginSession() -> Int {
+        nextSessionID += 1
+        activeSessionID = nextSessionID
+        return nextSessionID
+    }
+
+    private func currentOrNewSessionID() -> Int {
+        if let activeSessionID {
+            return activeSessionID
+        }
+
+        return beginSession()
+    }
+
+    private func isCurrentSession(_ sessionID: Int) -> Bool {
+        activeSessionID == sessionID
+    }
+
+    private func finishSession(_ sessionID: Int) {
+        guard activeSessionID == sessionID else {
             return
         }
 
-        recorder.cancelRecording()
-        outputStatusText = nil
+        activeSessionID = nil
+    }
 
-        switch recorder.currentStatus {
-        case .failed(let message):
-            status = .failure(message: message)
-        default:
-            status = .idle
-        }
+    private func cancelActiveSession() {
+        activeSessionID = nil
     }
 
     private func startRecording() async {
         outputStatusText = nil
         let settings = settingsProvider()
+        let sessionID = beginSession()
 
         do {
             try await recorder.startRecording()
+            guard isCurrentSession(sessionID) else {
+                return
+            }
+
             status = .recording
             playCue(.startRecording, settings: settings)
         } catch {
+            finishSession(sessionID)
             status = .failure(message: Self.userFacingMessage(for: error))
         }
     }
 
     private func stopRecordingAndTranscribe() async {
         outputStatusText = nil
+        let sessionID = currentOrNewSessionID()
 
         do {
             let artifact = try await recorder.stopRecording()
+            guard isCurrentSession(sessionID) else {
+                return
+            }
+
             let settings = settingsProvider()
             playCue(.stopRecording, settings: settings)
             status = .transcribing
@@ -110,6 +164,10 @@ final class DictationSessionController {
                 audioFileURL: artifact.fileURL,
                 settings: settings
             )
+            guard isCurrentSession(sessionID) else {
+                return
+            }
+
             let acceptedTranscript = try Self.acceptedTranscript(from: rawTranscript)
             lastTranscriptText = acceptedTranscript.text
             status = .success(transcript: acceptedTranscript.text)
@@ -120,9 +178,20 @@ final class DictationSessionController {
                     settings: settings
                 ).statusText
             } catch {
+                guard isCurrentSession(sessionID) else {
+                    return
+                }
+
                 outputStatusText = Self.userFacingMessage(for: error)
             }
+
+            finishSession(sessionID)
         } catch {
+            guard isCurrentSession(sessionID) else {
+                return
+            }
+
+            finishSession(sessionID)
             status = .failure(message: Self.userFacingMessage(for: error))
         }
     }

@@ -57,7 +57,7 @@ struct SpecialClipboardHotkeyServiceTests {
 
         coordinator.start()
         defer { coordinator.stop() }
-        await Task.yield()
+        await yieldUntil { await store.currentText() == nil }
 
         #expect(hotkeyService.startCount == 0)
         #expect(hotkeyService.stopCount == 1)
@@ -126,9 +126,9 @@ struct SpecialClipboardHotkeyServiceTests {
         }
     }
 
-    private func yieldUntil(_ condition: () -> Bool) async {
+    private func yieldUntil(_ condition: () async -> Bool) async {
         for _ in 0..<20 {
-            if condition() {
+            if await condition() {
                 return
             }
 

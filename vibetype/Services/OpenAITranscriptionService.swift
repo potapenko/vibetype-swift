@@ -9,6 +9,11 @@ import Foundation
 
 protocol OpenAITranscriptionServing {
     func transcribe(audioFileURL: URL, settings: AppSettings) async throws -> String
+    func cancelActiveTranscription()
+}
+
+extension OpenAITranscriptionServing {
+    func cancelActiveTranscription() {}
 }
 
 protocol URLLoading {
