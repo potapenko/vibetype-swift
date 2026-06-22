@@ -1,7 +1,7 @@
 ---
 id: VT-040
 title: Recording Umbrella
-status: backlog
+status: in-progress
 priority: P1
 lane: recording
 dependencies:
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-040 - Recording Umbrella
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
