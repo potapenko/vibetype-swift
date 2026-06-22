@@ -177,8 +177,9 @@ current-thread archive when thread management is available.
 - Versioned runtime contract:
   `docs/automation-prompts/runbooks/archive-completed-automation-threads.md`
 - Expected output: one current-repository-only archive-housekeeping pass that
-  readback-verifies eligible automation-run threads, sweeps until the remaining
-  eligible tail is zero, runs final
+  readback-verifies eligible automation-run threads, drains newly exposed pages
+  inside the same automation invocation until the remaining eligible tail is at
+  most two, runs final
   `python3 scripts/automation_resource_cleanup.py` current-user MCP cleanup,
   and archives the current housekeeping thread
 - Safety/thread contract: use thread-management tools as source of truth;

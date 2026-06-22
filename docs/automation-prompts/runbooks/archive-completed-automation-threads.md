@@ -61,10 +61,13 @@ This runbook is scoped only to the configured automation cwd above. Threads
 from any other cwd are out of scope even when they are visible in thread search
 and even when they are also recurring automation runs.
 
-The run must not finish after one discovery page or one search pass when any
-eligible automation-run thread remains. Continue sweeping until the verified
-remaining eligible tail is zero, or until a real tool, readback, active-work,
-or safety blocker prevents further progress.
+One scheduled automation invocation must drain pages internally. It must not
+archive one visible page and rely on a later scheduled invocation to expose and
+archive older pages. Within the same run, keep cycling through exact
+current-repository automation id/name searches, readback, and archive calls
+until a fresh post-archive tail check finds at most two remaining
+readback-eligible threads, or until a real tool, readback, active-work, or
+safety blocker prevents further progress.
 
 ## Required Tools
 
@@ -147,13 +150,20 @@ If a candidate belongs to another cwd, skip it as `out_of_scope`.
 If a candidate is ambiguous, unreadable, or lacks positive automation
 provenance for the current repository, skip it as `manual_or_unclear`.
 
+If a candidate is active, running, pending, or otherwise not terminal, skip it
+as `active_or_pending` and keep sweeping other candidates. Active or pending
+current-repository automation threads are not archive-eligible, but their
+presence must not block archiving separate readback-verified completed
+automation-run threads in the same visible page.
+
 If archive or readback reports `No Codex thread found` for a visible candidate
 id, count it as `orphaned_or_stale` and continue. Do not report it as active
 work.
 
-## Sweep Loop
+## Page Drain Loop
 
-Run discovery and archiving as a loop.
+Run discovery and archiving as an internal loop inside this single automation
+invocation.
 
 1. Build the search key set only from installed automation ids and names in the
    current-repository subset.
@@ -170,18 +180,26 @@ Run discovery and archiving as a loop.
 6. For each in-scope candidate id, call `read_thread` before deciding.
 7. Archive only candidates that pass the hard safety gate by calling
    `set_thread_archived` with `archived=true` and the explicit candidate id.
-8. After archiving the current batch, start a new sweep from step 1.
+8. After archiving every eligible candidate from the visible batch, immediately
+   run a fresh exact-key search/readback tail check in this same automation
+   invocation.
+9. If the fresh readback-verified eligible tail is more than two threads,
+   immediately start the next loop iteration from step 1. Do not wait for the
+   next scheduled run.
+10. If the fresh readback-verified eligible tail is two or fewer threads, exit
+    the page-drain loop successfully.
 
-Do not stop just because a single list call returned one page, no page, or no
-new ids. Re-run exact automation-id and automation-name searches after each
-batch because archiving one page can expose older unarchived threads. A
-successful run must include a final no-progress verification sweep after the
-last archive batch; that final sweep must read back candidates and prove that
-zero archive-eligible current-repository automation-run threads remain.
+Do not stop just because a single list call returned one page, no page, no new
+ids, or exactly the default-size result set. Re-run exact automation-id and
+automation-name searches after each archive batch because archiving one visible
+page can expose older unarchived threads. The two-thread allowance is only the
+single-run loop escape hatch for concurrent automation runs created during
+cleanup; it is not permission to leave additional eligible pages for a future
+scheduled invocation.
 
 ## Tail Exit Rule
 
-After each full sweep, calculate:
+After each loop iteration and fresh tail check, calculate:
 
 ```text
 remaining_eligible_tail_count
@@ -195,15 +213,17 @@ runs that pass the hard safety gate.
 Exit successfully only when:
 
 ```text
-remaining_eligible_tail_count == 0
+remaining_eligible_tail_count <= 2
 ```
 
-There is no normal tail allowance. If a new automation run is created during
-cleanup, it must either fail the hard safety gate as active/pending or be
-included in the next sweep when it becomes terminal and archive-eligible.
+The two-thread allowance is not permission to skip the first visible batch. It
+only prevents an endless loop after one full page has already been inspected
+and every readback-eligible thread in that page has been archived. If more than
+two eligible threads remain after the fresh tail check, run another page-drain
+loop iteration in the same automation invocation.
 
-If `remaining_eligible_tail_count > 0` and the latest sweep archived zero
-threads, stop with:
+If `remaining_eligible_tail_count > 2` and the latest loop iteration archived
+zero threads after at least one visible batch has been inspected, stop with:
 
 ```text
 blocker=no_progress_tail_above_threshold
@@ -249,4 +269,6 @@ housekeeping automation id, `status`, `rrule`, `execution_environment`, and
 `cwds` from `/Users/eugenepotapenko/.codex/automations/*/automation.toml`.
 
 If the run exits successfully, `blocker` must be `none` and
-`remaining_eligible_tail_count` must be `0`.
+`remaining_eligible_tail_count` must be `0`, `1`, or `2`, and `sweeps` must
+show that the internal page-drain loop completed inside this automation
+invocation.
