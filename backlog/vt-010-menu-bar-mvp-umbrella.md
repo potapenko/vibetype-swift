@@ -107,6 +107,18 @@ Close out the native menu bar MVP shell after its child tasks are implemented.
   `** BUILD INTERRUPTED **` before test discovery or execution. Final recovery
   found no stale processes or artifacts. `VT-158` remains the single follow-up
   task for this executable closeout blocker.
+- 2026-06-22 06:20 CEST: Blocker resolver reran mandatory local tooling
+  recovery before blocked selection and found no stale processes or generated
+  artifacts. The macOS build retry again reached Xcode's early
+  `clang -v -E -dM ... /dev/null` external-tool probe and exited 124 with
+  `** BUILD INTERRUPTED **` before compiler diagnostics. Recovery after the
+  build retry removed generated `scripts/__pycache__` and project-scoped
+  DerivedData, with no stale Xcode processes left. The focused `vibetypeTests`
+  retry reached the same probe and exited 124 with `** BUILD INTERRUPTED **`
+  before test discovery or execution. Final recovery terminated stale run-owned
+  timeout-wrapped and child `xcodebuild` processes and reported no remaining
+  stale processes. `VT-158` remains the single follow-up task for this
+  executable closeout blocker.
 
 ## Resolution Path
 
