@@ -28,6 +28,91 @@ def load_selector_module():
 
 
 class BacklogNextTests(unittest.TestCase):
+    def test_default_selection_defers_ios_lanes(self) -> None:
+        module = load_selector_module()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            backlog = root / "backlog"
+            backlog.mkdir()
+            (backlog / "vt-001-ios.md").write_text(
+                """---
+id: VT-001
+status: backlog
+priority: P0
+lane: ios
+---
+
+# VT-001 - iOS Task
+
+Status: backlog.
+""",
+                encoding="utf-8",
+            )
+            (backlog / "vt-002-macos.md").write_text(
+                """---
+id: VT-002
+status: backlog
+priority: P2
+lane: macos
+---
+
+# VT-002 - macOS Task
+
+Status: backlog.
+""",
+                encoding="utf-8",
+            )
+
+            result = module.select_task(root)
+
+        self.assertEqual(result["status"], "select")
+        self.assertEqual(result["selected"]["id"], "VT-002")
+        self.assertEqual(result["summary"]["deferred_lane_count"], 1)
+        self.assertEqual(result["deferred"][0]["id"], "VT-001")
+
+    def test_include_deferred_lanes_allows_ios_selection(self) -> None:
+        module = load_selector_module()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            backlog = root / "backlog"
+            backlog.mkdir()
+            (backlog / "vt-001-ios.md").write_text(
+                """---
+id: VT-001
+status: backlog
+priority: P0
+lane: ios-keyboard
+---
+
+# VT-001 - iOS Keyboard Task
+
+Status: backlog.
+""",
+                encoding="utf-8",
+            )
+            (backlog / "vt-002-macos.md").write_text(
+                """---
+id: VT-002
+status: backlog
+priority: P2
+lane: macos
+---
+
+# VT-002 - macOS Task
+
+Status: backlog.
+""",
+                encoding="utf-8",
+            )
+
+            result = module.select_task(root, deferred_lanes=frozenset())
+
+        self.assertEqual(result["status"], "select")
+        self.assertEqual(result["selected"]["id"], "VT-001")
+        self.assertEqual(result["summary"]["deferred_lane_count"], 0)
+
     def test_archived_done_dependency_makes_active_task_ready(self) -> None:
         module = load_selector_module()
 

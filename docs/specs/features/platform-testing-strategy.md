@@ -5,6 +5,11 @@
 Keep VibeType development verifiable on each small backlog task while avoiding
 fragile full-app checks for every change.
 
+The active product phase is the native macOS menu bar MVP. iOS companion,
+simulator, keyboard-extension, and shared cross-platform QA remain future v2
+scope unless a direct user request or explicitly v2-labeled task opts into
+deferred lanes.
+
 Testing must prove the changed behavior at the smallest useful layer, then add
 platform smoke evidence when a task touches the platform surface or a
 user-visible interaction that can only be trusted after launching the app.
@@ -32,6 +37,12 @@ or depend on real system permission prompts.
 
 For normal Swift behavior changes, the baseline verification is a macOS build
 or test command plus diff hygiene.
+
+When Build macOS Apps or macOS-capable XcodeBuildMCP is available in the active
+Codex session, use it for macOS build/run/test, screenshots, runtime UI
+snapshots, or simple interactions that match the selected task. If the macOS
+MCP surface is missing or unavailable, use the documented `xcodebuild` fallback
+and bounded Computer Use runtime smoke for changed UI.
 
 Use macOS runtime smoke for tasks that change the running app surface or the
 user action behind that surface:
@@ -69,21 +80,23 @@ Every implementation run must report a runtime QA decision:
   within the bounded run; report the blocker and the last successful
   build/test evidence.
 
-### iOS Simulator Checks
+### v2 iOS Simulator Checks
 
-Use XcodeBuildMCP / Build iOS Apps for future iOS targets:
+Use XcodeBuildMCP / Build iOS Apps only for explicit future v2 iOS targets:
 
 - simulator build
 - simulator test
 - screenshot capture
 - UI snapshot or simple interaction when available
 
-iOS checks should apply to iOS-specific targets and shared SwiftUI surfaces
-once those targets exist. They are not required for a macOS-only task unless
-the selected task explicitly changes shared iOS/macOS code. Operational MCP
-usage and fallbacks live in `docs/agent-tooling.md`.
+iOS checks should apply to iOS-specific targets once a v2 task explicitly opts
+into deferred iOS lanes. They are not required for ordinary macOS MVP work,
+including shared SwiftUI files used by the macOS app, unless the selected task
+is explicitly scoped as cross-platform v2 verification. Operational MCP usage
+and fallbacks live in `docs/agent-tooling.md`.
 
-When a shared SwiftUI surface changes, verification should include:
+When an explicit v2 shared SwiftUI surface changes, verification should
+include:
 
 - typechecking or building the shared source against both macOS and iOS SDKs;
 - an iOS simulator build/run/screenshot through XcodeBuildMCP when the build
@@ -91,7 +104,7 @@ When a shared SwiftUI surface changes, verification should include:
 - a QA blocker note when the simulator build or launch times out before a
   screenshot can be captured.
 
-## iOS Keyboard Constraints
+## v2 iOS Keyboard Constraints
 
 The iOS keyboard path is a separate platform architecture, not a direct port of
 the macOS menu bar flow. The product split is defined in
@@ -113,7 +126,7 @@ The likely iOS product split is:
 - keyboard extension focuses on compact UI and text insertion
 - shared SwiftUI screens may be reused where product behavior is common
 
-This split must be confirmed by future iOS specs before implementation.
+This split must be confirmed by future v2 iOS specs before implementation.
 
 ## Required Evidence By Task Type
 
@@ -126,10 +139,11 @@ This split must be confirmed by future iOS specs before implementation.
   no live provider call in normal automation
 - Permission or microphone behavior: fake-backed tests for app logic; bounded
   runtime smoke only when the selected task asks for platform evidence
-- iOS or shared SwiftUI behavior: XcodeBuildMCP simulator build/test/screenshot
-  when an iOS target exists and the selected task touches that surface; if full
-  `xcodebuild` or MCP build/run times out without compiler diagnostics, record
-  the timeout and keep SDK typecheck evidence explicit
+- v2 iOS behavior: XcodeBuildMCP simulator build/test/screenshot only when
+  deferred iOS lanes were explicitly included and the selected task touches
+  that surface; if full `xcodebuild` or MCP build/run times out without
+  compiler diagnostics, record the timeout and keep SDK typecheck evidence
+  explicit
 
 ## Sources
 

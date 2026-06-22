@@ -43,6 +43,9 @@ verify, and commit.
 
 The first implementation slice should establish a visible native menu bar item
 before deeper recording, transcription, permission, or settings work proceeds.
+Keep iOS companion, simulator, and keyboard-extension work deferred to future
+v2 planning until the macOS MVP is usable or a direct user request reopens that
+scope.
 
 ## Highest-Priority Unknowns
 

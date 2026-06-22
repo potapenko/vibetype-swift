@@ -24,6 +24,11 @@ If the selector returns `status: "select"` after any stale-claim repair, claim
 exactly the returned `selected.path`. If it returns `no_ready` or
 `queue_error`, stop and report the result.
 
+The current default product phase is the macOS menu bar MVP. The selector
+therefore defers `ios` and `ios-keyboard` lanes by default and reports them in
+the JSON `deferred` fields instead of selecting them. Only use
+`--include-deferred-lanes` for an explicit v2 iOS run or direct user request.
+
 ## Archive Completed Tasks
 
 Maintenance agents should keep completed tasks out of the active queue:

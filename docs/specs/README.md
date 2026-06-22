@@ -17,6 +17,10 @@ VibeType Swift is a new Swift project for a small native macOS menu bar
 dictation utility. The MVP records microphone input, sends audio to the OpenAI
 transcription API, and inserts returned text into the active app.
 
+The active product phase is the macOS MVP. iOS companion, simulator, keyboard,
+and cross-platform verification work is future v2 scope unless a direct user
+request or explicitly v2-labeled task opts into it.
+
 Because this repository starts without implementation code, the first specs are
 first-pass product contracts. They use the repository description and
 `docs/openwhispr_swiftui_codex_tz.md` as evidence and mark unresolved product

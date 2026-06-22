@@ -388,11 +388,15 @@ where practical.
 
 Use `docs/specs/features/platform-testing-strategy.md` to decide when a task
 needs extra platform evidence. Computer Use is for bounded macOS runtime smoke
-when a selected task changes visible app surfaces. XcodeBuildMCP / Build iOS
-Apps is for future iOS simulator build, test, screenshot, and UI-snapshot
-checks when an iOS target exists or a selected task changes shared iOS/macOS
-SwiftUI surfaces. Use `docs/agent-tooling.md` to discover active MCP tools and
-choose the task-appropriate Xcode, simulator, or Computer Use path.
+when a selected task changes visible app surfaces and the active MCP surface
+cannot operate the changed UI directly. The current product phase is the macOS
+menu bar MVP: prefer Build macOS Apps or macOS-capable XcodeBuildMCP for macOS
+Xcode and interface evidence when available, then fall back to the documented
+`xcodebuild` and Computer Use path. Build iOS Apps and iOS simulator checks are
+future v2 tooling and must not be used by normal executor runs unless deferred
+iOS lanes are explicitly included by a direct user request or v2-specific run.
+Use `docs/agent-tooling.md` to discover active MCP tools and choose the
+task-appropriate Xcode, simulator, or Computer Use path.
 
 ## Relationship To Other Files
 

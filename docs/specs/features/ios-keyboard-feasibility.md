@@ -2,8 +2,12 @@
 
 ## Goal
 
-Decide whether an iOS VibeType keyboard is feasible before adding an iOS
-target or keyboard extension.
+Preserve the future v2 iOS keyboard feasibility decision without making iOS
+implementation part of the current macOS MVP.
+
+The active product phase is the native macOS menu bar app. iOS companion,
+simulator, and keyboard-extension work must remain deferred unless a direct user
+request or explicitly v2-labeled task opts into deferred iOS lanes.
 
 ## Scope
 
@@ -13,9 +17,12 @@ This spec covers:
 - the containing-app versus keyboard-extension product split
 - Open Access, network, microphone, secure-field, and next-keyboard behavior
 - what shared SwiftUI surfaces may be reused from the macOS app
+- the constraint that normal macOS MVP implementation should not select iOS
+  work
 
 ## Non-goals
 
+- implementing any iOS work before the macOS MVP is usable
 - implementing a keyboard extension
 - implementing iOS recording, transcription, or storage
 - replacing the native iOS system dictation experience
@@ -32,10 +39,11 @@ This spec covers:
 
 ## Feasibility Decision
 
-An iOS VibeType keyboard is feasible as a text insertion surface, not as the
-component that records microphone audio or talks directly to OpenAI.
+For a future v2, an iOS VibeType keyboard is feasible as a text insertion
+surface, not as the component that records microphone audio or talks directly
+to OpenAI.
 
-The MVP iOS split is:
+The future v2 iOS split is:
 
 - Containing app:
   - onboarding and privacy disclosure
@@ -100,12 +108,13 @@ Inline keyboard settings are intentionally compact. Deep setup, credentials,
 microphone consent, Open Access explanation, transcription settings, and history
 management remain containing-app responsibilities.
 
-## Initial Containing App Target
+## Existing Exploratory Containing App Target
 
-The first iOS containing app target may launch as a minimal setup/status
-surface before keyboard or dictation behavior exists.
+The repository already contains an exploratory minimal iOS containing app
+target. It is not the current product target and must not steer normal
+implementer work away from the macOS menu bar MVP.
 
-Until future iOS implementation tasks add real features, this target must:
+Until future v2 iOS implementation tasks add real features, this target must:
 
 - identify itself as VibeType;
 - state that keyboard setup, recording, transcription, and text insertion are
@@ -176,8 +185,9 @@ extension, Open Access, or paste behavior.
 ## Verification Mapping
 
 - This spec-only task requires `git diff --check`.
-- Future iOS target work should use XcodeBuildMCP or the Build iOS Apps flow
-  for simulator build, test, screenshot, or UI snapshot evidence.
+- Future v2 iOS target work should use XcodeBuildMCP or the Build iOS Apps flow
+  for simulator build, test, screenshot, or UI snapshot evidence only when a
+  direct user request or v2-specific selector run includes deferred iOS lanes.
 - Keyboard session state model work should use pure Swift tests for start,
   cancel, accept, error, settings, and unavailable paths.
 - Future keyboard tests should cover next-keyboard availability, no-transcript
@@ -192,7 +202,7 @@ extension, Open Access, or paste behavior.
 - No direct OpenAI call from the keyboard extension in the MVP.
 - No API key storage inside the keyboard extension.
 - No reliance on keyboard availability in secure or host-rejected fields.
-- No iOS target should be added before a task or direct user request explicitly
-  selects that work.
+- No new iOS target, keyboard extension, or iOS product behavior should be
+  added before a task or direct user request explicitly selects v2 work.
 - The iOS containing app target must remain a safe setup/status surface until a
-  future spec adds real iOS dictation or keyboard behavior.
+  future v2 spec adds real iOS dictation or keyboard behavior.

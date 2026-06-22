@@ -32,6 +32,7 @@ def write_task(
     status: str,
     priority: str = "P3",
     dependencies: tuple[str, ...] = (),
+    lane: str = "test",
 ) -> None:
     dependency_block = ""
     if dependencies:
@@ -43,7 +44,7 @@ def write_task(
 id: {task_id}
 status: {status}
 priority: {priority}
-lane: test
+lane: {lane}
 {dependency_block}---
 
 # {task_id} - Test Task
@@ -55,6 +56,61 @@ Status: {status}
 
 
 class BacklogBlockedNextTests(unittest.TestCase):
+    def test_default_selection_defers_ios_blockers(self) -> None:
+        module = load_selector_module()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            backlog = root / "backlog"
+            backlog.mkdir()
+            write_task(backlog, "vt-001-ios.md", "VT-001", "blocked", priority="P0", lane="ios")
+            write_task(
+                backlog,
+                "vt-002-macos.md",
+                "VT-002",
+                "blocked",
+                priority="P2",
+                lane="macos",
+            )
+
+            result = module.select_blocked_task(root)
+
+        self.assertEqual(result["status"], "select")
+        self.assertEqual(result["selected"]["id"], "VT-002")
+        self.assertEqual(result["summary"]["blocked_count"], 1)
+        self.assertEqual(result["summary"]["deferred_blocked_count"], 1)
+        self.assertEqual(result["deferred_blocked"][0]["id"], "VT-001")
+
+    def test_include_deferred_lanes_allows_ios_blocker_selection(self) -> None:
+        module = load_selector_module()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            backlog = root / "backlog"
+            backlog.mkdir()
+            write_task(
+                backlog,
+                "vt-001-ios.md",
+                "VT-001",
+                "blocked",
+                priority="P0",
+                lane="ios-keyboard",
+            )
+            write_task(
+                backlog,
+                "vt-002-macos.md",
+                "VT-002",
+                "blocked",
+                priority="P2",
+                lane="macos",
+            )
+
+            result = module.select_blocked_task(root, deferred_lanes=frozenset())
+
+        self.assertEqual(result["status"], "select")
+        self.assertEqual(result["selected"]["id"], "VT-001")
+        self.assertEqual(result["summary"]["deferred_blocked_count"], 0)
+
     def test_archived_done_dependency_does_not_create_queue_error(self) -> None:
         module = load_selector_module()
 

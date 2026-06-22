@@ -19,8 +19,12 @@ Run one bounded backlog grooming pass for the VibeType Swift repository.
 Translate the MVP brief, current Swift project state, existing specs, and the
 copied OpenWhispr reference source into small executable backlog tasks for the
 separate implementer automation. Do not implement Swift product code.
-When grooming platform or shared SwiftUI tasks, use `docs/agent-tooling.md` so
-new tasks name the appropriate XcodeBuildMCP, `xcodebuild`, Computer Use, or
+The current product phase is the native macOS menu bar MVP. Groom macOS app
+behavior, tests, runtime QA, and tooling unblockers first. Do not create or
+refine iOS companion, simulator, or keyboard-extension tasks unless a direct
+user request explicitly opens future v2 planning.
+When grooming platform tasks, use `docs/agent-tooling.md` so new tasks name the
+appropriate Build macOS Apps, XcodeBuildMCP, `xcodebuild`, Computer Use, or
 fallback evidence path.
 
 Use the configured canonical checkout as the source of truth. Before edits,

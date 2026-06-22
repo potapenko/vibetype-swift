@@ -80,11 +80,11 @@ current-thread archive when thread management is available.
   `python3 scripts/backlog_next.py --json`
 - Expected output: up to eight groomed backlog/spec/workflow tasks, selector
   status, verification, and scoped checkpoint commit when files change
-- Tooling contract: read `docs/agent-tooling.md` before creating platform or
-  shared SwiftUI tasks that name XcodeBuildMCP, `xcodebuild`, Computer Use, or
-  fallback evidence; perform run-owned cleanup, do not call the broad MCP
-  cleanup script, and request current-thread archive before the final report
-  when thread management is available
+- Tooling contract: current phase is macOS MVP; read `docs/agent-tooling.md`
+  before creating platform tasks that name Build macOS Apps, XcodeBuildMCP,
+  `xcodebuild`, Computer Use, or fallback evidence; perform run-owned cleanup,
+  do not call the broad MCP cleanup script, and request current-thread archive
+  before the final report when thread management is available
 - Safety/browser evidence contract: no browser requirement; do not implement
   Swift product code; dirty Git state is not a blocker and must be preserved
   with path-limited commits; no DB or destructive storage operations
@@ -134,7 +134,8 @@ current-thread archive when thread management is available.
   MCP cleanup report, including current-thread archive status when thread
   management is available
 - Tooling contract: read `docs/agent-tooling.md` when Xcode, simulator, MCP,
-  runtime QA, or tool-selection decisions are involved
+  runtime QA, or tool-selection decisions are involved; normal implementation
+  runs target the macOS MVP and leave iOS lanes deferred to v2
 - Safety/runtime evidence contract: explicit runtime QA decision for each
   product delta; Computer Use required for bounded app-run QA when visible
   macOS surfaces or user interactions change; no live OpenAI API in normal

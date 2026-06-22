@@ -17,6 +17,10 @@ Configured automation cwd:
 
 Run one bounded blocked-task resolution sweep.
 
+The current product phase is the native macOS menu bar MVP. The resolver must
+prioritize macOS blockers and leave `ios` / `ios-keyboard` blockers deferred to
+future v2 work unless a direct user request explicitly includes deferred lanes.
+
 This automation is not the normal implementer and not the backlog groomer. Its
 job is to keep blocked tasks actionable by directly resolving every blocked
 task it can safely resolve in the current bounded run, or by creating/refining
@@ -49,7 +53,7 @@ Required reading before edits:
 - `docs/automation-prompts/runbooks/vibetype-swift-implementer.md`
 - `docs/specs/features/platform-testing-strategy.md` when the blocker is
   verification, runtime QA, permissions, microphone, paste handoff, macOS UI,
-  iOS, or simulator related
+  future-version iOS, or simulator related
 - `SWIFT.md` when Swift, SwiftUI, AppKit, Xcode, or tests may change
 - any task-relevant specs required by `AGENTS.md` or the selected blocked task
 
@@ -123,6 +127,9 @@ use the ordered `blocked` array returned by the selector and keep a run-local
 set of blocked task ids already handled, skipped, or proven not safely
 resolvable in this run. Read each blocked task body only when that task reaches
 its turn in the sweep.
+Normal resolver runs must leave the selector's default deferred lanes in place.
+Do not pass `--include-deferred-lanes` unless the user explicitly opens v2 iOS
+blocker resolution.
 
 If selector status is `select`, work on the first ordered blocked task that is
 not already in the run-local handled/skipped set. Initially this is
@@ -256,9 +263,10 @@ Use bounded waits for external tools. Do not call the live OpenAI API from
 normal automation. Do not require real microphone input or real system
 permission prompts for normal tests.
 When the blocker is platform verification or simulator evidence, check the
-active MCP tool surface and use XcodeBuildMCP when it matches the selected
-verification need; otherwise use the repository's documented `xcodebuild`
-fallback and record the reason.
+active MCP tool surface and use Build macOS Apps or macOS-capable
+XcodeBuildMCP when it matches the selected macOS verification need; otherwise
+use the repository's documented `xcodebuild` fallback and record the reason.
+Build iOS Apps / simulator checks are deferred to explicit v2 runs.
 
 ## Expected Output
 
@@ -270,8 +278,9 @@ taken for each (`directly_resolved`, `follow_up_created`,
 `follow_up_refined`, `tooling_recovered`, `operator_only`, or
 `still_blocked_with_reason`), follow-up id/path or operator action when
 applicable, local tooling recovery summary, changed files, verification
-results, `Tooling` with the XcodeBuildMCP / `xcodebuild` / Computer Use path
-used when relevant, cleanup performed with terminated resources and any
+results, `Tooling` with the Build macOS Apps / XcodeBuildMCP / `xcodebuild` /
+Computer Use path used when relevant, cleanup performed with terminated
+resources and any
 residual resources with reasons, `Thread archive` with `requested` or
 `unavailable` according to the MCP/thread lifecycle action, completion commit
 hashes if files changed, final blocked selector result, actual cwd, execution

@@ -38,9 +38,13 @@ For implementation or file-changing work, read in this order:
 
 For platform verification, use
 `docs/specs/features/platform-testing-strategy.md`. Most tasks should use
-unit/build checks. Add bounded Computer Use smoke only for changed macOS runtime
-surfaces, and use XcodeBuildMCP / Build iOS Apps for future iOS targets or
-shared SwiftUI surfaces when the selected task requires it.
+unit/build checks. The current target is the macOS menu bar MVP: use Build
+macOS Apps or macOS-capable XcodeBuildMCP when available for macOS build,
+run/test, screenshot, or UI snapshot evidence, and add bounded Computer Use
+smoke only for changed macOS runtime surfaces that the MCP surface cannot
+operate directly. Build iOS Apps and iOS simulator checks are v2-only unless a
+direct user request or future-version task explicitly opts into deferred iOS
+lanes.
 Use `docs/agent-tooling.md` to choose between active MCP tools, normal
 `xcodebuild`, and Computer Use for a selected task.
 

@@ -9,27 +9,34 @@ from pathlib import Path
 from typing import Any
 
 from backlog_next import (
+    DEFAULT_DEFERRED_LANES,
     Task,
     git_last_change,
     load_tasks_with_archived_done,
+    normalize_lanes,
     priority_rank,
     task_number,
     task_to_json,
 )
 
 
-def status_summary(tasks: list[Task]) -> dict[str, int]:
+def status_summary(tasks: list[Task], deferred_lanes: frozenset[str]) -> dict[str, int]:
     summary = {
         "task_count": len(tasks),
         "blocked_count": 0,
+        "deferred_blocked_count": 0,
         "done_count": 0,
         "in_progress_count": 0,
         "candidate_count": 0,
         "unknown_status_count": 0,
+        "deferred_lanes": sorted(deferred_lanes),
     }
     for task in tasks:
         if task.status == "blocked":
-            summary["blocked_count"] += 1
+            if task.lane in deferred_lanes:
+                summary["deferred_blocked_count"] += 1
+            else:
+                summary["blocked_count"] += 1
         elif task.status == "done":
             summary["done_count"] += 1
         elif task.status == "in-progress":
@@ -81,15 +88,28 @@ def blocked_task_to_json(task: Task, root: Path, dependents: dict[str, list[str]
     return task_json
 
 
-def select_blocked_task(root: Path) -> dict[str, Any]:
+def select_blocked_task(
+    root: Path,
+    deferred_lanes: set[str] | frozenset[str] | tuple[str, ...] | None = DEFAULT_DEFERRED_LANES,
+) -> dict[str, Any]:
+    normalized_deferred_lanes = normalize_lanes(deferred_lanes)
     active_tasks, archived_done_tasks, errors = load_tasks_with_archived_done(root)
     all_tasks = active_tasks + archived_done_tasks
     _by_id, dependents, dependency_errors = task_dependency_maps(all_tasks)
     errors.extend(dependency_errors)
-    summary = status_summary(active_tasks)
+    summary = status_summary(active_tasks, normalized_deferred_lanes)
     summary["archived_done_count"] = len(archived_done_tasks)
 
-    blocked_tasks = [task for task in active_tasks if task.status == "blocked"]
+    blocked_tasks = [
+        task
+        for task in active_tasks
+        if task.status == "blocked" and task.lane not in normalized_deferred_lanes
+    ]
+    deferred_blocked_tasks = [
+        task
+        for task in active_tasks
+        if task.status == "blocked" and task.lane in normalized_deferred_lanes
+    ]
     blocked_tasks.sort(
         key=lambda task: (
             priority_rank(task.priority),
@@ -98,10 +118,15 @@ def select_blocked_task(root: Path) -> dict[str, Any]:
             task.task_id,
         )
     )
+    deferred_blocked_tasks.sort(key=lambda task: (task_number(task.task_id), task.task_id))
 
     blocked_json = [
         blocked_task_to_json(task, root, dependents)
         for task in blocked_tasks[:10]
+    ]
+    deferred_blocked_json = [
+        blocked_task_to_json(task, root, dependents)
+        for task in deferred_blocked_tasks[:10]
     ]
 
     if errors:
@@ -110,6 +135,7 @@ def select_blocked_task(root: Path) -> dict[str, Any]:
             "errors": errors,
             "summary": summary,
             "blocked": blocked_json,
+            "deferred_blocked": deferred_blocked_json,
         }
 
     if not blocked_tasks:
@@ -118,6 +144,7 @@ def select_blocked_task(root: Path) -> dict[str, Any]:
             "selected": None,
             "summary": summary,
             "blocked": blocked_json,
+            "deferred_blocked": deferred_blocked_json,
         }
 
     selected = blocked_tasks[0]
@@ -130,6 +157,7 @@ def select_blocked_task(root: Path) -> dict[str, Any]:
         ),
         "summary": summary,
         "blocked": blocked_json,
+        "deferred_blocked": deferred_blocked_json,
     }
 
 
@@ -137,10 +165,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Select the next blocked backlog task.")
     parser.add_argument("--root", default=".", help="repository root")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    parser.add_argument(
+        "--include-deferred-lanes",
+        action="store_true",
+        help="include deferred future-version lanes such as ios and ios-keyboard",
+    )
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
-    result = select_blocked_task(root)
+    deferred_lanes = frozenset() if args.include_deferred_lanes else DEFAULT_DEFERRED_LANES
+    result = select_blocked_task(root, deferred_lanes=deferred_lanes)
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:

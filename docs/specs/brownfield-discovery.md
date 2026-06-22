@@ -7,8 +7,10 @@ Status: current discovery snapshot after root Xcode flattening.
 `vibetype-swift` now keeps the Xcode project at the repository root next to
 the spec-first documentation, backlog, scripts, and reference material.
 
-The app has early macOS and iOS SwiftUI surfaces plus shared state/UI code. It
-does not yet implement the full dictation MVP.
+The app has early macOS and exploratory iOS SwiftUI surfaces plus shared
+state/UI code. The active product phase is the macOS menu bar MVP; iOS
+companion and keyboard work is deferred to future v2 tasks. The macOS app does
+not yet implement the full dictation MVP.
 
 ## Existing Implementation
 
@@ -30,7 +32,7 @@ Current source files:
 - `vibetype/SettingsView.swift`
   - Early Settings window surface with permission status.
 - `vibetypeIOS/VibeTypeIOSApp.swift`
-  - Minimal iOS containing app surface.
+  - Minimal exploratory iOS containing app surface, deferred to v2.
 - `Shared/`
   - Shared SwiftUI setup/status UI and keyboard session state.
 - `vibetypeTests/vibetypeTests.swift`

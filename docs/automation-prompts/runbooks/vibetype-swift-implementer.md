@@ -32,6 +32,12 @@ by other OS users. Do not pass parameters to the script.
 Work on the VibeType Swift development backlog as one bounded 10-minute
 iteration.
 
+The current product phase is the native macOS menu bar MVP. The implementer
+must treat iOS companion, simulator, and keyboard-extension work as future v2
+scope unless a direct user request explicitly opens those deferred lanes. Do
+not pass `--include-deferred-lanes` to the selector during normal scheduled
+implementation.
+
 This automation is product-first. Each run must try to move the working app
 forward, not merely improve repository paperwork. A selected task is successful
 only when the run produces a concrete product delta: app behavior, Swift source,
@@ -84,7 +90,8 @@ Required reading before edits:
 - `references/README.md` before using copied OpenWhispr source
 - `docs/specs/features/platform-testing-strategy.md` when a task changes
   verification strategy, UI runtime behavior, permissions, microphone, paste
-  handoff, iOS, shared SwiftUI surfaces, or QA evidence
+  handoff, macOS UI, future-version iOS scope, shared SwiftUI surfaces, or QA
+  evidence
 - `docs/qa/macos/AGENTS.run.md` when a task changes user-visible macOS UI,
   app-run behavior, menu bar behavior, Settings, permissions, recording status,
   floating indicator, clipboard/paste handoff, or any action that should be
@@ -103,6 +110,9 @@ python3 scripts/backlog_next.py --json
 
 Treat selector JSON as the only source of truth. Do not reimplement backlog
 sorting, select by filename manually, or read non-selected task bodies.
+Normal implementer runs must leave the selector's default deferred lanes in
+place. If the selector reports only deferred iOS work, report that macOS MVP has
+no dependency-ready implementation task and do not claim iOS work manually.
 
 If selector output includes non-empty `expired_in_progress_reset_paths`, stop
 before claiming work, run `git diff --check`, stage only those reset task
@@ -266,9 +276,12 @@ Use `docs/specs/features/platform-testing-strategy.md` to choose extra platform
 checks. Use fake-backed tests for services and state machines. Do not call the
 live OpenAI API from normal automation. Do not require real microphone input or
 real system permission prompts for normal tests.
-Before falling back to shell-only Xcode commands for simulator or shared
-SwiftUI work, check the active MCP tool surface and use XcodeBuildMCP when it
-matches the selected verification need.
+Before falling back to shell-only Xcode commands, check the active MCP tool
+surface. Use Build macOS Apps or macOS-capable XcodeBuildMCP for macOS build,
+run/test, screenshot, UI snapshot, or simple interaction workflows when the
+current session exposes them. If the macOS MCP surface is missing or its
+transport fails, use the documented bounded `xcodebuild` baseline and Computer
+Use runtime smoke when UI behavior changed.
 
 Every run that delivers a product delta must make an explicit runtime QA
 decision before marking the task complete:
@@ -297,10 +310,9 @@ record why active-app handoff was blocked.
 If runtime QA cannot complete quickly, do not silently downgrade it to
 `not_applicable`. Record `blocked`, include the exact app-launch, inspection,
 permission, microphone, Accessibility, paste, or Computer Use blocker, and keep
-the completed build/test evidence explicit. Use XcodeBuildMCP / Build iOS Apps
-for future iOS simulator build, test, screenshot, or UI snapshot checks when an
-iOS target exists or the selected task changes shared iOS/macOS SwiftUI
-surfaces.
+the completed build/test evidence explicit. Use Build iOS Apps / iOS simulator
+checks only for explicit v2 iOS runs where deferred lanes were intentionally
+included.
 
 ## Expected Output
 
@@ -314,16 +326,16 @@ cleanup performed with terminated resources and any residual resources with
 reasons, remaining real blocker if any, next selector result if checked, actual
 cwd, execution environment, selected task before/after status, confirmation
 that the canonical checkout now contains the status update,
-`Tooling` with the XcodeBuildMCP / `xcodebuild` / Computer Use path used, and
-a short `Product delta` field. Include `Thread archive` with `requested` or
-`unavailable` according to the MCP/thread lifecycle action. The report must
-also include a `Runtime QA` field with one of `required`, `not_applicable`, or
-`blocked`; the Computer Use scenario/actions/observed result when required; or
-the exact reason runtime QA was not applicable or blocked. `Product delta` must
-name the app behavior, Swift code, tests, build/runtime capability, or bug fix
-delivered. If no product delta was possible, the task must be reported as
-blocked, not done, and the report must name the exact next implementation task
-created or updated. For any blocked result, the report must include
-`Resolution path` with either the follow-up task id/path, the local tooling
-recovery command and fresh bounded retry result, or the explicit operator-only
-unblock action after recovery has been ruled out.
+`Tooling` with the Build macOS Apps / XcodeBuildMCP / `xcodebuild` / Computer
+Use path used, and a short `Product delta` field. Include `Thread archive` with
+`requested` or `unavailable` according to the MCP/thread lifecycle action. The
+report must also include a `Runtime QA` field with one of `required`,
+`not_applicable`, or `blocked`; the MCP or Computer Use scenario, actions, and
+observed result when required; or the exact reason runtime QA was not
+applicable or blocked. `Product delta` must name the app behavior, Swift code,
+tests, build/runtime capability, or bug fix delivered. If no product delta was
+possible, the task must be reported as blocked, not done, and the report must
+name the exact next implementation task created or updated. For any blocked
+result, the report must include `Resolution path` with either the follow-up task
+id/path, the local tooling recovery command and fresh bounded retry result, or
+the explicit operator-only unblock action after recovery has been ruled out.

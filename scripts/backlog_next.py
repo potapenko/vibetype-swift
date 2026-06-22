@@ -23,6 +23,7 @@ TERMINAL_STATUSES = {"done", "in-progress", "blocked"}
 CANDIDATE_STATUSES = {"backlog", "ready", ""}
 PRIORITY_RANK = {"p0": 0, "p1": 1, "p2": 2, "p3": 3}
 ARCHIVED_DONE_DIR = Path("backlog") / "done"
+DEFAULT_DEFERRED_LANES = frozenset({"ios", "ios-keyboard"})
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,16 @@ class Task:
 
 def normalize_status(value: str | None) -> str:
     return (value or "").strip().lower().rstrip(".")
+
+
+def normalize_lane(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def normalize_lanes(values: set[str] | frozenset[str] | tuple[str, ...] | None) -> frozenset[str]:
+    if not values:
+        return frozenset()
+    return frozenset(normalize_lane(value) for value in values if normalize_lane(value))
 
 
 def parse_front_matter(lines: list[str]) -> dict[str, Any]:
@@ -126,7 +137,7 @@ def parse_task(path: Path, archived: bool = False) -> Task:
         status=normalize_status(str(front_matter.get("status", ""))),
         visible_status=visible_status,
         priority=str(front_matter.get("priority") or "P3"),
-        lane=str(front_matter.get("lane") or ""),
+        lane=normalize_lane(str(front_matter.get("lane") or "")),
         dependencies=dependencies,
         archived=archived,
     )
@@ -326,8 +337,10 @@ def select_task(
     root: Path,
     expire_in_progress_after_hours: float | None = 1.0,
     apply_expired_in_progress: bool = True,
+    deferred_lanes: set[str] | frozenset[str] | tuple[str, ...] | None = DEFAULT_DEFERRED_LANES,
 ) -> dict[str, Any]:
     now = time.time()
+    normalized_deferred_lanes = normalize_lanes(deferred_lanes)
     active_tasks, archived_done_tasks, errors = load_tasks_with_archived_done(root)
     expired_before_apply = [
         task
@@ -381,10 +394,17 @@ def select_task(
     for task_id, missing in sorted(missing_dependencies.items()):
         errors.append(f"{task_id} references missing dependencies: {', '.join(missing)}")
 
-    skipped = {"done": 0, "in_progress": 0, "blocked": 0, "unknown_status": 0}
+    skipped = {
+        "done": 0,
+        "in_progress": 0,
+        "blocked": 0,
+        "deferred_lane": 0,
+        "unknown_status": 0,
+    }
     ready: list[Task] = []
     pending: list[tuple[Task, list[str]]] = []
     in_progress: list[Task] = []
+    deferred: list[Task] = []
     blocked_by_in_progress: dict[str, set[str]] = {}
     for task in active_tasks:
         if task.status == "done":
@@ -399,6 +419,10 @@ def select_task(
             continue
         if task.status not in CANDIDATE_STATUSES:
             skipped["unknown_status"] += 1
+            continue
+        if task.lane in normalized_deferred_lanes:
+            skipped["deferred_lane"] += 1
+            deferred.append(task)
             continue
 
         unmet = [
@@ -425,12 +449,15 @@ def select_task(
     )
     pending.sort(key=lambda item: (task_number(item[0].task_id), item[0].task_id))
     in_progress.sort(key=lambda task: (task_number(task.task_id), task.task_id))
+    deferred.sort(key=lambda task: (task_number(task.task_id), task.task_id))
 
     summary = {
         "task_count": len(active_tasks),
         "archived_done_count": len(archived_done_tasks),
         "ready_count": len(ready),
         "dependency_pending_count": len(pending),
+        "deferred_lane_count": len(deferred),
+        "deferred_lanes": sorted(normalized_deferred_lanes),
         "blocking_in_progress_count": len(blocked_by_in_progress),
         "expired_in_progress_count": len(expired_before_apply),
         "skipped": skipped,
@@ -449,6 +476,10 @@ def select_task(
     ready_json = [
         task_to_json(task, root, sorted(dependents.get(task.task_id, [])), [])
         for task in ready[:10]
+    ]
+    deferred_json = [
+        task_to_json(task, root, sorted(dependents.get(task.task_id, [])), [])
+        for task in deferred[:10]
     ]
     pending_json = []
     for task, unmet in pending[:10]:
@@ -487,6 +518,7 @@ def select_task(
             "selected": None,
             "summary": summary,
             "ready": ready_json,
+            "deferred": deferred_json,
             "dependency_pending": pending_json,
             "in_progress": in_progress_json,
             "blocking_in_progress": blocking_in_progress_json,
@@ -504,9 +536,13 @@ def select_task(
             sorted(dependents.get(selected.task_id, [])),
             [],
         ),
-        "selection_reason": "highest priority dependency-ready task; ties prefer larger direct unblock count, then numeric task id",
+        "selection_reason": (
+            "highest priority dependency-ready task outside deferred lanes; "
+            "ties prefer larger direct unblock count, then numeric task id"
+        ),
         "summary": summary,
         "ready": ready_json,
+        "deferred": deferred_json,
         "dependency_pending": pending_json,
         "in_progress": in_progress_json,
         "blocking_in_progress": blocking_in_progress_json,
@@ -520,10 +556,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Select the next backlog task.")
     parser.add_argument("--root", default=".", help="repository root")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    parser.add_argument(
+        "--include-deferred-lanes",
+        action="store_true",
+        help="include deferred future-version lanes such as ios and ios-keyboard",
+    )
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
-    result = select_task(root)
+    deferred_lanes = frozenset() if args.include_deferred_lanes else DEFAULT_DEFERRED_LANES
+    result = select_task(root, deferred_lanes=deferred_lanes)
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:
