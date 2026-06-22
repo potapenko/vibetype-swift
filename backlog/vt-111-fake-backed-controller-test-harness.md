@@ -1,7 +1,7 @@
 ---
 id: VT-111
 title: Fake Backed Controller Test Harness
-status: backlog
+status: in-progress
 priority: P2
 lane: testing
 parent: VT-110
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-111 - Fake Backed Controller Test Harness
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
