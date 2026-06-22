@@ -68,12 +68,15 @@ visible sidebar page, readback, and archive calls. The primary discovery source
 is `list_threads` without a query, filtered by exact cwd and
 readback-verified automation provenance. Exact automation id/name searches are
 only supplemental fallback discovery; they must not replace the general
-visible-page pass because exact search can miss sidebar-visible rows. Archive
-the whole visible eligible page when it contains more than two
-readback-eligible threads, then immediately re-list so older pages can surface
-in the same run. Stop only when the next fresh visible page contains two or
-fewer readback-eligible threads, or when a real tool, readback, active-work, or
-safety blocker prevents further progress.
+visible-page pass because exact search can miss sidebar-visible rows. The
+first visible eligible page is mandatory: archive every readback-eligible
+thread from that first page, even when it contains only one or two eligible
+threads. The two-thread allowance applies only after at least one eligible
+visible page has been archived in this invocation, when deciding whether to
+start another page-drain pass. After each archive batch, immediately re-list so
+older pages can surface in the same run. Stop only when the next fresh visible
+page contains two or fewer readback-eligible threads, or when a real tool,
+readback, active-work, or safety blocker prevents further progress.
 
 ## Required Tools
 
@@ -212,14 +215,20 @@ invocation.
 7. Count the readback-eligible candidates from the mandatory unfiltered
    visible-page pass. Supplemental exact-key candidates may be archived in the
    same batch, but they do not reduce or inflate this visible-page count.
-8. If the current visible page contains two or fewer readback-eligible
-   candidates, do not archive that page; exit the page-drain loop successfully.
-9. If the current visible page contains more than two readback-eligible
-    candidates, archive every eligible candidate from that visible batch.
-10. Also archive any supplemental exact-key candidates that pass the hard
+8. On the first loop iteration, archive every readback-eligible candidate from
+   the visible batch, even when the first visible page contains only one or two
+   eligible candidates. If the first visible page contains zero eligible
+   candidates, exit the page-drain loop successfully.
+9. On later loop iterations, if the current visible page contains two or fewer
+   readback-eligible candidates, do not archive that page; exit the page-drain
+   loop successfully.
+10. On later loop iterations, if the current visible page contains more than
+    two readback-eligible candidates, archive every eligible candidate from
+    that visible batch.
+11. Also archive any supplemental exact-key candidates that pass the hard
     safety gate in this batch, unless doing so would archive one of the small
     residual visible-page candidates that the page-stop rule allowed to remain.
-11. Immediately start the next loop iteration from step 1 in this same
+12. Immediately start the next loop iteration from step 1 in this same
     automation invocation so older pages can surface. Do not wait for the next
     scheduled run.
 
@@ -227,9 +236,11 @@ Do not stop just because a single list call returned one page, no page, no new
 ids, or exactly the default-size result set. Re-run the unfiltered
 `list_threads` visible-page pass after each archive batch because archiving one
 visible page can expose older unarchived threads. The two-thread allowance is
-only the single-run page-stop escape hatch for a small residual visible page;
-it is not permission to archive one large page and leave additional large
-eligible pages for a future scheduled invocation.
+only the post-first-batch page-stop escape hatch for a small residual visible
+page; it is not permission to skip the first eligible page, archive one large
+page and leave additional large eligible pages for a future scheduled
+invocation, or finish a run without archiving currently visible eligible
+threads.
 
 ## Tail Exit Rule
 
@@ -245,17 +256,25 @@ current-repository automation-run threads in the mandatory unfiltered
 hanging in-progress, and self-archive hanging in-progress runs that pass the
 hard safety gate.
 
-Exit successfully only when:
+Exit successfully only when the first visible page has no eligible candidates:
+
+```text
+first_visible_page_eligible_count == 0
+```
+
+or when at least one eligible visible page has already been archived in this
+invocation and the next fresh visible page satisfies:
 
 ```text
 visible_page_eligible_count <= 2
 ```
 
-The two-thread allowance is permission to leave a small visible page
-unarchived. It is not permission to skip a visible page with more than two
-eligible threads. If more than two eligible threads are visible, archive that
-page and run another page-drain loop iteration in the same automation
-invocation.
+The two-thread allowance is permission to leave a small residual visible page
+unarchived after the mandatory first eligible page has been archived. It is not
+permission to skip the first visible page, and it is not permission to skip a
+visible page with more than two eligible threads. If more than two eligible
+threads are visible after the first archive batch, archive that page and run
+another page-drain loop iteration in the same automation invocation.
 
 If `visible_page_eligible_count > 2` and the latest loop iteration archived
 zero threads, stop with:
