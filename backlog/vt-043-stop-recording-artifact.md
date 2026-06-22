@@ -1,7 +1,7 @@
 ---
 id: VT-043
 title: Stop Recording Artifact
-status: backlog
+status: in-progress
 priority: P1
 lane: recording
 parent: VT-040
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-043 - Stop Recording Artifact
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
