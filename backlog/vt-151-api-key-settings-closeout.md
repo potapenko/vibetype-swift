@@ -78,21 +78,34 @@ settings implementation scope.
   with `** BUILD INTERRUPTED **` before compiler diagnostics or app product
   output.
 - Updated `VT-023` with the fresh bounded blocker evidence.
+- 2026-06-22 11:37 CEST: blocker-resolution sweep retried
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' build -quiet`; the macOS
+  build completed successfully.
+- The sweep launched the fresh debug app from project DerivedData, but Computer
+  Use returned `timeoutReached` before exposing a reliable Settings inspection
+  surface.
+- The sweep terminated the launched debug `vibetype.app` process after the
+  bounded UI attempt.
 
 ## Runtime QA
 
 - Result: blocked.
-- Reason: no fresh launchable macOS app product was produced, so Settings API
-  key saved/missing/remove states could not be inspected through Computer Use.
+- Reason: a fresh launchable macOS app product was produced, but Computer Use
+  did not expose a reliable Settings inspection surface. The sweep also did not
+  save or remove an API key through the live Settings UI because that UI uses
+  the production Keychain service `com.potapenko.vibetype.openai` /
+  `openai-api-key`, and exercising remove-state could delete an operator's real
+  saved key.
 
 ## Resolution Path
 
-- Blocker category: local Xcode build service hang.
-- Follow-up task: existing `VT-148`
-  (`backlog/vt-148-xcode-build-service-health.md`).
-- Unblock condition: local Xcode build/test health must reach compiler
-  diagnostics, build output, or test execution after recovery.
-- Next automatic recovery action: rerun
-  `python3 scripts/local_tooling_recover.py --apply --json`, then retry the
-  bounded macOS build gate when a blocker-resolution pass selects the next
-  closeout or Xcode health changes.
+- Blocker category: runtime Settings inspection and live Keychain safety.
+- Follow-up task: none yet; this closeout is already the narrow follow-up for
+  `VT-023`.
+- Unblock condition: rerun the Settings runtime closeout when Computer Use can
+  expose the VibeType menu/window, and either use an isolated test Keychain
+  namespace or get explicit operator approval before exercising remove-state on
+  the production Keychain item.
+- Build no longer blocks this closeout; do not route back to `VT-148` unless a
+  fresh bounded build fails again.

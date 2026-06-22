@@ -1,7 +1,7 @@
 ---
 id: VT-030
 title: Permissions Umbrella
-status: blocked
+status: done
 priority: P1
 lane: permissions
 dependencies:
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-030 - Permissions Umbrella
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -61,3 +61,13 @@ tasks land.
 - Current run cannot finish this directly because the groomer must not mark
   tasks done and VT-030's allowed paths do not permit new Swift, test,
   runtime QA report, or app configuration changes.
+
+## Completion Evidence
+
+- 2026-06-22 11:37 CEST: blocker-resolution sweep confirmed follow-up
+  `VT-149` remains archived `done`; the permission surfaces closeout evidence
+  is already task-scoped under `docs/qa/`.
+- No Swift edits were needed; this umbrella's remaining blocker was stale
+  metadata from a groomer run that was not allowed to close it.
+- `python3 scripts/backlog_next.py --json` and `git diff --check` are the
+  closeout verification for this metadata-only umbrella.

@@ -41,7 +41,7 @@ iOS target exists.
 
 ## Blocker
 
-Blocked by missing iOS product target.
+Blocked by Build iOS Apps / XcodeBuildMCP transport failure.
 
 Evidence from the 2026-06-21 automation pass:
 
@@ -56,18 +56,32 @@ Evidence from the 2026-06-21 automation pass:
   enabled simulators in this environment, and a direct `xcrun simctl list
   devices available -j` probe was interrupted after a bounded wait.
 
-Next implementation task: VT-117 must add the first minimal iOS containing-app
-target before this simulator baseline can be retried.
+Fresh evidence from the 2026-06-22 blocker-resolution sweep:
+
+- VT-117 added the first minimal iOS containing-app target and shared
+  `vibetype-iOS` scheme.
+- `/opt/homebrew/bin/timeout 120 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype-iOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+  build -quiet` completed successfully against a concrete iPhone 17 Pro
+  simulator.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' build -quiet` completed
+  successfully.
+- XcodeBuildMCP first returned empty session defaults, then `list_sims` and a
+  follow-up `session_show_defaults` failed with `Transport closed`, so the
+  required Build iOS Apps baseline flow could not be completed.
 
 ## Resolution Path
 
-- Blocker category: iOS simulator/build environment.
+- Blocker category: Build iOS Apps / XcodeBuildMCP transport failure.
 - Follow-up task: `VT-117`
-  (`backlog/vt-117-ios-containing-app-target-skeleton.md`) adds the first
-  minimal iOS containing-app target.
-- Unblock condition: after `VT-117` is complete and a concrete iOS Simulator
-  device is available to Xcode/XcodeBuildMCP, rerun the simulator baseline
-  command path from `docs/agent-tooling.md` and save any durable blocker or
+  (`backlog/vt-117-ios-containing-app-target-skeleton.md`) is still blocked
+  only on the required MCP build/run flow, not missing repository target
+  source.
+- Unblock condition: when XcodeBuildMCP transport is healthy, set session
+  defaults for project `vibetype.xcodeproj`, scheme `vibetype-iOS`, and a
+  concrete iOS Simulator such as `iPhone 17 Pro`, then rerun the simulator
+  baseline command path from `docs/agent-tooling.md` and save any useful
   screenshot evidence under `docs/qa/`.
 - No macOS product source edits belong in this simulator baseline task.
 

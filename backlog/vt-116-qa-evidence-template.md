@@ -1,7 +1,7 @@
 ---
 id: VT-116
 title: QA Evidence Template
-status: blocked
+status: done
 priority: P3
 lane: testing
 parent: VT-110
@@ -13,7 +13,7 @@ allowed_paths:
 
 # VT-116 - QA Evidence Template
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -60,3 +60,13 @@ Create a reusable QA evidence template for task-scoped runtime checks.
   work unless a later task explicitly needs a new reusable template.
 - Current-run limit: VT-116 only permits template/docs work and forbids the app
   check needed to produce runtime product evidence.
+
+## Completion Evidence
+
+- 2026-06-22 11:37 CEST: blocker-resolution sweep confirmed follow-up
+  `VT-112` remains archived `done`; it saved task-scoped menu-bar smoke
+  evidence under `docs/qa/macos/`.
+- The repository already has the task-scoped QA evidence shape this task asked
+  for, and future runtime QA tasks can reuse it.
+- No new QA template or app run was needed in this closeout.
+- `git diff --check` is the closeout verification for this docs-only task.

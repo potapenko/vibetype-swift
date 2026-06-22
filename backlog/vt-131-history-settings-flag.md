@@ -1,7 +1,7 @@
 ---
 id: VT-131
 title: History Settings Flag
-status: blocked
+status: done
 priority: P2
 lane: history
 parent: VT-130
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-131 - History Settings Flag
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -80,3 +80,17 @@ and move this task to `done` if it passes.
 The current run could not finish directly because both full and focused Xcode
 test commands were interrupted by bounded timeouts before any test diagnostics
 or failures were produced.
+
+## Completion Evidence
+
+- 2026-06-22 11:23 CEST: local tooling recovery succeeded, terminated stale
+  `SWBBuildService` pid 3403, and removed run-generated `scripts/__pycache__`
+  plus project-scoped DerivedData.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests` reached and passed the focused macOS unit-test
+  target, including `AppSettingsTests`.
+- `git diff --check` passed.
+- No source edits were needed; the previously implemented
+  `saveTranscriptHistory` flag, persistence behavior, and default-off tests now
+  have current verification evidence.

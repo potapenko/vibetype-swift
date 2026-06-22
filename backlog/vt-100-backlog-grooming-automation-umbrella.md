@@ -1,7 +1,7 @@
 ---
 id: VT-100
 title: Backlog Grooming Automation Umbrella
-status: blocked
+status: done
 priority: P2
 lane: workflow
 dependencies:
@@ -14,7 +14,7 @@ allowed_paths:
 
 # VT-100 - Backlog Grooming Automation Umbrella
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -52,3 +52,13 @@ contract is in place.
 - Current product queue blocker: the selector has no dependency-ready product
   task while verification-gated Swift tasks remain blocked by local Xcode
   build/test service health.
+
+## Completion Evidence
+
+- 2026-06-22 11:37 CEST: blocker-resolution sweep confirmed child `VT-101`
+  and product follow-up `VT-073` remain archived `done`.
+- The resolver policy now explicitly prevents metadata/workflow umbrellas from
+  staying blocked after their concrete follow-up work has completed.
+- No Swift edits were needed; this is a workflow umbrella closeout.
+- `python3 scripts/backlog_next.py --json` and `git diff --check` are the
+  closeout verification for this metadata-only workflow task.

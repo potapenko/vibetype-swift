@@ -1,7 +1,7 @@
 ---
 id: VT-132
 title: Transcript History Entry Model
-status: blocked
+status: done
 priority: P2
 lane: history
 parent: VT-130
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-132 - Transcript History Entry Model
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -75,3 +75,16 @@ Create the small local value model for accepted transcript history rows.
   and focused tests are already present.
 - If Xcode still blocks before test execution, record the fresh bounded Xcode
   blocker and keep the existing `swiftc` check only as narrow sanity evidence.
+
+## Completion Evidence
+
+- 2026-06-22 11:23 CEST: local tooling recovery succeeded, terminated stale
+  `SWBBuildService` pid 3403, and removed run-generated `scripts/__pycache__`
+  plus project-scoped DerivedData.
+- `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' test
+  -only-testing:vibetypeTests` reached and passed the focused macOS unit-test
+  target, including `TranscriptHistoryEntryTests`.
+- `git diff --check` passed.
+- No source edits were needed; the previously implemented transcript history
+  entry model and focused tests now have current verification evidence.

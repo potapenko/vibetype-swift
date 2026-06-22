@@ -88,19 +88,27 @@ real app surface to build.
   bounded wait while stuck in the same Xcode build-service external-tool
   probing phase.
 - `git diff --check` passed.
+- 2026-06-22 11:37 CEST: blocker-resolution sweep reran
+  `/opt/homebrew/bin/timeout 120 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype-iOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+  build -quiet`; the concrete iPhone 17 Pro simulator build completed
+  successfully.
+- 2026-06-22 11:37 CEST: the macOS build gate
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' build -quiet` completed
+  successfully.
+- XcodeBuildMCP was available enough to report empty session defaults, but
+  then `list_sims` and a follow-up `session_show_defaults` failed with
+  `Transport closed` before `session_set_defaults` or `build_run_sim` could be
+  run.
 
 ## Resolution Path
 
-Blocker category: local Xcode/simulator environment.
+Blocker category: Build iOS Apps / XcodeBuildMCP transport failure.
 
-Operator-only unblock: make a concrete iOS Simulator device available to Xcode
-and XcodeBuildMCP, then rerun the VT-117 simulator build/run and macOS build
-checks. A useful status check is:
-
-```sh
-xcrun simctl list devices available
-```
-
-No repository follow-up task was created because the target, scheme, and source
-are present; the remaining blocker is local simulator availability plus the
-current Xcode build-service hang, not missing repository work.
+Current local Xcode evidence shows the target, scheme, concrete simulator, iOS
+simulator build, and macOS build are present and passing. The remaining blocker
+is the required Build iOS Apps/XcodeBuildMCP flow: rerun the MCP session setup
+and `build_run_sim` when the MCP transport is healthy. No repository follow-up
+task was created because the remaining failure is tool transport, not missing
+project source.

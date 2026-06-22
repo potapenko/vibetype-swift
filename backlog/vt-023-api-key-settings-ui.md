@@ -74,21 +74,28 @@ Add the native settings field for entering and saving the OpenAI API key.
   `** BUILD INTERRUPTED **` before compiler diagnostics or app product output.
 - Runtime QA remains blocked because no fresh launchable app product was
   produced for Settings inspection.
+- 2026-06-22 11:37 CEST: blocker-resolution sweep retried
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj
+  -scheme vibetype -destination 'platform=macOS' build -quiet`; the macOS
+  build completed successfully.
+- The sweep launched the fresh debug app from project DerivedData, but Computer
+  Use returned `timeoutReached` before exposing a reliable Settings inspection
+  surface.
+- The sweep did not save or remove an API key through the live Settings UI
+  because `SettingsView` uses the default production Keychain service
+  `com.potapenko.vibetype.openai` / `openai-api-key`; exercising remove-state
+  could delete an operator's real saved key.
+- The launched debug `vibetype.app` process was terminated after the bounded UI
+  attempt.
 
 ## Resolution Path
 
-- Blocker category: local Xcode build service hang.
-- Follow-up task: `VT-148`
-  (`backlog/vt-148-xcode-build-service-health.md`).
-- Unblock condition: after the local Xcode build service reaches macOS build or
-  test execution again, rerun
-  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination
-  'platform=macOS' build` plus `git diff --check`.
-- Next automatic recovery action: run
-  `python3 scripts/local_tooling_recover.py --apply --json` before the next
-  bounded retry, then rerun this build gate only after local Xcode health has
-  changed or a blocker-resolution pass is selected.
-- If the build passes, a blocker-resolution pass should launch the freshly
-  built app, open Settings, verify the secure API key save/clear/remove states,
-  and then mark this task done without additional source edits unless runtime
-  QA finds a defect.
+- Blocker category: runtime Settings inspection and live Keychain safety.
+- Follow-up task: `VT-151`
+  (`backlog/vt-151-api-key-settings-closeout.md`).
+- Unblock condition: rerun the Settings runtime closeout when Computer Use can
+  expose the VibeType menu/window, and either use an isolated test Keychain
+  namespace or get explicit operator approval before exercising remove-state on
+  the production Keychain item.
+- Build no longer blocks this task; a future closeout should not route back to
+  `VT-148` unless a fresh bounded build fails again.

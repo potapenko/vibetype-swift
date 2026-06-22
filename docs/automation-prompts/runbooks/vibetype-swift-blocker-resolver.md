@@ -15,16 +15,17 @@ Configured automation cwd:
 
 ## Runtime Contract
 
-Run one bounded blocked-task resolution pass.
+Run one bounded blocked-task resolution sweep.
 
 This automation is not the normal implementer and not the backlog groomer. Its
-job is to keep blocked tasks actionable by directly resolving one blocked task
-when safe, or by creating/refining exactly one follow-up task whose completion
-would unblock it. When the selected task is a stale verification blocker and a
-single fresh recovery/test pass proves an explicitly linked closeout task or
-other same-cause verification blocker, the resolver may close that small
-verification batch in the same commit instead of leaving stale blocked noise
-behind.
+job is to keep blocked tasks actionable by directly resolving every blocked
+task it can safely resolve in the current bounded run, or by creating/refining
+the follow-up tasks whose completion would unblock the rest. A resolver run
+should not stop merely because it handled one blocked task while more blocked
+tasks are still safely resolvable from the current checkout. When a fresh
+recovery/test pass proves an explicitly linked closeout task or other
+same-cause verification blocker, close that verification batch in the same
+commit instead of leaving stale blocked noise behind.
 
 Use the configured canonical checkout as the source of truth. Historical run
 memory is context only; it does not mark tasks complete and must not override
@@ -110,27 +111,41 @@ repair to a user/operator action.
 
 ## Blocked Selector
 
-Run this selector from the repo root:
+Run this selector from the repo root before each blocked-task decision:
 
 ```sh
 python3 scripts/backlog_blocked_next.py --json
 ```
 
 Treat selector JSON as the only source of truth for blocked-task ordering. Do
-not reimplement sorting, select by filename manually, or read non-selected
-blocked task bodies.
+not reimplement sorting or select by filename manually. For sweep continuation,
+use the ordered `blocked` array returned by the selector and keep a run-local
+set of blocked task ids already handled, skipped, or proven not safely
+resolvable in this run. Read each blocked task body only when that task reaches
+its turn in the sweep.
 
-If selector status is `select`, work on exactly `selected.path`. If status is
-`no_blocked`, stop without changing repository files and report that no blocked
-task exists. If status is `queue_error`, stop without claiming and report the
-diagnostics.
+If selector status is `select`, work on the first ordered blocked task that is
+not already in the run-local handled/skipped set. Initially this is
+`selected.path`; after an unresolved blocker is recorded in the run-local set,
+continue with the next ordered entry from `blocked` instead of reprocessing the
+same task forever. Rerun the blocked selector after every commit, status
+change, follow-up creation/refinement, or safe batch completion, then rebuild
+the run-local queue from the fresh selector output while preserving the
+handled/skipped ids from this run.
+
+Continue until the selector reports `no_blocked`, `queue_error`, an active race
+condition from the normal selector, or every blocked task returned by the
+current selector has either been resolved, given/refreshed a durable resolution
+path, or recorded as not safely resolvable in the current run. If status is
+`no_blocked`, stop and report that no blocked task remains. If status is
+`queue_error`, stop without claiming and report the diagnostics.
 
 The blocked selector chooses the highest-priority blocked task. Ties prefer
 the task that directly unblocks the most other tasks, then numeric task id.
 
 ## Resolution Work
 
-After selecting one blocked task, read only that task body and the smallest
+For each selected blocked task, read only that task body and the smallest
 task-relevant file set needed to understand the blocker.
 
 Prefer direct resolution when all of these are true:
@@ -154,7 +169,8 @@ task remains blocked. A stale local tooling blocker may not be recorded as
 operator-only without this recovery/retry evidence.
 
 If direct resolution succeeds, mark the selected task `done`, record fresh
-verification evidence, stage only resolver-owned changes, and commit.
+verification evidence, stage only resolver-owned changes, and commit. Then
+rerun the blocked selector and continue the sweep.
 
 For stale verification blockers, do not stop after updating only the originally
 selected task when the repository already contains paired closeout tasks for the
@@ -162,16 +178,16 @@ same blocker. Search the active backlog for the selected task id, `closeout`,
 and the same bounded verification command. If the same recovery/test result
 satisfies those paired closeout tasks, mark the selected original task and the
 paired closeout task `done` together. If several blocked tasks share the same
-local Xcode/build-service timeout and the same passing focused command, the
-resolver may close that narrow batch together, capped to tasks whose resolution
-paths already say they can be marked done after that command passes. This is
-not permission to bulk-edit unrelated blocked tasks, runtime-QA blockers, or
-product-scope blockers.
+local Xcode/build-service timeout and the same passing focused command, close
+that narrow batch together, capped to tasks whose resolution paths already say
+they can be marked done after that command passes. This is not permission to
+bulk-edit unrelated blocked tasks, runtime-QA blockers, or product-scope
+blockers.
 
 If direct resolution is not safe or not possible, create or refine exactly one
-follow-up backlog task that can remove the blocker. Before creating a new task,
-search `backlog/` for the blocked task id, existing `unblocks` wording, and the
-blocker phrase to avoid duplicates. A follow-up task must include:
+follow-up backlog task that can remove that blocker. Before creating a new
+task, search `backlog/` for the blocked task id, existing `unblocks` wording,
+and the blocker phrase to avoid duplicates. A follow-up task must include:
 
 - the original blocked task id it unblocks;
 - small scope and `allowed_paths`;
@@ -197,9 +213,11 @@ operations, destructive Git rollback, external account login, payment/account
 changes, and manual system privacy approval remain operator-only; stale local
 Xcode/build/simulator state does not.
 
-Do not bulk-edit every blocked task. Do not mark a task `done` merely because a
-follow-up exists. After a follow-up later completes, a future resolver pass
-should reprocess the original blocked task and either mark it `done` with fresh
+Do not bulk-mark unresolved blocked tasks `done`. Do not mark a task `done`
+merely because a follow-up exists. A run-local skip is not a durable status; it
+only prevents one unresolved blocker from starving the rest of the current
+sweep. After a follow-up later completes, a future resolver pass should
+reprocess the original blocked task and either mark it `done` with fresh
 evidence or reset it to `backlog` if it genuinely needs implementation rerun.
 
 ## Verification
@@ -247,14 +265,15 @@ fallback and record the reason.
 Stage only files changed for this resolver pass and create a scoped completion
 checkpoint commit when files changed.
 
-Final report must include selected blocked task id/title/path, action taken
-(`directly_resolved`, `follow_up_created`, `follow_up_refined`,
-`tooling_recovered`, or `operator_only`), follow-up id/path or operator action,
-local tooling recovery summary, changed files, verification results, `Tooling`
-with the XcodeBuildMCP / `xcodebuild` / Computer Use path used when relevant,
-cleanup performed with terminated resources and any residual resources with
-reasons, `Thread archive` with `requested` or `unavailable` according to the
-MCP/thread lifecycle action, completion commit hash if files changed,
-next blocked selector result if checked, actual cwd, execution environment,
-unrelated dirty files preserved, and confirmation that the canonical checkout
-now contains the status or resolution-path update.
+Final report must include every blocked task inspected in the sweep, action
+taken for each (`directly_resolved`, `follow_up_created`,
+`follow_up_refined`, `tooling_recovered`, `operator_only`, or
+`still_blocked_with_reason`), follow-up id/path or operator action when
+applicable, local tooling recovery summary, changed files, verification
+results, `Tooling` with the XcodeBuildMCP / `xcodebuild` / Computer Use path
+used when relevant, cleanup performed with terminated resources and any
+residual resources with reasons, `Thread archive` with `requested` or
+`unavailable` according to the MCP/thread lifecycle action, completion commit
+hashes if files changed, final blocked selector result, actual cwd, execution
+environment, unrelated dirty files preserved, and confirmation that the
+canonical checkout now contains all status or resolution-path updates.

@@ -1,7 +1,7 @@
 ---
 id: VT-081
 title: Indicator State Contract
-status: blocked
+status: done
 priority: P3
 lane: indicator
 parent: VT-080
@@ -15,7 +15,7 @@ allowed_paths:
 
 # VT-081 - Indicator State Contract
 
-Status: blocked
+Status: done
 
 ## Goal
 
@@ -57,3 +57,13 @@ produce the required product delta for this automation.
 - Current-run limit: this groomer can refine task metadata, but it must not
   mark tasks done and cannot add Swift app or test code under VT-081's allowed
   paths.
+
+## Completion Evidence
+
+- 2026-06-22 11:37 CEST: blocker-resolution sweep confirmed follow-up
+  `VT-082` remains archived `done`; it added executable indicator presentation
+  and panel skeleton behavior.
+- No Swift edits were needed in this closeout; the prior blocker was only that
+  the groomer run could not mark documentation contracts `done`.
+- `python3 scripts/backlog_next.py --json` and `git diff --check` are the
+  closeout verification for this metadata-only contract.

@@ -1,7 +1,7 @@
 ---
 id: VT-141
 title: iOS Voice Keyboard Product Contract
-status: blocked
+status: done
 priority: P3
 lane: ios-keyboard
 parent: VT-140
@@ -17,7 +17,7 @@ verification:
 
 # VT-141 - iOS Voice Keyboard Product Contract
 
-Status: blocked
+Status: done
 Priority: P3
 Lane: ios-keyboard
 Dependencies: VT-113
@@ -81,3 +81,13 @@ bug fix.
 - Why this run could not finish directly: VT-141 forbids adding Swift
   implementation, so completing it with only spec prose would violate the
   product-first automation contract.
+
+## Completion Evidence
+
+- 2026-06-22 11:37 CEST: blocker-resolution sweep confirmed follow-up
+  `VT-144` remains archived `done`; it implemented the executable keyboard
+  voice-session state model with tests.
+- No Swift edits were needed in this closeout; the prior blocker was only that
+  the original documentation task could not itself produce the product delta.
+- `git diff --check` is the closeout verification for this metadata-only
+  product-contract task.
