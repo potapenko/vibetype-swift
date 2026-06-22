@@ -1,7 +1,7 @@
 ---
 id: VT-044
 title: Cancel Recording Cleanup
-status: in-progress
+status: backlog
 priority: P2
 lane: recording
 parent: VT-040
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-044 - Cancel Recording Cleanup
 
-Status: in-progress
+Status: backlog
 
 ## Goal
 
