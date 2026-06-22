@@ -13,22 +13,29 @@ struct SettingsView: View {
     @State private var appSettings: AppSettings
     @State private var apiKeyInput = ""
     @State private var apiKeyStatus: APIKeySettingsStatus = .unknown
+    @State private var hotkeyRegistrationStatus: GlobalHotkeyRegistrationStatus
 
     private let microphonePermissionService: MicrophonePermissionService
     private let accessibilityPermissionService: AccessibilityPermissionService
     private let apiKeyStorage: APIKeyStorage
     private let appSettingsStore: AppSettingsStore
+    private let preferredHotkeyConfiguration: GlobalHotkeyConfiguration
+    private let hotkeyStatusProvider: () -> GlobalHotkeyRegistrationStatus
 
     init(
         microphonePermissionService: MicrophonePermissionService = MicrophonePermissionService(),
         accessibilityPermissionService: AccessibilityPermissionService = AccessibilityPermissionService(),
         apiKeyStorage: APIKeyStorage = KeychainService(),
-        appSettingsStore: AppSettingsStore = AppSettingsStore()
+        appSettingsStore: AppSettingsStore = AppSettingsStore(),
+        preferredHotkeyConfiguration: GlobalHotkeyConfiguration = .defaultDictation,
+        hotkeyStatusProvider: @escaping () -> GlobalHotkeyRegistrationStatus = { .notRegistered }
     ) {
         self.microphonePermissionService = microphonePermissionService
         self.accessibilityPermissionService = accessibilityPermissionService
         self.apiKeyStorage = apiKeyStorage
         self.appSettingsStore = appSettingsStore
+        self.preferredHotkeyConfiguration = preferredHotkeyConfiguration
+        self.hotkeyStatusProvider = hotkeyStatusProvider
         _appSettings = State(initialValue: appSettingsStore.load())
         _microphonePermissionStatus = State(
             initialValue: microphonePermissionService.currentStatus()
@@ -36,6 +43,7 @@ struct SettingsView: View {
         _accessibilityPermissionStatus = State(
             initialValue: accessibilityPermissionService.currentStatus()
         )
+        _hotkeyRegistrationStatus = State(initialValue: hotkeyStatusProvider())
     }
 
     var body: some View {
@@ -93,6 +101,10 @@ struct SettingsView: View {
                 TextField("Prompt or vocabulary hint", text: settingBinding(\.prompt), axis: .vertical)
                     .lineLimit(2...4)
                     .textFieldStyle(.roundedBorder)
+            }
+
+            Section("Keyboard Shortcut") {
+                HotkeySettingsRow(presentation: hotkeyPresentation)
             }
 
             Section("Behavior") {
@@ -160,6 +172,7 @@ struct SettingsView: View {
             reloadAppSettings()
             refreshMicrophonePermissionStatus()
             refreshAccessibilityPermissionStatus()
+            refreshHotkeyRegistrationStatus()
             refreshAPIKeyStatus()
         }
     }
@@ -225,6 +238,13 @@ struct SettingsView: View {
         appSettings.customLanguageCodeValidation.isInvalid ? .red : .secondary
     }
 
+    private var hotkeyPresentation: HotkeySettingsPresentation {
+        HotkeySettingsPresentation(
+            status: hotkeyRegistrationStatus,
+            preferredConfiguration: preferredHotkeyConfiguration
+        )
+    }
+
     private func reloadAppSettings() {
         appSettings = appSettingsStore.load()
     }
@@ -253,6 +273,10 @@ struct SettingsView: View {
         accessibilityPermissionStatus = accessibilityPermissionService.currentStatus()
     }
 
+    private func refreshHotkeyRegistrationStatus() {
+        hotkeyRegistrationStatus = hotkeyStatusProvider()
+    }
+
     private func refreshAPIKeyStatus() {
         do {
             apiKeyStatus = try apiKeyStorage.loadAPIKey() == nil ? .missing : .saved
@@ -278,6 +302,73 @@ struct SettingsView: View {
             apiKeyStatus = .missing
         } catch {
             apiKeyStatus = .failure(error.localizedDescription)
+        }
+    }
+}
+
+private struct HotkeySettingsRow: View {
+    let presentation: HotkeySettingsPresentation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(presentation.shortcutText, systemImage: presentation.systemImage)
+
+            Text(presentation.statusText)
+                .font(.footnote)
+                .foregroundStyle(presentation.statusTint)
+
+            Text(presentation.detailText)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct HotkeySettingsPresentation {
+    let shortcutText: String
+    let statusText: String
+    let detailText: String
+    let systemImage: String
+    let statusTint: Color
+
+    init(
+        status: GlobalHotkeyRegistrationStatus,
+        preferredConfiguration: GlobalHotkeyConfiguration
+    ) {
+        switch status {
+        case .registered(let configuration):
+            shortcutText = configuration.displayText
+            statusText = "Global hotkey active."
+            detailText = Self.activeDetailText(for: configuration)
+            systemImage = "keyboard"
+            statusTint = .secondary
+        case .fallbackRegistered(let configuration):
+            shortcutText = configuration.displayText
+            statusText = "Fallback hotkey active."
+            detailText = "The default shortcut was unavailable. This shortcut records from any app."
+            systemImage = "keyboard.badge.ellipsis"
+            statusTint = .secondary
+        case .notRegistered:
+            shortcutText = preferredConfiguration.displayText
+            statusText = "Global hotkey not active."
+            detailText = "Use Start Recording in the menu until a shortcut is available."
+            systemImage = "keyboard"
+            statusTint = .secondary
+        case .unavailable(let message):
+            shortcutText = preferredConfiguration.displayText
+            statusText = "Global hotkey unavailable."
+            detailText = "\(message) Use Start Recording in the menu."
+            systemImage = "keyboard.badge.exclamationmark"
+            statusTint = .red
+        }
+    }
+
+    private static func activeDetailText(for configuration: GlobalHotkeyConfiguration) -> String {
+        switch configuration.activationMode {
+        case .holdToRecord:
+            return "Hold the shortcut to record from any app."
+        case .toggle:
+            return "Press the shortcut once to start recording and again to stop."
         }
     }
 }
