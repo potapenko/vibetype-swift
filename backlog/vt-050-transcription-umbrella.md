@@ -1,7 +1,7 @@
 ---
 id: VT-050
 title: OpenAI Transcription Umbrella
-status: in-progress
+status: blocked
 priority: P1
 lane: transcription
 dependencies:
@@ -17,7 +17,7 @@ allowed_paths:
 
 # VT-050 - OpenAI Transcription Umbrella
 
-Status: in-progress
+Status: blocked
 
 ## Goal
 
@@ -36,3 +36,25 @@ children land.
 
 - `python3 scripts/backlog_next.py --json`
 - `git diff --check`
+
+## Blocker
+
+Reason: no product delta possible from selected scope.
+
+This umbrella closeout can only edit backlog and spec files, so the implementer
+automation cannot produce app behavior, Swift source, executable tests,
+build/runtime capability, or a product bug fix in this selected scope. The
+OpenAI transcription service children are complete, but closing this task as
+done would be a paperwork-only completion.
+
+## Resolution Path
+
+- Blocker category: no product delta possible from selected scope.
+- Follow-up: VT-121 (`backlog/vt-121-controller-service-boundary.md`).
+- Unblock condition: implement VT-121 so the app has a Swift-native dictation
+  controller boundary with injected recording, transcription, settings, and
+  output dependencies.
+- Why this run could not finish it directly: VT-050 allows only backlog and
+  spec paths; VT-121 is the existing concrete implementation task that can
+  produce the smallest safe product delta by making completed transcription
+  service behavior consumable by menu and future hotkey flows.
