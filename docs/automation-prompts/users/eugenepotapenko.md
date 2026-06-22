@@ -16,14 +16,14 @@ Inventory status: inspected
 
 ## Summary
 
-| Automation id | Name | Status | Schedule | Model | Environment | Prompt source |
-| --- | --- | --- | --- | --- | --- | --- |
-| `vibetype-swift-backlog-archiver` | VibeType Swift Backlog Archiver | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-archiver.md` |
-| `vibetype-swift-backlog-groomer` | VibeType Swift Backlog Groomer | active | `FREQ=HOURLY;INTERVAL=2` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md` |
-| `vibetype-swift-blocker-resolver` | VibeType Swift Blocker Resolver | active | `FREQ=HOURLY;INTERVAL=1` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md` |
-| `vibetype-swift-implementer` | VibeType Swift Implementer | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-implementer.md` |
-| `vibetype-swift-tooling-unblocker` | VibeType Swift Tooling Unblocker | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md` |
-| `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | active | `FREQ=MINUTELY;INTERVAL=1` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
+| Automation id | Name | Status | Schedule | Model | Environment | Prompt snapshot | Runtime runbook |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/installed/vibetype-swift-archive-completed-automation-threads.md` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
+| `vibetype-swift-backlog-archiver` | VibeType Swift Backlog Archiver | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/installed/vibetype-swift-backlog-archiver.md` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-archiver.md` |
+| `vibetype-swift-backlog-groomer` | VibeType Swift Backlog Groomer | active | `FREQ=HOURLY;INTERVAL=2` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/installed/vibetype-swift-backlog-groomer.md` | `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md` |
+| `vibetype-swift-blocker-resolver` | VibeType Swift Blocker Resolver | active | `FREQ=HOURLY;INTERVAL=1` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/installed/vibetype-swift-blocker-resolver.md` | `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md` |
+| `vibetype-swift-implementer` | VibeType Swift Implementer | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/installed/vibetype-swift-implementer.md` | `docs/automation-prompts/runbooks/vibetype-swift-implementer.md` |
+| `vibetype-swift-tooling-unblocker` | VibeType Swift Tooling Unblocker | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/installed/vibetype-swift-tooling-unblocker.md` | `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md` |
 
 Installed automation count for this repository: 6.
 Active count for this repository: 6.
@@ -33,9 +33,9 @@ Current-user MCP cleanup gate: only two installed automations may call
 `python3 scripts/automation_resource_cleanup.py`:
 `vibetype-swift-implementer`, once at the end of an implementation run, and
 `vibetype-swift-archive-completed-automation-threads`, once at the end of each
-one-minute housekeeping run. The script takes no parameters, ignores processes
-owned by other OS users, and runs current-user killall cleanup for the
-allowlisted Codex helper/MCP process names.
+housekeeping run. The script takes no parameters, ignores processes owned by
+other OS users, and runs current-user killall cleanup for the allowlisted
+Codex helper/MCP process names.
 
 All other installed automations must not call
 `python3 scripts/automation_resource_cleanup.py`. They may only terminate or
@@ -44,6 +44,18 @@ current-thread archive when thread management is available.
 
 ## Installed Automations
 
+### `vibetype-swift-archive-completed-automation-threads`
+
+- Installed status: `ACTIVE`
+- Schedule: `FREQ=MINUTELY;INTERVAL=15`
+- Model / reasoning effort: `gpt-5.4-mini` / `low`
+- Execution environment: `local`
+- Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
+- Prompt snapshot: `docs/automation-prompts/installed/vibetype-swift-archive-completed-automation-threads.md`
+- Runtime contract: `docs/automation-prompts/runbooks/archive-completed-automation-threads.md`
+- Purpose: Archives completed or safely stale Codex automation threads for this exact repository cwd, verifies the local registry has no remaining eligible threads, runs the allowed final resource cleanup gate, and requests self-archive.
+- Prompt length: `6437` characters
+
 ### `vibetype-swift-backlog-archiver`
 
 - Installed status: `ACTIVE`
@@ -51,20 +63,10 @@ current-thread archive when thread management is available.
 - Model / reasoning effort: `gpt-5.4-mini` / `low`
 - Execution environment: `local`
 - Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
-- Prompt shape: short pointer prompt
-- Versioned runtime contract:
-  `docs/automation-prompts/runbooks/vibetype-swift-backlog-archiver.md`
-- Archive script:
-  `python3 scripts/backlog_archive_done.py --apply --json`
-- Expected output: one bounded completed-backlog archive pass, selector
-  readback, `git diff --check`, scoped checkpoint commit when files move,
-  run-owned cleanup report without the broad MCP cleanup script, and
-  current-thread archive status when thread management is available
-- Safety contract: move only clean verified `done` task files from top-level
-  `backlog/` to `backlog/done/`; do not claim tasks, implement product code,
-  resolve blockers, groom tasks, or run destructive database/storage operations
-- Current decision: active with current-thread self-archive requested before
-  the final report when thread management is available
+- Prompt snapshot: `docs/automation-prompts/installed/vibetype-swift-backlog-archiver.md`
+- Runtime contract: `docs/automation-prompts/runbooks/vibetype-swift-backlog-archiver.md`
+- Purpose: Runs the completed-backlog archive workflow, moving verified done task files from active backlog into backlog/done when the archive script reports safe moves.
+- Prompt length: `910` characters
 
 ### `vibetype-swift-backlog-groomer`
 
@@ -73,23 +75,10 @@ current-thread archive when thread management is available.
 - Model / reasoning effort: `gpt-5.5` / `xhigh`
 - Execution environment: `local`
 - Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
-- Prompt shape: short pointer prompt
-- Versioned runtime contract:
-  `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md`
-- Selector/script:
-  `python3 scripts/backlog_next.py --json`
-- Expected output: up to eight groomed backlog/spec/workflow tasks, selector
-  status, verification, and scoped checkpoint commit when files change
-- Tooling contract: current phase is macOS MVP; read `docs/agent-tooling.md`
-  before creating platform tasks that name Build macOS Apps, XcodeBuildMCP,
-  `xcodebuild`, Computer Use, or fallback evidence; perform run-owned cleanup,
-  do not call the broad MCP cleanup script, and request current-thread archive
-  before the final report when thread management is available
-- Safety/browser evidence contract: no browser requirement; do not implement
-  Swift product code; dirty Git state is not a blocker and must be preserved
-  with path-limited commits; no DB or destructive storage operations
-- Current decision: active with current-thread self-archive requested before
-  the final report when thread management is available
+- Prompt snapshot: `docs/automation-prompts/installed/vibetype-swift-backlog-groomer.md`
+- Runtime contract: `docs/automation-prompts/runbooks/vibetype-swift-backlog-groomer.md`
+- Purpose: Maintains small executable backlog/spec/workflow tasks for the macOS MVP without implementing Swift product code.
+- Prompt length: `831` characters
 
 ### `vibetype-swift-blocker-resolver`
 
@@ -98,23 +87,10 @@ current-thread archive when thread management is available.
 - Model / reasoning effort: `gpt-5.5` / `xhigh`
 - Execution environment: `local`
 - Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
-- Prompt shape: short pointer prompt
-- Versioned runtime contract:
-  `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md`
-- Selector/script:
-  `python3 scripts/backlog_blocked_next.py --json`
-- Expected output: one selected blocked task either directly resolved,
-  connected to one concrete follow-up task, or recorded with an exact
-  operator-only unblock action; run-owned cleanup report without the broad MCP
-  cleanup script and current-thread archive requested before the final report
-  when thread management is available
-- Tooling contract: read `docs/agent-tooling.md` when a blocker involves
-  Xcode, simulator, MCP, runtime QA, or tool-selection decisions
-- Safety/runtime evidence contract: dirty Git state is not a blocker and must
-  be preserved with path-limited commits; avoid duplicate follow-ups; use
-  bounded verification; no DB or destructive storage operations
-- Current decision: active with current-thread self-archive requested before
-  the final report when thread management is available
+- Prompt snapshot: `docs/automation-prompts/installed/vibetype-swift-blocker-resolver.md`
+- Runtime contract: `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md`
+- Purpose: Sweeps blocked backlog tasks and either resolves them, records precise operator-only unblock actions, or creates/refines one concrete follow-up task.
+- Prompt length: `833` characters
 
 ### `vibetype-swift-implementer`
 
@@ -123,26 +99,10 @@ current-thread archive when thread management is available.
 - Model / reasoning effort: `gpt-5.5` / `xhigh`
 - Execution environment: `local`
 - Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
-- Prompt shape: short pointer prompt
-- Versioned runtime contract:
-  `docs/automation-prompts/runbooks/vibetype-swift-implementer.md`
-- Selector/script:
-  `python3 scripts/backlog_next.py --json`
-- Expected output: one selected backlog iteration with claim/completion
-  checkpoint commits, verification, platform smoke evidence when required, and
-  mandatory final `python3 scripts/automation_resource_cleanup.py` current-user
-  MCP cleanup report, including current-thread archive status when thread
-  management is available
-- Tooling contract: read `docs/agent-tooling.md` when Xcode, simulator, MCP,
-  runtime QA, or tool-selection decisions are involved; normal implementation
-  runs target the macOS MVP and leave iOS lanes deferred to v2
-- Safety/runtime evidence contract: explicit runtime QA decision for each
-  product delta; Computer Use required for bounded app-run QA when visible
-  macOS surfaces or user interactions change; no live OpenAI API in normal
-  automation; no DB or destructive storage operations
-- Current decision: active with mandatory final cleanup and current-thread
-  self-archive requested before the final report when thread management is
-  available
+- Prompt snapshot: `docs/automation-prompts/installed/vibetype-swift-implementer.md`
+- Runtime contract: `docs/automation-prompts/runbooks/vibetype-swift-implementer.md`
+- Purpose: Runs one selector-approved product implementation iteration with claim/completion checkpoints, verification, cleanup, and thread self-archive reporting.
+- Prompt length: `1250` characters
 
 ### `vibetype-swift-tooling-unblocker`
 
@@ -151,71 +111,31 @@ current-thread archive when thread management is available.
 - Model / reasoning effort: `gpt-5.5` / `xhigh`
 - Execution environment: `local`
 - Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
-- Prompt shape: short pointer prompt
-- Versioned runtime contract:
-  `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md`
-- Recovery script:
-  `python3 scripts/local_tooling_recover.py --apply --json`
-- Expected output: one bounded local tooling recovery pass, bounded macOS
-  unit-test health check, selector readback, run-owned cleanup report without
-  the broad MCP cleanup script, and current-thread archive status when thread
-  management is available
-- Safety/runtime evidence contract: fix local Xcode/build/test/simulator,
-  cache, DerivedData, missing local utility, and missing local library blockers
-  automatically; do not perform destructive database/storage operations,
-  destructive Git rollback, external account login, payment/account changes, or
-  manual system privacy approval
-- Current decision: active with current-thread self-archive requested before
-  the final report when thread management is available
-
-### `vibetype-swift-archive-completed-automation-threads`
-
-- Installed status: `ACTIVE`
-- Schedule: `FREQ=MINUTELY;INTERVAL=1`
-- Model / reasoning effort: `gpt-5.4-mini` / `low`
-- Execution environment: `local`
-- Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
-- Prompt shape: short pointer prompt
-- Versioned runtime contract:
-  `docs/automation-prompts/runbooks/archive-completed-automation-threads.md`
-- Expected output: one current-repository-only archive-housekeeping pass that
-  readback-verifies completed, stale interrupted, and stale hanging
-  in-progress automation-run threads, treats self-archive hanging
-  in-progress runs as immediately eligible, treats this housekeeping
-  automation's own thread-tool hang as eligible through the runbook's shorter
-  gate, always archives the first visible eligible page even when it has only
-  one or two eligible threads, drains newly exposed pages inside the same
-  automation invocation, archives the whole eligible batch rather than one
-  thread, uses `scripts/archive_codex_threads.py` as the complete local
-  registry fallback when cron thread tools are unavailable, and uses the
-  at-most-two eligible thread allowance only to avoid starting a later
-  page-drain pass;
-  runs final
-  `python3 scripts/automation_resource_cleanup.py` current-user MCP cleanup,
-  and archives the current housekeeping thread
-- Safety/thread contract: use thread-management tools as source of truth;
-  when cron does not expose thread tools, use only the repository fallback
-  helper that scans both supported Codex `state_5.sqlite` locations; call
-  thread-management tools sequentially, not through parallel wrappers;
-  inspect only automation threads for this exact cwd; do not inspect, count, or
-  archive other-repository, active, pending, manual, or ambiguous threads;
-  request current housekeeping thread archive before the final report when the
-  thread-management tool is available
-- Current decision: active as the only scheduled non-implementer cleanup
-  automation, running every minute
+- Prompt snapshot: `docs/automation-prompts/installed/vibetype-swift-tooling-unblocker.md`
+- Runtime contract: `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md`
+- Purpose: Repairs local Xcode/build/test/tooling blockers and reruns a bounded health check so normal backlog automation can proceed.
+- Prompt length: `1100` characters
 
 ## Missing Or Paused Roles
 
-All six installed automations for this repository are active. The
-archive-housekeeping cleanup automation runs every minute. No installed
-automation role is missing.
+All six installed automations for this repository are active. No installed
+automation role is missing or paused in the inspected local registry.
 
 ## Verification
 
 Commands/evidence used:
 
 ```sh
-env CODEX_HOME=/Users/eugenepotapenko/.codex sh -c 'rg -n "^id =|^name =|^prompt =|^status =|^rrule =|^model =|^reasoning_effort =|^execution_environment =|^cwds =" "$CODEX_HOME"/automations/*/automation.toml'
+python3 - <<'PY'
+from pathlib import Path
+import tomli
+target = '/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift'
+base = Path('/Users/eugenepotapenko/.codex/automations')
+for path in sorted(base.glob('*/automation.toml')):
+    data = tomli.loads(path.read_text())
+    if target in data.get('cwds', []):
+        print(data['id'], data['rrule'], data['model'], data['reasoning_effort'])
+PY
 git diff --check
 git diff --cached --check
 ```

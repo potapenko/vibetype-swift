@@ -21,9 +21,23 @@ Runtime runbooks:
 - `runbooks/vibetype-swift-implementer.md`
 - `runbooks/vibetype-swift-tooling-unblocker.md`
 
+Restore-ready installed prompt snapshots:
+
+- `installed/README.md`
+- `installed/vibetype-swift-archive-completed-automation-threads.md`
+- `installed/vibetype-swift-backlog-archiver.md`
+- `installed/vibetype-swift-backlog-groomer.md`
+- `installed/vibetype-swift-blocker-resolver.md`
+- `installed/vibetype-swift-implementer.md`
+- `installed/vibetype-swift-tooling-unblocker.md`
+
 Shared tooling guidance:
 
 - `../agent-tooling.md`
+
+Recovery spec:
+
+- `../specs/features/automation-prompt-recovery.md`
 
 Only the implementer and archive-housekeeping automations may run
 `python3 scripts/automation_resource_cleanup.py`. Information-gathering,
