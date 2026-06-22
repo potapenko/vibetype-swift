@@ -203,6 +203,29 @@ Verification evidence:
 - Runtime QA remains blocked because no fresh macOS app build product was
   produced.
 
+2026-06-22 05:18 CEST blocker resolver refresh:
+
+- Passed: `python3 scripts/local_tooling_recover.py --apply --json` before
+  blocked-task selection removed project-scoped DerivedData and found no stale
+  Xcode/build/test processes.
+- Tooling surface checked: XcodeBuildMCP was available, but the exposed tool
+  set did not provide a matching macOS build/test action for the selected
+  `xcodebuild` verification, so the resolver used bounded shell `xcodebuild`.
+- Blocked:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+  reached Xcode's early `clang -v -E -dM ... /dev/null` external-tool probe
+  before compiler diagnostics and exited 124 with `** BUILD INTERRUPTED **`.
+- Passed: recovery after the build retry found no remaining stale processes or
+  generated artifacts.
+- Blocked:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  reached Xcode external-tool probing before test discovery or execution and
+  exited 143 with `** BUILD INTERRUPTED **`.
+- Passed: final recovery found no remaining stale processes or generated
+  artifacts.
+- Runtime QA remains blocked because no fresh macOS app build product was
+  produced.
+
 Durable QA note:
 
 - `docs/qa/macos/vt-158-2026-06-22-menu-bar-runtime-closeout.md`
