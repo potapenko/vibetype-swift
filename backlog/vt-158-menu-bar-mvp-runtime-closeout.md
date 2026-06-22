@@ -183,6 +183,26 @@ Verification evidence:
 - Runtime QA remains blocked because no fresh macOS app build product was
   produced.
 
+2026-06-22 04:17 CEST blocker resolver refresh:
+
+- Passed: `python3 scripts/local_tooling_recover.py --apply --json` before
+  blocked-task selection removed generated `scripts/__pycache__` and
+  project-scoped DerivedData and found no stale Xcode/build/test processes.
+- Blocked:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+  reached Xcode's early `clang -v -E -dM ... /dev/null` external-tool probe
+  before compiler diagnostics and exited 143 with `** BUILD INTERRUPTED **`.
+- Passed: recovery after the build retry found no remaining stale processes or
+  generated artifacts.
+- Blocked:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  reached Xcode external-tool probing before test discovery or execution and
+  exited 143 with `** BUILD INTERRUPTED **`.
+- Passed: final recovery removed regenerated project-scoped DerivedData and
+  found no stale processes.
+- Runtime QA remains blocked because no fresh macOS app build product was
+  produced.
+
 Durable QA note:
 
 - `docs/qa/macos/vt-158-2026-06-22-menu-bar-runtime-closeout.md`
@@ -200,5 +220,5 @@ Durable QA note:
   --apply --json`; then rerun the VT-158 build, focused unit tests, and menu
   runtime QA if a macOS UI interaction tool is available.
 - The latest resolver run could not finish directly because both required Xcode
-  commands timed out after local recovery, before they could build the app or
-  execute the new menu presentation tests.
+  commands were interrupted after local recovery, before they could build the
+  app or execute the new menu presentation tests.
