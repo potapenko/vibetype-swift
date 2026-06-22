@@ -59,12 +59,13 @@ struct DictationSessionControllerTests {
 
         await controller.performRecordingAction()
 
-        #expect(controller.status == .success(transcript: "  Shared controller transcript \n"))
+        #expect(controller.status == .success(transcript: "Shared controller transcript"))
+        #expect(controller.lastTranscriptText == "Shared controller transcript")
         #expect(controller.status.lastTranscriptText == "Shared controller transcript")
         #expect(controller.outputStatusText == "Transcript output is disabled.")
         #expect(recorder.stopCount == 1)
         #expect(transcriptionService.calls == [TranscriptionCall(audioFileURL: artifact.fileURL, settings: settings)])
-        #expect(transcriptOutput.calls == [TranscriptOutputCall(transcript: "  Shared controller transcript \n", settings: settings)])
+        #expect(transcriptOutput.calls == [TranscriptOutputCall(transcript: "Shared controller transcript", settings: settings)])
     }
 
     @Test func transcribingStateIgnoresRecordingAction() async {
@@ -107,7 +108,6 @@ struct DictationSessionControllerTests {
     }
 
     @Test func transcriptionFailureDoesNotDeliverOutputOrOverwriteSuccess() async {
-        let previousStatus = DictationStatus.success(transcript: "previous transcript")
         let recorder = FakeAudioRecorderService(currentStatus: .recording)
         let transcriptionService = FakeControllerTranscriptionService(result: .failure(.networkUnavailable))
         let transcriptOutput = FakeTranscriptOutput()
@@ -116,13 +116,35 @@ struct DictationSessionControllerTests {
             transcriptionService: transcriptionService,
             transcriptOutput: transcriptOutput,
             initialStatus: .recording,
+            lastTranscriptText: "previous transcript",
             outputStatusText: "Previous output status"
         )
 
         await controller.performRecordingAction()
 
         #expect(controller.status == .failure(message: "The network is unavailable. Try again when you are connected."))
-        #expect(controller.status != previousStatus)
+        #expect(controller.lastTranscriptText == "previous transcript")
+        #expect(controller.outputStatusText == nil)
+        #expect(transcriptionService.calls.count == 1)
+        #expect(transcriptOutput.calls.isEmpty)
+    }
+
+    @Test func emptyTranscriptionKeepsPreviousTranscriptAndSkipsOutput() async {
+        let recorder = FakeAudioRecorderService(currentStatus: .recording)
+        let transcriptionService = FakeControllerTranscriptionService(result: .success("  \n\t  "))
+        let transcriptOutput = FakeTranscriptOutput()
+        let controller = makeController(
+            recorder: recorder,
+            transcriptionService: transcriptionService,
+            transcriptOutput: transcriptOutput,
+            initialStatus: .recording,
+            lastTranscriptText: "previous accepted transcript"
+        )
+
+        await controller.performRecordingAction()
+
+        #expect(controller.status == .failure(message: "No speech text was detected."))
+        #expect(controller.lastTranscriptText == "previous accepted transcript")
         #expect(controller.outputStatusText == nil)
         #expect(transcriptionService.calls.count == 1)
         #expect(transcriptOutput.calls.isEmpty)
@@ -130,7 +152,7 @@ struct DictationSessionControllerTests {
 
     @Test func outputFailureKeepsAcceptedTranscriptRecoverable() async {
         let recorder = FakeAudioRecorderService(currentStatus: .recording)
-        let transcriptionService = FakeControllerTranscriptionService(result: .success("Delivered text"))
+        let transcriptionService = FakeControllerTranscriptionService(result: .success("  Delivered text\n"))
         let transcriptOutput = FakeTranscriptOutput(result: .failure(TextInsertionServiceError.pasteTimedOut))
         let controller = makeController(
             recorder: recorder,
@@ -142,8 +164,9 @@ struct DictationSessionControllerTests {
         await controller.performRecordingAction()
 
         #expect(controller.status == .success(transcript: "Delivered text"))
+        #expect(controller.lastTranscriptText == "Delivered text")
         #expect(controller.outputStatusText == "Paste into the active app timed out.")
-        #expect(transcriptOutput.calls.count == 1)
+        #expect(transcriptOutput.calls == [TranscriptOutputCall(transcript: "Delivered text", settings: .defaults)])
     }
 
     private func makeController(
@@ -152,6 +175,7 @@ struct DictationSessionControllerTests {
         settings: AppSettings = .defaults,
         transcriptOutput: FakeTranscriptOutput,
         initialStatus: DictationStatus = .idle,
+        lastTranscriptText: String? = nil,
         outputStatusText: String? = nil
     ) -> DictationSessionController {
         DictationSessionController(
@@ -160,6 +184,7 @@ struct DictationSessionControllerTests {
             settingsProvider: { settings },
             transcriptOutput: transcriptOutput,
             initialStatus: initialStatus,
+            lastTranscriptText: lastTranscriptText,
             outputStatusText: outputStatusText
         )
     }

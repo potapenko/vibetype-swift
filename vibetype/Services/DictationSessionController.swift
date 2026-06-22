@@ -23,6 +23,7 @@ final class DictationSessionController {
     private var isPerformingAction = false
 
     private(set) var status: DictationStatus
+    private(set) var lastTranscriptText: String?
     private(set) var outputStatusText: String?
 
     init(
@@ -31,6 +32,7 @@ final class DictationSessionController {
         settingsProvider: @escaping () -> AppSettings = { AppSettingsStore().load() },
         transcriptOutput: any TranscriptOutputDelivering = TextInsertionService(),
         initialStatus: DictationStatus = .idle,
+        lastTranscriptText: String? = nil,
         outputStatusText: String? = nil
     ) {
         self.recorder = recorder
@@ -38,6 +40,10 @@ final class DictationSessionController {
         self.settingsProvider = settingsProvider
         self.transcriptOutput = transcriptOutput
         self.status = initialStatus
+        self.lastTranscriptText = lastTranscriptText.flatMap {
+            AcceptedTranscript.nonEmptyNormalizedText(from: $0)
+        }
+            ?? initialStatus.lastTranscriptText
         self.outputStatusText = outputStatusText
     }
 
@@ -78,15 +84,17 @@ final class DictationSessionController {
             let settings = settingsProvider()
             status = .transcribing
 
-            let transcript = try await transcriptionService.transcribe(
+            let rawTranscript = try await transcriptionService.transcribe(
                 audioFileURL: artifact.fileURL,
                 settings: settings
             )
-            status = .success(transcript: transcript)
+            let acceptedTranscript = try Self.acceptedTranscript(from: rawTranscript)
+            lastTranscriptText = acceptedTranscript.text
+            status = .success(transcript: acceptedTranscript.text)
 
             do {
                 outputStatusText = try await transcriptOutput.deliver(
-                    transcript,
+                    acceptedTranscript.text,
                     settings: settings
                 ).statusText
             } catch {
@@ -94,6 +102,14 @@ final class DictationSessionController {
             }
         } catch {
             status = .failure(message: Self.userFacingMessage(for: error))
+        }
+    }
+
+    private static func acceptedTranscript(from rawText: String) throws -> AcceptedTranscript {
+        do {
+            return try AcceptedTranscript(rawText: rawText)
+        } catch AcceptedTranscript.ValidationError.emptyText {
+            throw OpenAITranscriptionServiceError.emptyTranscript
         }
     }
 
