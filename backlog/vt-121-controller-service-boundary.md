@@ -1,7 +1,7 @@
 ---
 id: VT-121
 title: Controller Service Boundary
-status: backlog
+status: in-progress
 priority: P2
 lane: controller
 parent: VT-120
@@ -21,7 +21,7 @@ allowed_paths:
 
 # VT-121 - Controller Service Boundary
 
-Status: backlog
+Status: in-progress
 
 ## Goal
 
