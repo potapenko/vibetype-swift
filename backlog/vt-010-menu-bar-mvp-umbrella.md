@@ -148,6 +148,21 @@ Close out the native menu bar MVP shell after its child tasks are implemented.
   execution. Final recovery found no remaining stale processes or artifacts.
   `VT-158` remains the single follow-up task for this executable closeout
   blocker.
+- 2026-06-22 09:25 CEST: Blocker resolver reran mandatory local tooling
+  recovery before blocked selection, which terminated stale VibeType clang
+  probe, timeout-wrapped `xcodebuild`, child `xcodebuild`, and
+  `SWBBuildService` processes left by a prior focused test attempt, and
+  removed project-scoped DerivedData. The active XcodeBuildMCP surface still
+  exposed no matching macOS build/test action for the selected verification,
+  so the resolver used bounded shell `xcodebuild`. The macOS build retry
+  exited 124 under `/opt/homebrew/bin/timeout 300` after the Xcode command-line
+  invocation and before compiler diagnostics. Recovery after the build retry
+  found no remaining stale processes or artifacts. The focused
+  `vibetypeTests` retry also exited 124 under `/opt/homebrew/bin/timeout 300`
+  after the Xcode command-line invocation and before test discovery or
+  execution. Final recovery found no remaining stale processes or artifacts.
+  `VT-158` remains the single follow-up task for this executable closeout
+  blocker.
 
 ## Resolution Path
 
@@ -163,6 +178,7 @@ Close out the native menu bar MVP shell after its child tasks are implemented.
   and focused unit-test gates until Xcode reaches compiler output and executes
   `vibetypeTests`; perform bounded menu runtime QA if a macOS UI interaction
   tool is available.
-- Latest resolver retry could not mark this umbrella done because the new
-  executable menu coverage still could not be verified through the required
-  Xcode gates after local tooling recovery and bounded build/test retries.
+- Latest resolver retry at 2026-06-22 09:25 CEST could not mark this umbrella
+  done because the new executable menu coverage still could not be verified
+  through the required Xcode gates after local tooling recovery and bounded
+  build/test retries.

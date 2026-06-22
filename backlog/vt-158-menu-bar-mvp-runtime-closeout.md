@@ -297,6 +297,31 @@ Verification evidence:
 - Runtime QA remains blocked because no fresh macOS app build product was
   produced.
 
+2026-06-22 09:25 CEST blocker resolver refresh:
+
+- Passed: `python3 scripts/local_tooling_recover.py --apply --json` before
+  blocked-task selection terminated stale VibeType build/test tooling from a
+  prior focused test attempt: clang probe pid `241`, timeout-wrapped
+  `xcodebuild` pid `97414`, child `xcodebuild` pid `97480`, and
+  `SWBBuildService` pid `99817`. It also removed project-scoped DerivedData.
+- Tooling surface checked: XcodeBuildMCP was available, but the exposed tool
+  set did not provide a matching macOS build/test action for the selected
+  `xcodebuild` verification, so the resolver used bounded shell `xcodebuild`.
+- Blocked:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' build`
+  exited 124 after the Xcode command-line invocation, before compiler
+  diagnostics or a build product.
+- Passed: recovery after the build retry found no remaining stale processes or
+  generated artifacts.
+- Blocked:
+  `/opt/homebrew/bin/timeout 300 xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test -only-testing:vibetypeTests`
+  exited 124 after the Xcode command-line invocation, before test discovery or
+  unit-test execution.
+- Passed: final recovery found no remaining stale processes or generated
+  artifacts.
+- Runtime QA remains blocked because no fresh macOS app build product was
+  produced.
+
 Durable QA note:
 
 - `docs/qa/macos/vt-158-2026-06-22-menu-bar-runtime-closeout.md`
@@ -313,6 +338,6 @@ Durable QA note:
   and focused `vibetypeTests` execution after `scripts/local_tooling_recover.py
   --apply --json`; then rerun the VT-158 build, focused unit tests, and menu
   runtime QA if a macOS UI interaction tool is available.
-- The latest resolver run could not finish directly because both required Xcode
-  commands were interrupted after local recovery, before they could build the
-  app or execute the new menu presentation tests.
+- The latest resolver run at 2026-06-22 09:25 CEST could not finish directly
+  because both required Xcode commands timed out after local recovery, before
+  they could build the app or execute the new menu presentation tests.
