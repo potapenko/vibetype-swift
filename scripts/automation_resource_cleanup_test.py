@@ -3,14 +3,19 @@
 
 from __future__ import annotations
 
+import io
+import sys
 import unittest
+from unittest.mock import patch
 
 from automation_resource_cleanup import (
+    KILLALL_PROCESS_NAMES,
+    main,
     match_process_kind,
     parse_elapsed_seconds,
     parse_ps_output,
+    run_killall,
     select_candidates,
-    terminate_candidates,
 )
 
 
@@ -55,24 +60,18 @@ me 103 1 103 00:04 2048 0.0 node ./normal-dev-server.js
         )
         self.assertEqual([candidate.pid for candidate in candidates], [100])
 
-    def test_other_owner_apply_requires_operator(self) -> None:
-        rows = """
-codex3 200 1 200 00:04 2048 0.0 npm exec @playwright/mcp@latest
-"""
-        candidates = select_candidates(
-            parse_ps_output(rows),
-            owners={"codex3"},
-            min_age_seconds=1,
-            protected=set(),
-        )
-        result = terminate_candidates(
-            candidates,
-            apply=True,
-            grace_seconds=0,
-            current_user="me",
-        )
-        self.assertEqual(len(result["permission_required"]), 1)
-        self.assertEqual(result["permission_required"][0]["owner"], "codex3")
+    def test_killall_dry_run_records_current_target_names(self) -> None:
+        result = run_killall(owner="me", apply=False, grace_seconds=0)
+        self.assertEqual(result["process_names"], list(KILLALL_PROCESS_NAMES))
+        self.assertEqual(result["signals"], [])
+        self.assertEqual(result["errors"], [])
+
+    def test_cli_rejects_arguments(self) -> None:
+        with (
+            patch.object(sys, "argv", ["automation_resource_cleanup.py", "--apply"]),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            self.assertEqual(main(), 2)
 
 
 if __name__ == "__main__":

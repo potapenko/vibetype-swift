@@ -23,18 +23,23 @@ Inventory status: inspected
 | `vibetype-swift-blocker-resolver` | VibeType Swift Blocker Resolver | paused | `FREQ=HOURLY;INTERVAL=1` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md` |
 | `vibetype-swift-implementer` | VibeType Swift Implementer | paused | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-implementer.md` |
 | `vibetype-swift-tooling-unblocker` | VibeType Swift Tooling Unblocker | paused | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md` |
-| `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | paused | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
+| `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | active | `FREQ=HOURLY;INTERVAL=3` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
 
 Installed automation count for this repository: 6.
-Active count for this repository: 0.
-Paused count for this repository: 6.
+Active count for this repository: 1.
+Paused count for this repository: 5.
 
-Global cleanup gate: every installed automation prompt and runbook must call
-`python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json`
-at the start, call
-`python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json`
-before the final response, report residual processes and permission-required
-operator commands when cleanup cannot terminate something safely, and request
+Current-user MCP cleanup gate: only two installed automations may call
+`python3 scripts/automation_resource_cleanup.py`:
+`vibetype-swift-implementer`, once at the end of an implementation run, and
+`vibetype-swift-archive-completed-automation-threads`, once at the end of each
+3-hour housekeeping run. The script takes no parameters, ignores processes
+owned by other OS users, and runs current-user killall cleanup for the
+allowlisted Codex helper/MCP process names.
+
+All other installed automations must not call
+`python3 scripts/automation_resource_cleanup.py`. They may only terminate or
+close resources clearly started by their own run and should still request
 current-thread archive when thread management is available.
 
 ## Installed Automations
@@ -53,8 +58,8 @@ current-thread archive when thread management is available.
   `python3 scripts/backlog_archive_done.py --apply --json`
 - Expected output: one bounded completed-backlog archive pass, selector
   readback, `git diff --check`, scoped checkpoint commit when files move,
-  hard cleanup report, and current-thread archive status when thread
-  management is available
+  run-owned cleanup report without the broad MCP cleanup script, and
+  current-thread archive status when thread management is available
 - Safety contract: move only clean verified `done` task files from top-level
   `backlog/` to `backlog/done/`; do not claim tasks, implement product code,
   resolve blockers, groom tasks, or run destructive database/storage operations
@@ -77,8 +82,9 @@ current-thread archive when thread management is available.
   status, verification, and scoped checkpoint commit when files change
 - Tooling contract: read `docs/agent-tooling.md` before creating platform or
   shared SwiftUI tasks that name XcodeBuildMCP, `xcodebuild`, Computer Use, or
-  fallback evidence; perform hard run-owned cleanup and request current-thread
-  archive before the final report when thread management is available
+  fallback evidence; perform run-owned cleanup, do not call the broad MCP
+  cleanup script, and request current-thread archive before the final report
+  when thread management is available
 - Safety/browser evidence contract: no browser requirement; do not implement
   Swift product code; dirty Git state is not a blocker and must be preserved
   with path-limited commits; no DB or destructive storage operations
@@ -99,8 +105,9 @@ current-thread archive when thread management is available.
   `python3 scripts/backlog_blocked_next.py --json`
 - Expected output: one selected blocked task either directly resolved,
   connected to one concrete follow-up task, or recorded with an exact
-  operator-only unblock action; hard cleanup report and current-thread archive
-  requested before the final report when thread management is available
+  operator-only unblock action; run-owned cleanup report without the broad MCP
+  cleanup script and current-thread archive requested before the final report
+  when thread management is available
 - Tooling contract: read `docs/agent-tooling.md` when a blocker involves
   Xcode, simulator, MCP, runtime QA, or tool-selection decisions
 - Safety/runtime evidence contract: dirty Git state is not a blocker and must
@@ -123,7 +130,8 @@ current-thread archive when thread management is available.
   `python3 scripts/backlog_next.py --json`
 - Expected output: one selected backlog iteration with claim/completion
   checkpoint commits, verification, platform smoke evidence when required, and
-  hard cleanup report, including current-thread archive status when thread
+  mandatory final `python3 scripts/automation_resource_cleanup.py` current-user
+  MCP cleanup report, including current-thread archive status when thread
   management is available
 - Tooling contract: read `docs/agent-tooling.md` when Xcode, simulator, MCP,
   runtime QA, or tool-selection decisions are involved
@@ -147,8 +155,9 @@ current-thread archive when thread management is available.
 - Recovery script:
   `python3 scripts/local_tooling_recover.py --apply --json`
 - Expected output: one bounded local tooling recovery pass, bounded macOS
-  unit-test health check, selector readback, hard cleanup report, and
-  current-thread archive status when thread management is available
+  unit-test health check, selector readback, run-owned cleanup report without
+  the broad MCP cleanup script, and current-thread archive status when thread
+  management is available
 - Safety/runtime evidence contract: fix local Xcode/build/test/simulator,
   cache, DerivedData, missing local utility, and missing local library blockers
   automatically; do not perform destructive database/storage operations,
@@ -159,8 +168,8 @@ current-thread archive when thread management is available.
 
 ### `vibetype-swift-archive-completed-automation-threads`
 
-- Installed status: `PAUSED`
-- Schedule: `FREQ=MINUTELY;INTERVAL=15`
+- Installed status: `ACTIVE`
+- Schedule: `FREQ=HOURLY;INTERVAL=3`
 - Model / reasoning effort: `gpt-5.4-mini` / `low`
 - Execution environment: `local`
 - Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
@@ -169,20 +178,22 @@ current-thread archive when thread management is available.
   `docs/automation-prompts/runbooks/archive-completed-automation-threads.md`
 - Expected output: one current-repository-only archive-housekeeping pass that
   readback-verifies eligible automation-run threads, sweeps until the remaining
-  eligible tail is at most two, and reports hard cleanup before archiving the
-  current housekeeping thread
+  eligible tail is at most two, runs final
+  `python3 scripts/automation_resource_cleanup.py` current-user MCP cleanup,
+  and archives the current housekeeping thread
 - Safety/thread contract: use thread-management tools as source of truth;
   inspect only automation threads for this exact cwd; do not inspect, count, or
   archive other-repository, active, pending, manual, or ambiguous threads;
   request current housekeeping thread archive before the final report when the
   thread-management tool is available
-- Current decision: paused until the cleanup mechanism is verified and the
-  operator explicitly resumes this automation
+- Current decision: active as the only scheduled non-implementer cleanup
+  automation, running every three hours
 
 ## Missing Or Paused Roles
 
-All installed automations for this repository are paused during this inventory
-pass. No installed automation role is missing.
+Five installed work automations for this repository are paused during this
+inventory pass. The archive-housekeeping cleanup automation is active. No
+installed automation role is missing.
 
 ## Verification
 

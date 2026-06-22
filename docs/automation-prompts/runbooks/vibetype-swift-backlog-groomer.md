@@ -13,26 +13,6 @@ This runbook is the versioned runtime contract for the current user's
 Configured automation cwd:
 `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
 
-## Resource Cleanup Gate
-
-At the start of the run, before selector work, reference inspection, or
-MCP-heavy tool use, run from the repository root:
-
-```sh
-python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json
-```
-
-At the end of the run, after verification/checkpoint handling and immediately
-before the final response, run:
-
-```sh
-python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json
-```
-
-Include both cleanup JSON summaries in the final report. If the script reports
-`permission_required`, `operator_commands`, or remaining processes, report the
-owner, pid, command, and reason instead of claiming cleanup succeeded.
-
 ## Runtime Contract
 
 Run one bounded backlog grooming pass for the VibeType Swift repository.
@@ -97,8 +77,9 @@ Do not modify sibling repositories. Do not access MongoDB directly. Do not run
 destructive database or object-storage operations.
 
 Apply run hygiene: keep MCP inspection task-specific, do not manually kill
-broad MCP process names unless the process is clearly run-owned, and follow the
-hard final resource cleanup and MCP/thread lifecycle guidance in
+broad MCP process names, do not call
+`python3 scripts/automation_resource_cleanup.py`, and follow the hard final
+resource cleanup and MCP/thread lifecycle guidance in
 `docs/agent-tooling.md` by terminating or closing every resource the run
 started, reporting any residual resource that cannot be terminated, and
 requesting archive of the current automation thread before the final response

@@ -8,7 +8,9 @@ status: active
 # Archive Completed Automation Threads
 
 This runbook is the runtime contract for the installed VibeType Swift
-archive-housekeeping Codex automation.
+archive-housekeeping Codex automation. It is also the only scheduled
+non-implementer automation that may run the broad current-user MCP cleanup
+script.
 
 Configured automation cwd:
 
@@ -22,25 +24,25 @@ Codex home:
 /Users/eugenepotapenko/.codex
 ```
 
+Expected schedule:
+
+```text
+FREQ=HOURLY;INTERVAL=3
+```
+
 ## Resource Cleanup Gate
 
-At the start of the run, before thread-tool discovery or MCP-heavy work, run
-from the repository root:
-
-```sh
-python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json
-```
-
 At the end of the run, after verification/report preparation and immediately
-before the final response, run:
+before the final response, run from the repository root:
 
 ```sh
-python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json
+python3 scripts/automation_resource_cleanup.py
 ```
 
-Include both cleanup JSON summaries in the final report. If the script reports
-`permission_required`, `operator_commands`, or remaining processes, report the
-owner, pid, command, and reason instead of claiming cleanup succeeded.
+Include the cleanup JSON summary in the final report. If the script reports
+remaining current-user processes, report the owner, pid, command, and reason
+instead of claiming cleanup succeeded. Do not inspect or clean processes owned
+by other OS users. Do not pass parameters to the script.
 
 ## Goal
 

@@ -19,20 +19,21 @@ Runtime runbooks:
 - `runbooks/vibetype-swift-backlog-groomer.md`
 - `runbooks/vibetype-swift-blocker-resolver.md`
 - `runbooks/vibetype-swift-implementer.md`
+- `runbooks/vibetype-swift-tooling-unblocker.md`
 
 Shared tooling guidance:
 
 - `../agent-tooling.md`
 
-Every scheduled automation runbook must follow the hard final resource cleanup
-and MCP/thread lifecycle rules in `../agent-tooling.md`: run
-`python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json`
-at the start, run
-`python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json`
-before the final response, keep MCP use task-specific, terminate or close every
-resource clearly started by the current run, report any residual resource that
-cannot be terminated, and request archive of the current automation thread
-before the final response when the thread-management tool is available.
+Only the implementer and archive-housekeeping automations may run
+`python3 scripts/automation_resource_cleanup.py`. Information-gathering,
+backlog-grooming, blocker-resolution, tooling-unblocker, and backlog-archiver
+automations must not call that script because broad current-user `killall`
+cleanup can conflict with other concurrent work. Every automation should still
+keep MCP use task-specific, terminate or close resources clearly started by the
+current run, report residual run-owned resources, and request archive of the
+current automation thread before the final response when the thread-management
+tool is available.
 
 Per-user inventories:
 

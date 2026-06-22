@@ -13,26 +13,6 @@ This runbook is the versioned runtime contract for the current user's
 Configured automation cwd:
 `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
 
-## Resource Cleanup Gate
-
-At the start of the run, before blocked selector work or MCP-heavy tool use,
-run from the repository root:
-
-```sh
-python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json
-```
-
-At the end of the run, after verification/checkpoint handling and immediately
-before the final response, run:
-
-```sh
-python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json
-```
-
-Include both cleanup JSON summaries in the final report. If the script reports
-`permission_required`, `operator_commands`, or remaining processes, report the
-owner, pid, command, and reason instead of claiming cleanup succeeded.
-
 ## Runtime Contract
 
 Run one bounded blocked-task resolution pass.
@@ -115,10 +95,11 @@ current-run temporary screenshots, audits, profiles, downloads, bytecode, and
 build artifacts before staging; keep only durable reports or explicit evidence.
 Follow the hard final resource cleanup and MCP/thread lifecycle guidance in
 `docs/agent-tooling.md`: keep MCP inspection task-specific, do not manually
-kill broad MCP process names unless the process is clearly run-owned, terminate
-or close every resource the run started, report any residual resource that
-cannot be terminated, and request archive of the current automation thread
-before the final response when the thread-management tool is available. For
+kill broad MCP process names, do not call
+`python3 scripts/automation_resource_cleanup.py`, terminate or close every
+resource the run started, report any residual resource that cannot be
+terminated, and request archive of the current automation thread before the
+final response when the thread-management tool is available. For
 local build/test tooling, use the repo recovery helper and local
 installation/configuration commands when needed; do not downgrade local tooling
 repair to a user/operator action.

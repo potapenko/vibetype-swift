@@ -4,12 +4,11 @@
 This script is deliberately narrow. It targets Codex helper/MCP processes that
 scheduled automation runs commonly leave behind. It does not target arbitrary
 Node.js processes, the main Codex app, product apps, databases, storage tools,
-or repository files.
+repository files, or processes owned by other OS users.
 """
 
 from __future__ import annotations
 
-import argparse
 import getpass
 import json
 import os
@@ -19,13 +18,17 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass
-from pathlib import Path
 from typing import Any
 
 
-DEFAULT_MIN_AGE_SECONDS = 60
 DEFAULT_GRACE_SECONDS = 2
 DEFAULT_PS_TIMEOUT_SECONDS = 30
+KILLALL_PROCESS_NAMES: tuple[str, ...] = (
+    "SkyComputerUseClient",
+    "mcp-server-darwin-arm64",
+    "node",
+    "node_repl",
+)
 
 PROCESS_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
@@ -221,44 +224,22 @@ def process_exists(pid: int) -> bool:
     return True
 
 
-def owners_requiring_operator(owners: set[str], current_user: str) -> set[str]:
-    if os.geteuid() == 0:
-        return set()
-    return {owner for owner in owners if owner != current_user}
-
-
-def operator_command(owner: str, min_age_seconds: int, script_path: Path) -> str:
-    return (
-        f"sudo -u {owner} python3 {script_path} --apply --owner {owner} "
-        f"--min-age-seconds {min_age_seconds} --json"
-    )
-
-
 def terminate_candidates(
     candidates: list[CleanupCandidate],
     *,
     apply: bool,
     grace_seconds: int,
-    current_user: str,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "matched": [asdict(candidate) for candidate in candidates],
         "terminated": [],
         "errors": [],
         "remaining": [],
-        "permission_required": [],
     }
     if not apply:
         return result
 
-    blocked_owners = owners_requiring_operator(
-        {candidate.owner for candidate in candidates},
-        current_user,
-    )
     for candidate in candidates:
-        if candidate.owner in blocked_owners:
-            result["permission_required"].append(asdict(candidate))
-            continue
         try:
             os.kill(candidate.pid, signal.SIGTERM)
             result["terminated"].append({"pid": candidate.pid, "signal": "TERM"})
@@ -270,13 +251,12 @@ def terminate_candidates(
             result["errors"].append({"pid": candidate.pid, "error": str(exc)})
 
     deadline = time.monotonic() + max(0, grace_seconds)
-    killable = [candidate for candidate in candidates if candidate.owner not in blocked_owners]
     while time.monotonic() < deadline:
-        if not any(process_exists(candidate.pid) for candidate in killable):
+        if not any(process_exists(candidate.pid) for candidate in candidates):
             break
         time.sleep(0.2)
 
-    for candidate in killable:
+    for candidate in candidates:
         if not process_exists(candidate.pid):
             continue
         try:
@@ -295,105 +275,101 @@ def terminate_candidates(
     return result
 
 
-def cleanup(
+def run_killall(
     *,
-    owners: set[str],
+    owner: str,
     apply: bool,
-    min_age_seconds: int,
     grace_seconds: int,
-    script_path: Path,
+    process_names: tuple[str, ...] = KILLALL_PROCESS_NAMES,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "owner": owner,
+        "process_names": list(process_names),
+        "signals": [],
+        "errors": [],
+    }
+    if not apply:
+        return result
+
+    for signal_name in ("TERM", "KILL"):
+        if signal_name == "KILL" and grace_seconds > 0:
+            time.sleep(grace_seconds)
+        for process_name in process_names:
+            completed = subprocess.run(
+                ["killall", "-u", owner, f"-{signal_name}", process_name],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=DEFAULT_PS_TIMEOUT_SECONDS,
+            )
+            entry = {
+                "process_name": process_name,
+                "signal": signal_name,
+                "returncode": completed.returncode,
+            }
+            stderr = completed.stderr.strip()
+            if stderr and "No matching processes belonging to you were found" not in stderr:
+                entry["stderr"] = stderr
+                result["errors"].append(entry)
+            else:
+                result["signals"].append(entry)
+    return result
+
+
+def cleanup(
 ) -> dict[str, Any]:
     current_user = getpass.getuser()
+    killall_result = run_killall(
+        owner=current_user,
+        apply=True,
+        grace_seconds=DEFAULT_GRACE_SECONDS,
+    )
     processes = read_processes()
     candidates = select_candidates(
         processes,
-        owners=owners,
-        min_age_seconds=min_age_seconds,
+        owners={current_user},
+        min_age_seconds=0,
     )
     process_result = terminate_candidates(
         candidates,
-        apply=apply,
-        grace_seconds=grace_seconds,
-        current_user=current_user,
-    )
-    permission_owners = sorted(
-        {candidate["owner"] for candidate in process_result["permission_required"]}
+        apply=True,
+        grace_seconds=DEFAULT_GRACE_SECONDS,
     )
     return {
-        "mode": "apply" if apply else "dry_run",
+        "mode": "apply",
         "current_user": current_user,
-        "owners": sorted(owners),
-        "min_age_seconds": min_age_seconds,
-        "grace_seconds": grace_seconds,
+        "owners": [current_user],
+        "min_age_seconds": 0,
+        "grace_seconds": DEFAULT_GRACE_SECONDS,
+        "killall": killall_result,
         "processes": process_result,
-        "operator_commands": [
-            operator_command(owner, min_age_seconds, script_path)
-            for owner in permission_owners
-        ],
         "ok": not process_result["errors"]
-        and (not apply or (not process_result["remaining"] and not permission_owners)),
+        and not killall_result["errors"]
+        and not process_result["remaining"],
     }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Clean stale Codex automation helpers.")
-    parser.add_argument(
-        "--apply",
-        action="store_true",
-        help="terminate matched allowlisted helper processes",
-    )
-    parser.add_argument(
-        "--owner",
-        action="append",
-        help="process owner to inspect; defaults to the current user",
-    )
-    parser.add_argument(
-        "--min-age-seconds",
-        type=int,
-        default=DEFAULT_MIN_AGE_SECONDS,
-        help="minimum process age before it may be terminated",
-    )
-    parser.add_argument(
-        "--grace-seconds",
-        type=int,
-        default=DEFAULT_GRACE_SECONDS,
-        help="seconds to wait after TERM before KILL",
-    )
-    parser.add_argument("--json", action="store_true", help="print JSON report")
-    args = parser.parse_args()
-
-    owners = set(args.owner or [getpass.getuser()])
-    script_path = Path(__file__).resolve()
-    try:
-        result = cleanup(
-            owners=owners,
-            apply=args.apply,
-            min_age_seconds=args.min_age_seconds,
-            grace_seconds=args.grace_seconds,
-            script_path=script_path,
+    if len(sys.argv) != 1:
+        print(
+            "automation_resource_cleanup.py takes no arguments; run it directly.",
+            file=sys.stderr,
         )
+        return 2
+
+    try:
+        result = cleanup()
     except Exception as exc:  # pragma: no cover - defensive CLI boundary
         result = {
-            "mode": "apply" if args.apply else "dry_run",
-            "owners": sorted(owners),
+            "mode": "apply",
+            "owners": [getpass.getuser()],
             "ok": False,
             "error": str(exc),
         }
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
-        else:
-            print(f"automation resource cleanup failed: {exc}", file=sys.stderr)
+        print(json.dumps(result, indent=2, sort_keys=True))
         return 1
 
-    if args.json:
-        print(json.dumps(result, indent=2, sort_keys=True))
-    else:
-        matched = len(result["processes"]["matched"])
-        remaining = len(result["processes"]["remaining"])
-        print(
-            "automation resource cleanup "
-            f"{result['mode']}: {matched} matched, {remaining} remaining"
-        )
+    print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["ok"] else 1
 
 

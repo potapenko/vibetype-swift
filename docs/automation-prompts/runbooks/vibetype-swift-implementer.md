@@ -15,23 +15,17 @@ Configured automation cwd:
 
 ## Resource Cleanup Gate
 
-At the start of the run, before selector work, task claiming, or MCP-heavy tool
-use, run from the repository root:
-
-```sh
-python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json
-```
-
 At the end of the run, after verification/checkpoint handling and immediately
-before the final response, run:
+before the final response, run from the repository root:
 
 ```sh
-python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json
+python3 scripts/automation_resource_cleanup.py
 ```
 
-Include both cleanup JSON summaries in the final report. If the script reports
-`permission_required`, `operator_commands`, or remaining processes, report the
-owner, pid, command, and reason instead of claiming cleanup succeeded.
+Include the cleanup JSON summary in the final report. If the script reports
+remaining current-user processes, report the owner, pid, command, and reason
+instead of claiming cleanup succeeded. Do not inspect or clean processes owned
+by other OS users. Do not pass parameters to the script.
 
 ## Runtime Contract
 
@@ -192,11 +186,11 @@ and dev servers before and after checks when ownership is clear; clean
 current-run temporary screenshots, audits, profiles, and build artifacts before
 staging; keep only durable reports or explicit evidence. Follow the hard final
 resource cleanup and MCP/thread lifecycle guidance in `docs/agent-tooling.md`:
-keep MCP inspection task-specific, do not manually kill broad MCP process names
-unless the process is clearly run-owned, terminate or close every resource the
-run started, report any residual resource that cannot be terminated, and
-request archive of the current automation thread before the final response when
-the thread-management tool is available. Stale local Xcode/build/test/simulator
+keep MCP inspection task-specific, terminate or close every resource the run
+started, run the mandatory final no-argument cleanup script above, report any
+residual resource that cannot be terminated, and request archive of the current
+automation thread before the final response when the thread-management tool is
+available. Stale local Xcode/build/test/simulator
 tooling, generated caches, missing local CLI utilities, and project-scoped
 DerivedData are automation problems, not user chores; fix them in the run by
 using `scripts/local_tooling_recover.py`, local package managers, Xcode command

@@ -38,13 +38,11 @@ Keep MCP use narrow:
   baseline when they satisfy the selected task's verification.
 - Use Computer Use only for changed visible macOS runtime behavior.
 - Do not manually kill broad MCP process names from an automation run. Use the
-  repository cleanup scripts instead:
-  - `python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json`
-    for allowlisted stale Codex helper/MCP processes owned by the current
-    automation user;
-  - `python3 scripts/local_tooling_recover.py --apply --json` for allowlisted
-    stale `xcodebuild`, `xctest`, `SWBBuildService`, compiler-probe, and
-    project-scoped DerivedData recovery.
+  repository cleanup script only from the implementer final gate or the
+  scheduled archive-housekeeping cleanup run.
+- Use `python3 scripts/local_tooling_recover.py --apply --json` for
+  allowlisted stale `xcodebuild`, `xctest`, `SWBBuildService`,
+  compiler-probe, and project-scoped DerivedData recovery.
 
 At the end of every scheduled automation run, after verification and checkpoint
 handling are complete and before the final response, request archive of the
@@ -54,11 +52,10 @@ no `threadId` when the thread-management tool is available. Report
 `Thread archive: unavailable` and keep the rest of the cleanup bounded to
 artifacts clearly owned by the current run.
 
-## Hard Final Resource Cleanup And Archive Gate
+## Run-Owned Resource Cleanup And Archive Gate
 
-Every scheduled automation run must treat resource cleanup as a required final
-gate, not a best-effort note. Before the final response, the run must release
-everything it started or opened during that run:
+Every scheduled automation run must release resources it clearly started or
+opened during that run:
 
 - terminate run-owned app launches, dev servers, preview servers, browser
   sessions, Playwright/Chrome sessions, simulator sessions, Xcode/build/test
@@ -69,42 +66,41 @@ everything it started or opened during that run:
   logs, and generated caches that are not durable evidence;
 - preserve repository sources, committed evidence, durable reports, user-owned
   browser sessions, unrelated application state, databases, and object storage;
-- never kill broad process-name matches unless the process is clearly owned by
-  the current run, current process tree, selected task, or repository recovery
-  helper.
+- never kill broad process-name matches unless the run is the implementer final
+  gate or the archive-housekeeping cleanup run described below.
 
-Every scheduled automation run must also run the repository helper cleanup
-script twice from the repository root:
+## Current-User MCP Killall Script
 
-```sh
-python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json
-```
+Only these automations may run the broad current-user MCP cleanup script:
 
-Run it once at the start of the run, before opening MCP-heavy tools, to clear
-stale helpers from previous runs owned by the same automation user. Run it
-again immediately before the final response with:
+- `vibetype-swift-implementer`, once at the end of an implementation run;
+- `vibetype-swift-archive-completed-automation-threads`, on its 3-hour
+  housekeeping schedule.
+
+The script takes no parameters. Run it from the repository root exactly as:
 
 ```sh
-python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json
+python3 scripts/automation_resource_cleanup.py
 ```
 
-The script is an allowlist reaper for Codex helper and MCP processes such as
-Computer Use, Playwright MCP, XcodeBuildMCP, Pencil MCP, Codex `node_repl`, and
-Codex browser MCP. It must not be replaced with ad hoc `pkill node`,
-`pkill mcp`, or broad process-name cleanup.
+The script runs `killall -u <current-user>` for `SkyComputerUseClient`,
+`mcp-server-darwin-arm64`, `node`, and `node_repl`, then terminates any
+remaining allowlisted current-user Codex helper/MCP parent processes such as
+`npm exec xcodebuildmcp@latest mcp`, `npm exec @playwright/mcp@latest`,
+XcodeBuildMCP, Playwright MCP, Pencil MCP, Codex `node_repl`, and Codex browser
+MCP.
 
-If the cleanup script reports `permission_required` or emits
-`operator_commands` for another user such as `codex2` or `codex3`, do not
-pretend cleanup succeeded. Include the residual owner, pid, command, and exact
-operator command in the final report.
+The cleanup script is intentionally scoped to the current OS user only. Do not
+pass another owner, do not prepare `sudo -u` cleanup commands for other users,
+and do not treat processes owned by other users as part of this repository's
+automation cleanup. If other-user processes are visible in `ps`, leave them out
+of the cleanup result.
 
-If a process or session cannot be terminated because ownership is ambiguous,
-the OS denies permission, or the tool surface has no scoped close action, the
-run must report the residual resource with the best available `pid`, owner,
-command, cwd or tool name, and reason it was left running. This is still a
-cleanup result; silently leaving resources behind is not allowed.
+Information-gathering, backlog-grooming, blocker-resolution, tooling-unblocker,
+and backlog-archiver automations must not call this script. They should report
+only resources they clearly started themselves.
 
-After cleanup, the run must request archive of the current automation thread
+At the end of scheduled automation runs, request archive of the current thread
 with `set_thread_archived` using `archived: true` and no `threadId` when that
 tool is available. The final response must include both:
 

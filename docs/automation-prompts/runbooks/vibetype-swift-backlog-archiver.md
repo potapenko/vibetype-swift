@@ -13,26 +13,6 @@ This runbook is the versioned runtime contract for the current user's
 Configured automation cwd:
 `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
 
-## Resource Cleanup Gate
-
-At the start of the run, before archive work or MCP-heavy tool use, run from
-the repository root:
-
-```sh
-python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 60 --json
-```
-
-At the end of the run, after verification/checkpoint handling and immediately
-before the final response, run:
-
-```sh
-python3 scripts/automation_resource_cleanup.py --apply --min-age-seconds 0 --json
-```
-
-Include both cleanup JSON summaries in the final report. If the script reports
-`permission_required`, `operator_commands`, or remaining processes, report the
-owner, pid, command, and reason instead of claiming cleanup succeeded.
-
 ## Runtime Contract
 
 Run one bounded completed-backlog archival pass for VibeType Swift.
@@ -76,7 +56,8 @@ MCP/thread lifecycle guidance in `docs/agent-tooling.md`: terminate or close
 every resource the run started, clean only non-durable run-owned temporary
 artifacts, report any residual resource that cannot be terminated, and request
 archive of the current automation thread when the thread-management tool is
-available.
+available. This automation must not call
+`python3 scripts/automation_resource_cleanup.py`.
 
 ## Apply Rule
 
