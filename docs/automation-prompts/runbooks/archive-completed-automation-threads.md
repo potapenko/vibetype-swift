@@ -78,28 +78,34 @@ older pages can surface in the same run. Stop only when the next fresh visible
 page contains two or fewer readback-eligible threads, or when a real tool,
 readback, active-work, or safety blocker prevents further progress.
 
-## Required Tools
+## Thread Tools And Registry Fallback
 
-Use thread-management tools, not filesystem or database state, as the source of
-truth for thread state:
+Use thread-management tools as the first source of truth for thread state when
+they are available:
 
 - `list_threads`
 - `read_thread`
 - `set_thread_archived`
 
-Do not inspect Codex SQLite state files or use filesystem helpers that infer
-thread state from `state_5.sqlite` or similar files. The live sidebar can use a
-different state database than a filesystem helper selects, so `list_threads`
-readback is the only valid cleanup source of truth. If any helper output
-conflicts with `list_threads`, ignore the helper output and continue from the
-thread-management tools.
+Cron automation sessions may not expose these thread tools. When they are not
+available, use only the repository helper below as the fallback source of
+truth. Do not write ad hoc SQLite queries or use a helper that scans only one
+`state_5.sqlite` location. The fallback helper must scan every supported local
+Codex state DB it knows about, currently both
+`/Users/eugenepotapenko/.codex/sqlite/state_5.sqlite` and
+`/Users/eugenepotapenko/.codex/state_5.sqlite`, because the live sidebar may be
+backed by either location during Codex app migrations.
+
+Thread-management calls must be sequential. Do not call `list_threads`,
+`read_thread`, or `set_thread_archived` through parallel tool wrappers, and do
+not run them in parallel with shell/file reads. Wait for each thread-management
+call to return before issuing the next thread-management call. If a
+thread-management call appears to hang, continue only through the readback gates
+below; do not start duplicate archive calls for the same candidate.
 
 If these tools are not already visible in the active tool list, use tool
-discovery first. If discovery cannot expose all three tools, stop and report:
-
-```text
-blocker=thread_tools_unavailable
-```
+discovery first. If discovery cannot expose all three tools, run the local
+registry fallback sweep instead of reporting success or guessing.
 
 Do not treat an empty initial discovery result as success. Try exact searches
 by installed automation id and name before declaring that no candidates exist.
@@ -160,7 +166,16 @@ A thread is archive-eligible only when every condition below is true:
     no user message after the root automation prompt, and there is no unresolved
     user question. This case is eligible without waiting 30 minutes because the
     run has already declared its work complete and is stuck only on archiving
-    itself;
+    itself; or
+  - housekeeping thread-tool hanging `inProgress`: the thread is this
+    housekeeping automation id for this exact cwd, readback shows no running or
+    pending tool call, no user message after the root automation prompt, no
+    unresolved user question, no repository files attributable to that
+    housekeeping run, and the latest visible progress has been waiting on
+    thread-tool discovery, `list_threads`, `read_thread`, or
+    `set_thread_archived` for at least 2 minutes. This shorter gate applies only
+    to this archive-housekeeping automation because its sole job is thread
+    cleanup and a hung thread-tool step otherwise leaves cleanup residue;
 - the thread is not pinned;
 - the thread has no normal back-and-forth manual user conversation;
 - the thread has no unresolved user question or blocker expecting user input;
@@ -180,11 +195,12 @@ If a candidate is ambiguous, unreadable, or lacks positive automation
 provenance for the current repository, skip it as `manual_or_unclear`.
 
 If a candidate is active, running, pending, or otherwise not terminal and does
-not pass the stale hanging or self-archive hanging `inProgress` eligibility
-gates above, skip it as `active_or_pending` and keep sweeping other candidates.
-Active or pending current-repository automation threads that are still live
-work are not archive-eligible, but their presence must not block archiving
-separate readback-verified completed, stale hanging, or self-archive hanging
+not pass the stale hanging, self-archive hanging, or housekeeping thread-tool
+hanging `inProgress` eligibility gates above, skip it as `active_or_pending`
+and keep sweeping other candidates. Active or pending current-repository
+automation threads that are still live work are not archive-eligible, but their
+presence must not block archiving separate readback-verified completed, stale
+hanging, self-archive hanging, or housekeeping thread-tool hanging
 automation-run threads in the same visible page.
 
 If archive or readback reports `No Codex thread found` for a visible candidate
@@ -232,6 +248,12 @@ invocation.
     automation invocation so older pages can surface. Do not wait for the next
     scheduled run.
 
+An archive batch means the complete eligible list for that pass, not a single
+thread id. Collect the eligible ids first, then call `set_thread_archived`
+sequentially for every eligible id in the batch. Do not report success after
+archiving only one candidate while other eligible candidates from the same
+visible or supplemental batch remain.
+
 Do not stop just because a single list call returned one page, no page, no new
 ids, or exactly the default-size result set. Re-run the unfiltered
 `list_threads` visible-page pass after each archive batch because archiving one
@@ -241,6 +263,39 @@ page; it is not permission to skip the first eligible page, archive one large
 page and leave additional large eligible pages for a future scheduled
 invocation, or finish a run without archiving currently visible eligible
 threads.
+
+## Local Registry Fallback Sweep
+
+If thread-management tools are unavailable in the cron session, or after a
+thread-tool sweep needs full-registry verification, run the local registry
+helper from the repository root. This helper scans all supported local Codex
+state DBs for the exact configured cwd and installed current-repository
+automation ids/names, so it is not limited to the currently visible
+`list_threads` page.
+
+Dry-run command:
+
+```sh
+python3 scripts/archive_codex_threads.py --target-cwd /Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift --json
+```
+
+If the dry-run reports `remaining_eligible_count > 0`, run apply:
+
+```sh
+python3 scripts/archive_codex_threads.py --target-cwd /Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift --apply --json
+```
+
+The helper must create a SQLite backup before applying archive updates, update
+only rows whose `cwd` is this configured repository and whose automation
+provenance matches the installed current-repository subset, and move archived
+rollout files from `/Users/eugenepotapenko/.codex/sessions` to
+`/Users/eugenepotapenko/.codex/archived_sessions`.
+
+The helper archives the whole eligible registry batch in one apply pass. If the
+dry-run or apply report lists `eligible_count = N`, the apply pass must attempt
+all N eligible rows, not just the first row. Keep looping dry-run/apply in the
+same automation invocation until `remaining_eligible_count = 0`, or until an
+apply pass archives zero rows while eligible rows remain.
 
 ## Tail Exit Rule
 
@@ -267,6 +322,12 @@ invocation and the next fresh visible page satisfies:
 
 ```text
 visible_page_eligible_count <= 2
+```
+
+and the local registry fallback report satisfies:
+
+```text
+remaining_eligible_count = 0
 ```
 
 The two-thread allowance is permission to leave a small residual visible page
@@ -311,6 +372,10 @@ Report a compact operator summary with these fields:
 - `archived_count`
 - `visible_page_eligible_count`
 - `remaining_eligible_tail_count`
+- `registry_archived_count`
+- `registry_remaining_eligible_count`
+- `registry_allowed_active_count`
+- `registry_backup_paths`
 - `skipped_out_of_scope`
 - `skipped_manual_or_unclear`
 - `skipped_active_or_pending`
@@ -326,5 +391,6 @@ housekeeping automation id, `status`, `rrule`, `execution_environment`, and
 If the run exits successfully, `blocker` must be `none` and
 `visible_page_eligible_count` must be `0`, `1`, or `2`; `sweeps` must show
 that the internal page-drain loop completed inside this automation invocation.
-`remaining_eligible_tail_count` may repeat the visible-page count when the tool
-does not expose a cursor or total result count.
+`registry_remaining_eligible_count` must be `0`. `remaining_eligible_tail_count`
+may repeat the visible-page count when the tool does not expose a cursor or
+total result count.

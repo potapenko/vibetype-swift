@@ -179,16 +179,22 @@ current-thread archive when thread management is available.
 - Expected output: one current-repository-only archive-housekeeping pass that
   readback-verifies completed, stale interrupted, and stale hanging
   in-progress automation-run threads, treats self-archive hanging
-  in-progress runs as immediately eligible, always archives the first visible
-  eligible page even when it has only one or two eligible threads, drains newly
-  exposed pages inside the same automation invocation, and uses the at-most-two
-  eligible thread allowance only to avoid starting a later page-drain pass;
+  in-progress runs as immediately eligible, treats this housekeeping
+  automation's own thread-tool hang as eligible through the runbook's shorter
+  gate, always archives the first visible eligible page even when it has only
+  one or two eligible threads, drains newly exposed pages inside the same
+  automation invocation, archives the whole eligible batch rather than one
+  thread, uses `scripts/archive_codex_threads.py` as the complete local
+  registry fallback when cron thread tools are unavailable, and uses the
+  at-most-two eligible thread allowance only to avoid starting a later
+  page-drain pass;
   runs final
   `python3 scripts/automation_resource_cleanup.py` current-user MCP cleanup,
   and archives the current housekeeping thread
 - Safety/thread contract: use thread-management tools as source of truth;
-  never use Codex SQLite files such as `state_5.sqlite` or filesystem helpers
-  to decide what the live sidebar contains;
+  when cron does not expose thread tools, use only the repository fallback
+  helper that scans both supported Codex `state_5.sqlite` locations; call
+  thread-management tools sequentially, not through parallel wrappers;
   inspect only automation threads for this exact cwd; do not inspect, count, or
   archive other-repository, active, pending, manual, or ambiguous threads;
   request current housekeeping thread archive before the final report when the
