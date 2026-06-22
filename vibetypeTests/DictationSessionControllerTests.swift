@@ -88,6 +88,69 @@ struct DictationSessionControllerTests {
         #expect(transcriptOutput.calls.isEmpty)
     }
 
+    @Test func cancelRecordingReturnsToIdleAndSkipsTranscription() {
+        let recorder = FakeAudioRecorderService(currentStatus: .recording)
+        let transcriptionService = FakeControllerTranscriptionService()
+        let transcriptOutput = FakeTranscriptOutput()
+        let controller = makeController(
+            recorder: recorder,
+            transcriptionService: transcriptionService,
+            transcriptOutput: transcriptOutput,
+            initialStatus: .recording,
+            outputStatusText: "Previous output status"
+        )
+
+        controller.cancelRecording()
+
+        #expect(controller.status == .idle)
+        #expect(controller.outputStatusText == nil)
+        #expect(recorder.cancelCount == 1)
+        #expect(recorder.stopCount == 0)
+        #expect(transcriptionService.calls.isEmpty)
+        #expect(transcriptOutput.calls.isEmpty)
+    }
+
+    @Test func cancelRecordingSurfacesRecorderCleanupFailure() {
+        let recorder = FakeAudioRecorderService(
+            currentStatus: .recording,
+            cancelStatus: .failed(message: "Could not remove the canceled recording.")
+        )
+        let transcriptionService = FakeControllerTranscriptionService()
+        let transcriptOutput = FakeTranscriptOutput()
+        let controller = makeController(
+            recorder: recorder,
+            transcriptionService: transcriptionService,
+            transcriptOutput: transcriptOutput,
+            initialStatus: .recording
+        )
+
+        controller.cancelRecording()
+
+        #expect(controller.status == .failure(message: "Could not remove the canceled recording."))
+        #expect(recorder.cancelCount == 1)
+        #expect(transcriptionService.calls.isEmpty)
+        #expect(transcriptOutput.calls.isEmpty)
+    }
+
+    @Test func cancelRecordingIsIgnoredOutsideActiveRecording() {
+        let recorder = FakeAudioRecorderService()
+        let transcriptionService = FakeControllerTranscriptionService()
+        let transcriptOutput = FakeTranscriptOutput()
+        let controller = makeController(
+            recorder: recorder,
+            transcriptionService: transcriptionService,
+            transcriptOutput: transcriptOutput,
+            initialStatus: .success(transcript: "previous")
+        )
+
+        controller.cancelRecording()
+
+        #expect(controller.status == .success(transcript: "previous"))
+        #expect(recorder.cancelCount == 0)
+        #expect(transcriptionService.calls.isEmpty)
+        #expect(transcriptOutput.calls.isEmpty)
+    }
+
     @Test func startFailureBecomesUserVisibleFailureWithoutExternalWork() async {
         let recorder = FakeAudioRecorderService(startResult: .failure(.recordingUnavailable))
         let transcriptionService = FakeControllerTranscriptionService()

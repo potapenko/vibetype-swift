@@ -1,7 +1,7 @@
 ---
 id: VT-044
 title: Cancel Recording Cleanup
-status: in-progress
+status: done
 priority: P2
 lane: recording
 parent: VT-040
@@ -16,7 +16,7 @@ allowed_paths:
 
 # VT-044 - Cancel Recording Cleanup
 
-Status: in-progress
+Status: done
 
 ## Goal
 
@@ -39,3 +39,15 @@ artifact when safe.
 
 - `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination 'platform=macOS' test`
 - `git diff --check`
+
+## Completion Notes
+
+- Added cancel cleanup for the active recorder artifact only, with controller
+  cancel returning to idle or a controlled failure state.
+- Verification: focused VT-044 suites passed with
+  `xcodebuild -project vibetype.xcodeproj -scheme vibetype -destination
+  'platform=macOS' test -only-testing:vibetypeTests/AudioRecorderServiceTests
+  -only-testing:vibetypeTests/DictationSessionControllerTests`.
+- Full scheme test was retried after local tooling recovery and still failed in
+  the unrelated UI launch-performance test; the selected recorder/controller
+  behavior passed focused verification.

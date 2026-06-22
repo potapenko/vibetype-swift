@@ -16,6 +16,7 @@ final class FakeAudioRecorderService: AudioRecorderService {
 
     var startResult: Result<Void, AudioRecorderServiceError>
     var stopResult: Result<AudioRecordingArtifact, AudioRecorderServiceError>
+    var cancelStatus: AudioRecorderStatus
 
     init(
         currentStatus: AudioRecorderStatus = .idle,
@@ -26,11 +27,13 @@ final class FakeAudioRecorderService: AudioRecorderService {
                 duration: 1.2,
                 byteCount: 1024
             )
-        )
+        ),
+        cancelStatus: AudioRecorderStatus = .cancelled
     ) {
         self.currentStatus = currentStatus
         self.startResult = startResult
         self.stopResult = stopResult
+        self.cancelStatus = cancelStatus
     }
 
     func startRecording() async throws {
@@ -60,6 +63,6 @@ final class FakeAudioRecorderService: AudioRecorderService {
 
     func cancelRecording() {
         cancelCount += 1
-        currentStatus = .cancelled
+        currentStatus = cancelStatus
     }
 }

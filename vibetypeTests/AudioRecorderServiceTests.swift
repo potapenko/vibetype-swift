@@ -228,6 +228,53 @@ struct AudioRecorderServiceTests {
         )
     }
 
+    @Test func avFoundationRecorderCancelStopsAndDeletesOnlyActiveFile() async throws {
+        let activeFileURL = makeTemporaryRecordingFileURL()
+        let unrelatedFileURL = makeTemporaryRecordingFileURL()
+        let engine = FakeAudioRecorderEngine()
+        let factory = CapturingAudioRecorderEngineFactory(engine: engine)
+        let recorder = AVFoundationAudioRecorderService(
+            permissionStatusProvider: { .allowed },
+            recorderFactory: factory,
+            makeRecordingFileURL: { activeFileURL }
+        )
+        defer { try? FileManager.default.removeItem(at: activeFileURL) }
+        defer { try? FileManager.default.removeItem(at: unrelatedFileURL) }
+
+        try await recorder.startRecording()
+        try Data([0x01]).write(to: activeFileURL)
+        try Data([0x02]).write(to: unrelatedFileURL)
+
+        recorder.cancelRecording()
+
+        #expect(recorder.currentStatus == .cancelled)
+        #expect(engine.stopCallCount == 1)
+        #expect(engine.deleteCallCount == 1)
+        #expect(FileManager.default.fileExists(atPath: activeFileURL.path) == false)
+        #expect(FileManager.default.fileExists(atPath: unrelatedFileURL.path))
+    }
+
+    @Test func avFoundationRecorderCancelWithoutActiveFileDoesNotDeleteUnrelatedFiles() async throws {
+        let unrelatedFileURL = makeTemporaryRecordingFileURL()
+        let engine = FakeAudioRecorderEngine()
+        let factory = CapturingAudioRecorderEngineFactory(engine: engine)
+        let recorder = AVFoundationAudioRecorderService(
+            permissionStatusProvider: { .allowed },
+            recorderFactory: factory,
+            makeRecordingFileURL: { makeTemporaryRecordingFileURL() }
+        )
+        defer { try? FileManager.default.removeItem(at: unrelatedFileURL) }
+
+        try Data([0x01]).write(to: unrelatedFileURL)
+
+        recorder.cancelRecording()
+
+        #expect(recorder.currentStatus == .cancelled)
+        #expect(engine.stopCallCount == 0)
+        #expect(engine.deleteCallCount == 0)
+        #expect(FileManager.default.fileExists(atPath: unrelatedFileURL.path))
+    }
+
     @Test func avFoundationRecorderRejectsMissingCompletedFile() async throws {
         let outputFileURL = makeTemporaryRecordingFileURL()
         let engine = FakeAudioRecorderEngine(currentTime: 1.0)

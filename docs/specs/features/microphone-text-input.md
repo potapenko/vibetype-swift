@@ -44,6 +44,9 @@ This spec covers:
   begin.
 - The user must be able to cancel a session before accepting or handing off the
   generated text.
+- Cancelling active capture stops the recorder, removes the current app-created
+  temporary audio artifact, returns the session to idle, and must not start
+  transcription or output handoff.
 - After capture stops, the app may enter a processing state while
   transcription completes.
 - Start, stop, and cancel actions must be serialized through one active
@@ -68,6 +71,8 @@ This spec covers:
   uploads, duplicate output handoffs, or multiple accepted transcripts for one
   recording.
 - Stopping or cancelling capture must not silently accept unfinished text.
+- Cancelling capture must clean up only the current recording artifact and must
+  leave unrelated temporary files untouched.
 - A failed session must not overwrite previously accepted text.
 - Recording, transcribing, done, and error states must be mutually
   understandable to the user.

@@ -42,6 +42,7 @@ enum AudioRecorderServiceError: Error, Equatable, LocalizedError {
     case temporaryFileUnavailable
     case startFailed
     case stopFailed
+    case cancelCleanupFailed
     case missingRecordingFile
     case emptyRecording
     case recordingTooShort(duration: TimeInterval, minimumDuration: TimeInterval)
@@ -62,6 +63,8 @@ enum AudioRecorderServiceError: Error, Equatable, LocalizedError {
             return "Could not start microphone recording."
         case .stopFailed:
             return "Could not finish the current recording."
+        case .cancelCleanupFailed:
+            return "Could not remove the canceled recording."
         case .missingRecordingFile:
             return "The completed recording file is missing."
         case .emptyRecording:
@@ -203,10 +206,21 @@ final class AVFoundationAudioRecorderService: AudioRecorderService {
     }
 
     func cancelRecording() {
-        activeRecorder?.stop()
-        activeRecorder?.deleteRecording()
+        let recorder = activeRecorder
+        let outputFileURL = activeFileURL
+
+        recorder?.stop()
+        recorder?.deleteRecording()
         activeRecorder = nil
         activeFileURL = nil
+
+        do {
+            try removeRecordingFileIfPresent(at: outputFileURL)
+        } catch {
+            fail(with: .cancelCleanupFailed)
+            return
+        }
+
         currentStatus = .cancelled
     }
 
@@ -255,6 +269,25 @@ final class AVFoundationAudioRecorderService: AudioRecorderService {
             duration: duration,
             byteCount: byteCount
         )
+    }
+
+    private func removeRecordingFileIfPresent(at outputFileURL: URL?) throws {
+        guard let outputFileURL else {
+            return
+        }
+
+        let path = outputFileURL.path
+        var isDirectory: ObjCBool = false
+
+        guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory) else {
+            return
+        }
+
+        guard !isDirectory.boolValue else {
+            throw AudioRecorderServiceError.cancelCleanupFailed
+        }
+
+        try fileManager.removeItem(at: outputFileURL)
     }
 
     private static var recordingSettings: [String: Any] {

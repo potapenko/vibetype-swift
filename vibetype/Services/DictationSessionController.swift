@@ -65,6 +65,22 @@ final class DictationSessionController {
         }
     }
 
+    func cancelRecording() {
+        guard !isPerformingAction, status == .recording else {
+            return
+        }
+
+        recorder.cancelRecording()
+        outputStatusText = nil
+
+        switch recorder.currentStatus {
+        case .failed(let message):
+            status = .failure(message: message)
+        default:
+            status = .idle
+        }
+    }
+
     private func startRecording() async {
         outputStatusText = nil
 
