@@ -1,6 +1,0 @@
-node_modules
-dist
-build
-src/dist
-*.min.js
-package-lock.json

@@ -33,15 +33,5 @@ __pycache__/
 *.pem
 *.key
 
-# OpenWhispr reference checkout generated artifacts
-references/openwhispr-main/node_modules/
-references/openwhispr-main/dist/
-references/openwhispr-main/out/
-references/openwhispr-main/build/
-references/openwhispr-main/release/
-references/openwhispr-main/coverage/
-references/openwhispr-main/resources/bin/
-references/openwhispr-main/.vite/
-references/openwhispr-main/.env
-references/openwhispr-main/.env.*
-!references/openwhispr-main/.env.example
+# Local reference checkouts
+/references/
