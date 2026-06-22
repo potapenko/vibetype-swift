@@ -151,6 +151,7 @@ struct AudioRecorderServiceTests {
         let recorder = AVFoundationAudioRecorderService(
             permissionStatusProvider: { .allowed },
             recorderFactory: factory,
+            maximumRecordingDuration: 2.5,
             makeRecordingFileURL: { outputFileURL }
         )
         defer { try? FileManager.default.removeItem(at: outputFileURL) }
@@ -163,6 +164,7 @@ struct AudioRecorderServiceTests {
         #expect(factory.settings?[AVFormatIDKey] as? Int == Int(kAudioFormatMPEG4AAC))
         #expect(factory.settings?[AVNumberOfChannelsKey] as? Int == 1)
         #expect(engine.recordCallCount == 1)
+        #expect(engine.requestedRecordDuration == 2.5)
         #expect(engine.isRecording)
 
         try fileContents.write(to: outputFileURL)
@@ -372,6 +374,42 @@ struct AudioRecorderServiceTests {
             )
         )
     }
+
+    @Test func avFoundationRecorderRejectsTimedOutCompletedFile() async throws {
+        let outputFileURL = makeTemporaryRecordingFileURL()
+        let engine = FakeAudioRecorderEngine(currentTime: 2.0)
+        let factory = CapturingAudioRecorderEngineFactory(engine: engine)
+        let recorder = AVFoundationAudioRecorderService(
+            permissionStatusProvider: { .allowed },
+            recorderFactory: factory,
+            maximumRecordingDuration: 2.0,
+            makeRecordingFileURL: { outputFileURL }
+        )
+        defer { try? FileManager.default.removeItem(at: outputFileURL) }
+
+        try await recorder.startRecording()
+        try Data([0x01]).write(to: outputFileURL)
+
+        do {
+            _ = try await recorder.stopRecording()
+            Issue.record("Expected stopRecording to throw")
+        } catch let error as AudioRecorderServiceError {
+            #expect(error == .recordingTimedOut(duration: 2.0, maximumDuration: 2.0))
+        } catch {
+            Issue.record("Expected AudioRecorderServiceError, got \(error)")
+        }
+
+        #expect(engine.stopCallCount == 1)
+        #expect(engine.deleteCallCount == 1)
+        #expect(
+            recorder.currentStatus == .failed(
+                message: AudioRecorderServiceError.recordingTimedOut(
+                    duration: 2.0,
+                    maximumDuration: 2.0
+                ).errorDescription ?? ""
+            )
+        )
+    }
 }
 
 private struct RecorderConsumer {
@@ -411,6 +449,7 @@ private final class FakeAudioRecorderEngine: AudioRecorderEngine {
     private(set) var isRecording = false
     let currentTime: TimeInterval
     private(set) var recordCallCount = 0
+    private(set) var requestedRecordDuration: TimeInterval?
     private(set) var stopCallCount = 0
     private(set) var deleteCallCount = 0
 
@@ -420,7 +459,12 @@ private final class FakeAudioRecorderEngine: AudioRecorderEngine {
     }
 
     func record() -> Bool {
+        record(forDuration: .infinity)
+    }
+
+    func record(forDuration duration: TimeInterval) -> Bool {
         recordCallCount += 1
+        requestedRecordDuration = duration
         isRecording = recordResult
         return recordResult
     }

@@ -46,6 +46,7 @@ enum AudioRecorderServiceError: Error, Equatable, LocalizedError {
     case missingRecordingFile
     case emptyRecording
     case recordingTooShort(duration: TimeInterval, minimumDuration: TimeInterval)
+    case recordingTimedOut(duration: TimeInterval, maximumDuration: TimeInterval)
 
     var errorDescription: String? {
         switch self {
@@ -71,6 +72,8 @@ enum AudioRecorderServiceError: Error, Equatable, LocalizedError {
             return "No audio was captured. Try recording again."
         case .recordingTooShort:
             return "Recording was too short. Try speaking for a little longer."
+        case .recordingTimedOut:
+            return "Recording reached the maximum length. Try again with a shorter dictation."
         }
     }
 }
@@ -80,6 +83,7 @@ protocol AudioRecorderEngine: AnyObject {
     var currentTime: TimeInterval { get }
 
     func record() -> Bool
+    func record(forDuration duration: TimeInterval) -> Bool
     func stop()
     @discardableResult func deleteRecording() -> Bool
 }
@@ -110,12 +114,14 @@ struct AVFoundationAudioRecorderEngineFactory: AudioRecorderEngineFactory {
 
 final class AVFoundationAudioRecorderService: AudioRecorderService {
     private static let temporaryDirectoryName = "vibetype-recordings"
+    static let defaultMaximumRecordingDuration: TimeInterval = 300
 
     private let permissionStatusProvider: () -> MicrophonePermissionStatus
     private let recorderFactory: any AudioRecorderEngineFactory
     private let makeRecordingFileURL: () throws -> URL
     private let fileManager: FileManager
     private let minimumRecordingDuration: TimeInterval
+    private let maximumRecordingDuration: TimeInterval
 
     private var activeRecorder: (any AudioRecorderEngine)?
     private var activeFileURL: URL?
@@ -129,6 +135,7 @@ final class AVFoundationAudioRecorderService: AudioRecorderService {
         recorderFactory: any AudioRecorderEngineFactory = AVFoundationAudioRecorderEngineFactory(),
         fileManager: FileManager = .default,
         minimumRecordingDuration: TimeInterval = 0.3,
+        maximumRecordingDuration: TimeInterval = AVFoundationAudioRecorderService.defaultMaximumRecordingDuration,
         makeRecordingFileURL: @escaping () throws -> URL = {
             try AVFoundationAudioRecorderService.makeDefaultRecordingFileURL()
         }
@@ -137,6 +144,9 @@ final class AVFoundationAudioRecorderService: AudioRecorderService {
         self.recorderFactory = recorderFactory
         self.fileManager = fileManager
         self.minimumRecordingDuration = minimumRecordingDuration
+        self.maximumRecordingDuration = maximumRecordingDuration > 0
+            ? maximumRecordingDuration
+            : Self.defaultMaximumRecordingDuration
         self.makeRecordingFileURL = makeRecordingFileURL
     }
 
@@ -159,7 +169,7 @@ final class AVFoundationAudioRecorderService: AudioRecorderService {
                 settings: Self.recordingSettings
             )
 
-            guard recorder.record() else {
+            guard recorder.record(forDuration: maximumRecordingDuration) else {
                 recorder.deleteRecording()
                 let error = AudioRecorderServiceError.startFailed
                 fail(with: error)
@@ -261,6 +271,13 @@ final class AVFoundationAudioRecorderService: AudioRecorderService {
             throw AudioRecorderServiceError.recordingTooShort(
                 duration: duration,
                 minimumDuration: minimumRecordingDuration
+            )
+        }
+
+        guard duration < maximumRecordingDuration else {
+            throw AudioRecorderServiceError.recordingTimedOut(
+                duration: duration,
+                maximumDuration: maximumRecordingDuration
             )
         }
 

@@ -39,6 +39,10 @@ This spec covers:
 - While microphone capture is active, the app must show an unmistakable
   recording state.
 - The user must be able to stop an active recording session.
+- A single recording attempt must have a bounded MVP maximum duration of five
+  minutes. When the limit is reached, capture stops at the recorder boundary
+  and the session fails with a recoverable maximum-length message instead of
+  sending the timed-out artifact to transcription.
 - Stopping an active recording returns a completed local recording artifact
   with the file URL, captured duration, and byte size before transcription may
   begin.
@@ -96,8 +100,11 @@ This spec covers:
   stop or fail visibly rather than continue recording invisibly.
 - If the recording is too short, the app should show a clear error instead of
   sending misleading empty input through the normal success path.
-- Missing, empty, or too-short completed recording artifacts must be treated as
-  failed recording results and must not be sent to OpenAI.
+- If the recording reaches the maximum duration, the app should stop or fail
+  the capture and show a clear maximum-length error without uploading the
+  timed-out artifact.
+- Missing, empty, too-short, or maximum-duration completed recording artifacts
+  must be treated as failed recording results and must not be sent to OpenAI.
 
 ## Route / state / data implications
 
