@@ -27,7 +27,7 @@ Codex home:
 Expected schedule:
 
 ```text
-FREQ=HOURLY;INTERVAL=3
+FREQ=MINUTELY;INTERVAL=15
 ```
 
 ## Resource Cleanup Gate
@@ -61,10 +61,10 @@ This runbook is scoped only to the configured automation cwd above. Threads
 from any other cwd are out of scope even when they are visible in thread search
 and even when they are also recurring automation runs.
 
-The run must not finish after one discovery page or one search pass when more
-eligible automation-run threads remain. Continue sweeping until the verified
-remaining eligible tail is at most two threads, or until a real tool, readback,
-active-work, or safety blocker prevents further progress.
+The run must not finish after one discovery page or one search pass when any
+eligible automation-run thread remains. Continue sweeping until the verified
+remaining eligible tail is zero, or until a real tool, readback, active-work,
+or safety blocker prevents further progress.
 
 ## Required Tools
 
@@ -157,10 +157,13 @@ Run discovery and archiving as a loop.
 
 1. Build the search key set only from installed automation ids and names in the
    current-repository subset.
-2. For each search key, call `list_threads` with that exact key.
+2. For each search key, call `list_threads` with that exact key and the largest
+   practical `limit` supported by the tool so the sweep is not capped at the
+   default recent-thread page.
 3. Also call `list_threads` for the housekeeping automation id and name when
    the housekeeping automation definition belongs to the current repository.
-4. De-duplicate candidate thread ids across all result pages searched.
+4. De-duplicate candidate thread ids across all search results in the current
+   sweep.
 5. For each candidate id whose list result reports another cwd, skip it as
    `out_of_scope` without readback unless readback is needed to disambiguate a
    missing cwd.
@@ -171,7 +174,10 @@ Run discovery and archiving as a loop.
 
 Do not stop just because a single list call returned one page, no page, or no
 new ids. Re-run exact automation-id and automation-name searches after each
-batch because archiving one page can expose older unarchived threads.
+batch because archiving one page can expose older unarchived threads. A
+successful run must include a final no-progress verification sweep after the
+last archive batch; that final sweep must read back candidates and prove that
+zero archive-eligible current-repository automation-run threads remain.
 
 ## Tail Exit Rule
 
@@ -189,13 +195,14 @@ runs that pass the hard safety gate.
 Exit successfully only when:
 
 ```text
-remaining_eligible_tail_count <= 2
+remaining_eligible_tail_count == 0
 ```
 
-The two-thread allowance prevents an endless loop while new automation runs are
-being created during cleanup.
+There is no normal tail allowance. If a new automation run is created during
+cleanup, it must either fail the hard safety gate as active/pending or be
+included in the next sweep when it becomes terminal and archive-eligible.
 
-If `remaining_eligible_tail_count > 2` and the latest sweep archived zero
+If `remaining_eligible_tail_count > 0` and the latest sweep archived zero
 threads, stop with:
 
 ```text
@@ -242,4 +249,4 @@ housekeeping automation id, `status`, `rrule`, `execution_environment`, and
 `cwds` from `/Users/eugenepotapenko/.codex/automations/*/automation.toml`.
 
 If the run exits successfully, `blocker` must be `none` and
-`remaining_eligible_tail_count` must be `0`, `1`, or `2`.
+`remaining_eligible_tail_count` must be `0`.

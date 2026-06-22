@@ -23,7 +23,7 @@ Inventory status: inspected
 | `vibetype-swift-blocker-resolver` | VibeType Swift Blocker Resolver | paused | `FREQ=HOURLY;INTERVAL=1` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-blocker-resolver.md` |
 | `vibetype-swift-implementer` | VibeType Swift Implementer | paused | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-implementer.md` |
 | `vibetype-swift-tooling-unblocker` | VibeType Swift Tooling Unblocker | paused | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.5` / `xhigh` | `local` | `docs/automation-prompts/runbooks/vibetype-swift-tooling-unblocker.md` |
-| `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | active | `FREQ=HOURLY;INTERVAL=3` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
+| `vibetype-swift-archive-completed-automation-threads` | VibeType Swift Archive Completed Automation Threads | active | `FREQ=MINUTELY;INTERVAL=15` | `gpt-5.4-mini` / `low` | `local` | `docs/automation-prompts/runbooks/archive-completed-automation-threads.md` |
 
 Installed automation count for this repository: 6.
 Active count for this repository: 1.
@@ -33,7 +33,7 @@ Current-user MCP cleanup gate: only two installed automations may call
 `python3 scripts/automation_resource_cleanup.py`:
 `vibetype-swift-implementer`, once at the end of an implementation run, and
 `vibetype-swift-archive-completed-automation-threads`, once at the end of each
-3-hour housekeeping run. The script takes no parameters, ignores processes
+15-minute housekeeping run. The script takes no parameters, ignores processes
 owned by other OS users, and runs current-user killall cleanup for the
 allowlisted Codex helper/MCP process names.
 
@@ -169,7 +169,7 @@ current-thread archive when thread management is available.
 ### `vibetype-swift-archive-completed-automation-threads`
 
 - Installed status: `ACTIVE`
-- Schedule: `FREQ=HOURLY;INTERVAL=3`
+- Schedule: `FREQ=MINUTELY;INTERVAL=15`
 - Model / reasoning effort: `gpt-5.4-mini` / `low`
 - Execution environment: `local`
 - Cwd: `/Users/eugenepotapenko/Projects/potapenko-github/vibetype-swift`
@@ -178,7 +178,7 @@ current-thread archive when thread management is available.
   `docs/automation-prompts/runbooks/archive-completed-automation-threads.md`
 - Expected output: one current-repository-only archive-housekeeping pass that
   readback-verifies eligible automation-run threads, sweeps until the remaining
-  eligible tail is at most two, runs final
+  eligible tail is zero, runs final
   `python3 scripts/automation_resource_cleanup.py` current-user MCP cleanup,
   and archives the current housekeeping thread
 - Safety/thread contract: use thread-management tools as source of truth;
@@ -187,7 +187,7 @@ current-thread archive when thread management is available.
   request current housekeeping thread archive before the final report when the
   thread-management tool is available
 - Current decision: active as the only scheduled non-implementer cleanup
-  automation, running every three hours
+  automation, running every 15 minutes
 
 ## Missing Or Paused Roles
 
