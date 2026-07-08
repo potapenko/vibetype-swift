@@ -89,7 +89,6 @@ def validate_cask_text(
         "homebrew-cask:version": f'version "{version}"',
         "homebrew-cask:sha256": f'sha256 "{sha256.lower()}"',
         "homebrew-cask:url": expected_url,
-        "homebrew-cask:verified": f'verified: "github.com/{repository}/"',
         "homebrew-cask:name": f'name "{APP_NAME}"',
         "homebrew-cask:desc": 'desc "Native macOS menu bar dictation utility"',
         "homebrew-cask:homepage": f'homepage "{homepage}"',
@@ -113,6 +112,7 @@ def validate_cask_text(
 
     forbidden_fragments = {
         "homebrew-cask:forbid-latest": "version :latest",
+        "homebrew-cask:forbid-verified": "verified:",
         "homebrew-cask:forbid-no-check": "sha256 :no_check",
     }
     for name, fragment in forbidden_fragments.items():

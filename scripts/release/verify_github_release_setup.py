@@ -444,7 +444,6 @@ def check_official_homebrew_cask_text(
     expected_fragments = {
         "github-official-cask:token": f'cask "{CASK_TOKEN}" do',
         "github-official-cask:url": expected_url,
-        "github-official-cask:verified": f'verified: "github.com/{expected_repository}/"',
         "github-official-cask:name": f'name "{APP_NAME}"',
         "github-official-cask:desc": 'desc "Native macOS menu bar dictation utility"',
         "github-official-cask:homepage": f'homepage "https://github.com/{expected_repository}"',

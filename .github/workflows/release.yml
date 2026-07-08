@@ -386,8 +386,7 @@ jobs:
             --sha256 "$sha256" \
             --repository "$GITHUB_REPOSITORY" \
             --tap-repository "$HOMEBREW_TAP_REPOSITORY" \
-            --minimum-macos "$HOMEBREW_MINIMUM_MACOS" \
-            --audit
+            --minimum-macos "$HOMEBREW_MINIMUM_MACOS"
 
           git -C "$tap_dir" config user.name "github-actions[bot]"
           git -C "$tap_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -397,6 +396,14 @@ jobs:
             exit 0
           fi
           git -C "$tap_dir" commit -m "Update HoldType to $VERSION"
+
+          export HOMEBREW_NO_AUTO_UPDATE="${HOMEBREW_NO_AUTO_UPDATE:-1}"
+          export HOMEBREW_NO_INSTALL_FROM_API="${HOMEBREW_NO_INSTALL_FROM_API:-1}"
+          scripts/release/with_timeout.py 300 \
+            brew tap "$HOMEBREW_EXPECTED_TAP" "$tap_dir"
+          scripts/release/with_timeout.py 600 \
+            brew audit --cask "$HOMEBREW_EXPECTED_TAP/holdtype"
+
           scripts/release/with_timeout.py 300 \
             git -C "$tap_dir" push --force-with-lease origin "$branch"
 

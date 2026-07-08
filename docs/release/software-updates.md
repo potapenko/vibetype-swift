@@ -496,9 +496,9 @@ when official bump automation is enabled. Use the same verifier with
 prove `brew install --cask holdtype` is backed by the official cask before
 turning that automation on.
 That gate decodes `Homebrew/homebrew-cask`'s `Casks/h/holdtype.rb` and verifies
-the cask token, GitHub Release DMG URL, `verified:` source, app artifact,
-Sparkle-compatible livecheck, uninstall/zap metadata, pinned numeric version,
-pinned SHA-256, and absence of `version :latest` or `sha256 :no_check`.
+the cask token, GitHub Release DMG URL, app artifact, Sparkle-compatible
+livecheck, uninstall/zap metadata, pinned numeric version, pinned SHA-256, and
+absence of `version :latest`, `verified:`, or `sha256 :no_check`.
 
 Before publishing the first cask, confirm the minimum macOS version. The
 current Xcode project uses `MACOSX_DEPLOYMENT_TARGET = 26.5`; if that is not

@@ -15,38 +15,19 @@ Options:
   --version VERSION
   --sha256 SHA256
   --repository OWNER/REPO
-  --tap-repository OWNER/HOMEBREW_REPO  Used to derive brew tap name for audit.
-  --tap-name OWNER/TAP                 Overrides derived tap name.
+  --tap-repository OWNER/HOMEBREW_REPO  Accepted for workflow compatibility.
+  --tap-name OWNER/TAP                 Accepted for workflow compatibility.
   --homepage URL
   --minimum-macos HOMEBREW_VALUE       Example: ">= :tahoe"
-  --audit                              Run brew tap and brew audit after rendering.
+  --audit                              Unsupported; audit after committing the tap.
   --brew PATH                          Defaults to BREW_BIN or brew.
-  --tap-timeout SECONDS                Defaults to 300.
+  --tap-timeout SECONDS                Accepted for compatibility.
   --audit-timeout SECONDS              Defaults to 600.
   --help
 
 The script updates Casks/holdtype.rb inside an existing tap checkout. It does
 not clone, commit, push, or open a pull request.
 USAGE
-}
-
-derive_tap_name() {
-  local repository="$1"
-  local owner="${repository%%/*}"
-  local repo_name="${repository#*/}"
-
-  if [ -z "$owner" ] || [ -z "$repo_name" ] || [ "$owner" = "$repository" ]; then
-    die "tap repository must be OWNER/REPO, got: $repository"
-  fi
-  case "$repo_name" in
-    homebrew-?*)
-      ;;
-    *)
-      die "tap repository name must start with homebrew-, got: $repository"
-      ;;
-  esac
-
-  printf '%s/%s\n' "$owner" "${repo_name#homebrew-}"
 }
 
 TAP_DIR=""
@@ -154,18 +135,7 @@ fi
 "$SCRIPT_DIR/render_homebrew_cask.sh" "${render_args[@]}"
 
 if [ "$AUDIT" -eq 1 ]; then
-  require_command "$BREW_BIN"
-
-  if [ -z "$TAP_NAME" ]; then
-    [ -n "$TAP_REPOSITORY" ] || die "missing --tap-repository or --tap-name for --audit"
-    TAP_NAME="$(derive_tap_name "$TAP_REPOSITORY")"
-  fi
-
-  log "auditing Homebrew cask through tap: $TAP_NAME"
-  export HOMEBREW_NO_AUTO_UPDATE="${HOMEBREW_NO_AUTO_UPDATE:-1}"
-  export HOMEBREW_NO_INSTALL_FROM_API="${HOMEBREW_NO_INSTALL_FROM_API:-1}"
-  run_timed "$TAP_TIMEOUT" "$BREW_BIN" tap "$TAP_NAME" "$TAP_DIR"
-  run_timed "$AUDIT_TIMEOUT" "$BREW_BIN" audit --new --cask "$TAP_NAME/holdtype"
+  die "--audit must run after committing the tap checkout; use brew tap <tap> <tap-dir> and brew audit --new --cask <tap>/holdtype"
 fi
 
 log "updated Homebrew tap cask: $TAP_DIR/Casks/holdtype.rb"

@@ -2,8 +2,7 @@ cask "holdtype" do
   version "{{VERSION}}"
   sha256 "{{SHA256}}"
 
-  url "https://github.com/{{REPOSITORY}}/releases/download/v#{version}/HoldType-#{version}.dmg",
-      verified: "github.com/{{REPOSITORY}}/"
+  url "https://github.com/{{REPOSITORY}}/releases/download/v#{version}/HoldType-#{version}.dmg"
   name "HoldType"
   desc "Native macOS menu bar dictation utility"
   homepage "{{HOMEPAGE}}"

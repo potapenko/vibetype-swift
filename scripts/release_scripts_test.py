@@ -119,8 +119,7 @@ def rendered_official_cask_text(
   version "{version}"
   sha256 "{sha256}"
 
-  url "https://github.com/{repository}/releases/download/v#{{version}}/HoldType-#{{version}}.dmg",
-      verified: "github.com/{repository}/"
+  url "https://github.com/{repository}/releases/download/v#{{version}}/HoldType-#{{version}}.dmg"
   name "HoldType"
   desc "Native macOS menu bar dictation utility"
   homepage "https://github.com/{repository}"
@@ -415,6 +414,8 @@ end
         self.assertIn("HOMEBREW_MINIMUM_MACOS: ${{ vars.HOMEBREW_MINIMUM_MACOS }}", workflow)
         self.assertIn("env.HOMEBREW_MINIMUM_MACOS != ''", workflow)
         self.assertIn("--minimum-macos \"$HOMEBREW_MINIMUM_MACOS\"", workflow)
+        self.assertIn('brew tap "$HOMEBREW_EXPECTED_TAP" "$tap_dir"', workflow)
+        self.assertIn('brew audit --cask "$HOMEBREW_EXPECTED_TAP/holdtype"', workflow)
         self.assertIn('tap_default_branch="$(', workflow)
         self.assertIn("--base \"$tap_default_branch\"", workflow)
         self.assertNotIn("--base main", workflow)
@@ -433,6 +434,8 @@ end
             "--timeout 300",
             "scripts/release/with_timeout.py 300 \\\n            git clone",
             "scripts/release/with_timeout.py 300 gh repo view",
+            "scripts/release/with_timeout.py 300 \\\n            brew tap",
+            "scripts/release/with_timeout.py 600 \\\n            brew audit",
             "scripts/release/with_timeout.py 300 \\\n            git -C \"$tap_dir\" push",
             "scripts/release/with_timeout.py 300 gh pr list",
             "scripts/release/with_timeout.py 300 gh pr create",
@@ -1391,7 +1394,7 @@ end
             self.assertIn('uninstall quit: "app.holdtype.HoldType"', rendered)
             self.assertIn('"~/Library/Caches/HoldType"', rendered)
 
-    def test_update_homebrew_tap_requires_homebrew_prefixed_tap_repository_for_audit(self) -> None:
+    def test_update_homebrew_tap_rejects_precommit_audit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             tap_dir = Path(temp_dir) / "homebrew-tap"
             tap_dir.mkdir()
@@ -1411,7 +1414,7 @@ end
                     "--repository",
                     "holdtype/holdtype-swift",
                     "--tap-repository",
-                    "holdtype/tap",
+                    "holdtype/homebrew-tap",
                     "--minimum-macos",
                     ">= :tahoe",
                     "--audit",
@@ -1426,8 +1429,7 @@ end
             )
 
             self.assertEqual(result.returncode, 1)
-            self.assertIn("tap repository name must start with homebrew-", result.stderr)
-            self.assertNotIn("auditing Homebrew cask through tap", result.stdout)
+            self.assertIn("--audit must run after committing the tap checkout", result.stderr)
 
     def test_prepare_official_homebrew_cask_uses_official_cask_layout(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

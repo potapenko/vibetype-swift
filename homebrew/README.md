@@ -84,9 +84,9 @@ scripts/release/verify_github_release_setup.py \
 ```
 
 That verifier decodes the upstream `Casks/h/holdtype.rb` file and checks the
-short install contract: `holdtype` token, GitHub Release DMG URL, `verified:`
-source, `HoldType.app`, livecheck, uninstall/zap metadata, pinned numeric
-version, pinned SHA-256, and no `version :latest` or `sha256 :no_check`.
+short install contract: `holdtype` token, GitHub Release DMG URL,
+`HoldType.app`, livecheck, uninstall/zap metadata, pinned numeric version,
+pinned SHA-256, and no `version :latest`, `verified:`, or `sha256 :no_check`.
 
 Prepare the official cask candidate in a local Homebrew Cask checkout or fork:
 
