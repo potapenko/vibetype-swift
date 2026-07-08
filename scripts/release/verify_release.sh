@@ -127,13 +127,16 @@ if [ "$SKIP_STAPLER" -eq 0 ]; then
   log "validating app staple"
   run_timed 300 xcrun stapler validate "$APP_PATH"
 
+  log "verifying DMG signature"
+  run_timed 300 codesign --verify --verbose=2 "$DMG_PATH"
+
   log "validating DMG staple"
   run_timed 300 xcrun stapler validate "$DMG_PATH"
 fi
 
 if [ "$SKIP_SPCTL" -eq 0 ]; then
   log "assessing DMG with Gatekeeper"
-  run_timed 300 spctl --assess --type open --verbose=4 "$DMG_PATH"
+  run_timed 300 spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"
 fi
 
 log "checking SHA-256 sums"

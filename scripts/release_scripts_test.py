@@ -2485,6 +2485,11 @@ end
         self.assertIn('ARTIFACT_KIND="notarization-skipped-release"', release_script)
         self.assertIn('"kind": "$ARTIFACT_KIND"', release_script)
         self.assertIn('--expect-kind "$ARTIFACT_KIND"', release_script)
+        self.assertIn('RELEASE_CODE_SIGN_IDENTITY="${HOLDTYPE_CODE_SIGN_IDENTITY:-Developer ID Application}"', release_script)
+        self.assertIn('codesign \\', release_script)
+        self.assertIn('--sign "$RELEASE_CODE_SIGN_IDENTITY"', release_script)
+        self.assertIn('codesign --verify --verbose=2 "$DMG_PATH"', verify_script)
+        self.assertIn('--context context:primary-signature', verify_script)
 
     def test_artifact_build_scripts_reject_invalid_build_number_before_external_work(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

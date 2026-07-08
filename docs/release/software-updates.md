@@ -524,7 +524,7 @@ codesign --verify --deep --strict --verbose=2 HoldType.app
 spctl --assess --type execute --verbose=4 HoldType.app
 xcrun stapler validate HoldType.app
 xcrun stapler validate HoldType-<version>.dmg
-spctl --assess --type open --verbose=4 HoldType-<version>.dmg
+spctl --assess --type open --context context:primary-signature --verbose=4 HoldType-<version>.dmg
 shasum -a 256 HoldType-<version>.dmg
 brew audit --cask holdtype
 ```

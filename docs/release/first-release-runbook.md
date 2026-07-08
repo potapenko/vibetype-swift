@@ -436,7 +436,7 @@ scripts/release/verify_published_release.py \
 gh release view v1.0.0
 gh release download v1.0.0 --pattern 'HoldType-1.0.0.dmg'
 shasum -a 256 HoldType-1.0.0.dmg
-spctl --assess --type open --verbose=4 HoldType-1.0.0.dmg
+spctl --assess --type open --context context:primary-signature --verbose=4 HoldType-1.0.0.dmg
 scripts/release/verify_dmg_install.sh --dmg HoldType-1.0.0.dmg
 ```
 
