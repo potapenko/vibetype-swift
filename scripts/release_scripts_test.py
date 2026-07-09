@@ -538,6 +538,12 @@ end
         self.assertIn("--draft=false", workflow)
         self.assertIn("--prerelease=false", workflow)
 
+    def test_release_workflow_uses_macos_14_runtime_test_gate(self) -> None:
+        workflow = RELEASE_WORKFLOW.read_text()
+
+        self.assertIn('minimum_version="14.0"', workflow)
+        self.assertNotIn('minimum_version="26.5"', workflow)
+
     def test_release_workflow_reuses_existing_appcast(self) -> None:
         workflow = RELEASE_WORKFLOW.read_text()
 
@@ -727,6 +733,30 @@ jobs:
             )
 
             self.assertEqual(output_path.read_text(), source_path.read_text())
+
+    def test_write_release_notes_uses_versioned_curated_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "release-notes.md"
+
+            subprocess.run(
+                [
+                    str(WRITE_RELEASE_NOTES_SCRIPT),
+                    "--version",
+                    "1.0.1",
+                    "--output",
+                    str(output_path),
+                ],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+
+            text = output_path.read_text()
+            self.assertIn("# HoldType 1.0.1", text)
+            self.assertIn("macOS 14 Sonoma", text)
+            self.assertIn("There are no changes to recording", text)
 
     def test_write_release_notes_rejects_placeholder_source(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

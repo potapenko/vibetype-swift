@@ -54,6 +54,13 @@ validate_release_version "$VERSION"
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 
+if [ -z "$SOURCE_PATH" ]; then
+  CURATED_SOURCE="$REPO_ROOT/docs/release/notes/$VERSION.md"
+  if [ -f "$CURATED_SOURCE" ]; then
+    SOURCE_PATH="$CURATED_SOURCE"
+  fi
+fi
+
 if [ -n "$SOURCE_PATH" ]; then
   [ -f "$SOURCE_PATH" ] || die "release notes source not found: $SOURCE_PATH"
   cp "$SOURCE_PATH" "$OUTPUT_PATH"

@@ -99,7 +99,7 @@ jobs:
         run: |
           set -euo pipefail
           host_version="$(sw_vers -productVersion)"
-          minimum_version="26.5"
+          minimum_version="14.0"
           can_run_tests="$(
             python3 - "$host_version" "$minimum_version" <<'PY'
           import sys
