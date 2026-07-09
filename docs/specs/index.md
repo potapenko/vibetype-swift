@@ -19,6 +19,7 @@ matching feature spec, then verify exact source ownership with `rg --files`.
 | Transcript history | `features/transcript-history.md` | History storage, display, recovery, retention |
 | Diagnostics | `features/diagnostics-and-crash-reports.md` | Logs, crash/diagnostic reports, operator-facing error evidence |
 | Software updates | `features/software-updates.md` | Native macOS app update checks, prompts, release artifacts, appcast behavior |
+| App Store distribution | `features/app-store-distribution.md` | macOS distribution channel decision, App Store viability, direct-download trust |
 | Usage estimates | `features/ui-functionality-coverage.md` | Current UI/task coverage inventory, visible-surface task mapping |
 | Platform testing | `features/platform-testing-strategy.md` | Choosing build/test/runtime QA, MCP, Computer Use, or manual evidence |
 | Verification | `features/verification-strategy.md` | Verification baseline, test scope, evidence quality |

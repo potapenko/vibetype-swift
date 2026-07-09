@@ -252,9 +252,10 @@ This spec covers:
   HoldType reads Input Monitoring as `Allowed`.
 - The macOS MVP app target must not use App Sandbox while active-app insertion,
   Paste Last Result, or nearby text context depend on Accessibility-gated
-  control of other apps. Re-enabling sandbox requires a replacement architecture
-  and proof that the Accessibility request still registers HoldType in System
-  Settings.
+  control of other apps. This is also why Mac App Store distribution is not the
+  current macOS release target. Re-enabling sandbox requires a replacement
+  architecture and proof that the Accessibility request still registers
+  HoldType in System Settings.
 - When Accessibility is not allowed, the setup surface must explain that the
   user should enable HoldType in Privacy & Security > Accessibility, and if
   HoldType is not listed, use `+` to add the running app before turning it on.
