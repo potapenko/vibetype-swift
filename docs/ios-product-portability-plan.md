@@ -854,8 +854,10 @@ portable delivery-outcome boundary before moving any session controller:
 3. keep accepted text, document/session identities, TTLs, acknowledgements,
    duplicate claims, and repository I/O in their separately owned value and
    persistence contracts;
-4. add package and normal-import iOS truth-table tests that prove the neutral
-   outcomes do not claim insertion success when acknowledgement is missing;
+4. add package and normal-import iOS truth-table tests that keep the extension's
+   local `confirmedInserted`/`submittedUnverified` outcomes distinct from
+   containing-app acknowledgement and reconciliation; a missing acknowledgement
+   must not rewrite the local outcome;
 5. keep UI, bridge/App Group records, cache lifecycle, recovery routing,
    session orchestration, the obsolete M0A prototype, and the production QWERTY
    engine outside this result-only slice.
