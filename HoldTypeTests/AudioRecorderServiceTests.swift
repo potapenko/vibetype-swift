@@ -7,10 +7,19 @@
 
 import AVFoundation
 import Foundation
+import HoldTypeDomain
 import Testing
 @testable import HoldType
 
 struct AudioRecorderServiceTests {
+
+    @Test func defaultMaximumDurationUsesThePortableUtteranceContract() {
+        #expect(
+            AVFoundationAudioRecorderService.defaultMaximumRecordingDuration ==
+                VoiceSessionPreferences.maximumUtteranceDuration
+        )
+        #expect(AVFoundationAudioRecorderService.defaultMaximumRecordingDuration == 300)
+    }
 
     @Test func statusExposesRecordingState() {
         let artifact = AudioRecordingArtifact(

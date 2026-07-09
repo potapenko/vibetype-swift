@@ -8,44 +8,6 @@
 import Foundation
 import HoldTypeDomain
 
-enum RecordingStopTailDuration: String, CaseIterable, Codable, Equatable {
-    case off
-    case milliseconds500
-    case seconds1
-    case seconds1_5
-    case seconds2
-
-    var duration: TimeInterval {
-        switch self {
-        case .off:
-            return 0
-        case .milliseconds500:
-            return 0.5
-        case .seconds1:
-            return 1
-        case .seconds1_5:
-            return 1.5
-        case .seconds2:
-            return 2
-        }
-    }
-
-    var displayName: String {
-        switch self {
-        case .off:
-            return "Off"
-        case .milliseconds500:
-            return "0.5 seconds"
-        case .seconds1:
-            return "1.0 second"
-        case .seconds1_5:
-            return "1.5 seconds"
-        case .seconds2:
-            return "2.0 seconds"
-        }
-    }
-}
-
 struct AppSettings: Equatable {
     static let defaultTranscriptionModel = TranscriptionConfiguration.defaultModel
     static let defaultTextCorrectionModel = TextCorrectionConfiguration.defaultModel
@@ -85,9 +47,10 @@ struct AppSettings: Equatable {
         translationPrompt: defaultTranslationPrompt,
         automaticallyInsertTranscripts: true,
         saveTranscriptsToAppClipboard: true,
-        soundEnabled: true,
+        soundEnabled: VoiceSessionPreferences.defaults.audioCuesEnabled,
         showFloatingIndicator: true,
-        recordingStopTailDuration: .off,
+        recordingStopTailDuration:
+            VoiceSessionPreferences.defaults.recordingStopTailDuration,
         saveTranscriptHistory: RetentionConfiguration.defaults.historyEnabled,
         recordingCachePolicy: RetentionConfiguration.defaults.recordingCachePolicy
     )
@@ -216,6 +179,13 @@ struct AppSettings: Equatable {
         RetentionConfiguration(
             historyEnabled: saveTranscriptHistory,
             recordingCachePolicy: recordingCachePolicy
+        )
+    }
+
+    var voiceSessionPreferences: VoiceSessionPreferences {
+        VoiceSessionPreferences(
+            audioCuesEnabled: soundEnabled,
+            recordingStopTailDuration: recordingStopTailDuration
         )
     }
 

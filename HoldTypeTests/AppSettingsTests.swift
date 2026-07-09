@@ -66,6 +66,7 @@ struct AppSettingsTests {
         #expect(settings.automaticallyInsertTranscripts)
         #expect(settings.saveTranscriptsToAppClipboard)
         #expect(settings.soundEnabled)
+        #expect(settings.voiceSessionPreferences == .defaults)
         #expect(settings.showFloatingIndicator)
         #expect(settings.recordingStopTailDuration == .off)
         #expect(settings.recordingStopTailDuration.duration == 0)
@@ -818,19 +819,61 @@ struct AppSettingsTests {
         #expect(migratedMissing.0.object(forKey: historyKey) == nil)
     }
 
-    @Test func loadsRecordingStopTailDurationAndFallsBackForUnknownValues() {
+    @Test func projectsVoiceSessionPreferencesWithoutIncludingMacOnlyIndicatorState() {
+        var settings = AppSettings.defaults
+        settings.soundEnabled = false
+        settings.recordingStopTailDuration = .seconds1_5
+        settings.showFloatingIndicator = false
+
+        #expect(settings.voiceSessionPreferences == VoiceSessionPreferences(
+            audioCuesEnabled: false,
+            recordingStopTailDuration: .seconds1_5
+        ))
+        #expect(RecordingStopTailDuration.allCases.map(\.displayName) == [
+            "Off",
+            "0.5 seconds",
+            "1.0 second",
+            "1.5 seconds",
+            "2.0 seconds",
+        ])
+    }
+
+    @Test func voiceSessionPreferencePersistenceKeepsLegacyKeysAndRawValues() {
         let (defaults, suiteName) = makeIsolatedUserDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let store = AppSettingsStore(userDefaults: defaults)
         var settings = AppSettings.defaults
-        settings.recordingStopTailDuration = .seconds2
+        let soundKey = AppSettingsStore.keyPrefix + "soundEnabled"
+        let tailKey = AppSettingsStore.keyPrefix + "recordingStopTailDuration"
 
-        store.save(settings)
-        #expect(store.load().recordingStopTailDuration == .seconds2)
+        settings.soundEnabled = false
+        for tail in RecordingStopTailDuration.allCases {
+            settings.recordingStopTailDuration = tail
+            store.save(settings)
+            #expect(defaults.bool(forKey: soundKey) == false)
+            #expect(defaults.string(forKey: tailKey) == tail.rawValue)
+            #expect(store.load().voiceSessionPreferences == VoiceSessionPreferences(
+                audioCuesEnabled: false,
+                recordingStopTailDuration: tail
+            ))
+        }
 
-        defaults.set("legacyUnknownTail", forKey: AppSettingsStore.keyPrefix + "recordingStopTailDuration")
+        defaults.set("legacyUnknownTail", forKey: tailKey)
         #expect(store.load().recordingStopTailDuration == .off)
+        #expect(defaults.string(forKey: tailKey) == "legacyUnknownTail")
+
+        defaults.set("not-a-bool", forKey: soundKey)
+        defaults.set(Data([0x01]), forKey: tailKey)
+        #expect(store.load().voiceSessionPreferences == .defaults)
+        #expect(defaults.string(forKey: soundKey) == "not-a-bool")
+        #expect(defaults.data(forKey: tailKey) == Data([0x01]))
+
+        defaults.removeObject(forKey: soundKey)
+        defaults.removeObject(forKey: tailKey)
+        #expect(store.load().voiceSessionPreferences == .defaults)
+        #expect(defaults.object(forKey: soundKey) == nil)
+        #expect(defaults.object(forKey: tailKey) == nil)
     }
 
     @Test func legacyRussianToEnglishShortcutSettingMigratesToTranslationShortcut() {

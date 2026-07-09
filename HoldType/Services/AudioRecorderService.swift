@@ -7,6 +7,7 @@
 
 import AVFoundation
 import Foundation
+import HoldTypeDomain
 
 struct AudioRecordingArtifact: Equatable {
     let fileURL: URL
@@ -113,7 +114,8 @@ struct AVFoundationAudioRecorderEngineFactory: AudioRecorderEngineFactory {
 }
 
 final class AVFoundationAudioRecorderService: AudioRecorderService {
-    static let defaultMaximumRecordingDuration: TimeInterval = 300
+    static let defaultMaximumRecordingDuration =
+        VoiceSessionPreferences.maximumUtteranceDuration
 
     private let permissionStatusProvider: () -> MicrophonePermissionStatus
     private let recorderFactory: any AudioRecorderEngineFactory

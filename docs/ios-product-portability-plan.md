@@ -1,6 +1,6 @@
 # HoldType iOS Full Product Portability Plan
 
-Status: active implementation roadmap, P0 contracts and the first thirteen P1
+Status: active implementation roadmap, P0 contracts and the first fourteen P1
 Domain slices complete; updated 2026-07-10.
 
 This document plans the complete iPhone and iPad companion product around the
@@ -200,6 +200,7 @@ must not become the cross-platform public API. Extract these domain types:
 - `PersonalizationConfiguration` for dictionary and emoji commands;
 - `RetentionConfiguration` for history and recordings;
 - `VoiceSessionPreferences`;
+- `OutputDeliveryPreferences`;
 - `KeyboardPreferences`;
 - `MacBehaviorConfiguration`;
 - `IOSBehaviorConfiguration`.
@@ -623,8 +624,12 @@ semantics. The macOS app keeps source-compatible
 typealias/presentation facades, projects the configurations from its existing
 scalar settings, and preserves the UserDefaults keys, scalar raw values, legacy
 translation and history migrations, the cache policy's legacy two-key schema,
-and custom-dictionary `[String]` storage. Direct package
-consumers are linked explicitly, the keyboard remains unlinked, and
+and custom-dictionary `[String]` storage. `VoiceSessionPreferences` now carries
+the portable audio-cue and recording-tail intent, while the five-minute
+per-utterance maximum and the separately gated five-minute Quick Session remain
+independent constants. The existing recorder delegates its default maximum to
+that contract without moving capture or session behavior into Domain. Direct
+package consumers are linked explicitly, the keyboard remains unlinked, and
 package/macOS/iOS tests pass.
 
 ### P2 — Mobile-ready provider and persistence foundations
@@ -831,20 +836,23 @@ iOS target. P0 plus the accepted-text, prompt-context, language,
 transcription-configuration, custom-dictionary, text-replacement, emoji
 model/catalog, emoji-configuration, emoji-matcher, and full local-postprocessing
 slices plus remote text-correction and translation configurations are complete.
-Retention configuration is complete too. The next P1 slice extracts portable
-voice-session preferences:
+Retention configuration and voice-session preferences are complete too. The
+next P1 slice extracts portable output-delivery preferences:
 
-1. move `RecordingStopTailDuration` and a pure `VoiceSessionPreferences` into
-   Domain;
-2. preserve the current stop-tail raw values, Off default, and sound-enabled
-   default without treating macOS indicator or hotkey preferences as portable;
-3. represent the approved five-minute per-utterance cap and the separately
-   fixed five-minute Quick Session duration as distinct product constants;
-4. project the portable values from `AppSettings` without changing its
-   initializer, UserDefaults keys, raw persistence, or fallback behavior;
-5. keep audio capture, timers, cues, interruptions, session orchestration, UI,
-   App Group publication, background modes, the obsolete M0A
-   session prototype, and the production QWERTY engine outside this slice.
+1. add a pure `OutputDeliveryPreferences` with independent default-on
+   `automaticInsertionPreferenceEnabled` and `keepLatestResult` values;
+2. project `automaticallyInsertTranscripts` and the app-owned
+   `saveTranscriptsToAppClipboard` from `AppSettings` without changing its
+   initializer, two existing Bool keys, missing/wrong-type fallback, or current
+   macOS effects;
+3. treat automatic insertion as user intent only: target identity, expiry,
+   acknowledgement, duplicate prevention, and route eligibility remain outside
+   the preference;
+4. keep actual text, clipboard operations, Accessibility, Full Access, bridge
+   publication, latest-result expiry/storage, delivery results, and recovery
+   destinations outside this configuration-only slice;
+5. keep UI, the obsolete M0A session prototype, and the production QWERTY
+   engine outside this slice.
 
 ## Research Basis
 

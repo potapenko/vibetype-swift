@@ -275,7 +275,10 @@ host app, state, expected result, actual result, and go/no-go decision.
   `EmojiCommandsConfiguration`, the matcher, and the full local post-processing
   pipeline are also complete. Remote text-correction configuration is portable;
   translation and retention configurations are portable too, including the
-  exact history caps and recording-cache policy semantics. The next slice
-  extracts `VoiceSessionPreferences`; no voice-session state is published to
-  the keyboard during that configuration-only move.
+  exact history caps and recording-cache policy semantics. Portable
+  `VoiceSessionPreferences` now preserves cue/tail intent and the two distinct
+  five-minute contracts without publishing voice-session state to the
+  keyboard. The next configuration-only slice extracts
+  `OutputDeliveryPreferences`; it will not publish text, target identity, or
+  insertion eligibility to the extension.
 - Full QWERTY and background Quick Session: gated and not started.
