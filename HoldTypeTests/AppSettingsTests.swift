@@ -440,6 +440,47 @@ struct AppSettingsTests {
         )
     }
 
+    @Test func customEmojiCommandsDecodeFrozenLegacyPayloadWithoutMigration() throws {
+        let (defaults, suiteName) = makeIsolatedUserDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let key = AppSettingsStore.keyPrefix + "customEmojiCommands"
+        let fixture = Data(
+            #"""
+            [
+              {
+                "id": "00000000-0000-0000-0000-000000000321",
+                "emoji": "🚀",
+                "command": "emoji rocket",
+                "aliases": ["launch emoji"],
+                "isEnabled": false
+              }
+            ]
+            """#.utf8
+        )
+        defaults.set(fixture, forKey: key)
+        let store = AppSettingsStore(userDefaults: defaults)
+
+        let settings = store.load()
+
+        #expect(defaults.data(forKey: key) == fixture)
+        #expect(settings.customEmojiCommands.count == 1)
+        #expect(settings.customEmojiCommands.first?.emoji == "🚀")
+        #expect(settings.customEmojiCommands.first?.command == "emoji rocket")
+        #expect(settings.customEmojiCommands.first?.aliases == ["launch emoji"])
+        #expect(settings.customEmojiCommands.first?.isEnabled == false)
+
+        store.save(settings)
+
+        let savedData = try #require(defaults.data(forKey: key))
+        #expect(
+            try JSONDecoder().decode(
+                Array<HoldTypeDomain.CustomEmojiCommand>.self,
+                from: savedData
+            ) == settings.customEmojiCommands
+        )
+    }
+
     @Test func migratesLegacyDisabledTranscriptHistoryToEnabledDefaultOnce() {
         let (defaults, suiteName) = makeIsolatedUserDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }

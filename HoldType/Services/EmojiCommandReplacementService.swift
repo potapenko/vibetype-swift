@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import HoldTypeDomain
 
 struct EmojiCommandReplacementService {
     func process(

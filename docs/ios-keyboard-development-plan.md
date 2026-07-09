@@ -271,6 +271,6 @@ host app, state, expected result, actual result, and go/no-go decision.
 - P1 portable-domain extraction: active; `AcceptedTranscript` and
   `TranscriptionPromptContext` plus transcription language/validation and
   `TranscriptionConfiguration` plus custom-dictionary normalization package
-  slices and `TextReplacementRule` are complete; the next slice extracts emoji
-  command models and the built-in catalog.
+  slices, `TextReplacementRule`, and emoji command models/catalog are complete;
+  the next slice adds `EmojiCommandsConfiguration`.
 - Full QWERTY and background Quick Session: gated and not started.

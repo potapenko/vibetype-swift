@@ -1,6 +1,6 @@
 # HoldType iOS Full Product Portability Plan
 
-Status: active implementation roadmap, P0 contracts and the first six P1
+Status: active implementation roadmap, P0 contracts and the first seven P1
 Domain slices complete; updated 2026-07-09.
 
 This document plans the complete iPhone and iPad companion product around the
@@ -608,7 +608,8 @@ Foundation-only `AcceptedTranscript`, `TranscriptionPromptContext`,
 `TranscriptionLanguage`, custom-language validation, and
 `TranscriptionConfiguration`, plus the normalized `CustomDictionary` value.
 The package also owns the Codable `TextReplacementRule` value without changing
-its legacy JSON fields. The macOS app keeps source-compatible
+its legacy JSON fields, and the four emoji-command values plus the exact
+six-language built-in catalog. The macOS app keeps source-compatible
 typealias/presentation facades, projects the configuration from its existing
 scalar settings, and preserves the UserDefaults keys, scalar raw values, and
 custom-dictionary `[String]` storage. Direct package consumers are linked
@@ -815,18 +816,19 @@ already decided by their P0 specs.
 
 Do not begin by porting `SettingsView` or adding every macOS source file to the
 iOS target. P0 plus the accepted-text, prompt-context, language,
-transcription-configuration, custom-dictionary, and text-replacement value
-slices are complete. The next P1 slice moves emoji-command models and their
-built-in catalog:
+transcription-configuration, custom-dictionary, text-replacement, and emoji
+model/catalog slices are complete. The next P1 slice adds
+`EmojiCommandsConfiguration`:
 
-1. extract the exact alias, command, custom-command, and command-set values plus
-   the existing six built-in sets without changing names, aliases, or order;
-2. preserve custom-command UUID/Codable fields, whitespace normalization,
-   first-spelling behavior, prompt hints, and single-active-built-in-set rules;
-3. keep `AppSettings` fields and JSON/UserDefaults persistence behind macOS
-   compatibility facades, with frozen legacy fixtures and package/iOS smoke;
-4. leave the matcher/replacement engine and full local post-processing order in
-   their current pipeline until the following portable slices;
+1. project the current enabled flag, selected built-in-set IDs, and custom
+   commands into a pure Domain value;
+2. move the existing single-active-set and custom-command normalization into
+   that value without changing first-entry, UUID, prompt-hint, or enabled-state
+   semantics;
+3. keep `AppSettings` fields, UserDefaults keys, and legacy JSON payloads as the
+   macOS persistence source of truth behind delegating compatibility accessors;
+4. preserve full prompt ordering and leave the matcher/replacement engine plus
+   local post-processing order for their following portable slices;
 5. keep UI, App Group publication, provider work, audio, background modes, the
    obsolete M0A session prototype, and the production QWERTY engine outside
    this slice.
