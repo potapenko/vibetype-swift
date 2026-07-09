@@ -24,6 +24,9 @@
 /* Begin PBXBuildFile section */
 		D4A1740A2FEF17400000000A /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = D4A1740D2FEF17400000000D /* Sparkle */; };
 		D4A175092FF0000000000009 /* HoldTypeKeyboard.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D4A175012FF0000000000001 /* HoldTypeKeyboard.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D4A176042FF1000000000004 /* HoldTypeDomain in Frameworks */ = {isa = PBXBuildFile; productRef = D4A176012FF1000000000001 /* HoldTypeDomain */; };
+		D4A176052FF1000000000005 /* HoldTypeDomain in Frameworks */ = {isa = PBXBuildFile; productRef = D4A176022FF1000000000002 /* HoldTypeDomain */; };
+		D4A176062FF1000000000006 /* HoldTypeDomain in Frameworks */ = {isa = PBXBuildFile; productRef = D4A176032FF1000000000003 /* HoldTypeDomain */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -163,6 +166,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D4A176042FF1000000000004 /* HoldTypeDomain in Frameworks */,
 				D4A1740A2FEF17400000000A /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -185,6 +189,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D4A176052FF1000000000005 /* HoldTypeDomain in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -192,6 +197,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D4A176062FF1000000000006 /* HoldTypeDomain in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -255,6 +261,7 @@
 			);
 			name = HoldType;
 			packageProductDependencies = (
+				D4A176012FF1000000000001 /* HoldTypeDomain */,
 				D4A1740D2FEF17400000000D /* Sparkle */,
 			);
 			productName = HoldType;
@@ -328,6 +335,7 @@
 			);
 			name = "HoldType-iOS";
 			packageProductDependencies = (
+				D4A176022FF1000000000002 /* HoldTypeDomain */,
 			);
 			productName = "HoldType-iOS";
 			productReference = 9DB749A12FE7A0000053C3F3 /* HoldType-iOS.app */;
@@ -352,6 +360,7 @@
 			);
 			name = HoldTypeIOSTests;
 			packageProductDependencies = (
+				D4A176032FF1000000000003 /* HoldTypeDomain */,
 			);
 			productName = HoldTypeIOSTests;
 			productReference = 9DB749B02FE800000053C3F3 /* HoldTypeIOSTests.xctest */;
@@ -425,6 +434,7 @@
 			mainGroup = 9DB749602FE6D7300053C3F3;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				D4A176002FF1000000000000 /* XCLocalSwiftPackageReference "HoldTypeDomain" */,
 				D4A1740C2FEF17400000000C /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -582,6 +592,13 @@
 		};
 /* End PBXTargetDependency section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		D4A176002FF1000000000000 /* XCLocalSwiftPackageReference "HoldTypeDomain" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/HoldTypeDomain;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		D4A1740C2FEF17400000000C /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -598,6 +615,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D4A1740C2FEF17400000000C /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		D4A176012FF1000000000001 /* HoldTypeDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4A176002FF1000000000000 /* XCLocalSwiftPackageReference "HoldTypeDomain" */;
+			productName = HoldTypeDomain;
+		};
+		D4A176022FF1000000000002 /* HoldTypeDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4A176002FF1000000000000 /* XCLocalSwiftPackageReference "HoldTypeDomain" */;
+			productName = HoldTypeDomain;
+		};
+		D4A176032FF1000000000003 /* HoldTypeDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4A176002FF1000000000000 /* XCLocalSwiftPackageReference "HoldTypeDomain" */;
+			productName = HoldTypeDomain;
 		};
 /* End XCSwiftPackageProductDependency section */
 

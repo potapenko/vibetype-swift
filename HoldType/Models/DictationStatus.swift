@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import HoldTypeDomain
 
 enum DictationStatus: Equatable {
     case idle

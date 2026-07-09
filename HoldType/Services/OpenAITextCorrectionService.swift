@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import HoldTypeDomain
 
 protocol OpenAITextCorrectionServing {
     func correct(

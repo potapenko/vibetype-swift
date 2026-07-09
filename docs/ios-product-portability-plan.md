@@ -1,7 +1,7 @@
 # HoldType iOS Full Product Portability Plan
 
-Status: active implementation roadmap, P0 contracts complete and P1 active;
-updated 2026-07-09.
+Status: active implementation roadmap, P0 contracts and the first P1 Domain
+slice complete; updated 2026-07-09.
 
 This document plans the complete iPhone and iPad companion product around the
 HoldType keyboard. It does not authorize Swift, target, entitlement, or
@@ -593,6 +593,11 @@ physical-device claims. M0B/M0C remain operator-local physical gates.
 
 Exit: macOS builds/tests pass and shared tests run on macOS and iOS.
 
+Progress 2026-07-09: local package `HoldTypeDomain` now owns the public
+Foundation-only `AcceptedTranscript`; the macOS app keeps its source-compatible
+typealias facade, the package is linked to the macOS app, iOS app, and iOS test
+target but not the keyboard, and package/macOS/iOS tests pass.
+
 ### P2 — Mobile-ready provider and persistence foundations
 
 - extract OpenAI transcription, correction, and translation;
@@ -793,17 +798,18 @@ already decided by their P0 specs.
 ## Recommended Next Slice
 
 Do not begin by porting `SettingsView` or adding every macOS source file to the
-iOS target. P0 is complete. The active P1 slice is the smallest
-behavior-neutral extraction:
+iOS target. P0 and the `AcceptedTranscript` slice are complete. The next P1
+slice is another behavior-neutral domain move:
 
-1. create local package `HoldTypeDomain`;
-2. move only `AcceptedTranscript` and its pure tests into it;
-3. keep the current macOS source path as a compatibility typealias facade;
-4. link the package to the macOS app, iOS containing app, and iOS tests, but not
-   the keyboard extension;
-5. run package, macOS, and iOS tests before broadening extraction to
-   configurations;
-6. keep audio, background modes, the obsolete M0A session prototype, and the
+1. remove `TranscriptionPromptContext` from the Accessibility-owning source by
+   giving the value a Foundation-only prompt-composition contract;
+2. keep AX text acquisition and the first-release iOS Nearby Text Context
+   exclusion platform-specific;
+3. move focused normalization/prompt tests into `HoldTypeDomain` while keeping
+   current macOS request-builder and settings tests green;
+4. only then split `TranscriptionConfiguration` and language validation behind
+   the existing `AppSettings` facade;
+5. keep audio, background modes, the obsolete M0A session prototype, and the
    production QWERTY engine for their named gates.
 
 ## Research Basis

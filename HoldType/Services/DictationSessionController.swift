@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import HoldTypeDomain
 
 protocol TranscriptOutputDelivering {
     func deliver(_ transcript: String, settings: AppSettings) async throws -> TextInsertionResult

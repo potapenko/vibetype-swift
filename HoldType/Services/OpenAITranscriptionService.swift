@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import HoldTypeDomain
 
 protocol OpenAITranscriptionServing {
     func transcribe(

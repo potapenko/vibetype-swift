@@ -268,5 +268,6 @@ host app, state, expected result, actual result, and go/no-go decision.
   interaction: pending the first physical-device/manual pass and operator-local
   Apple Developer Team/App Group provisioning.
 - M0B/M0C physical-device evidence: pending.
-- P1 portable-domain extraction: active, beginning with `AcceptedTranscript`.
+- P1 portable-domain extraction: active; the `AcceptedTranscript` package slice
+  is complete and the next slice isolates `TranscriptionPromptContext`.
 - Full QWERTY and background Quick Session: gated and not started.
