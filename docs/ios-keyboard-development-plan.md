@@ -295,7 +295,10 @@ host app, state, expected result, actual result, and go/no-go decision.
   access and availability errors remain platform-owned. The keyboard is still
   unlinked from the transitional Domain product; before it imports typing
   types, provider-only contracts must be split behind an app-only product
-  boundary. The next P1 slice narrows successful transcription-usage handoff;
-  App Group command/session records, keyboard linking, and actual keyboard
-  insertion remain unchanged until their owning milestones.
+  boundary. Successful transcription usage now has a portable, idempotent
+  containing-app handoff and remains absent from keyboard/App Group state; its
+  durable replay ID and versioned repository remain P2 work. The next P1 slice
+  makes runtime attempt-stage attribution portable. App Group command/session
+  records, keyboard linking, and actual keyboard insertion remain unchanged
+  until their owning milestones.
 - Full QWERTY and background Quick Session: gated and not started.

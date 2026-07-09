@@ -1,6 +1,6 @@
 # HoldType iOS Full Product Portability Plan
 
-Status: active implementation roadmap, P0 contracts and the first twenty-two P1
+Status: active implementation roadmap, P0 contracts and the first twenty-three P1
 Domain slices complete; updated 2026-07-10.
 
 This document plans the complete iPhone and iPad companion product around the
@@ -674,6 +674,21 @@ still owns Keychain access, availability and presentation errors, and maps the
 Domain validation failure back to the existing missing-key behavior. The
 keyboard remains unlinked from the transitional Domain product.
 
+`SuccessfulTranscriptionUsage` now narrows the usage handoff to one local
+idempotency UUID, a normalized model, and a strictly positive finite duration.
+The main-actor recorder receives it immediately after a non-empty provider
+transcript is accepted, before correction, translation, History, or output, and
+never receives `AppSettings`. Provider failure, rejected/late output,
+cancellation before acceptance, and invalid legacy retry durations produce no
+invented event; later failure or cancellation cannot revoke an accepted usage
+handoff. The existing macOS store
+uses the UUID as its event ID, keeps the first frozen event on conflicting
+same-ID replay, and does not hide an unrelated save failure on a duplicate
+no-op. P1 proves same-ID in-process idempotency only. P2 must durably journal
+that UUID before provider dispatch and reuse it on lifecycle replay, quarantine
+invalid legacy event durations, and move persistence off the latency-critical
+main-actor path.
+
 ### P2 — Mobile-ready provider and persistence foundations
 
 - extract OpenAI transcription, correction, and translation;
@@ -874,29 +889,28 @@ already decided by their P0 specs.
 ## Recommended Next Slice
 
 Do not begin by porting `SettingsView` or adding every macOS source file to the
-iOS target. The first twenty-two value/configuration/dependency slices are
-complete, including the redacted transient provider credential boundary. The
-next P1 slice narrows successful transcription-usage handoff before moving the
-legacy priced event or store:
+iOS target. The first twenty-three value/configuration/dependency slices are
+complete, including the redacted credential and idempotent successful-
+transcription usage handoff. The next P1 slice makes attempt-stage attribution
+portable without turning it into persisted session state:
 
-1. specify and add a public `SuccessfulTranscriptionUsage` value containing
-   only a normalized non-empty model and strictly positive audio duration;
-   keep it `Equatable`, `Sendable`, and non-Codable, with no timestamp, price,
-   transcript, provider payload, credential, or persistence semantics;
-2. add the narrow `TranscriptionUsageRecording` dependency that receives that
-   exact value only after a non-empty provider transcription is accepted;
-3. change the macOS controller/store adapter to pass the resolved model and
-   completed artifact duration instead of giving the usage store all of
-   `AppSettings`; preserve exactly-once behavior and make invalid handoff data a
-   non-blocking no-record path rather than inventing a zero-duration event;
-4. keep `OpenAIUsageEvent`, pricing snapshots, summaries, Combine,
-   `UserDefaults`, retention, clocks, and user-facing storage errors in the
-   containing app until the versioned P2 persistence slice;
-5. add package, macOS orchestration/store-regression, and normal-import iOS
-   tests covering normalization, validation, success, failure, cancellation,
-   retry, and the absence of forbidden content;
-6. keep all usage data out of App Group, keyboard, diagnostics, and normal live
-   provider tests.
+1. specify and add a public runtime-only `VoiceAttemptStage` with exactly
+   `recordingFinalization`, `transcription`, `postProcessing`, and
+   `outputDelivery`;
+2. make it `Equatable` and `Sendable`, but not `Codable`, raw-valued, localized,
+   or payload-bearing. It attributes the current operation for recovery and
+   compact logging; it is not `VoiceWorkPhase`, an outcome, delivery state, or
+   a complete journal contract;
+3. replace the private macOS `DictationSessionStage` through a compatibility
+   facade and preserve existing stage assignment, recovery eligibility,
+   failure presentation, and event categories exactly;
+4. keep detailed correction/translation and mandatory accepted-result
+   persistence checkpoints out of this four-case compatibility value. P2 owns
+   a separately versioned durable journal DTO and any finer resume stages;
+5. add exhaustive package and normal-import iOS tests plus macOS regressions for
+   each failure-log/recovery branch;
+6. keep the value out of App Group and keyboard transport; no stage alone
+   authorizes retry, delivery, or secret/audio access.
 
 ## Research Basis
 

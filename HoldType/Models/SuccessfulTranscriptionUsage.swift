@@ -1,0 +1,4 @@
+import HoldTypeDomain
+
+typealias SuccessfulTranscriptionUsage = HoldTypeDomain.SuccessfulTranscriptionUsage
+typealias TranscriptionUsageRecording = HoldTypeDomain.TranscriptionUsageRecording

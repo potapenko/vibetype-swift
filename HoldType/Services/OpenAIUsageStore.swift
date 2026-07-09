@@ -7,6 +7,7 @@
 
 import Combine
 import Foundation
+import HoldTypeDomain
 
 protocol OpenAIUsagePersistence {
     func loadData(forKey key: String) throws -> Data?
@@ -15,11 +16,6 @@ protocol OpenAIUsagePersistence {
 }
 
 extension UserDefaults: OpenAIUsagePersistence {}
-
-@MainActor
-protocol OpenAIUsageRecording: AnyObject {
-    func recordCompletedTranscription(settings: AppSettings, audioDuration: TimeInterval)
-}
 
 enum OpenAIUsageStoreError: Error, Equatable, LocalizedError {
     case loadFailed
@@ -42,7 +38,7 @@ enum OpenAIUsageStoreError: Error, Equatable, LocalizedError {
 }
 
 @MainActor
-final class OpenAIUsageStore: ObservableObject, OpenAIUsageRecording {
+final class OpenAIUsageStore: ObservableObject, TranscriptionUsageRecording {
     static let shared = OpenAIUsageStore()
     nonisolated static let defaultStorageKey = "holdtype.openAIUsageEstimate.events"
     nonisolated static let defaultRetentionDays = 365
@@ -115,16 +111,16 @@ final class OpenAIUsageStore: ObservableObject, OpenAIUsageRecording {
         }
     }
 
-    func recordCompletedTranscription(settings: AppSettings, audioDuration: TimeInterval) {
+    func recordSuccessfulTranscriptionUsage(_ usage: SuccessfulTranscriptionUsage) {
         let event = pricing.makeEvent(
             timestamp: now(),
-            model: settings.resolvedTranscriptionModel,
-            durationSeconds: audioDuration
+            model: usage.model,
+            durationSeconds: usage.audioDuration,
+            id: usage.transcriptionID
         )
 
         do {
             _ = try append(event)
-            storageErrorMessage = nil
         } catch {
             storageErrorMessage = Self.userFacingMessage(for: error)
         }
@@ -152,7 +148,13 @@ final class OpenAIUsageStore: ObservableObject, OpenAIUsageRecording {
 
     @discardableResult
     func append(_ event: OpenAIUsageEvent) throws -> [OpenAIUsageEvent] {
-        let updatedEntries = retainedEntries([event] + (try load()))
+        let existingEntries = try load()
+        guard !existingEntries.contains(where: { $0.id == event.id }) else {
+            entries = existingEntries
+            return existingEntries
+        }
+
+        let updatedEntries = retainedEntries([event] + existingEntries)
         try save(updatedEntries)
         entries = updatedEntries
         storageErrorMessage = nil

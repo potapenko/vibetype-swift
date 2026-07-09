@@ -128,13 +128,22 @@ A failed entry may store:
 - relative identifier for protected retry-only audio
 
 The pending journal stores only the attempt/session ID, relative audio
-identifier, creation/update dates, processing phase, output intent, and compact
-configuration identifiers needed to explain recovery. Provider retry resolves
-fresh settings and credentials.
+identifier, creation/update dates, processing phase, output intent, optional
+current audio-transcription idempotency UUID, and compact configuration
+identifiers needed to explain recovery. The UUID is committed before provider
+dispatch and reused only when replaying that same request/handoff; every
+genuinely new provider request, including Retry, replaces it with a new UUID.
+Provider retry resolves fresh settings and credentials.
 
 History and journal records never store API keys, authorization headers,
 provider responses, prompts, dictionary contents, surrounding text, analytics,
 or ordinary keystrokes.
+
+Usage bookkeeping is independent of History ownership. Once a non-empty audio
+transcription response is accepted, its idempotent local usage handoff remains
+valid even if later translation, accepted-History append, or output delivery
+fails. Clearing History never clears usage, and a History write failure never
+repeats provider work or creates a second usage event.
 
 ## Journal And Audio Ownership Transitions
 

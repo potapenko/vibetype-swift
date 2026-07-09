@@ -171,6 +171,13 @@ recoverable journal commit and covers transcription, correction, translation,
 and accepted-result preparation. It may continue after Quick Session Stop or
 expiry when the journaled provider attempt remains valid.
 
+The successful-transcription usage handoff is synchronous local bookkeeping
+inside `processing` and is non-fatal and non-gating for the voice result. It
+never holds or reactivates the microphone, changes `VoiceWorkPhase`, decides
+the terminal voice outcome, or repeats a provider request when local usage
+persistence fails. Persistence moves off the latency-critical path before this
+contract is described as non-blocking.
+
 The containing app and keyboard presentations derive their understandable
 user-facing state from separate sources instead of persisting or transporting
 the phase as a complete product state:

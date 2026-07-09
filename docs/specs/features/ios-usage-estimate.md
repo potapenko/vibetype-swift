@@ -18,7 +18,8 @@ complete provider-usage dashboard.
 
 - OpenAI billing, usage, balance, or account API calls
 - correction or translation token/cost estimates
-- failed, cancelled, rejected, empty, or locally invalid attempts
+- failed, rejected, empty, locally invalid, or cancelled-before-acceptance
+  transcription attempts
 - raw audio, transcript text, prompts, dictionary content, credentials, or
   provider payloads in usage records
 - analytics, telemetry, cloud sync, or cross-device aggregation
@@ -29,8 +30,32 @@ complete provider-usage dashboard.
   non-empty transcript is accepted from the transcription stage. Later local
   cleanup, correction, translation, output delivery, or History failure does
   not create a second audio-usage event.
-- A successful explicit retry records one event for that new provider
-  transcription. A failed or cancelled retry records none.
+- The containing app creates the usage handoff immediately after accepting that
+  non-empty provider transcript and before correction, translation, History,
+  or output delivery. A later failure in any of those stages does not revoke
+  the already successful audio transcription or create another handoff.
+- A successful explicit retry with valid positive finite duration metadata
+  records one event for that new provider transcription. A failed retry or one
+  cancelled before acceptance records none. Cancellation after its
+  transcription was already accepted does not revoke that event. A successful
+  legacy retry with missing or invalid duration still returns its text but
+  creates no invented usage event.
+- Before each actual audio-transcription provider request, the containing app
+  creates one local transcription UUID. Callback duplication or replay for
+  that request reuses the UUID; every new provider request, including an
+  explicit Retry, gets a new one. Correction, translation, History, and output
+  retries never get audio-transcription IDs.
+- The portable handoff contains only that local idempotency UUID, the
+  lowercased surrounding-whitespace-trimmed model, and a finite audio duration
+  greater than zero. Empty models, zero or negative durations, NaN, and
+  infinite durations are invalid and produce no event; rejection is
+  non-blocking for the accepted transcript.
+- The handoff is an `Equatable`, `Sendable`, runtime-only non-Codable value. It
+  has no timestamp, price, persistence, transcript, prompt, provider payload,
+  credential, or keyboard/App Group meaning. The UUID is not a provider,
+  analytics, session, document, or account identifier. The containing-app usage
+  repository uses it as the event ID, adds time and the frozen local price
+  snapshot, and treats a repeated UUID as an idempotent no-op.
 - Each event contains only a local ID, timestamp, normalized transcription
   model, positive audio duration, optional known USD-per-minute price, optional
   calculated cost, and optional local pricing-source/version label.
@@ -67,6 +92,10 @@ complete provider-usage dashboard.
 - The containing app is the only writer. Events use versioned app-private
   persistence with Data Protection and retain at most the most recent 365
   calendar days.
+- Before dispatching a replayable provider request, the pending-attempt journal
+  durably stores its local transcription UUID. Replaying the same accepted
+  handoff reuses that UUID; only a genuinely new provider request allocates a
+  new one.
 - Usage data is excluded from device backup and never enters App Group,
   Keychain, the keyboard extension, logs, diagnostics, or exports by default.
 - Normal app use and automated tests never call a live provider billing or
@@ -74,8 +103,11 @@ complete provider-usage dashboard.
 
 ## Invariants
 
-- Audio duration cannot be negative and cost is never invented for an unknown
-  model.
+- Newly created handoffs and events require finite, strictly positive audio
+  duration, and cost is never invented for an unknown model. Legacy decoded
+  zero, negative, or non-finite events are quarantined or migrated by the
+  versioned repository before they enter summaries; they are never silently
+  clamped into new valid events.
 - One successful audio request produces at most one event even after callback
   duplication, lifecycle replay, or output retry.
 - Correction and translation requests do not affect this estimate until a

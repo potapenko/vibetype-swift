@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import HoldTypeDomain
 import Testing
 @testable import HoldType
 
@@ -65,7 +66,7 @@ struct OpenAIUsageStoreTests {
         #expect(store.entries.map(\.id) == [retainedEvent.id])
     }
 
-    @Test func recordCompletedTranscriptionUsesResolvedModelAndCurrentPricing() {
+    @Test func recordSuccessfulTranscriptionUsageUsesCurrentPricingAndClock() throws {
         let persistence = FakeOpenAIUsagePersistence()
         let now = makeDate(year: 2026, month: 6, day: 22, hour: 12)
         let store = OpenAIUsageStore(
@@ -73,15 +74,81 @@ struct OpenAIUsageStoreTests {
             calendar: makeCalendar(),
             now: { now }
         )
-        var settings = AppSettings.defaults
-        settings.transcriptionModel = "gpt-4o-mini-transcribe"
+        let transcriptionID = try #require(
+            UUID(uuidString: "D92652ED-9594-4534-8AA7-F80AEEA89663")
+        )
+        let usage = try SuccessfulTranscriptionUsage(
+            transcriptionID: transcriptionID,
+            model: "gpt-4o-mini-transcribe",
+            audioDuration: 180
+        )
 
-        store.recordCompletedTranscription(settings: settings, audioDuration: 180)
+        store.recordSuccessfulTranscriptionUsage(usage)
 
         #expect(store.entries.count == 1)
+        #expect(store.entries.first?.id == transcriptionID)
+        #expect(store.entries.first?.timestamp == now)
         #expect(store.entries.first?.model == "gpt-4o-mini-transcribe")
         #expect(store.entries.first?.durationSeconds == 180)
         #expect(isClose(store.entries.first?.estimatedCostUSD, 0.009))
+    }
+
+    @Test func repeatedTranscriptionIDKeepsTheFirstFrozenEvent() throws {
+        let persistence = FakeOpenAIUsagePersistence()
+        var now = makeDate(year: 2026, month: 6, day: 22, hour: 10)
+        let store = OpenAIUsageStore(persistence: persistence, now: { now })
+        let transcriptionID = try #require(
+            UUID(uuidString: "C5133E89-5F95-485D-B7D9-6A20D93AE98A")
+        )
+        let firstUsage = try SuccessfulTranscriptionUsage(
+            transcriptionID: transcriptionID,
+            model: "gpt-4o-transcribe",
+            audioDuration: 30
+        )
+        let conflictingReplay = try SuccessfulTranscriptionUsage(
+            transcriptionID: transcriptionID,
+            model: "gpt-4o-mini-transcribe",
+            audioDuration: 90
+        )
+
+        store.recordSuccessfulTranscriptionUsage(firstUsage)
+        now = makeDate(year: 2026, month: 6, day: 23, hour: 10)
+        store.recordSuccessfulTranscriptionUsage(conflictingReplay)
+
+        #expect(store.entries.map(\.id) == [transcriptionID])
+        #expect(store.entries.first?.timestamp == makeDate(year: 2026, month: 6, day: 22, hour: 10))
+        #expect(store.entries.first?.model == "gpt-4o-transcribe")
+        #expect(store.entries.first?.durationSeconds == 30)
+        #expect(store.entries.first?.priceUSDPerMinute == 0.006)
+        #expect(persistence.saveCount == 1)
+    }
+
+    @Test func failedSaveRemainsVisibleWhenAnOlderIDIsReplayed() throws {
+        let persistence = FakeOpenAIUsagePersistence()
+        let store = OpenAIUsageStore(persistence: persistence)
+        let firstUsage = try SuccessfulTranscriptionUsage(
+            transcriptionID: try #require(UUID(uuidString: "511BB044-397E-49E4-B87A-0C7368C9AD34")),
+            model: "gpt-4o-transcribe",
+            audioDuration: 30
+        )
+        let failedUsage = try SuccessfulTranscriptionUsage(
+            transcriptionID: try #require(UUID(uuidString: "DD5208C1-1B74-4A23-9681-3BBF41D4D72B")),
+            model: "gpt-4o-mini-transcribe",
+            audioDuration: 60
+        )
+
+        store.recordSuccessfulTranscriptionUsage(firstUsage)
+        persistence.saveError = OpenAIUsagePersistenceTestError.saveFailed
+        store.recordSuccessfulTranscriptionUsage(failedUsage)
+        let failedMessage = store.storageErrorMessage
+        persistence.saveError = nil
+
+        store.recordSuccessfulTranscriptionUsage(firstUsage)
+
+        #expect(store.entries.map(\.id) == [firstUsage.transcriptionID])
+        #expect(failedMessage == "OpenAI usage estimate could not be saved.")
+        #expect(store.storageErrorMessage == failedMessage)
+        #expect(persistence.saveCount == 2)
     }
 
     @Test func clearRemovesUsageEstimateOnlyFromLocalStore() throws {
@@ -134,12 +201,18 @@ struct OpenAIUsageStoreTests {
 private final class FakeOpenAIUsagePersistence: OpenAIUsagePersistence {
     var savedData: Data?
     var removedKeys: [String] = []
+    var saveCount = 0
+    var saveError: (any Error)?
 
     func loadData(forKey key: String) throws -> Data? {
         savedData
     }
 
     func saveData(_ data: Data, forKey key: String) throws {
+        saveCount += 1
+        if let saveError {
+            throw saveError
+        }
         savedData = data
     }
 
@@ -147,4 +220,8 @@ private final class FakeOpenAIUsagePersistence: OpenAIUsagePersistence {
         removedKeys.append(key)
         savedData = nil
     }
+}
+
+private enum OpenAIUsagePersistenceTestError: Error {
+    case saveFailed
 }

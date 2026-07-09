@@ -48,7 +48,8 @@ final class DictationSessionController {
     private let transcriptHistory: any TranscriptRecoveryHistoryRecording
     private let transcriptionFailureRecovery: any TranscriptionFailureRecoveryRecording
     private let activeTextContextReader: any ActiveTextContextReading
-    private let openAIUsageRecorder: any OpenAIUsageRecording
+    private let transcriptionUsageRecorder: any TranscriptionUsageRecording
+    private let transcriptionIDGenerator: () -> UUID
     private let recordingCache: any RecordingCacheLifecycleHandling
     private let recordingStopTailSleeper: any RecordingStopTailSleeping
     private let eventLogger: any DictationEventLogging
@@ -99,7 +100,8 @@ final class DictationSessionController {
         transcriptHistory: (any TranscriptRecoveryHistoryRecording)? = nil,
         transcriptionFailureRecovery: (any TranscriptionFailureRecoveryRecording)? = nil,
         activeTextContextReader: (any ActiveTextContextReading)? = nil,
-        openAIUsageRecorder: (any OpenAIUsageRecording)? = nil,
+        transcriptionUsageRecorder: (any TranscriptionUsageRecording)? = nil,
+        transcriptionIDGenerator: @escaping () -> UUID = UUID.init,
         recordingCache: any RecordingCacheLifecycleHandling = RecordingCacheService.shared,
         recordingStopTailSleeper: any RecordingStopTailSleeping = TaskRecordingStopTailSleeper(),
         eventLogger: any DictationEventLogging = OSLogDictationEventLogger(),
@@ -119,7 +121,8 @@ final class DictationSessionController {
         self.transcriptionFailureRecovery = transcriptionFailureRecovery
             ?? TranscriptionFailureRecoveryStore.shared
         self.activeTextContextReader = activeTextContextReader ?? ActiveTextContextService()
-        self.openAIUsageRecorder = openAIUsageRecorder ?? OpenAIUsageStore.shared
+        self.transcriptionUsageRecorder = transcriptionUsageRecorder ?? OpenAIUsageStore.shared
+        self.transcriptionIDGenerator = transcriptionIDGenerator
         self.recordingCache = recordingCache
         self.recordingStopTailSleeper = recordingStopTailSleeper
         self.eventLogger = eventLogger
@@ -232,6 +235,7 @@ final class DictationSessionController {
             status = .transcribing
             let settings = settingsProvider()
             eventLogger.record(.transcriptionStarted)
+            let transcriptionID = transcriptionIDGenerator()
             let rawTranscript = try await transcriptionService.transcribe(
                 audioFileURL: attempt.audioFileURL,
                 settings: settings,
@@ -244,6 +248,11 @@ final class DictationSessionController {
             }
 
             let transcribedTranscript = try Self.acceptedTranscript(from: rawTranscript)
+            recordSuccessfulTranscriptionUsage(
+                transcriptionID: transcriptionID,
+                model: settings.resolvedTranscriptionModel,
+                audioDuration: attempt.audioDuration
+            )
             let correctedTranscriptText = await correctedTranscriptText(
                 from: transcribedTranscript.text,
                 settings: settings,
@@ -258,9 +267,6 @@ final class DictationSessionController {
             status = .success(transcript: acceptedTranscript.text)
             failurePresentation = nil
 
-            if let audioDuration = attempt.audioDuration {
-                recordOpenAIUsageEstimate(settings: settings, audioDuration: audioDuration)
-            }
             recordRecoveryHistory(
                 acceptedTranscript.text,
                 settings: settings,
@@ -489,6 +495,7 @@ final class DictationSessionController {
             completedRecordingSettings = transcriptionSettings
             let context = activeTextContextReader.currentContext(settings: transcriptionSettings)
             eventLogger.record(.transcriptionStarted)
+            let transcriptionID = transcriptionIDGenerator()
             let rawTranscript = try await transcriptionService.transcribe(
                 audioFileURL: artifact.fileURL,
                 settings: transcriptionSettings,
@@ -501,6 +508,11 @@ final class DictationSessionController {
             }
 
             let transcribedTranscript = try Self.acceptedTranscript(from: rawTranscript)
+            recordSuccessfulTranscriptionUsage(
+                transcriptionID: transcriptionID,
+                model: transcriptionSettings.resolvedTranscriptionModel,
+                audioDuration: artifact.duration
+            )
             stage = .postProcessing
             let correctedTranscriptText = await correctedTranscriptText(
                 from: transcribedTranscript.text,
@@ -525,7 +537,6 @@ final class DictationSessionController {
             lastTranscriptText = acceptedTranscript.text
             status = .success(transcript: acceptedTranscript.text)
             failurePresentation = nil
-            recordOpenAIUsageEstimate(settings: settings, audioDuration: artifact.duration)
             recordRecoveryHistory(
                 acceptedTranscript.text,
                 settings: settings,
@@ -663,11 +674,21 @@ final class DictationSessionController {
         }
     }
 
-    private func recordOpenAIUsageEstimate(settings: AppSettings, audioDuration: TimeInterval) {
-        openAIUsageRecorder.recordCompletedTranscription(
-            settings: settings,
-            audioDuration: audioDuration
-        )
+    private func recordSuccessfulTranscriptionUsage(
+        transcriptionID: UUID,
+        model: String,
+        audioDuration: TimeInterval?
+    ) {
+        guard let audioDuration,
+              let usage = try? SuccessfulTranscriptionUsage(
+                  transcriptionID: transcriptionID,
+                  model: model,
+                  audioDuration: audioDuration
+              ) else {
+            return
+        }
+
+        transcriptionUsageRecorder.recordSuccessfulTranscriptionUsage(usage)
     }
 
     private func updateCompletedRecordingCacheIfNeeded(
