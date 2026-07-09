@@ -11,7 +11,7 @@ enum HoldTypeSetupSurface {
     case iOSContainingApp
 
     var eyebrow: String {
-        "iOS simulator companion"
+        "iOS keyboard feasibility"
     }
 
     var title: String {
@@ -19,33 +19,33 @@ enum HoldTypeSetupSurface {
     }
 
     var summary: String {
-        "A shared SwiftUI surface for testing setup and status screens on iOS."
+        "A contained first step toward a native-feeling HoldType voice keyboard."
     }
 
     var primaryStatusTitle: String {
-        "Containing app target is available"
+        "Phase 0 extension is embedded"
     }
 
     var primaryStatusDetail: String {
-        "Keyboard setup, recording, transcription, and text insertion stay disabled for now."
+        "This build validates keyboard loading, shared state, and safe text insertion."
     }
 
     var statusItems: [HoldTypeSetupStatusItem] {
         [
             HoldTypeSetupStatusItem(
-                symbolName: "rectangle.connected.to.line.below",
-                title: "Shared SwiftUI",
-                detail: "This screen is compiled from the same source as the macOS setup header."
-            ),
-            HoldTypeSetupStatusItem(
                 symbolName: "keyboard",
-                title: "No keyboard extension",
-                detail: "The target does not add Open Access, shared containers, or input extension code."
+                title: "Insertion probe",
+                detail: "The extension can type a normal character and insert an accepted sample."
             ),
             HoldTypeSetupStatusItem(
-                symbolName: "network",
-                title: "No provider calls",
-                detail: "The simulator surface makes no microphone, network, or transcription request."
+                symbolName: "folder.badge.gearshape",
+                title: "Private shared bridge",
+                detail: "Only a short, expiring transcript record crosses the App Group boundary."
+            ),
+            HoldTypeSetupStatusItem(
+                symbolName: "mic.slash.fill",
+                title: "Voice path is still gated",
+                detail: "Microphone, background session, network, and OpenAI remain outside this spike."
             ),
         ]
     }

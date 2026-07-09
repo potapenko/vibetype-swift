@@ -23,6 +23,7 @@
 
 /* Begin PBXBuildFile section */
 		D4A1740A2FEF17400000000A /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = D4A1740D2FEF17400000000D /* Sparkle */; };
+		D4A175092FF0000000000009 /* HoldTypeKeyboard.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D4A175012FF0000000000001 /* HoldTypeKeyboard.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -47,7 +48,28 @@
 			remoteGlobalIDString = 9DB749682FE6D7300053C3F3;
 			remoteInfo = HoldType;
 		};
+		D4A1750B2FF000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9DB749612FE6D7300053C3F3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D4A1750A2FF000000000000A;
+			remoteInfo = HoldTypeKeyboard;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D4A175082FF0000000000008 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D4A175092FF0000000000009 /* HoldTypeKeyboard.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		9DB749692FE6D7300053C3F3 /* HoldType.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HoldType.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -56,6 +78,7 @@
 		9DB749A12FE7A0000053C3F3 /* HoldType-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "HoldType-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		9DB749B02FE800000053C3F3 /* HoldTypeIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HoldTypeIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D4A174012FEF174000000001 /* Config/HoldTypeSigning.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/HoldTypeSigning.xcconfig; sourceTree = "<group>"; };
+		D4A175012FF0000000000001 /* HoldTypeKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HoldTypeKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -65,6 +88,21 @@
 				Info.plist,
 			);
 			target = 9DB749682FE6D7300053C3F3 /* HoldType */;
+		};
+		D4A175022FF0000000000002 /* Exceptions for "HoldTypeKeyboard" folder in "HoldTypeKeyboard" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				HoldTypeKeyboard.entitlements,
+				Info.plist,
+			);
+			target = D4A1750A2FF000000000000A /* HoldTypeKeyboard */;
+		};
+		D4A175102FF0000000000010 /* Exceptions for "HoldTypeIOS" folder in "HoldType-iOS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				HoldTypeIOS.entitlements,
+			);
+			target = 9DB749A62FE7A0000053C3F3 /* HoldType-iOS */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -89,6 +127,9 @@
 		};
 		9DB749A22FE7A0000053C3F3 /* HoldTypeIOS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D4A175102FF0000000000010 /* Exceptions for "HoldTypeIOS" folder in "HoldType-iOS" target */,
+			);
 			path = HoldTypeIOS;
 			sourceTree = "<group>";
 		};
@@ -100,6 +141,19 @@
 		9DB749B12FE800000053C3F3 /* HoldTypeIOSTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = HoldTypeIOSTests;
+			sourceTree = "<group>";
+		};
+		D4A175032FF0000000000003 /* HoldTypeKeyboard */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D4A175022FF0000000000002 /* Exceptions for "HoldTypeKeyboard" folder in "HoldTypeKeyboard" target */,
+			);
+			path = HoldTypeKeyboard;
+			sourceTree = "<group>";
+		};
+		D4A175042FF0000000000004 /* KeyboardShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = KeyboardShared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -141,6 +195,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D4A175052FF0000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -151,6 +212,8 @@
 				9DB7496B2FE6D7300053C3F3 /* HoldType */,
 				9DB749AA2FE7B0000053C3F3 /* Shared */,
 				9DB749A22FE7A0000053C3F3 /* HoldTypeIOS */,
+				D4A175032FF0000000000003 /* HoldTypeKeyboard */,
+				D4A175042FF0000000000004 /* KeyboardShared */,
 				9DB749B12FE800000053C3F3 /* HoldTypeIOSTests */,
 				9DB749792FE6D7320053C3F3 /* HoldTypeTests */,
 				9DB749832FE6D7320053C3F3 /* HoldTypeUITests */,
@@ -163,6 +226,7 @@
 			children = (
 				9DB749692FE6D7300053C3F3 /* HoldType.app */,
 				9DB749A12FE7A0000053C3F3 /* HoldType-iOS.app */,
+				D4A175012FF0000000000001 /* HoldTypeKeyboard.appex */,
 				9DB749B02FE800000053C3F3 /* HoldTypeIOSTests.xctest */,
 				9DB749762FE6D7320053C3F3 /* HoldTypeTests.xctest */,
 				9DB749802FE6D7320053C3F3 /* HoldTypeUITests.xctest */,
@@ -250,14 +314,17 @@
 				9DB749A52FE7A0000053C3F3 /* Sources */,
 				9DB749A32FE7A0000053C3F3 /* Frameworks */,
 				9DB749A42FE7A0000053C3F3 /* Resources */,
+				D4A175082FF0000000000008 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D4A1750C2FF000000000000C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				9DB749A22FE7A0000053C3F3 /* HoldTypeIOS */,
 				9DB749AA2FE7B0000053C3F3 /* Shared */,
+				D4A175042FF0000000000004 /* KeyboardShared */,
 			);
 			name = "HoldType-iOS";
 			packageProductDependencies = (
@@ -280,6 +347,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				9DB749AA2FE7B0000053C3F3 /* Shared */,
+				D4A175042FF0000000000004 /* KeyboardShared */,
 				9DB749B12FE800000053C3F3 /* HoldTypeIOSTests */,
 			);
 			name = HoldTypeIOSTests;
@@ -288,6 +356,29 @@
 			productName = HoldTypeIOSTests;
 			productReference = 9DB749B02FE800000053C3F3 /* HoldTypeIOSTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		D4A1750A2FF000000000000A /* HoldTypeKeyboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D4A1750F2FF000000000000F /* Build configuration list for PBXNativeTarget "HoldTypeKeyboard" */;
+			buildPhases = (
+				D4A175062FF0000000000006 /* Sources */,
+				D4A175052FF0000000000005 /* Frameworks */,
+				D4A175072FF0000000000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D4A175032FF0000000000003 /* HoldTypeKeyboard */,
+				D4A175042FF0000000000004 /* KeyboardShared */,
+			);
+			name = HoldTypeKeyboard;
+			packageProductDependencies = (
+			);
+			productName = HoldTypeKeyboard;
+			productReference = D4A175012FF0000000000001 /* HoldTypeKeyboard.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -316,6 +407,9 @@
 					9DB749B52FE800000053C3F3 = {
 						CreatedOnToolsVersion = 26.5;
 					};
+					D4A1750A2FF000000000000A = {
+						CreatedOnToolsVersion = 26.5;
+					};
 					D4A174052FEF174000000005 = {
 						CreatedOnToolsVersion = 26.6;
 					};
@@ -341,6 +435,7 @@
 				9DB749682FE6D7300053C3F3 /* HoldType */,
 				D4A174052FEF174000000005 /* Stabilize HoldType TCC Identity */,
 				9DB749A62FE7A0000053C3F3 /* HoldType-iOS */,
+				D4A1750A2FF000000000000A /* HoldTypeKeyboard */,
 				9DB749B52FE800000053C3F3 /* HoldTypeIOSTests */,
 				9DB749752FE6D7320053C3F3 /* HoldTypeTests */,
 				9DB7497F2FE6D7320053C3F3 /* HoldTypeUITests */,
@@ -378,6 +473,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		9DB749B32FE800000053C3F3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D4A175072FF0000000000007 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -448,6 +550,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D4A175062FF0000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -465,6 +574,11 @@
 			isa = PBXTargetDependency;
 			target = 9DB749682FE6D7300053C3F3 /* HoldType */;
 			targetProxy = D4A174022FEF174000000002 /* PBXContainerItemProxy */;
+		};
+		D4A1750C2FF000000000000C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D4A1750A2FF000000000000A /* HoldTypeKeyboard */;
+			targetProxy = D4A1750B2FF000000000000B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -754,6 +868,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HoldTypeIOS/HoldTypeIOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
@@ -789,6 +904,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HoldTypeIOS/HoldTypeIOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
@@ -854,6 +970,74 @@
 				PRODUCT_BUNDLE_IDENTIFIER = app.holdtype.HoldType.iosTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D4A1750D2FF000000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = HoldTypeKeyboard/HoldTypeKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HoldTypeKeyboard/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.holdtype.HoldType.ios.keyboard;
+				PRODUCT_MODULE_NAME = HoldTypeKeyboard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D4A1750E2FF000000000000E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = HoldTypeKeyboard/HoldTypeKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HoldTypeKeyboard/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.holdtype.HoldType.ios.keyboard;
+				PRODUCT_MODULE_NAME = HoldTypeKeyboard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -937,6 +1121,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		D4A1750F2FF000000000000F /* Build configuration list for PBXNativeTarget "HoldTypeKeyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D4A1750D2FF000000000000D /* Debug */,
+				D4A1750E2FF000000000000E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		D4A174082FEF174000000008 /* Build configuration list for PBXAggregateTarget "Stabilize HoldType TCC Identity" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -947,6 +1140,7 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
 	};
 	rootObject = 9DB749612FE6D7300053C3F3 /* Project object */;
 }

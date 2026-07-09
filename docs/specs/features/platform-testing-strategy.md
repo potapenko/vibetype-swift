@@ -126,7 +126,10 @@ The likely iOS product split is:
 - keyboard extension focuses on compact UI and text insertion
 - shared SwiftUI screens may be reused where product behavior is common
 
-This split must be confirmed by future v2 iOS specs before implementation.
+This split is confirmed by `ios-keyboard-feasibility.md`,
+`ios-keyboard-experience.md`, and `ios-keyboard-shared-state.md`. The active
+implementation sequence and physical-device gates live in
+`docs/ios-keyboard-development-plan.md`.
 
 ## Required Evidence By Task Type
 
@@ -144,6 +147,12 @@ This split must be confirmed by future v2 iOS specs before implementation.
   that surface; if full `xcodebuild` or MCP build/run times out without
   compiler diagnostics, record the timeout and keep SDK typecheck evidence
   explicit
+
+For the Phase 0 keyboard spike, simulator verification must additionally prove
+that the containing app embeds the `.appex` and that the processed extension
+plist declares `com.apple.keyboard-service`. Full Access, secure-field fallback,
+keyboard switching, app return, microphone lifecycle, process eviction, and
+iPad floating layout remain physical-device evidence.
 
 ## Sources
 

@@ -26,7 +26,9 @@ matching feature spec, then verify exact source ownership with `rg --files`.
 | Backlog grooming | `features/backlog-grooming-automation.md` | Backlog task creation/refinement behavior |
 | Blocked tasks | `features/blocked-task-resolution-automation.md` | Blocked-task resolver behavior and resolution contracts |
 | Automation recovery | `features/automation-prompt-recovery.md` | Installed automation/runbook recovery behavior |
-| iOS feasibility | `features/ios-keyboard-feasibility.md` | Future iOS/keyboard feasibility only; do not read for normal macOS MVP work |
+| iOS feasibility | `features/ios-keyboard-feasibility.md` | Platform boundary, device spike, go/no-go gate, containing-app/extension split |
+| iOS keyboard UX | `features/ios-keyboard-experience.md` | Typing parity, voice states, insertion safety, iPhone/iPad behavior |
+| iOS shared state | `features/ios-keyboard-shared-state.md` | App Group record, expiry, privacy boundary, insertion eligibility |
 
 ## Source Hints
 

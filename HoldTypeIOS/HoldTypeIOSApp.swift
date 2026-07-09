@@ -20,8 +20,11 @@ private struct HoldTypeIOSRootView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                HoldTypeSetupStatusView(surface: .iOSContainingApp)
-                    .padding(24)
+                VStack(spacing: 18) {
+                    HoldTypeSetupStatusView(surface: .iOSContainingApp)
+                    KeyboardBridgeProbeView()
+                }
+                .padding(24)
             }
             .navigationTitle("HoldType")
             .background(Color(.systemGroupedBackground))
