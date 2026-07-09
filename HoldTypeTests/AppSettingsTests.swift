@@ -394,6 +394,52 @@ struct AppSettingsTests {
         #expect(defaults.stringArray(forKey: key) == ["ACME, Inc.", "Line\nBreak"])
     }
 
+    @Test func textReplacementRulesDecodeFrozenLegacyPayloadWithoutMigration() throws {
+        let (defaults, suiteName) = makeIsolatedUserDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let key = AppSettingsStore.keyPrefix + "textReplacementRules"
+        let fixture = Data(
+            #"""
+            [
+              {
+                "id": "01234567-89AB-CDEF-0123-456789ABCDEF",
+                "search": "—",
+                "replacement": "-",
+                "isEnabled": true
+              },
+              {
+                "id": "FEDCBA98-7654-3210-FEDC-BA9876543210",
+                "search": "  ",
+                "replacement": "",
+                "isEnabled": false
+              }
+            ]
+            """#.utf8
+        )
+        defaults.set(fixture, forKey: key)
+        let store = AppSettingsStore(userDefaults: defaults)
+
+        let settings = store.load()
+
+        #expect(defaults.data(forKey: key) == fixture)
+        #expect(settings.textReplacementRules.map(\.search) == ["—", "  "])
+        #expect(settings.textReplacementRules.map(\.replacement) == ["-", ""])
+        #expect(settings.textReplacementRules.map(\.isEnabled) == [true, false])
+        #expect(settings.enabledTextReplacementRules.count == 1)
+
+        store.save(settings)
+
+        let savedData = try #require(defaults.data(forKey: key))
+        #expect(
+            try JSONDecoder().decode(
+                Array<HoldTypeDomain.TextReplacementRule>.self,
+                from: savedData
+            ) ==
+                settings.textReplacementRules
+        )
+    }
+
     @Test func migratesLegacyDisabledTranscriptHistoryToEnabledDefaultOnce() {
         let (defaults, suiteName) = makeIsolatedUserDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }

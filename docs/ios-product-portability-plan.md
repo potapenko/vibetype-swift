@@ -1,6 +1,6 @@
 # HoldType iOS Full Product Portability Plan
 
-Status: active implementation roadmap, P0 contracts and the first five P1
+Status: active implementation roadmap, P0 contracts and the first six P1
 Domain slices complete; updated 2026-07-09.
 
 This document plans the complete iPhone and iPad companion product around the
@@ -607,7 +607,8 @@ Progress 2026-07-09: local package `HoldTypeDomain` now owns the public
 Foundation-only `AcceptedTranscript`, `TranscriptionPromptContext`,
 `TranscriptionLanguage`, custom-language validation, and
 `TranscriptionConfiguration`, plus the normalized `CustomDictionary` value.
-The macOS app keeps source-compatible
+The package also owns the Codable `TextReplacementRule` value without changing
+its legacy JSON fields. The macOS app keeps source-compatible
 typealias/presentation facades, projects the configuration from its existing
 scalar settings, and preserves the UserDefaults keys, scalar raw values, and
 custom-dictionary `[String]` storage. Direct package consumers are linked
@@ -814,20 +815,21 @@ already decided by their P0 specs.
 
 Do not begin by porting `SettingsView` or adding every macOS source file to the
 iOS target. P0 plus the accepted-text, prompt-context, language,
-transcription-configuration, and custom-dictionary slices are complete. The
-next P1 slice moves `TextReplacementRule`:
+transcription-configuration, custom-dictionary, and text-replacement value
+slices are complete. The next P1 slice moves emoji-command models and their
+built-in catalog:
 
-1. extract the exact Codable/Identifiable value into `HoldTypeDomain` and keep
-   an internal macOS typealias facade;
-2. preserve UUIDs, raw search/replacement strings, array order, default enabled
-   state, Codable field names, and the existing UserDefaults key;
-3. prove a frozen legacy JSON payload decodes through both package and app-store
-   paths and still round-trips on iOS;
-4. keep filtering and case-insensitive replacement execution in the macOS
-   compatibility pipeline until their own portable slices;
-5. keep UI, dictionary/emoji payloads, App Group publication, provider work,
-   audio, background modes, the obsolete M0A session prototype, and the
-   production QWERTY engine outside this slice.
+1. extract the exact alias, command, custom-command, and command-set values plus
+   the existing six built-in sets without changing names, aliases, or order;
+2. preserve custom-command UUID/Codable fields, whitespace normalization,
+   first-spelling behavior, prompt hints, and single-active-built-in-set rules;
+3. keep `AppSettings` fields and JSON/UserDefaults persistence behind macOS
+   compatibility facades, with frozen legacy fixtures and package/iOS smoke;
+4. leave the matcher/replacement engine and full local post-processing order in
+   their current pipeline until the following portable slices;
+5. keep UI, App Group publication, provider work, audio, background modes, the
+   obsolete M0A session prototype, and the production QWERTY engine outside
+   this slice.
 
 ## Research Basis
 

@@ -86,24 +86,6 @@ enum TextCorrectionModelPreset: String, CaseIterable, Codable, Equatable {
     }
 }
 
-struct TextReplacementRule: Codable, Equatable, Identifiable {
-    var id: UUID
-    var search: String
-    var replacement: String
-    var isEnabled: Bool
-
-    init(id: UUID = UUID(), search: String, replacement: String, isEnabled: Bool = true) {
-        self.id = id
-        self.search = search
-        self.replacement = replacement
-        self.isEnabled = isEnabled
-    }
-
-    var hasSearchText: Bool {
-        !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-}
-
 enum RecordingCachePolicy: Equatable {
     static let defaultRetainedRecordingLimit = 10
     static let maximumRetainedRecordingLimit = 999
