@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import HoldTypeDomain
 @testable import HoldType
 
 final class FakeGlobalHotkeyService: GlobalHotkeyService {

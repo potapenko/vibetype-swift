@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import HoldTypeDomain
 import SwiftUI
 
 struct MenuBarView: View {

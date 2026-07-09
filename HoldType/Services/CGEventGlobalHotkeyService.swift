@@ -8,6 +8,7 @@
 import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
+import HoldTypeDomain
 
 struct RightCommandHotkeyEventMapper {
     private(set) var isRightCommandPressed = false

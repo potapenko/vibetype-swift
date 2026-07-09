@@ -5,6 +5,7 @@
 //  Created by Codex on 6/22/26.
 //
 
+import HoldTypeDomain
 import Testing
 @testable import HoldType
 

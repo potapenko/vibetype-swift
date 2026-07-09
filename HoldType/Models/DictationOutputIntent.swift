@@ -5,10 +5,11 @@
 //  Created by Codex on 7/5/26.
 //
 
-enum DictationOutputIntent: Equatable {
-    case standard
-    case translate
+import HoldTypeDomain
 
+typealias DictationOutputIntent = HoldTypeDomain.DictationOutputIntent
+
+extension DictationOutputIntent {
     func merged(with intent: DictationOutputIntent) -> DictationOutputIntent {
         self == .translate || intent == .translate ? .translate : .standard
     }

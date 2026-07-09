@@ -7,6 +7,7 @@
 
 import Combine
 import Foundation
+import HoldTypeDomain
 
 @MainActor
 final class DictationRuntime: ObservableObject {

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import HoldTypeDomain
 
 enum GlobalHotkeyModifier: String, CaseIterable, Equatable {
     case control

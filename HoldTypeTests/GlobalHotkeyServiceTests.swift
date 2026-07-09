@@ -7,6 +7,7 @@
 
 import Carbon.HIToolbox
 import CoreGraphics
+import HoldTypeDomain
 import Testing
 @testable import HoldType
 

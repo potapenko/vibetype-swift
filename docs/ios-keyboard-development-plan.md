@@ -280,7 +280,8 @@ host app, state, expected result, actual result, and go/no-go decision.
   five-minute contracts without publishing voice-session state to the
   keyboard. `OutputDeliveryPreferences` now carries insertion and Latest Result
   intent without publishing text, target identity, or insertion eligibility to
-  the extension. The next value-only slice extracts `DictationOutputIntent`;
-  App Group command/session records remain unchanged until their owning
-  milestone.
+  the extension. `DictationOutputIntent` is portable too, while its hotkey merge
+  remains macOS-only. The next result-only slice defines neutral delivery
+  outcomes; App Group command/session records and actual keyboard insertion
+  remain unchanged until their owning milestone.
 - Full QWERTY and background Quick Session: gated and not started.

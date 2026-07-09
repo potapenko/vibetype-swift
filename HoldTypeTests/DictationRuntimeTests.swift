@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import HoldTypeDomain
 import Security
 import Testing
 @testable import HoldType
