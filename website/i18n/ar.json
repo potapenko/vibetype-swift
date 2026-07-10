@@ -31,7 +31,6 @@
   "hero": {
     "title": "عبّر عن فكرتك كاملةً.",
     "lede": "من دون حساب. تحكّم كامل في الإملاء الصوتي. تدفع لـ OpenAI، لا لـ {brand.holdType}.",
-    "support": "مطالبات طويلة ورسائل ومستندات وملاحظات — أملِها مباشرةً داخل تطبيق {brand.mac} الذي تعمل فيه. يستخدم {brand.holdType} مفتاح API الخاص بك من {brand.openAI} ويعيد النص المعتمد إلى موضع المؤشر في معظم تطبيقات {brand.mac}.",
     "qualification": "تطبيق مجاني · تُحاسب على استخدام API من {brand.openAI} بصورة منفصلة · {fact.minimumOS}",
     "price": {
       "aria": "حتى {pricing.dailyDictations} عملية إملاء يوميًا لا تكلّف سوى نحو {pricing.dailyPrice} في مثال الاستخدام المكثف هذا.",

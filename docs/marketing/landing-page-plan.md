@@ -78,9 +78,9 @@ seconds.
 - Headline: `The most honest Wispr Flow "clone".`
 - Supporting copy: `No account. Full control over your dictation. You pay
   OpenAI, not HoldType.`
-- Supporting copy explains that text returns to the cursor, the user's OpenAI
-  key is used directly, and translation runs only when requested. Do not repeat
-  these claims in a separate proof-chip row.
+- Do not add a second explanatory paragraph below that line. Cursor handoff,
+  API-key routing, and translation details belong in the product contract
+  below rather than the hero.
 - Primary CTA: `Download free for macOS`.
 - Source inspection remains in the footer rather than the hero.
 - Qualification: `Free app · OpenAI API usage billed separately · macOS 14+`.

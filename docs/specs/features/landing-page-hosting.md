@@ -20,10 +20,10 @@ that already uses GitHub Pages.
   App Platform's static-site service, managed HTTPS, and CDN.
 - `www.holdtype.app` redirects to the canonical apex domain.
 - The first viewport may position HoldType as the most honest Wispr Flow
-  "clone" when the same viewport immediately defines `full control` through the
-  concrete product boundary: text returns to the active cursor, the user
-  supplies the OpenAI Platform API key, OpenAI rather than HoldType bills API
-  usage, and no HoldType account is required.
+  "clone" when the same viewport immediately grounds `full control` through no
+  HoldType account and direct OpenAI billing. Cursor handoff, API-key routing,
+  and translation details remain in the product contract below rather than a
+  separate gray explanatory paragraph in the hero.
 - The hero presents one action: the free macOS download. Source inspection
   remains available in the footer, and the hero does not repeat product claims
   as a separate row of proof chips.

@@ -31,7 +31,6 @@
   "hero": {
     "title": "把完整的想法说出来。",
     "lede": "无需注册账号。你的语音输入，完全由你掌控。你付费给 OpenAI，而不是 {brand.holdType}。",
-    "support": "长提示词、消息、文档和笔记，都可以直接说进当前使用的 {brand.mac} 应用。{brand.holdType} 使用你自己的 {brand.openAI} API 密钥，并将确认后的文本送回大多数 {brand.mac} 应用中的光标位置。",
     "qualification": "应用免费 · {brand.openAI} API 用量另行计费 · {fact.minimumOS}",
     "price": {
       "aria": "在这一高强度使用示例中，即使每天听写 {pricing.dailyDictations} 次，费用也只需约 {pricing.dailyPrice}。",

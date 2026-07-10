@@ -162,13 +162,13 @@ text links. Shadows are reserved for the hero editor and real product windows.
   16px page gutters, and full-width primary CTAs.
 
 The first viewport leads with `The most honest Wispr Flow "clone".` It must
-immediately ground `Full control over your dictation` through text returning to
-the active cursor, the user's OpenAI Platform API key, direct OpenAI billing,
-and no HoldType account or subscription. The hero has one action: the free
-macOS download. Source inspection remains in the footer, and there is no
-separate proof-chip row. No unsupported metric, comparative speed claim, or
-undocumented claim about Wispr Flow's internal model is permitted above the
-fold.
+immediately ground `Full control over your dictation` through no HoldType
+account and direct OpenAI billing. Cursor handoff, API-key routing, and
+translation details appear below; the hero has no separate gray explanatory
+paragraph. The hero has one action: the free macOS download. Source inspection
+remains in the footer, and there is no separate proof-chip row. No unsupported
+metric, comparative speed claim, or undocumented claim about Wispr Flow's
+internal model is permitted above the fold.
 
 The code-native editor uses a dry, self-ironic fictional plan to build a tiny
 SaaS and reach `$1M ARR`; the interface presents the request as if it were

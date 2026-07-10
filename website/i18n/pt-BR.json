@@ -31,7 +31,6 @@
   "hero": {
     "title": "Fale tudo o que está pensando.",
     "lede": "Sem conta. Controle total sobre o seu ditado. Você paga à OpenAI, não ao {brand.holdType}.",
-    "support": "Prompts longos, mensagens, documentos e notas — ditados diretamente no app para {brand.mac} em que você está trabalhando. O {brand.holdType} usa sua chave de API da {brand.openAI} e devolve o texto aceito ao cursor na maioria dos apps para {brand.mac}.",
     "qualification": "App gratuito · Uso da API da {brand.openAI} cobrado à parte · {fact.minimumOS}",
     "price": {
       "aria": "Mesmo {pricing.dailyDictations} ditados por dia custam cerca de {pricing.dailyPrice} neste exemplo de uso intensivo.",

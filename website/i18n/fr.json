@@ -31,7 +31,6 @@
   "hero": {
     "title": "Exprimez toute votre pensée.",
     "lede": "Pas de compte. Contrôle total sur votre dictée. Vous payez OpenAI, pas {brand.holdType}.",
-    "support": "Longs prompts, messages, documents et notes : dictez-les directement dans l’application {brand.mac} où vous travaillez. {brand.holdType} utilise votre clé API {brand.openAI} et replace le texte validé au niveau du curseur dans la plupart des applications {brand.mac}.",
     "qualification": "Application gratuite · Utilisation de l’API {brand.openAI} facturée séparément · {fact.minimumOS}",
     "price": {
       "aria": "Même {pricing.dailyDictations} dictées par jour coûtent environ {pricing.dailyPrice} dans cet exemple d’utilisation intensive.",

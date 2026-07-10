@@ -477,14 +477,6 @@ h3 {
   line-height: 1.16;
 }
 
-.hero-support {
-  max-width: 570px;
-  margin-bottom: 32px;
-  color: var(--text-soft);
-  font-size: 1.1rem;
-  line-height: 1.65;
-}
-
 .hero-actions {
   display: flex;
   align-items: center;
@@ -2123,10 +2115,6 @@ body.has-image-lightbox {
 
   .hero-lede {
     font-size: 1.75rem;
-  }
-
-  .hero-support {
-    font-size: 1rem;
   }
 
   .hero-price-sticker {

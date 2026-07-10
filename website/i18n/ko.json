@@ -31,7 +31,6 @@
   "hero": {
     "title": "생각을 끝까지 말하세요.",
     "lede": "계정이 필요 없습니다. 받아쓰기는 온전히 내 뜻대로. 비용은 {brand.holdType}이 아니라 OpenAI에 직접 냅니다.",
-    "support": "긴 프롬프트, 메시지, 문서와 메모를 현재 작업 중인 {brand.mac} 앱에 직접 말해 입력하세요. {brand.holdType}은 본인의 {brand.openAI} API 키를 사용하며, 확정된 텍스트를 대부분의 {brand.mac} 앱에서 커서 위치로 돌려보냅니다.",
     "qualification": "무료 앱 · {brand.openAI} API 사용료 별도 청구 · {fact.minimumOS}",
     "price": {
       "aria": "이 고강도 사용 예시에서는 하루 {pricing.dailyDictations}회 받아쓰기도 약 {pricing.dailyPrice}입니다.",

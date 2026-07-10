@@ -31,7 +31,6 @@
   "hero": {
     "title": "考えていることを、最後まで話そう。",
     "lede": "アカウント不要。音声入力は、すべて自分の思いどおり。料金を払う相手は{brand.holdType}ではなくOpenAIです。",
-    "support": "長いプロンプト、メッセージ、文書、メモを、作業中の {brand.mac} アプリへ直接話して入力できます。{brand.holdType} はお手持ちの {brand.openAI} API キーを使い、確定したテキストをほとんどの {brand.mac} アプリのカーソル位置へ戻します。",
     "qualification": "アプリは無料 · {brand.openAI} API の利用料は別途請求 · {fact.minimumOS}",
     "price": {
       "aria": "この高頻度利用の例では、1日 {pricing.dailyDictations} 回の音声入力でも費用は約 {pricing.dailyPrice} です。",

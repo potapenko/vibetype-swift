@@ -31,7 +31,6 @@
   "hero": {
     "title": "Самый честный «клон» Wispr Flow.",
     "lede": "Без аккаунта. Полный контроль над диктовкой. Вы платите OpenAI, а не {brand.holdType}.",
-    "support": "{brand.holdType} отправляет аудио напрямую с вашего {brand.mac} в {brand.openAI} по вашему API-ключу, а затем возвращает текст к курсору в большинстве приложений для {brand.mac}. Перевод запускается только по вашей команде.",
     "qualification": "Бесплатное приложение · Использование API {brand.openAI} оплачивается отдельно · {fact.minimumOS}",
     "price": {
       "aria": "При текущем расчётном тарифе {pricing.dailyDictations} диктовок стоят примерно {pricing.dailyPrice}.",
