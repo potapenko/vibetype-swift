@@ -14,11 +14,22 @@ let package = Package(
             targets: ["HoldTypeOpenAI"]
         ),
     ],
+    dependencies: [
+        .package(path: "../HoldTypeDomain"),
+    ],
     targets: [
-        .target(name: "HoldTypeOpenAI"),
+        .target(
+            name: "HoldTypeOpenAI",
+            dependencies: [
+                .product(name: "HoldTypeDomain", package: "HoldTypeDomain"),
+            ]
+        ),
         .testTarget(
             name: "HoldTypeOpenAITests",
-            dependencies: ["HoldTypeOpenAI"]
+            dependencies: [
+                "HoldTypeOpenAI",
+                .product(name: "HoldTypeDomain", package: "HoldTypeDomain"),
+            ]
         ),
     ]
 )

@@ -1,5 +1,5 @@
 //
-//  OpenAITextTranslationServiceTests.swift
+//  OpenAITextCorrectionServiceTests.swift
 //  HoldTypeTests
 //
 //  Created by Codex on 7/5/26.
@@ -7,49 +7,42 @@
 
 import Foundation
 import HoldTypeDomain
-import HoldTypeOpenAI
 import Testing
-@testable import HoldType
+@testable import HoldTypeOpenAI
 
-struct OpenAITextTranslationServiceTests {
+struct OpenAITextCorrectionServiceTests {
 
-    @Test func successfulOutputTextReturnsTranslationAndAuthorizedRequest() async throws {
-        let loader = TranslationFakeURLLoader(
+    @Test func successfulOutputTextReturnsCorrectionAndAuthorizedRequest() async throws {
+        let loader = CorrectionFakeURLLoader(
             result: .success(
-                Data(#"{"output_text":"  Hello, world. \n"}"#.utf8),
-                makeTranslationHTTPResponse(statusCode: 200)
+                Data(#"{"output_text":"  Corrected text. \n"}"#.utf8),
+                makeCorrectionHTTPResponse(statusCode: 200)
             )
         )
-        let sleeper = TranslationFakeTimeoutSleeper()
+        let sleeper = CorrectionFakeTimeoutSleeper()
         let service = makeService(
             loader: loader,
             sleeper: sleeper,
             requestTimeout: 4
         )
-        let translationRequest = TextTranslationRequest(
-            acceptedTranscript: try AcceptedTranscript(rawText: "  Hola, mundo. \n"),
-            translationConfiguration: TranslationConfiguration(
-                targetLanguage: .english,
-                model: "gpt-translation-test",
-                prompt: "Prefer concise product UI wording."
-            ),
-            transcriptionConfiguration: TranscriptionConfiguration(
-                model: "unrelated-transcription-model",
-                language: .spanish,
-                freeformPrompt: "private transcription instructions"
-            )
+        let configuration = TextCorrectionConfiguration(
+            isEnabled: true,
+            modelPreset: .custom,
+            customModel: "gpt-correction-test",
+            prompt: "Fix only obvious errors."
         )
 
-        let translation = try await service.translate(
-            translationRequest,
+        let correction = try await service.correct(
+            try AcceptedTranscript(rawText: "  hello text \n"),
+            configuration: configuration,
             credential: testCredential("sk-test-secret")
         )
 
-        #expect(translation == "Hello, world.")
+        #expect(correction == "Corrected text.")
         #expect(loader.requests.count == 1)
 
         let request = try #require(loader.requests.first)
-        #expect(request.url == OpenAITextTranslationService.defaultEndpointURL)
+        #expect(request.url == OpenAITextCorrectionService.defaultEndpointURL)
         #expect(request.httpMethod == "POST")
         #expect(request.timeoutInterval == 4)
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-test-secret")
@@ -58,17 +51,11 @@ struct OpenAITextTranslationServiceTests {
         #expect(sleeper.sleepCalls == [4])
 
         let payload = try decodedRequestPayload(from: request)
-        #expect(payload["model"] as? String == "gpt-translation-test")
+        #expect(payload["model"] as? String == "gpt-correction-test")
+        #expect(payload["instructions"] as? String == "Fix only obvious errors.")
         #expect(payload["tool_choice"] as? String == "none")
         #expect(payload["store"] as? Bool == false)
-        #expect(payload["max_output_tokens"] as? Int == OpenAITextTranslationService.defaultMaxOutputTokens)
-        let instructions = try #require(payload["instructions"] as? String)
-        #expect(instructions.contains("language code es"))
-        #expect(instructions.contains("language code en"))
-        #expect(instructions.contains("Prefer concise product UI wording."))
-        #expect(instructions.contains("private transcription instructions") == false)
-        #expect(instructions.contains("unrelated-transcription-model") == false)
-        #expect(instructions.contains("Russian") == false)
+        #expect(payload["max_output_tokens"] as? Int == OpenAITextCorrectionService.defaultMaxOutputTokens)
 
         let reasoning = try #require(payload["reasoning"] as? [String: Any])
         #expect(reasoning["effort"] as? String == "low")
@@ -81,35 +68,12 @@ struct OpenAITextTranslationServiceTests {
         let content = try #require(firstMessage["content"] as? [[String: Any]])
         let firstContent = try #require(content.first)
         #expect(firstContent["type"] as? String == "input_text")
-        #expect(firstContent["text"] as? String == "Hola, mundo.")
+        #expect(firstContent["text"] as? String == "hello text")
     }
 
-    @Test func autoTranscriptionSourceOmitsSourceLanguageInstruction() async throws {
-        let loader = TranslationFakeURLLoader(
-            result: .success(
-                Data(#"{"output_text":"Hello."}"#.utf8),
-                makeTranslationHTTPResponse(statusCode: 200)
-            )
-        )
-        let service = makeService(loader: loader)
-        _ = try await service.translate(
-            try configuredTranslationRequest(
-                "Hola.",
-                transcriptionConfiguration: TranscriptionConfiguration(language: .automatic)
-            ),
-            credential: testCredential()
-        )
-
-        let request = try #require(loader.requests.first)
-        let payload = try decodedRequestPayload(from: request)
-        let instructions = try #require(payload["instructions"] as? String)
-        #expect(instructions.contains("Translate the user's transcript to language code en."))
-        #expect(instructions.contains("from language code") == false)
-    }
-
-    @Test func outputArrayFallbackReturnsTranslationText() async throws {
+    @Test func outputArrayFallbackReturnsCorrectionText() async throws {
         let service = makeService(
-            loader: TranslationFakeURLLoader(
+            loader: CorrectionFakeURLLoader(
                 result: .success(
                     Data(
                         #"""
@@ -118,39 +82,42 @@ struct OpenAITextTranslationServiceTests {
                             {
                               "type": "message",
                               "content": [
-                                {"type": "output_text", "text": "Translated from array"}
+                                {"type": "output_text", "text": "Corrected from array"}
                               ]
                             }
                           ]
                         }
                         """#.utf8
                     ),
-                    makeTranslationHTTPResponse(statusCode: 200)
+                    makeCorrectionHTTPResponse(statusCode: 200)
                 )
             )
         )
 
-        let translation = try await service.translate(
-            try configuredTranslationRequest("сырой текст"),
+        let correction = try await service.correct(
+            try AcceptedTranscript(rawText: "raw text"),
+            configuration: .defaults,
             credential: testCredential()
         )
 
-        #expect(translation == "Translated from array")
+        #expect(correction == "Corrected from array")
     }
 
-    @Test func timeoutMapsToTranslationTimeout() async throws {
-        let loader = TranslationFakeURLLoader(
+    @Test func timeoutMapsToTextCorrectionTimeout() async throws {
+        let loader = CorrectionFakeURLLoader(
             result: .delayedSuccess(
                 Data(#"{"output_text":"late"}"#.utf8),
-                makeTranslationHTTPResponse(statusCode: 200)
+                makeCorrectionHTTPResponse(statusCode: 200)
             )
         )
-        let sleeper = TranslationFakeTimeoutSleeper(mode: .timeoutImmediately)
+        let sleeper = CorrectionFakeTimeoutSleeper(mode: .timeoutImmediately)
         let service = makeService(loader: loader, sleeper: sleeper, requestTimeout: 2)
+        let transcript = try AcceptedTranscript(rawText: "transcript")
 
-        await expectTranslationError(.timedOut) {
-            try await service.translate(
-                try configuredTranslationRequest("transcript"),
+        await expectCorrectionError(.timedOut) {
+            try await service.correct(
+                transcript,
+                configuration: .defaults,
                 credential: testCredential()
             )
         }
@@ -161,64 +128,67 @@ struct OpenAITextTranslationServiceTests {
     }
 
     @Test func cancellationStopsTransportAndNextRequestSucceedsIndependently() async throws {
-        let loader = TranslationSequencedURLLoader(
+        let loader = CorrectionSequencedURLLoader(
             steps: [
                 .waitForCancellation,
                 .success(
-                    Data(#"{"output_text":"fresh translation"}"#.utf8),
-                    makeTranslationHTTPResponse(statusCode: 200)
+                    Data(#"{"output_text":"fresh correction"}"#.utf8),
+                    makeCorrectionHTTPResponse(statusCode: 200)
                 ),
             ]
         )
         let service = makeService(loader: loader)
-        let request = try configuredTranslationRequest("transcript")
+        let transcript = try AcceptedTranscript(rawText: "transcript")
         let credential = try testCredential()
 
-        service.cancelActiveTranslation()
+        service.cancelActiveCorrection()
         let cancelledTask = Task {
-            try await service.translate(
-                request,
+            try await service.correct(
+                transcript,
+                configuration: .defaults,
                 credential: credential
             )
         }
         try await loader.waitForRequestCount(1)
 
-        service.cancelActiveTranslation()
-        service.cancelActiveTranslation()
+        service.cancelActiveCorrection()
+        service.cancelActiveCorrection()
 
-        await expectTranslationError(.cancelled) {
+        await expectCorrectionError(.cancelled) {
             try await cancelledTask.value
         }
         #expect(await loader.observedCancellationCount() == 1)
 
-        let translation = try await service.translate(
-            request,
+        let correction = try await service.correct(
+            transcript,
+            configuration: .defaults,
             credential: credential
         )
-        #expect(translation == "fresh translation")
+        #expect(correction == "fresh correction")
 
-        service.cancelActiveTranslation()
+        service.cancelActiveCorrection()
     }
 
     @Test func cancellationCompletesBeforeNonCooperativeLoaderReturns() async throws {
         let loader = ControlledURLLoader(cancellationBehaviors: [.awaitResponse])
         let service = makeService(loader: loader)
-        let request = try configuredTranslationRequest("transcript")
+        let transcript = try AcceptedTranscript(rawText: "transcript")
         let credential = try testCredential()
         let resultProbe = AsyncOperationResultProbe<String>()
-        let lateResponse = makeTranslationHTTPResponse(statusCode: 200)
+        let lateResponse = makeCorrectionHTTPResponse(statusCode: 200)
         defer {
             loader.resolveRequest(
                 at: 0,
-                data: Data(#"{"output_text":"late translation"}"#.utf8),
+                data: Data(#"{"output_text":"late correction"}"#.utf8),
                 response: lateResponse
             )
         }
 
-        let translation = Task {
+        let correction = Task {
             do {
-                let result = try await service.translate(
-                    request,
+                let result = try await service.correct(
+                    transcript,
+                    configuration: .defaults,
                     credential: credential
                 )
                 resultProbe.complete(with: .success(result))
@@ -228,58 +198,60 @@ struct OpenAITextTranslationServiceTests {
         }
         try await loader.waitForRequestCount(1)
 
-        service.cancelActiveTranslation()
+        service.cancelActiveCorrection()
 
         try await loader.waitForCancellation(ofRequestAt: 0)
         let result = try await resultProbe.waitForResult()
         switch result {
         case .success:
             Issue.record("Expected cancellation before the loader returned.")
-        case let .failure(error as OpenAITextTranslationServiceError):
+        case let .failure(error as OpenAITextCorrectionServiceError):
             #expect(error == .cancelled)
         case let .failure(error):
-            Issue.record("Expected OpenAITextTranslationServiceError.cancelled, got \(error)")
+            Issue.record("Expected OpenAITextCorrectionServiceError.cancelled, got \(error)")
         }
-        await translation.value
+        await correction.value
     }
 
     @Test func lateCancelledResponseCannotPublishOrClearNewActiveRequest() async throws {
-        let loader = TranslationSequencedURLLoader(
+        let loader = CorrectionSequencedURLLoader(
             steps: [
                 .lateSuccessAfterCancellation(
-                    Data(#"{"output_text":"late translation"}"#.utf8),
-                    makeTranslationHTTPResponse(statusCode: 200)
+                    Data(#"{"output_text":"late correction"}"#.utf8),
+                    makeCorrectionHTTPResponse(statusCode: 200)
                 ),
                 .waitForCancellation,
             ]
         )
         let service = makeService(loader: loader)
-        let request = try configuredTranslationRequest("transcript")
+        let transcript = try AcceptedTranscript(rawText: "transcript")
         let credential = try testCredential()
 
         let oldTask = Task {
-            try await service.translate(
-                request,
+            try await service.correct(
+                transcript,
+                configuration: .defaults,
                 credential: credential
             )
         }
         try await loader.waitForRequestCount(1)
 
         let newTask = Task {
-            try await service.translate(
-                request,
+            try await service.correct(
+                transcript,
+                configuration: .defaults,
                 credential: credential
             )
         }
         try await loader.waitForRequestCount(2)
 
-        await expectTranslationError(.cancelled) {
+        await expectCorrectionError(.cancelled) {
             try await oldTask.value
         }
 
-        service.cancelActiveTranslation()
+        service.cancelActiveCorrection()
 
-        await expectTranslationError(.cancelled) {
+        await expectCorrectionError(.cancelled) {
             try await newTask.value
         }
         #expect(await loader.observedCancellationCount() == 2)
@@ -287,103 +259,57 @@ struct OpenAITextTranslationServiceTests {
 
     @Test func invalidProviderResponseIsRejected() async throws {
         let service = makeService(
-            loader: TranslationFakeURLLoader(
+            loader: CorrectionFakeURLLoader(
                 result: .success(
                     Data(#"{"output":[{"type":"message","content":[]}]}"#.utf8),
-                    makeTranslationHTTPResponse(statusCode: 200)
+                    makeCorrectionHTTPResponse(statusCode: 200)
                 )
             )
         )
+        let transcript = try AcceptedTranscript(rawText: "transcript")
 
-        await expectTranslationError(.emptyTranslation) {
-            try await service.translate(
-                try configuredTranslationRequest("transcript"),
+        await expectCorrectionError(.emptyCorrection) {
+            try await service.correct(
+                transcript,
+                configuration: .defaults,
                 credential: testCredential()
             )
         }
     }
 
     @Test func providerStatusCodesMapToProductErrors() async throws {
-        let cases: [(Int, OpenAITextTranslationServiceError)] = [
+        let cases: [(Int, OpenAITextCorrectionServiceError)] = [
             (401, .invalidAPIKey),
             (429, .rateLimited),
             (500, .providerUnavailable),
             (418, .providerRejected(statusCode: 418)),
         ]
+        let transcript = try AcceptedTranscript(rawText: "transcript")
 
         for (statusCode, expectedError) in cases {
             let service = makeService(
-                loader: TranslationFakeURLLoader(
-                    result: .success(
-                        Data(#"{"error":"unused"}"#.utf8),
-                        makeTranslationHTTPResponse(statusCode: statusCode)
-                    )
+                loader: CorrectionFakeURLLoader(
+                    result: .success(Data(#"{"error":"unused"}"#.utf8), makeCorrectionHTTPResponse(statusCode: statusCode))
                 )
             )
 
-            await expectTranslationError(expectedError) {
-                try await service.translate(
-                    try configuredTranslationRequest("transcript"),
+            await expectCorrectionError(expectedError) {
+                try await service.correct(
+                    transcript,
+                    configuration: .defaults,
                     credential: testCredential()
                 )
             }
         }
     }
 
-    @Test func invalidLanguageConfigurationStopsBeforeNetworkRequest() async throws {
-        let loader = TranslationFakeURLLoader(
-            result: .success(Data(#"{"output_text":"unused"}"#.utf8), makeTranslationHTTPResponse(statusCode: 200))
-        )
-        let service = makeService(loader: loader)
-        let request = TextTranslationRequest(
-            acceptedTranscript: try AcceptedTranscript(rawText: "transcript"),
-            translationConfiguration: TranslationConfiguration(
-                sourceMode: .override,
-                sourceLanguage: .custom,
-                customSourceLanguageCode: "",
-                targetLanguage: .english
-            ),
-            transcriptionConfiguration: .defaults
-        )
-
-        await expectTranslationError(.invalidLanguageConfiguration) {
-            try await service.translate(
-                request,
-                credential: testCredential()
-            )
-        }
-
-        #expect(loader.requests.isEmpty)
-    }
-
-    @Test func missingTargetLanguageStopsBeforeNetworkRequest() async throws {
-        let loader = TranslationFakeURLLoader(
-            result: .success(Data(#"{"output_text":"unused"}"#.utf8), makeTranslationHTTPResponse(statusCode: 200))
-        )
-        let service = makeService(loader: loader)
-
-        let request = TextTranslationRequest(
-            acceptedTranscript: try AcceptedTranscript(rawText: "transcript"),
-            translationConfiguration: .defaults,
-            transcriptionConfiguration: .defaults
-        )
-
-        await expectTranslationError(.invalidLanguageConfiguration) {
-            try await service.translate(
-                request,
-                credential: testCredential()
-            )
-        }
-
-        #expect(loader.requests.isEmpty)
-    }
-
     private func makeService(
         loader: any URLLoading,
-        sleeper: TranslationFakeTimeoutSleeper = TranslationFakeTimeoutSleeper(),
+        sleeper: CorrectionFakeTimeoutSleeper = CorrectionFakeTimeoutSleeper(),
         requestTimeout: TimeInterval = 5
-    ) -> OpenAITextTranslationService {
-        OpenAITextTranslationService(
+    ) -> OpenAITextCorrectionService {
+        OpenAITextCorrectionService(
+            endpointURL: OpenAITextCorrectionService.defaultEndpointURL,
             urlLoader: loader,
             timeoutSleeper: sleeper,
             requestTimeout: requestTimeout
@@ -400,41 +326,30 @@ struct OpenAITextTranslationServiceTests {
     }
 }
 
-private func configuredTranslationRequest(
-    _ transcript: String,
-    transcriptionConfiguration: TranscriptionConfiguration = .defaults
-) throws -> TextTranslationRequest {
-    TextTranslationRequest(
-        acceptedTranscript: try AcceptedTranscript(rawText: transcript),
-        translationConfiguration: TranslationConfiguration(targetLanguage: .english),
-        transcriptionConfiguration: transcriptionConfiguration
-    )
-}
-
-private func expectTranslationError(
-    _ expectedError: OpenAITextTranslationServiceError,
+private func expectCorrectionError(
+    _ expectedError: OpenAITextCorrectionServiceError,
     operation: () async throws -> String
 ) async {
     do {
         _ = try await operation()
-        Issue.record("Expected OpenAITextTranslationServiceError.\(expectedError)")
-    } catch let error as OpenAITextTranslationServiceError {
+        Issue.record("Expected OpenAITextCorrectionServiceError.\(expectedError)")
+    } catch let error as OpenAITextCorrectionServiceError {
         #expect(error == expectedError)
     } catch {
-        Issue.record("Expected OpenAITextTranslationServiceError, got \(error)")
+        Issue.record("Expected OpenAITextCorrectionServiceError, got \(error)")
     }
 }
 
-private func makeTranslationHTTPResponse(statusCode: Int) -> HTTPURLResponse {
+private func makeCorrectionHTTPResponse(statusCode: Int) -> HTTPURLResponse {
     HTTPURLResponse(
-        url: OpenAITextTranslationService.defaultEndpointURL,
+        url: OpenAITextCorrectionService.defaultEndpointURL,
         statusCode: statusCode,
         httpVersion: nil,
         headerFields: nil
     )!
 }
 
-private final class TranslationFakeURLLoader: URLLoading, @unchecked Sendable {
+private final class CorrectionFakeURLLoader: URLLoading, @unchecked Sendable {
     enum Result {
         case success(Data, URLResponse)
         case delayedSuccess(Data, URLResponse)
@@ -482,7 +397,7 @@ private final class TranslationFakeURLLoader: URLLoading, @unchecked Sendable {
     }
 }
 
-private actor TranslationSequencedURLLoader: URLLoading {
+private actor CorrectionSequencedURLLoader: URLLoading {
     enum Step {
         case success(Data, URLResponse)
         case waitForCancellation
@@ -535,7 +450,7 @@ private actor TranslationSequencedURLLoader: URLLoading {
         }
 
         guard requestCount >= expectedCount else {
-            throw TranslationTestWaitError.timedOutWaitingForRequestCount(expectedCount)
+            throw CorrectionTestWaitError.timedOutWaitingForRequestCount(expectedCount)
         }
     }
 
@@ -544,11 +459,11 @@ private actor TranslationSequencedURLLoader: URLLoading {
     }
 }
 
-private enum TranslationTestWaitError: Error {
+private enum CorrectionTestWaitError: Error {
     case timedOutWaitingForRequestCount(Int)
 }
 
-private final class TranslationFakeTimeoutSleeper: TranscriptionTimeoutSleeping, @unchecked Sendable {
+private final class CorrectionFakeTimeoutSleeper: TranscriptionTimeoutSleeping, @unchecked Sendable {
     enum Mode {
         case waitForCancellation
         case timeoutImmediately

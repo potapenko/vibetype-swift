@@ -7,9 +7,8 @@
 
 import Foundation
 import HoldTypeDomain
-import HoldTypeOpenAI
 
-protocol OpenAITranscriptionServing {
+public protocol OpenAITranscriptionServing {
     func transcribe(
         _ request: AudioTranscriptionRequest,
         credential: OpenAICredential
@@ -17,7 +16,7 @@ protocol OpenAITranscriptionServing {
     func cancelActiveTranscription()
 }
 
-extension OpenAITranscriptionServing {
+public extension OpenAITranscriptionServing {
     func cancelActiveTranscription() {}
 }
 
@@ -29,7 +28,7 @@ protocol TranscriptionTimeoutSleeping: Sendable {
     func sleep(seconds: TimeInterval) async throws
 }
 
-struct OpenAITranscriptionService: OpenAITranscriptionServing {
+public struct OpenAITranscriptionService: OpenAITranscriptionServing, Sendable {
     static let defaultRequestTimeout: TimeInterval = 60
 
     private let requestBuilder: OpenAITranscriptionRequestBuilder
@@ -39,8 +38,19 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
     private let decoder: JSONDecoder
     private let requestTaskCoordinator: OpenAIRequestTaskCoordinator
 
+    public init() {
+        self.init(
+            requestBuilder: OpenAITranscriptionRequestBuilder(),
+            urlUploader: OpenAIFileUploadTransport(),
+            timeoutSleeper: TaskTranscriptionTimeoutSleeper(),
+            requestTimeout: Self.defaultRequestTimeout,
+            decoder: JSONDecoder(),
+            requestTaskCoordinator: OpenAIRequestTaskCoordinator()
+        )
+    }
+
     init(
-        requestBuilder: OpenAITranscriptionRequestBuilder = OpenAITranscriptionRequestBuilder(),
+        requestBuilder: OpenAITranscriptionRequestBuilder,
         urlUploader: any URLFileUploading = OpenAIFileUploadTransport(),
         timeoutSleeper: any TranscriptionTimeoutSleeping = TaskTranscriptionTimeoutSleeper(),
         requestTimeout: TimeInterval = Self.defaultRequestTimeout,
@@ -55,7 +65,7 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
         self.requestTaskCoordinator = requestTaskCoordinator
     }
 
-    func transcribe(
+    public func transcribe(
         _ request: AudioTranscriptionRequest,
         credential: OpenAICredential
     ) async throws -> String {
@@ -71,7 +81,7 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
         return try parseTranscript(from: data, promptComposition: request.promptComposition)
     }
 
-    func cancelActiveTranscription() {
+    public func cancelActiveTranscription() {
         requestTaskCoordinator.cancelActiveRequest()
     }
 
@@ -304,7 +314,7 @@ struct TaskTranscriptionTimeoutSleeper: TranscriptionTimeoutSleeping {
     }
 }
 
-nonisolated enum OpenAITranscriptionServiceError: Error, Equatable, LocalizedError, Sendable {
+public nonisolated enum OpenAITranscriptionServiceError: Error, Equatable, LocalizedError, Sendable {
     case missingAPIKey
     case apiKeyUnavailable
     case invalidRecording(OpenAITranscriptionRequestBuilderError)
@@ -324,11 +334,11 @@ nonisolated enum OpenAITranscriptionServiceError: Error, Equatable, LocalizedErr
     case dictionaryEcho
     case contextEcho
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         userFacingMessage
     }
 
-    var userFacingMessage: String {
+    public var userFacingMessage: String {
         switch self {
         case .missingAPIKey:
             return "Enter an OpenAI API key before transcribing."
@@ -369,7 +379,7 @@ nonisolated enum OpenAITranscriptionServiceError: Error, Equatable, LocalizedErr
         }
     }
 
-    var operatorLogCategory: String {
+    public var operatorLogCategory: String {
         switch self {
         case .missingAPIKey:
             return "missing_api_key"
@@ -415,15 +425,15 @@ nonisolated extension OpenAITranscriptionServiceError:
     CustomStringConvertible,
     CustomDebugStringConvertible,
     CustomReflectable {
-    var description: String {
+    public var description: String {
         "OpenAITranscriptionServiceError(<redacted>)"
     }
 
-    var debugDescription: String {
+    public var debugDescription: String {
         description
     }
 
-    var customMirror: Mirror {
+    public var customMirror: Mirror {
         Mirror(
             self,
             children: [(label: String?, value: Any)](),

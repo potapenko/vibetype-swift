@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import HoldTypeDomain
 import Testing
-@testable import HoldType
+@testable import HoldTypeOpenAI
 
 @MainActor
 struct OpenAITranscriptionRequestBuilderTests {
@@ -11,18 +11,22 @@ struct OpenAITranscriptionRequestBuilderTests {
         let source = try temporaryAudio(named: "secret\"\r\nInjected.m4a", data: audio)
         let scratchDirectory = temporaryDirectory("multipart-exact")
         defer { remove(source.deletingLastPathComponent()); remove(scratchDirectory) }
-        var settings = AppSettings.defaults
-        settings.transcriptionModel = "custom-model"
-        settings.language = .english
-        settings.prompt = "  product names  "
-        settings.emojiCommandsEnabled = false
+        let transcriptionConfiguration = TranscriptionConfiguration(
+            model: "custom-model",
+            language: .english,
+            freeformPrompt: "  product names  "
+        )
         let builder = OpenAITranscriptionRequestBuilder(
             boundary: "Boundary-Test",
             scratchDirectoryURL: scratchDirectory
         )
         let (preparation, cleanup) = try await prepare(
             builder,
-            request: try request(source, settings: settings)
+            request: try request(
+                source,
+                transcriptionConfiguration: transcriptionConfiguration,
+                emojiCommandsConfiguration: EmojiCommandsConfiguration(isEnabled: false)
+            )
         )
         defer { preparation.cleanup(); cleanup.requestCleanup() }
 
@@ -275,7 +279,7 @@ struct OpenAITranscriptionRequestBuilderTests {
         )
         let baseRequest = try AudioTranscriptionRequest(
             audioFileURL: URL(fileURLWithPath: "/private/source.m4a"),
-            transcriptionConfiguration: AppSettings.defaults.transcriptionConfiguration,
+            transcriptionConfiguration: .defaults,
             promptComposition: baseComposition
         )
         let (basePreparation, baseCleanup) = try await prepare(builder, request: baseRequest)
@@ -305,7 +309,7 @@ struct OpenAITranscriptionRequestBuilderTests {
         )
         let exact = try AudioTranscriptionRequest(
             audioFileURL: baseRequest.audioFileURL,
-            transcriptionConfiguration: AppSettings.defaults.transcriptionConfiguration,
+            transcriptionConfiguration: .defaults,
             promptComposition: .init(
                 resolvedFreeformPrompt: exactPrompt,
                 context: nil,
@@ -327,7 +331,7 @@ struct OpenAITranscriptionRequestBuilderTests {
         )
         let oversized = try AudioTranscriptionRequest(
             audioFileURL: baseRequest.audioFileURL,
-            transcriptionConfiguration: AppSettings.defaults.transcriptionConfiguration,
+            transcriptionConfiguration: .defaults,
             promptComposition: .init(
                 resolvedFreeformPrompt: exactPrompt + "x",
                 context: nil,
@@ -457,14 +461,16 @@ struct OpenAITranscriptionRequestBuilderTests {
         defer { remove(source.deletingLastPathComponent()); remove(scratchDirectory) }
         let before = try fileSnapshot(source)
         let builder = OpenAITranscriptionRequestBuilder(scratchDirectoryURL: scratchDirectory)
-        var firstSettings = AppSettings.defaults
-        firstSettings.prompt = "first-current-setting"
-        var secondSettings = AppSettings.defaults
-        secondSettings.prompt = "second-current-setting"
+        let firstConfiguration = TranscriptionConfiguration(
+            freeformPrompt: "first-current-setting"
+        )
+        let secondConfiguration = TranscriptionConfiguration(
+            freeformPrompt: "second-current-setting"
+        )
 
         let (first, firstCleanup) = try await prepare(
             builder,
-            request: try request(source, settings: firstSettings)
+            request: try request(source, transcriptionConfiguration: firstConfiguration)
         )
         let firstRequest = try await first.prepareRequest()
         let firstBody = try Data(contentsOf: first.bodyFileURL)
@@ -472,7 +478,7 @@ struct OpenAITranscriptionRequestBuilderTests {
         firstCleanup.requestCleanup()
         let (second, secondCleanup) = try await prepare(
             builder,
-            request: try request(source, settings: secondSettings)
+            request: try request(source, transcriptionConfiguration: secondConfiguration)
         )
         let secondRequest = try await second.prepareRequest()
         let secondBody = try Data(contentsOf: second.bodyFileURL)
@@ -541,9 +547,23 @@ struct OpenAITranscriptionRequestBuilderTests {
         return (try await builder.makePreparation(request, cleanupRegistration: cleanup), cleanup)
     }
 
-    private func request(_ url: URL, settings: AppSettings? = nil) throws -> AudioTranscriptionRequest {
-        let settings = settings ?? .defaults
-        return try settings.audioTranscriptionRequest(audioFileURL: url, context: nil)
+    private func request(
+        _ url: URL,
+        transcriptionConfiguration: TranscriptionConfiguration = .defaults,
+        context: TranscriptionPromptContext? = nil,
+        emojiCommandsConfiguration: EmojiCommandsConfiguration = .defaults,
+        customDictionary: CustomDictionary = .empty
+    ) throws -> AudioTranscriptionRequest {
+        try AudioTranscriptionRequest(
+            audioFileURL: url,
+            transcriptionConfiguration: transcriptionConfiguration,
+            promptComposition: TranscriptionPromptComposition(
+                resolvedFreeformPrompt: transcriptionConfiguration.resolvedFreeformPrompt,
+                context: context,
+                emojiCommandsConfiguration: emojiCommandsConfiguration,
+                customDictionary: customDictionary
+            )
+        )
     }
 }
 

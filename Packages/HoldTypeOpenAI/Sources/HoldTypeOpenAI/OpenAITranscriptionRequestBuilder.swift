@@ -387,7 +387,11 @@ nonisolated extension OpenAITranscriptionMultipartPreparation:
     }
 }
 
-nonisolated enum OpenAITranscriptionRequestBuilderError: Error, Equatable, LocalizedError, Sendable {
+public nonisolated enum OpenAITranscriptionRequestBuilderError:
+    Error,
+    Equatable,
+    LocalizedError,
+    Sendable {
     case missingAudioFile(URL)
     case emptyAudioFile(URL)
     case unsupportedAudioFileType(String)
@@ -400,7 +404,7 @@ nonisolated enum OpenAITranscriptionRequestBuilderError: Error, Equatable, Local
     case invalidMultipartBoundary
     case invalidCustomLanguageCode(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .missingAudioFile: "The recording file is missing."
         case .emptyAudioFile: "The recording file is empty."
@@ -420,9 +424,9 @@ nonisolated extension OpenAITranscriptionRequestBuilderError:
     CustomStringConvertible,
     CustomDebugStringConvertible,
     CustomReflectable {
-    var description: String { "OpenAITranscriptionRequestBuilderError(<redacted>)" }
-    var debugDescription: String { description }
-    var customMirror: Mirror {
+    public var description: String { "OpenAITranscriptionRequestBuilderError(<redacted>)" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror {
         Mirror(
             self,
             children: [(label: String?, value: Any)](),

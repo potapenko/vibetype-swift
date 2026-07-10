@@ -7,9 +7,8 @@
 
 import Foundation
 import HoldTypeDomain
-import HoldTypeOpenAI
 import Testing
-@testable import HoldType
+@testable import HoldTypeOpenAI
 
 @MainActor
 struct OpenAITranscriptionServiceTests {
@@ -443,9 +442,6 @@ struct OpenAITranscriptionServiceTests {
         let audioFileURL = try makeTemporaryAudioFile()
         defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
 
-        var settings = AppSettings.defaults
-        settings.customDictionary = ["OpenWhispr", "Parakeet", "Alcahest"]
-
         let service = makeService(
             loader: FakeURLLoader(
                 result: .success(
@@ -459,7 +455,9 @@ struct OpenAITranscriptionServiceTests {
             try await service.transcribe(
                 try makeTranscriptionRequest(
                     audioFileURL: audioFileURL,
-                    settings: settings
+                    customDictionary: CustomDictionary(
+                        entries: ["OpenWhispr", "Parakeet", "Alcahest"]
+                    )
                 ),
                 credential: testCredential()
             )
@@ -493,8 +491,6 @@ struct OpenAITranscriptionServiceTests {
         let audioFileURL = try makeTemporaryAudioFile()
         defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
 
-        var settings = AppSettings.defaults
-        settings.useActiveTextContext = true
         let context = try #require(
             TranscriptionPromptContext("We are already writing about contextual dictation quality.")
         )
@@ -511,7 +507,6 @@ struct OpenAITranscriptionServiceTests {
             try await service.transcribe(
                 try makeTranscriptionRequest(
                     audioFileURL: audioFileURL,
-                    settings: settings,
                     context: context
                 ),
                 credential: testCredential()
@@ -523,9 +518,6 @@ struct OpenAITranscriptionServiceTests {
         let audioFileURL = try makeTemporaryAudioFile()
         defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
 
-        var settings = AppSettings.defaults
-        settings.emojiCommandsEnabled = false
-        settings.useActiveTextContext = false
         let context = try #require(
             TranscriptionPromptContext("We are already writing about contextual dictation quality.")
         )
@@ -540,8 +532,7 @@ struct OpenAITranscriptionServiceTests {
         let transcript = try await service.transcribe(
             try makeTranscriptionRequest(
                 audioFileURL: audioFileURL,
-                settings: settings,
-                context: context
+                emojiCommandsConfiguration: EmojiCommandsConfiguration(isEnabled: false)
             ),
             credential: testCredential()
         )
@@ -632,10 +623,11 @@ struct OpenAITranscriptionServiceTests {
     @Test func oversizedMultipartMetadataIsMappedBeforeScratchUpload() async throws {
         let audioFileURL = try makeTemporaryAudioFile()
         defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
-        var settings = AppSettings.defaults
-        settings.prompt = String(
-            repeating: "x",
-            count: Int(OpenAITranscriptionRequestBuilder.maximumMetadataByteCount)
+        let transcriptionConfiguration = TranscriptionConfiguration(
+            freeformPrompt: String(
+                repeating: "x",
+                count: Int(OpenAITranscriptionRequestBuilder.maximumMetadataByteCount)
+            )
         )
         let loader = FakeURLLoader(
             result: .success(Data(#"{"text":"unused"}"#.utf8), makeHTTPResponse(statusCode: 200))
@@ -644,7 +636,10 @@ struct OpenAITranscriptionServiceTests {
 
         await expectTranscriptionError(.multipartMetadataTooLarge) {
             try await service.transcribe(
-                try makeTranscriptionRequest(audioFileURL: audioFileURL, settings: settings),
+                try makeTranscriptionRequest(
+                    audioFileURL: audioFileURL,
+                    transcriptionConfiguration: transcriptionConfiguration
+                ),
                 credential: testCredential()
             )
         }
@@ -656,16 +651,17 @@ struct OpenAITranscriptionServiceTests {
     @Test func invalidCustomLanguageFailsDuringRequestConstructionBeforeServiceFileIO() {
         let missingFileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("holdtype-invalid-language-\(UUID().uuidString).m4a")
-        var settings = AppSettings.defaults
-        settings.language = .custom
-        settings.customLanguageCode = "en-US"
+        let transcriptionConfiguration = TranscriptionConfiguration(
+            language: .custom,
+            customLanguageCode: "en-US"
+        )
 
         #expect(
             throws: AudioTranscriptionRequest.ValidationError.invalidCustomLanguageCode("en-US")
         ) {
             _ = try makeTranscriptionRequest(
                 audioFileURL: missingFileURL,
-                settings: settings
+                transcriptionConfiguration: transcriptionConfiguration
             )
         }
     }
@@ -749,13 +745,20 @@ struct OpenAITranscriptionServiceTests {
 
     private func makeTranscriptionRequest(
         audioFileURL: URL,
-        settings: AppSettings? = nil,
-        context: TranscriptionPromptContext? = nil
+        transcriptionConfiguration: TranscriptionConfiguration = .defaults,
+        context: TranscriptionPromptContext? = nil,
+        emojiCommandsConfiguration: EmojiCommandsConfiguration = .defaults,
+        customDictionary: CustomDictionary = .empty
     ) throws -> AudioTranscriptionRequest {
-        let settings = settings ?? .defaults
-        return try settings.audioTranscriptionRequest(
+        try AudioTranscriptionRequest(
             audioFileURL: audioFileURL,
-            context: context
+            transcriptionConfiguration: transcriptionConfiguration,
+            promptComposition: TranscriptionPromptComposition(
+                resolvedFreeformPrompt: transcriptionConfiguration.resolvedFreeformPrompt,
+                context: context,
+                emojiCommandsConfiguration: emojiCommandsConfiguration,
+                customDictionary: customDictionary
+            )
         )
     }
 
@@ -790,6 +793,7 @@ struct OpenAITranscriptionServiceTests {
     }
 }
 
+@MainActor
 private func expectTranscriptionError(
     _ expectedError: OpenAITranscriptionServiceError,
     operation: () async throws -> String

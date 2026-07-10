@@ -7,7 +7,7 @@
 
 import Foundation
 import Testing
-@testable import HoldType
+@testable import HoldTypeOpenAI
 
 @Suite(.serialized)
 struct OpenAIFileUploadTransportTests {

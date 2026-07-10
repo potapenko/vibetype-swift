@@ -353,8 +353,8 @@ attempt remains a separate recovery invariant, not accepted transcript history.
 | Emoji catalog and custom commands | `Models/EmojiCommandSet.swift` | Move to domain |
 | Emoji replacement | `Services/EmojiCommandReplacementService.swift` | Move to domain |
 | Local cleanup and replacement pipeline | `Services/TranscriptTextCorrectionService.swift` | Move pure postprocessor to domain |
-| OpenAI transcription | `OpenAITranscriptionRequestBuilder.swift`, `OpenAITranscriptionService.swift` | Move after mobile transport hardening |
-| OpenAI correction and translation | `OpenAITextCorrectionService.swift`, `OpenAITextTranslationService.swift` | Move with real cancellation |
+| OpenAI transcription | `Packages/HoldTypeOpenAI` | Moved unchanged; only the service contract, concrete service, and errors are public |
+| OpenAI correction and translation | `Packages/HoldTypeOpenAI` | Moved unchanged; transport and injection seams remain internal |
 | Credential value | `Packages/HoldTypeOpenAI/Sources/HoldTypeOpenAI/OpenAICredential.swift` | Portable value/resolver contract moved; storage adapters remain platform-specific |
 | Usage models/store | `Models/OpenAIUsageEstimate.swift`, `Services/OpenAIUsageStore.swift` | Move model; inject persistence and clock |
 | History models | `Models/TranscriptHistoryEntry.swift`, `Services/TranscriptHistoryStore.swift` | Redesign before moving: current Codable drops audio URL and failed recovery is session-only/absolute-path/transcription-only |
@@ -751,7 +751,7 @@ accepted text before cleanup, emoji matching, and ordered replacements. The
 macOS controller and adapters no longer expose all of `AppSettings` across this
 boundary. The provider adapter now owns real, bounded cancellation of the
 active transport and ignores abandoned late completions. Provider-module
-movement remains P2 work.
+ownership now lives in `HoldTypeOpenAI`.
 
 `TextTranslationRequest` now narrows both containing-app translation boundaries
 to one validated `AcceptedTranscript`, one `TranslationConfiguration`, and the
@@ -768,7 +768,8 @@ usage. Final typography cleanup remains controller-owned, keeps a non-empty
 pre-cleanup fallback, and never reruns correction, emoji commands, or
 replacements. The provider adapter now owns real, bounded cancellation of the
 active transport and ignores abandoned late completions. Provider-module
-movement, persistence, and macOS Translation Retry remain outside this slice.
+ownership now lives in `HoldTypeOpenAI`; persistence and macOS Translation
+Retry remain outside this slice.
 
 `TranscriptionPromptComposition` now freezes the runtime provider prompt and
 matching dictionary/context echo guards from only the resolved freeform prompt,
@@ -829,11 +830,11 @@ durable repositories, migration, and journaling remain P2 work.
 
 P1 exit is complete: the shared Foundation-only extraction originally built and
 ran the same 151 behavioral tests on macOS and iOS, with separate normal-import
-iOS smoke coverage. The P2 provider-boundary bootstrap later moved six
-credential tests into `HoldTypeOpenAI`; Domain now runs 145 and OpenAI runs six
-on both platforms, preserving the same aggregate 151-test coverage. The macOS
-compatibility facades preserve existing behavior, and the remaining provider,
-persistence, Apple audio, and bridge work belongs to named later milestones.
+iOS smoke coverage. P2 first moved six credential tests and then the 69
+existing provider tests into `HoldTypeOpenAI`; Domain now runs 145 tests and
+OpenAI runs 75. The macOS compatibility facades preserve existing behavior,
+and the remaining persistence, Apple audio, and bridge work belongs to named
+later milestones.
 
 ### P2 — Mobile-ready provider and persistence foundations
 
@@ -878,15 +879,18 @@ coordinator for the app process and route all production Keychain and marker
 access through it; scene-local coordinators and parallel direct adapter access
 are forbidden.
 `HoldTypeIOSCore` is linked only to the iOS app and iOS tests; the keyboard and
-macOS app remain unlinked. Bounded file-backed multipart upload and
-provider-service extraction remain; signed-device Keychain behavior remains a
-physical gate. The `HoldTypeOpenAI` package now owns the unchanged portable
-credential value and synchronous resolver contract. Its six shared tests run
-beside the remaining 145 Domain tests on macOS and iOS, both containing apps
-link the product, the macOS app uses its compatibility facade, normal-import
-iOS tests prove the containing-app boundary, and the keyboard remains unlinked.
-Keychain access, provider services, multipart upload, and UI stay outside this
-bootstrap package slice.
+macOS app remain unlinked. Signed-device Keychain behavior remains a physical
+gate. `HoldTypeOpenAI` now owns the unchanged credential contract plus
+transcription, correction, translation, real cancellation, and bounded
+file-backed multipart upload. Its public surface contains only the three
+service protocols, concrete services, service errors, the request-builder
+error required by the transcription error, and the credential contract;
+transport, request builders, file-system adapters, DTOs, and injection seams
+remain internal. Seventy-five package tests cover the boundary without live
+provider calls. Both containing apps link the product, the macOS app uses
+narrow compatibility aliases, normal-import iOS smoke constructs all three
+services, and the keyboard remains unlinked. Keychain access and UI remain
+outside the provider package.
 
 ### P3 — Native containing-app shell
 
@@ -1077,28 +1081,18 @@ already decided by their P0 specs.
 
 ## Recommended Next Slice
 
-The first six P2 foundations are complete: the non-secret marker package,
-real transport cancellation, the app-only iOS Keychain adapter, the
-credential-only `HoldTypeOpenAI` bootstrap, serialized app-only credential
-reconciliation, and bounded file-backed multipart upload. Continue with the
-next small independent checkpoint:
+The provider foundation is now complete: the credential contract, real
+cancellation, bounded file-backed multipart upload, and all three provider
+services live behind `HoldTypeOpenAI`. Continue P2 with the next small
+independent checkpoint:
 
-1. move the current provider services into `HoldTypeOpenAI` in a
-   behavior-neutral checkpoint.
+1. add the versioned iOS settings repository and migrations without moving
+   Keychain, UI, or App Group state into the provider package.
 
-The multipart checkpoint keeps the current provider service in the macOS app
-while hardening its transport seam: regular `m4a`/`wav` audio is strictly less
-than 25,000,000 bytes, non-audio multipart bytes are capped at 1 MiB, audio is
-copied with at most 64 KiB reads into protected app-private scratch storage,
-and an ephemeral foreground `URLSession` uploads that complete body from a
-file. Redirects remain within the exact original origin, and provider response
-data is capped at 1 MiB. The existing 60-second deadline covers preparation,
-upload, and response. Cancellation and timeout remove scratch state without
-waiting for a non-cooperative loader, retain the source recording for recovery,
-and never reuse a body on explicit Retry. The subsequent checkpoint moves the
-already-tested provider code into `HoldTypeOpenAI`; this hardening checkpoint
-does not expose a public scratch file contract or link provider code to the
-keyboard.
+Keep startup scavenging for abandoned private multipart scratch files as an
+explicit later P2 provider gate. It must stay bounded, must never touch source
+recordings, and must not expose a public scratch-file contract or link provider
+code to the keyboard.
 
 These lanes require no live provider or real secret. Simulator and fake-backed
 evidence are sufficient for their checkpoint commits, while signed-device

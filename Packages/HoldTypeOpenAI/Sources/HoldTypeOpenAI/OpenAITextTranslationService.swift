@@ -1,5 +1,5 @@
 //
-//  OpenAITextCorrectionService.swift
+//  OpenAITextTranslationService.swift
 //  HoldType
 //
 //  Created by Codex on 7/5/26.
@@ -7,26 +7,23 @@
 
 import Foundation
 import HoldTypeDomain
-import HoldTypeOpenAI
 
-protocol OpenAITextCorrectionServing {
-    func correct(
-        _ transcript: AcceptedTranscript,
-        configuration: TextCorrectionConfiguration,
+public protocol OpenAITextTranslationServing {
+    func translate(
+        _ request: TextTranslationRequest,
         credential: OpenAICredential
     ) async throws -> String
-    func cancelActiveCorrection()
+    func cancelActiveTranslation()
 }
 
-extension OpenAITextCorrectionServing {
-    func cancelActiveCorrection() {}
+public extension OpenAITextTranslationServing {
+    func cancelActiveTranslation() {}
 }
 
-struct OpenAITextCorrectionService: OpenAITextCorrectionServing {
+public struct OpenAITextTranslationService: OpenAITextTranslationServing, Sendable {
     static let defaultEndpointURL = URL(string: "https://api.openai.com/v1/responses")!
     static let defaultRequestTimeout: TimeInterval = 20
     static let defaultMaxOutputTokens = 4096
-
     private let endpointURL: URL
     private let urlLoader: any URLLoading
     private let timeoutSleeper: any TranscriptionTimeoutSleeping
@@ -36,8 +33,21 @@ struct OpenAITextCorrectionService: OpenAITextCorrectionServing {
     private let decoder: JSONDecoder
     private let requestTaskCoordinator: OpenAIRequestTaskCoordinator
 
+    public init() {
+        self.init(
+            endpointURL: Self.defaultEndpointURL,
+            urlLoader: URLSession.shared,
+            timeoutSleeper: TaskTranscriptionTimeoutSleeper(),
+            requestTimeout: Self.defaultRequestTimeout,
+            maxOutputTokens: Self.defaultMaxOutputTokens,
+            encoder: JSONEncoder(),
+            decoder: JSONDecoder(),
+            requestTaskCoordinator: OpenAIRequestTaskCoordinator()
+        )
+    }
+
     init(
-        endpointURL: URL = Self.defaultEndpointURL,
+        endpointURL: URL,
         urlLoader: any URLLoading = URLSession.shared,
         timeoutSleeper: any TranscriptionTimeoutSleeping = TaskTranscriptionTimeoutSleeper(),
         requestTimeout: TimeInterval = Self.defaultRequestTimeout,
@@ -56,50 +66,50 @@ struct OpenAITextCorrectionService: OpenAITextCorrectionServing {
         self.requestTaskCoordinator = requestTaskCoordinator
     }
 
-    func correct(
-        _ transcript: AcceptedTranscript,
-        configuration: TextCorrectionConfiguration,
+    public func translate(
+        _ request: TextTranslationRequest,
         credential: OpenAICredential
     ) async throws -> String {
-        var request = try makeAuthorizedRequest(
-            inputText: transcript.text,
-            configuration: configuration,
+        var urlRequest = try makeAuthorizedRequest(
+            translationRequest: request,
             credential: credential
         )
-        request.timeoutInterval = requestTimeout
+        urlRequest.timeoutInterval = requestTimeout
 
-        let (data, response) = try await loadWithTimeout(request)
+        let (data, response) = try await loadWithTimeout(urlRequest)
         try validateHTTPResponse(response)
-        return try parseCorrection(from: data)
+        return try parseTranslation(from: data)
     }
 
-    func cancelActiveCorrection() {
+    public func cancelActiveTranslation() {
         requestTaskCoordinator.cancelActiveRequest()
     }
 
     private func makeAuthorizedRequest(
-        inputText: String,
-        configuration: TextCorrectionConfiguration,
+        translationRequest: TextTranslationRequest,
         credential: OpenAICredential
     ) throws -> URLRequest {
+        let configuration = translationRequest.translationConfiguration
+        let instructions = try makeInstructions(request: translationRequest)
+
         do {
-            let payload = OpenAITextCorrectionRequest(
+            let payload = OpenAITextTranslationRequest(
                 model: configuration.resolvedModel,
-                instructions: configuration.resolvedPrompt,
+                instructions: instructions,
                 input: [
-                    OpenAITextCorrectionInputMessage(
+                    OpenAITextTranslationInputMessage(
                         role: "user",
                         content: [
-                            OpenAITextCorrectionInputContent(
+                            OpenAITextTranslationInputContent(
                                 type: "input_text",
-                                text: inputText
+                                text: translationRequest.acceptedTranscript.text
                             )
                         ]
                     )
                 ],
-                reasoning: OpenAITextCorrectionReasoning(effort: "low"),
-                text: OpenAITextCorrectionTextConfig(
-                    format: OpenAITextCorrectionTextFormat(type: "text"),
+                reasoning: OpenAITextTranslationReasoning(effort: "low"),
+                text: OpenAITextTranslationTextConfig(
+                    format: OpenAITextTranslationTextFormat(type: "text"),
                     verbosity: "low"
                 ),
                 toolChoice: "none",
@@ -114,9 +124,34 @@ struct OpenAITextCorrectionService: OpenAITextCorrectionServing {
             request.setValue("Bearer \(credential.apiKey)", forHTTPHeaderField: "Authorization")
             request.httpBody = try encoder.encode(payload)
             return request
+        } catch let error as OpenAITextTranslationServiceError {
+            throw error
         } catch {
-            throw OpenAITextCorrectionServiceError.invalidRequest
+            throw OpenAITextTranslationServiceError.invalidRequest
         }
+    }
+
+    private func makeInstructions(request: TextTranslationRequest) throws -> String {
+        let configuration = request.translationConfiguration
+        guard configuration.isSourceConfigurationValid,
+              let targetCode = configuration.resolvedTargetLanguageCode else {
+            throw OpenAITextTranslationServiceError.invalidLanguageConfiguration
+        }
+
+        let routeInstruction: String
+        if let sourceCode = request.resolvedSourceLanguageCode {
+            routeInstruction = "Translate from language code \(sourceCode) to language code \(targetCode)."
+        } else {
+            routeInstruction = "Translate the user's transcript to language code \(targetCode)."
+        }
+
+        return """
+        \(routeInstruction)
+        Return only the translated text.
+
+        User translation instructions:
+        \(configuration.resolvedPrompt)
+        """
     }
 
     private func loadWithTimeout(_ request: URLRequest) async throws -> (Data, URLResponse) {
@@ -125,57 +160,57 @@ struct OpenAITextCorrectionService: OpenAITextCorrectionServing {
                 try await urlLoader.loadData(for: request)
             } deadline: {
                 try await timeoutSleeper.sleep(seconds: requestTimeout)
-                throw OpenAITextCorrectionServiceError.timedOut
+                throw OpenAITextTranslationServiceError.timedOut
             }
-        } catch let error as OpenAITextCorrectionServiceError {
+        } catch let error as OpenAITextTranslationServiceError {
             throw error
         } catch let error as URLError {
             throw Self.mapURLError(error)
         } catch is CancellationError {
-            throw OpenAITextCorrectionServiceError.cancelled
+            throw OpenAITextTranslationServiceError.cancelled
         } catch {
-            throw OpenAITextCorrectionServiceError.networkFailure
+            throw OpenAITextTranslationServiceError.networkFailure
         }
     }
 
     private func validateHTTPResponse(_ response: URLResponse) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenAITextCorrectionServiceError.invalidResponse
+            throw OpenAITextTranslationServiceError.invalidResponse
         }
 
         switch httpResponse.statusCode {
         case 200..<300:
             return
         case 401, 403:
-            throw OpenAITextCorrectionServiceError.invalidAPIKey
+            throw OpenAITextTranslationServiceError.invalidAPIKey
         case 408:
-            throw OpenAITextCorrectionServiceError.timedOut
+            throw OpenAITextTranslationServiceError.timedOut
         case 429:
-            throw OpenAITextCorrectionServiceError.rateLimited
+            throw OpenAITextTranslationServiceError.rateLimited
         case 400, 404, 413, 415, 422:
-            throw OpenAITextCorrectionServiceError.badRequest
+            throw OpenAITextTranslationServiceError.badRequest
         case 500..<600:
-            throw OpenAITextCorrectionServiceError.providerUnavailable
+            throw OpenAITextTranslationServiceError.providerUnavailable
         default:
-            throw OpenAITextCorrectionServiceError.providerRejected(statusCode: httpResponse.statusCode)
+            throw OpenAITextTranslationServiceError.providerRejected(statusCode: httpResponse.statusCode)
         }
     }
 
-    private func parseCorrection(from data: Data) throws -> String {
+    private func parseTranslation(from data: Data) throws -> String {
         do {
-            let response = try decoder.decode(OpenAITextCorrectionResponse.self, from: data)
+            let response = try decoder.decode(OpenAITextTranslationResponse.self, from: data)
             let outputText = response.outputText ?? response.firstOutputText
             return try AcceptedTranscript(rawText: outputText ?? "").text
         } catch AcceptedTranscript.ValidationError.emptyText {
-            throw OpenAITextCorrectionServiceError.emptyCorrection
-        } catch let error as OpenAITextCorrectionServiceError {
+            throw OpenAITextTranslationServiceError.emptyTranslation
+        } catch let error as OpenAITextTranslationServiceError {
             throw error
         } catch {
-            throw OpenAITextCorrectionServiceError.invalidResponse
+            throw OpenAITextTranslationServiceError.invalidResponse
         }
     }
 
-    private static func mapURLError(_ error: URLError) -> OpenAITextCorrectionServiceError {
+    private static func mapURLError(_ error: URLError) -> OpenAITextTranslationServiceError {
         switch error.code {
         case .timedOut:
             return .timedOut
@@ -189,7 +224,7 @@ struct OpenAITextCorrectionService: OpenAITextCorrectionServing {
     }
 }
 
-enum OpenAITextCorrectionServiceError: Error, Equatable, LocalizedError {
+public enum OpenAITextTranslationServiceError: Error, Equatable, LocalizedError, Sendable {
     case missingAPIKey
     case apiKeyUnavailable
     case invalidRequest
@@ -201,50 +236,53 @@ enum OpenAITextCorrectionServiceError: Error, Equatable, LocalizedError {
     case rateLimited
     case providerUnavailable
     case badRequest
+    case invalidLanguageConfiguration
     case providerRejected(statusCode: Int)
     case invalidResponse
-    case emptyCorrection
+    case emptyTranslation
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .missingAPIKey:
-            return "Enter an OpenAI API key before correcting text."
+            return "Enter an OpenAI API key before translating text."
         case .apiKeyUnavailable:
             return "The OpenAI API key could not be read."
         case .invalidRequest:
-            return "The text correction request could not be prepared."
+            return "The translation request could not be prepared."
         case .timedOut:
-            return "Text correction timed out."
+            return "Translation timed out."
         case .networkUnavailable:
-            return "The network is unavailable. Text correction was skipped."
+            return "The network is unavailable. Translation was not completed."
         case .networkFailure:
-            return "The text correction request failed."
+            return "The translation request failed."
         case .cancelled:
-            return "Text correction was cancelled."
+            return "Translation was cancelled."
         case .invalidAPIKey:
             return "OpenAI rejected the saved API key. Check Settings."
         case .rateLimited:
-            return "OpenAI rate limits were reached. Text correction was skipped."
+            return "OpenAI rate limits were reached. Translation was not completed."
         case .providerUnavailable:
-            return "OpenAI is unavailable. Text correction was skipped."
+            return "OpenAI is unavailable. Translation was not completed."
         case .badRequest:
-            return "Text correction settings need attention."
+            return "Translation settings need attention."
+        case .invalidLanguageConfiguration:
+            return "Choose valid translation languages in Settings."
         case .providerRejected:
-            return "OpenAI rejected the text correction request."
+            return "OpenAI rejected the translation request."
         case .invalidResponse:
-            return "OpenAI returned an unreadable text correction response."
-        case .emptyCorrection:
-            return "Text correction returned no usable text."
+            return "OpenAI returned an unreadable translation response."
+        case .emptyTranslation:
+            return "Translation returned no usable text."
         }
     }
 }
 
-private struct OpenAITextCorrectionRequest: Encodable {
+private struct OpenAITextTranslationRequest: Encodable {
     let model: String
     let instructions: String
-    let input: [OpenAITextCorrectionInputMessage]
-    let reasoning: OpenAITextCorrectionReasoning
-    let text: OpenAITextCorrectionTextConfig
+    let input: [OpenAITextTranslationInputMessage]
+    let reasoning: OpenAITextTranslationReasoning
+    let text: OpenAITextTranslationTextConfig
     let toolChoice: String
     let maxOutputTokens: Int
     let store: Bool
@@ -261,32 +299,32 @@ private struct OpenAITextCorrectionRequest: Encodable {
     }
 }
 
-private struct OpenAITextCorrectionInputMessage: Encodable {
+private struct OpenAITextTranslationInputMessage: Encodable {
     let role: String
-    let content: [OpenAITextCorrectionInputContent]
+    let content: [OpenAITextTranslationInputContent]
 }
 
-private struct OpenAITextCorrectionInputContent: Encodable {
+private struct OpenAITextTranslationInputContent: Encodable {
     let type: String
     let text: String
 }
 
-private struct OpenAITextCorrectionReasoning: Encodable {
+private struct OpenAITextTranslationReasoning: Encodable {
     let effort: String
 }
 
-private struct OpenAITextCorrectionTextConfig: Encodable {
-    let format: OpenAITextCorrectionTextFormat
+private struct OpenAITextTranslationTextConfig: Encodable {
+    let format: OpenAITextTranslationTextFormat
     let verbosity: String
 }
 
-private struct OpenAITextCorrectionTextFormat: Encodable {
+private struct OpenAITextTranslationTextFormat: Encodable {
     let type: String
 }
 
-private struct OpenAITextCorrectionResponse: Decodable {
+private struct OpenAITextTranslationResponse: Decodable {
     let outputText: String?
-    let output: [OpenAITextCorrectionOutputItem]?
+    let output: [OpenAITextTranslationOutputItem]?
 
     var firstOutputText: String? {
         output?
@@ -302,11 +340,11 @@ private struct OpenAITextCorrectionResponse: Decodable {
     }
 }
 
-private struct OpenAITextCorrectionOutputItem: Decodable {
-    let content: [OpenAITextCorrectionOutputContent]?
+private struct OpenAITextTranslationOutputItem: Decodable {
+    let content: [OpenAITextTranslationOutputContent]?
 }
 
-private struct OpenAITextCorrectionOutputContent: Decodable {
+private struct OpenAITextTranslationOutputContent: Decodable {
     let type: String
     let text: String?
 }
