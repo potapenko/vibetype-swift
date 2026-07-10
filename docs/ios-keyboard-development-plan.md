@@ -311,9 +311,12 @@ host app, state, expected result, actual result, and go/no-go decision.
   the untranslated intermediate. Provider transport remains containing-app
   work and no request enters App Group or the keyboard. Prompt composition and
   its matching echo guards are now portable, while context acquisition stays
-  platform-owned. The next P1 slice narrows the containing-app audio-
-  transcription adapter request without linking provider work into the
-  keyboard.
+  platform-owned. The containing-app audio-transcription boundary is now
+  narrowed to a transient audio URL, resolved model/language, and one frozen
+  prompt composition; the service and multipart builder no longer receive full
+  `AppSettings` or loose context, and no provider request enters App Group or
+  the keyboard. The next P1 slice separates terminal `VoiceAttemptOutcome`
+  from active work, stage attribution, delivery, setup, and presentation.
   App Group command/session records, keyboard linking, and actual keyboard
   insertion remain unchanged until their owning milestones.
 - Full QWERTY and background Quick Session: gated and not started.

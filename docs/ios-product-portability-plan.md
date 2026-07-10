@@ -1,6 +1,6 @@
 # HoldType iOS Full Product Portability Plan
 
-Status: active implementation roadmap, P0 contracts and the first twenty-eight P1
+Status: active implementation roadmap, P0 contracts and the first twenty-nine P1
 Domain slices complete; updated 2026-07-10.
 
 This document plans the complete iPhone and iPad companion product around the
@@ -763,6 +763,20 @@ language, credential, audio, persistence, App Group, keyboard, or permission
 semantics. Context acquisition remains platform-owned, and Nearby Text remains
 unavailable to the iOS product pending its separate privacy gate.
 
+`AudioTranscriptionRequest` now narrows file-based transcription to one
+transient app-local audio URL, one resolved model, one optional validated
+language code, and one frozen prompt composition. The value is `Equatable`,
+`Sendable`, and non-Codable; credentials remain separate. Invalid non-empty
+Custom language fails before file I/O, while blank model and language fallbacks
+remain unchanged. The macOS service and multipart builder no longer receive
+full `AppSettings` or loose context. Normal attempts use their captured
+settings/context snapshot; failed-attempt Retry captures current settings once,
+uses no Nearby Text, and attributes usage to the request's resolved model.
+Multipart bytes, file validation/error mapping, echo rejection, timeout,
+cancellation surface, recovery ordering, and stale-result rejection remain
+covered. File-backed upload, real cancellation, provider-module movement,
+durable request identity, and persistence remain P2 work.
+
 ### P2 — Mobile-ready provider and persistence foundations
 
 - extract OpenAI transcription, correction, and translation;
@@ -963,31 +977,27 @@ already decided by their P0 specs.
 ## Recommended Next Slice
 
 Do not begin by porting `SettingsView` or adding every macOS source file to the
-iOS target. The first twenty-eight value/configuration/dependency slices are
-complete, including pure prompt composition and echo guards. The next P1 slice
-removes full `AppSettings` and loose context from the transcription adapter
-boundary without changing provider transport:
+iOS target. The first twenty-nine value/configuration/dependency slices are
+complete, including the narrow audio-transcription request boundary. The next
+P1 slice separates terminal attempt outcome from active work, stage
+attribution, delivery, setup, and presentation:
 
-1. specify and add a public runtime-only `AudioTranscriptionRequest` containing
-   exactly one transient app-local audio URL, one resolved non-empty model, one
-   optional validated language code, and one `TranscriptionPromptComposition`;
-2. make request construction preserve the current blank-model fallback,
-   Auto/blank-custom omission, normalized fixed/custom code, and typed invalid
-   custom-language failure before reading or uploading audio;
-3. make the value `Equatable` and `Sendable`, but not `Codable`, identified,
-   persisted, logged, or transported through App Group or the keyboard. Keep
-   `OpenAICredential` as a separate transient dependency;
-4. change the macOS transcription service and multipart builder boundaries to
-   receive the request rather than audio URL + full `AppSettings` + loose
-   context. Normal attempts use their captured snapshot; failed-attempt Retry
-   resolves fresh current settings once and deliberately has no Nearby Text;
-5. preserve exact multipart bytes, audio-file validation/error mapping,
-   response parsing, echo rejection, timeout, cancellation surface, usage
-   handoff, recovery ordering, and controller stale-result rejection;
-6. add package and normal-import iOS tests plus controller normal/Retry and
-   existing request-builder/service regressions. Keep file-backed upload, real
-   cancellation, provider-module movement, durable request identity,
-   persistence, and `VoiceAttemptOutcome` outside this slice.
+1. specify and add a public payload-free `VoiceAttemptOutcome` with exactly
+   `resultReady`, `recoverableFailure`, `interrupted`, and `expired`;
+2. make it `Equatable` and `Sendable`, but not raw-valued, localized, Codable,
+   identified, persisted, logged, or transported through App Group;
+3. keep accepted text, error details, interruption/expiry reasons, retry
+   eligibility, setup recovery, and output delivery outside the value;
+4. add only honest macOS compatibility projection: an accepted final result may
+   project `resultReady`, and a genuinely retained eligible failed attempt may
+   project `recoverableFailure`. Ordinary cancel must not invent
+   `interrupted`, and macOS has no synthetic `expired` mapping;
+5. prove the value remains independent from `VoiceWorkPhase`,
+   `VoiceAttemptStage`, and `OutputDeliveryState`, without changing existing
+   macOS UI copy, recovery ownership, or cancellation behavior;
+6. add package and normal-import iOS tests plus narrow macOS projection tests.
+   Durable outcome journals, detailed portable failure categories, and iOS
+   interruption/expiry adapters remain later slices.
 
 ## Research Basis
 

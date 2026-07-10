@@ -25,28 +25,11 @@ struct OpenAITranscriptionRequestBuilder {
         self.fileManager = fileManager
     }
 
-    func makeRequest(
-        audioFileURL: URL,
-        settings: AppSettings,
-        context: TranscriptionPromptContext? = nil
-    ) throws -> URLRequest {
-        try makeRequest(
-            audioFileURL: audioFileURL,
-            settings: settings,
-            promptComposition: settings.transcriptionPromptComposition(context: context)
-        )
-    }
-
-    func makeRequest(
-        audioFileURL: URL,
-        settings: AppSettings,
-        promptComposition: TranscriptionPromptComposition
-    ) throws -> URLRequest {
-        let audioFile = try validatedAudioFile(at: audioFileURL)
-        let body = try makeMultipartBody(
+    func makeRequest(_ transcriptionRequest: AudioTranscriptionRequest) throws -> URLRequest {
+        let audioFile = try validatedAudioFile(at: transcriptionRequest.audioFileURL)
+        let body = makeMultipartBody(
             audioFile: audioFile,
-            settings: settings,
-            promptComposition: promptComposition
+            transcriptionRequest: transcriptionRequest
         )
 
         var request = URLRequest(url: endpointURL)
@@ -105,19 +88,18 @@ struct OpenAITranscriptionRequestBuilder {
 
     private func makeMultipartBody(
         audioFile: AudioFilePart,
-        settings: AppSettings,
-        promptComposition: TranscriptionPromptComposition
-    ) throws -> Data {
+        transcriptionRequest: AudioTranscriptionRequest
+    ) -> Data {
         var body = Data()
 
-        body.appendFormField(name: "model", value: settings.resolvedTranscriptionModel, boundary: boundary)
+        body.appendFormField(name: "model", value: transcriptionRequest.model, boundary: boundary)
         body.appendFormField(name: "response_format", value: "json", boundary: boundary)
 
-        if let languageCode = try validatedLanguageCode(for: settings) {
+        if let languageCode = transcriptionRequest.languageCode {
             body.appendFormField(name: "language", value: languageCode, boundary: boundary)
         }
 
-        if let prompt = promptComposition.providerPrompt {
+        if let prompt = transcriptionRequest.promptComposition.providerPrompt {
             body.appendFormField(name: "prompt", value: prompt, boundary: boundary)
         }
 
@@ -131,17 +113,6 @@ struct OpenAITranscriptionRequestBuilder {
         body.appendString("--\(boundary)--\r\n")
 
         return body
-    }
-
-    private func validatedLanguageCode(for settings: AppSettings) throws -> String? {
-        switch settings.customLanguageCodeValidation {
-        case .invalid:
-            throw OpenAITranscriptionRequestBuilderError.invalidCustomLanguageCode(
-                settings.customLanguageCode
-            )
-        case .notRequired, .emptyFallsBackToAutomatic, .valid:
-            return settings.resolvedLanguageCode
-        }
     }
 
     private static let supportedContentTypeByExtension = [

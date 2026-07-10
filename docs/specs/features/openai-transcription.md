@@ -192,6 +192,38 @@ value, logged, placed in App Group, sent to the keyboard, or treated as a
 durable request journal. Multipart construction, audio reading/upload, provider
 transport, timeout, and real cancellation remain platform-adapter work.
 
+## Runtime Audio Transcription Request
+
+`AudioTranscriptionRequest` is the narrow transient input to the file-based
+transcription adapter. It contains exactly one app-local audio file URL, one
+resolved non-empty model, one optional validated language code, and one frozen
+`TranscriptionPromptComposition`. The initializer resolves these provider
+values from one `TranscriptionConfiguration`; it uses but does not retain the
+raw configuration, so the freeform prompt cannot be duplicated outside the
+composition.
+
+Blank model still falls back to the current default. Auto and blank Custom
+language still omit the language field; fixed and valid Custom language use the
+same normalized provider codes. A non-empty invalid Custom code produces a
+typed request-validation failure before audio is read or uploaded. The macOS
+adapter maps that failure to its existing user-visible transcription-settings
+error without changing copy or failure attribution.
+
+Normal recording constructs the request from the attempt's captured settings
+snapshot and the already-gated Nearby Text context. Explicit failed-attempt
+Retry resolves current safe settings exactly once and constructs a fresh
+composition with no Nearby Text. It reuses only the retained audio URL; it does
+not reuse a prior prompt, dictionary, context, credential, provider payload, or
+request value.
+
+`OpenAICredential` remains a separate transient argument. The request is
+`Equatable`, `Sendable`, and non-Codable. It has no duration, byte count,
+session/attempt/history identity, timestamp, recovery or output policy,
+authorization, response, persistence, App Group, keyboard, or logging
+semantics. File validation, MIME selection, multipart construction, in-memory
+audio reading, transport, timeout, and real cancellation remain platform-
+adapter concerns; bounded file-backed upload remains required in P2.
+
 ## Invariants
 
 - The OpenAI API key is loaded from local secure storage into a process-local

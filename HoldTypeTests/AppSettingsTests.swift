@@ -165,6 +165,46 @@ struct AppSettingsTests {
         #expect(composition.dictionaryEchoGuardText == "HoldType")
     }
 
+    @Test func projectsOneFrozenAudioTranscriptionRequest() throws {
+        var settings = AppSettings.defaults
+        settings.transcriptionModel = "  custom-transcribe  "
+        settings.language = .custom
+        settings.customLanguageCode = " PT "
+        settings.prompt = "Prefer product vocabulary."
+        settings.useActiveTextContext = true
+        settings.customDictionary = ["HoldType"]
+        let audioFileURL = URL(fileURLWithPath: "/tmp/frozen-request.m4a")
+        let context = try #require(TranscriptionPromptContext("Existing sentence."))
+
+        let request = try settings.audioTranscriptionRequest(
+            audioFileURL: audioFileURL,
+            context: context
+        )
+
+        #expect(request.audioFileURL == audioFileURL)
+        #expect(request.model == "custom-transcribe")
+        #expect(request.languageCode == "pt")
+        #expect(
+            request.promptComposition ==
+                settings.transcriptionPromptComposition(context: context)
+        )
+    }
+
+    @Test func rejectsInvalidCustomLanguageBeforeProducingAnAudioRequest() {
+        var settings = AppSettings.defaults
+        settings.language = .custom
+        settings.customLanguageCode = "en-US"
+
+        #expect(
+            throws: AudioTranscriptionRequest.ValidationError.invalidCustomLanguageCode("en-US")
+        ) {
+            _ = try settings.audioTranscriptionRequest(
+                audioFileURL: URL(fileURLWithPath: "/tmp/invalid-request.m4a"),
+                context: nil
+            )
+        }
+    }
+
     @Test func resolvesTextCorrectionModelAndRules() {
         var settings = AppSettings.defaults
 

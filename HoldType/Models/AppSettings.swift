@@ -229,6 +229,17 @@ struct AppSettings: Equatable {
         )
     }
 
+    func audioTranscriptionRequest(
+        audioFileURL: URL,
+        context: TranscriptionPromptContext?
+    ) throws -> AudioTranscriptionRequest {
+        try AudioTranscriptionRequest(
+            audioFileURL: audioFileURL,
+            transcriptionConfiguration: transcriptionConfiguration,
+            promptComposition: transcriptionPromptComposition(context: context)
+        )
+    }
+
     var resolvedCustomDictionaryEntries: [String] {
         resolvedCustomDictionary.entries
     }

@@ -10,28 +10,13 @@ import HoldTypeDomain
 
 protocol OpenAITranscriptionServing {
     func transcribe(
-        audioFileURL: URL,
-        settings: AppSettings,
-        context: TranscriptionPromptContext?,
+        _ request: AudioTranscriptionRequest,
         credential: OpenAICredential
     ) async throws -> String
     func cancelActiveTranscription()
 }
 
 extension OpenAITranscriptionServing {
-    func transcribe(
-        audioFileURL: URL,
-        settings: AppSettings,
-        credential: OpenAICredential
-    ) async throws -> String {
-        try await transcribe(
-            audioFileURL: audioFileURL,
-            settings: settings,
-            context: nil,
-            credential: credential
-        )
-    }
-
     func cancelActiveTranscription() {}
 }
 
@@ -67,38 +52,27 @@ struct OpenAITranscriptionService: OpenAITranscriptionServing {
     }
 
     func transcribe(
-        audioFileURL: URL,
-        settings: AppSettings,
-        context: TranscriptionPromptContext? = nil,
+        _ request: AudioTranscriptionRequest,
         credential: OpenAICredential
     ) async throws -> String {
-        let promptComposition = settings.transcriptionPromptComposition(context: context)
-        var request = try makeAuthorizedRequest(
-            audioFileURL: audioFileURL,
-            settings: settings,
-            promptComposition: promptComposition,
+        var urlRequest = try makeAuthorizedRequest(
+            request,
             credential: credential
         )
 
-        request.timeoutInterval = requestTimeout
+        urlRequest.timeoutInterval = requestTimeout
 
-        let (data, response) = try await loadWithTimeout(request)
+        let (data, response) = try await loadWithTimeout(urlRequest)
         try validateHTTPResponse(response)
-        return try parseTranscript(from: data, promptComposition: promptComposition)
+        return try parseTranscript(from: data, promptComposition: request.promptComposition)
     }
 
     private func makeAuthorizedRequest(
-        audioFileURL: URL,
-        settings: AppSettings,
-        promptComposition: TranscriptionPromptComposition,
+        _ transcriptionRequest: AudioTranscriptionRequest,
         credential: OpenAICredential
     ) throws -> URLRequest {
         do {
-            var request = try requestBuilder.makeRequest(
-                audioFileURL: audioFileURL,
-                settings: settings,
-                promptComposition: promptComposition
-            )
+            var request = try requestBuilder.makeRequest(transcriptionRequest)
             request.setValue("Bearer \(credential.apiKey)", forHTTPHeaderField: "Authorization")
             return request
         } catch let error as OpenAITranscriptionRequestBuilderError {
