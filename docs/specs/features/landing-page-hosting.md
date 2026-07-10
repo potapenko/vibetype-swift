@@ -24,6 +24,9 @@ that already uses GitHub Pages.
   to the active cursor, model-based correction is optional and off by default,
   the user supplies the OpenAI Platform API key, and OpenAI rather than HoldType
   bills API usage.
+- The hero presents one action: the free macOS download. Source inspection
+  remains available in the footer, and the hero does not repeat product claims
+  as a separate row of proof chips.
 - The landing page must turn `honest` into a visible product contract rather
   than leaving it as praise. The contract covers the cursor-level workflow,
   billing source, optional rewrite pass, explicit Mac-to-OpenAI data path, and

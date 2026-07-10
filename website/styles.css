@@ -492,26 +492,6 @@ h3 {
   gap: 20px;
 }
 
-.hero-proof {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 20px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.hero-proof li {
-  padding: 7px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: #fff;
-  color: var(--text-soft);
-  font-size: 0.72rem;
-  font-weight: 650;
-  line-height: 1.2;
-}
-
 .price-sticker {
   width: 134px;
   aspect-ratio: 1;
@@ -2172,19 +2152,6 @@ body.has-image-lightbox {
 
   .hero-actions .button {
     width: 100%;
-  }
-
-  .hero-actions .text-link {
-    min-height: 44px;
-    justify-content: center;
-  }
-
-  .hero-proof {
-    gap: 6px;
-  }
-
-  .hero-proof li {
-    font-size: 0.68rem;
   }
 
   .hero-visual {

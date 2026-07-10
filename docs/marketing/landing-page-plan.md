@@ -78,11 +78,11 @@ seconds.
 - Headline: `The most honest Wispr Flow "clone".`
 - Supporting copy: `No account. No mandatory rewrite pass. You pay
   OpenAI, not HoldType.`
-- Immediate proof: text returns to the cursor, the user's OpenAI key, direct
-  OpenAI billing, no HoldType account or backend, and translation only when
-  requested.
+- Supporting copy explains that text returns to the cursor, the user's OpenAI
+  key is used directly, and translation runs only when requested. Do not repeat
+  these claims in a separate proof-chip row.
 - Primary CTA: `Download free for macOS`.
-- Secondary CTA: `Inspect the source`.
+- Source inspection remains in the footer rather than the hero.
 - Qualification: `Free app · OpenAI API usage billed separately · macOS 14+`.
 
 ### 2. End-To-End Demo

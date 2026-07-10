@@ -164,11 +164,11 @@ text links. Shadows are reserved for the hero editor and real product windows.
 The first viewport leads with `The most honest Wispr Flow "clone".` It must
 immediately explain the provocation through text returning to the active
 cursor, the user's OpenAI Platform API key, direct OpenAI billing, no HoldType
-subscription, and no mandatory model rewrite. The primary actions are the free
-macOS download and source inspection. A compact proof row repeats the cursor
-workflow, direct billing, and absence of a HoldType account or backend. No
-unsupported metric, comparative speed claim, or undocumented claim about Wispr
-Flow's internal model is permitted above the fold.
+subscription, and no mandatory model rewrite. The hero has one action: the free
+macOS download. Source inspection remains in the footer, and there is no
+separate proof-chip row. No unsupported metric, comparative speed claim, or
+undocumented claim about Wispr Flow's internal model is permitted above the
+fold.
 
 The code-native editor uses a dry, self-ironic fictional plan to build a tiny
 SaaS and reach `$1M ARR`; the interface presents the request as if it were
