@@ -36,7 +36,7 @@ Recommended positioning line:
 
 Supporting line:
 
-> No account. No mandatory rewrite pass. You pay OpenAI, not HoldType.
+> No account. Full control over your dictation. You pay OpenAI, not HoldType.
 
 ## Role Of Each Surface
 
@@ -76,7 +76,7 @@ Goal: explain the outcome, platform, and commercial boundary within five
 seconds.
 
 - Headline: `The most honest Wispr Flow "clone".`
-- Supporting copy: `No account. No mandatory rewrite pass. You pay
+- Supporting copy: `No account. Full control over your dictation. You pay
   OpenAI, not HoldType.`
 - Supporting copy explains that text returns to the cursor, the user's OpenAI
   key is used directly, and translation runs only when requested. Do not repeat
@@ -161,7 +161,7 @@ that optional correction and translation are separate.
 
 Keep the story specific and short:
 
-- open with `I wanted Wispr Flow. I didn't want the bullshit.`;
+- open with `I wanted a dictation tool. Not all the bullshit.`;
 - explain the concrete frustration: another product account, opaque billing,
   and a mandatory rewrite pipeline between voice and cursor;
 - answer it with the user's API key, direct OpenAI billing, optional correction,

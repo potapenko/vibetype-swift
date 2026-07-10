@@ -162,9 +162,9 @@ text links. Shadows are reserved for the hero editor and real product windows.
   16px page gutters, and full-width primary CTAs.
 
 The first viewport leads with `The most honest Wispr Flow "clone".` It must
-immediately explain the provocation through text returning to the active
-cursor, the user's OpenAI Platform API key, direct OpenAI billing, no HoldType
-subscription, and no mandatory model rewrite. The hero has one action: the free
+immediately ground `Full control over your dictation` through text returning to
+the active cursor, the user's OpenAI Platform API key, direct OpenAI billing,
+and no HoldType account or subscription. The hero has one action: the free
 macOS download. Source inspection remains in the footer, and there is no
 separate proof-chip row. No unsupported metric, comparative speed claim, or
 undocumented claim about Wispr Flow's internal model is permitted above the
