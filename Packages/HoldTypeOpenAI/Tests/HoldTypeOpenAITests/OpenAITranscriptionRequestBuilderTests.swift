@@ -36,11 +36,32 @@ struct OpenAITranscriptionRequestBuilderTests {
         let directoryAttributes = try FileManager.default.attributesOfItem(
             atPath: scratchDirectory.path
         )
+        let scratchResourceValues = try preparation.bodyFileURL.resourceValues(
+            forKeys: [.isExcludedFromBackupKey]
+        )
+        let directoryResourceValues = try scratchDirectory.resourceValues(
+            forKeys: [.isExcludedFromBackupKey]
+        )
         #expect((scratchAttributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
         #expect((directoryAttributes[.posixPermissions] as? NSNumber)?.intValue == 0o700)
+        #expect(scratchResourceValues.isExcludedFromBackup == true)
+        #expect(directoryResourceValues.isExcludedFromBackup == true)
+#if os(iOS)
+        let scratchProtection = scratchAttributes[.protectionKey] as? FileProtectionType
+        let directoryProtection = directoryAttributes[.protectionKey] as? FileProtectionType
+#if targetEnvironment(simulator)
+        #expect(scratchProtection == nil || scratchProtection == .complete)
+        #expect(directoryProtection == nil || directoryProtection == .complete)
+#else
+        #expect(scratchProtection == .complete)
+        #expect(directoryProtection == .complete)
+#endif
+#endif
 
-        let urlRequest = try await preparation.prepareRequest()
-        let body = try Data(contentsOf: preparation.bodyFileURL)
+        let preparedUpload = try await preparation.prepareRequest()
+        let urlRequest = preparedUpload.request
+        let body = try readAll(preparedUpload.body)
+        #expect(!FileManager.default.fileExists(atPath: preparation.bodyFileURL.path))
         var expected = Data(
             "--Boundary-Test\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\ncustom-model\r\n".utf8
         )
@@ -283,7 +304,7 @@ struct OpenAITranscriptionRequestBuilderTests {
             promptComposition: baseComposition
         )
         let (basePreparation, baseCleanup) = try await prepare(builder, request: baseRequest)
-        let baseURLRequest = try await basePreparation.prepareRequest()
+        let baseURLRequest = try await basePreparation.prepareRequest().request
         let baseTotal = try #require(
             Int64(baseURLRequest.value(forHTTPHeaderField: "Content-Length") ?? "")
         )
@@ -426,6 +447,288 @@ struct OpenAITranscriptionRequestBuilderTests {
         #expect(FileManager.default.fileExists(atPath: movedOwnedFile.path))
     }
 
+    @Test func finalizedPinnedDescriptorUploadsOriginalBytesAndPreservesReplacementPath() async throws {
+        let sourceData = Data("descriptor-pinned-audio".utf8)
+        let source = try temporaryAudio(data: sourceData)
+        let scratchDirectory = temporaryDirectory("multipart-pinned-replacement")
+        defer {
+            remove(source.deletingLastPathComponent())
+            remove(scratchDirectory)
+        }
+        let builder = OpenAITranscriptionRequestBuilder(
+            boundary: "Boundary-Pinned-Replacement",
+            scratchDirectoryURL: scratchDirectory
+        )
+        let (preparation, cleanup) = try await prepare(builder, request: try request(source))
+        let preparedUpload = try await preparation.prepareRequest()
+        #expect(!FileManager.default.fileExists(atPath: preparation.bodyFileURL.path))
+
+        let replacement = Data("replacement-path-must-survive".utf8)
+        try replacement.write(to: preparation.bodyFileURL)
+        let uploadedBody = try readAll(preparedUpload.body)
+        preparation.cleanup()
+        cleanup.requestCleanup()
+
+        #expect(uploadedBody.contains(sourceData))
+        #expect(uploadedBody.contains(replacement) == false)
+        #expect(try Data(contentsOf: preparation.bodyFileURL) == replacement)
+        #expect(try Data(contentsOf: source) == sourceData)
+    }
+
+    @Test func hardLinkedScratchCannotBecomeAnUnlinkedUploadArtifact() async throws {
+        let sourceData = Data("hard-link-audio".utf8)
+        let source = try temporaryAudio(data: sourceData)
+        let scratchDirectory = temporaryDirectory("multipart-hard-link")
+        defer {
+            remove(source.deletingLastPathComponent())
+            remove(scratchDirectory)
+        }
+        let builder = OpenAITranscriptionRequestBuilder(
+            boundary: "Boundary-Hard-Link",
+            scratchDirectoryURL: scratchDirectory
+        )
+        let (preparation, cleanup) = try await prepare(builder, request: try request(source))
+        defer { preparation.cleanup(); cleanup.requestCleanup() }
+        let hardLinkURL = scratchDirectory.appendingPathComponent("retained-hard-link.multipart")
+        try FileManager.default.linkItem(at: preparation.bodyFileURL, to: hardLinkURL)
+
+        await #expect(throws: OpenAITranscriptionRequestBuilderError.multipartBodyUnavailable) {
+            _ = try await preparation.prepareRequest()
+        }
+
+        #expect(FileManager.default.fileExists(atPath: hardLinkURL.path))
+        #expect(try Data(contentsOf: source) == sourceData)
+    }
+
+    @Test func pinnedArtifactStreamsHaveIndependentFullAndOffsetReads() async throws {
+        let sourceData = Data((0..<180_000).map { UInt8($0 % 251) })
+        let source = try temporaryAudio(data: sourceData)
+        let scratchDirectory = temporaryDirectory("multipart-independent-streams")
+        defer {
+            remove(source.deletingLastPathComponent())
+            remove(scratchDirectory)
+        }
+        let calls = ScriptedPOSIXCalls(writeSteps: [])
+        let builder = OpenAITranscriptionRequestBuilder(
+            boundary: "Boundary-Independent-Streams",
+            scratchDirectoryURL: scratchDirectory,
+            fileSystem: POSIXOpenAITranscriptionMultipartFileSystem(calls: calls)
+        )
+        let (preparation, cleanup) = try await prepare(builder, request: try request(source))
+        defer { preparation.cleanup(); cleanup.requestCleanup() }
+        let preparedUpload = try await preparation.prepareRequest()
+        let artifact = try #require(
+            preparedUpload.body as? OpenAITranscriptionMultipartUploadArtifact
+        )
+
+        let first = try readAll(artifact)
+        let second = try readAll(artifact)
+        let offset = Int64(73)
+        let offsetStream = try artifact.makeInputStream(
+            startingAtOffset: offset,
+            failureHandler: { _ in }
+        )
+        let suffix = try readAll(offsetStream)
+
+        #expect(first == second)
+        #expect(suffix == Data(first.dropFirst(Int(offset))))
+        #expect(calls.preadCounts.allSatisfy { $0 <= 64 * 1024 })
+        #expect(calls.preadOffsets.filter { $0 == 0 }.count >= 2)
+        #expect(calls.preadOffsets.contains(offset))
+    }
+
+    @Test func concurrentReadsOnOneStreamAdvanceOneSerializedOffset() async throws {
+        let sourceData = Data((0..<256).map(UInt8.init))
+        let source = try temporaryAudio(data: sourceData)
+        let scratchDirectory = temporaryDirectory("multipart-serialized-stream")
+        defer {
+            remove(source.deletingLastPathComponent())
+            remove(scratchDirectory)
+        }
+        let calls = BlockingFirstPreadCalls()
+        defer { calls.release() }
+        let builder = OpenAITranscriptionRequestBuilder(
+            boundary: "Boundary-Serialized-Stream",
+            scratchDirectoryURL: scratchDirectory,
+            fileSystem: POSIXOpenAITranscriptionMultipartFileSystem(calls: calls)
+        )
+        let (preparation, cleanup) = try await prepare(builder, request: try request(source))
+        defer { preparation.cleanup(); cleanup.requestCleanup() }
+        let preparedUpload = try await preparation.prepareRequest()
+        let artifact = try #require(
+            preparedUpload.body as? OpenAITranscriptionMultipartUploadArtifact
+        )
+        let harness = ConcurrentStreamReadHarness(
+            stream: try #require(
+                try artifact.makeInputStream(failureHandler: { _ in })
+                    as? OpenAITranscriptionMultipartInputStream
+            )
+        )
+        harness.open()
+        defer { harness.close() }
+
+        let first = harness.makeReadTask(count: 10)
+        try await calls.waitUntilBlocked()
+        let second = harness.makeReadTask(count: 10)
+        try await Task.sleep(for: .milliseconds(10))
+        #expect(calls.preadInvocationCount == 1)
+
+        calls.release()
+        let firstChunk = try await first.value
+        let secondChunk = try await second.value
+        #expect(firstChunk + secondChunk == Data(try readAll(artifact).prefix(20)))
+        #expect(calls.preadOffsets.prefix(2).elementsEqual([0, 10]))
+    }
+
+    @Test func closeDuringBlockedPreadReturnsNoBytesAndPreservesClosedState() async throws {
+        let source = try temporaryAudio(data: Data("close-during-pread".utf8))
+        let scratchDirectory = temporaryDirectory("multipart-close-pread")
+        defer {
+            remove(source.deletingLastPathComponent())
+            remove(scratchDirectory)
+        }
+        let calls = BlockingFirstPreadCalls()
+        defer { calls.release() }
+        let builder = OpenAITranscriptionRequestBuilder(
+            boundary: "Boundary-Close-Pread",
+            scratchDirectoryURL: scratchDirectory,
+            fileSystem: POSIXOpenAITranscriptionMultipartFileSystem(calls: calls)
+        )
+        let (preparation, cleanup) = try await prepare(builder, request: try request(source))
+        defer { preparation.cleanup(); cleanup.requestCleanup() }
+        let preparedUpload = try await preparation.prepareRequest()
+        let artifact = try #require(
+            preparedUpload.body as? OpenAITranscriptionMultipartUploadArtifact
+        )
+        let failureCount = LockedInteger()
+        let harness = ConcurrentStreamReadHarness(
+            stream: try #require(
+                try artifact.makeInputStream { _ in failureCount.increment() }
+                    as? OpenAITranscriptionMultipartInputStream
+            )
+        )
+        harness.open()
+        let read = harness.makeReadTask(count: 10)
+        try await calls.waitUntilBlocked()
+
+        harness.close()
+        #expect(harness.status == .closed)
+        calls.release()
+
+        #expect(try await read.value.isEmpty)
+        #expect(harness.status == .closed)
+        #expect(failureCount.value == 0)
+    }
+
+    @Test func descriptorStreamImplementsExplicitNSStreamStateAndPropertyContract() async throws {
+        let source = try temporaryAudio(data: Data("stream-contract".utf8))
+        let scratchDirectory = temporaryDirectory("multipart-stream-contract")
+        defer {
+            remove(source.deletingLastPathComponent())
+            remove(scratchDirectory)
+        }
+        let builder = OpenAITranscriptionRequestBuilder(
+            boundary: "Boundary-Stream-Contract",
+            scratchDirectoryURL: scratchDirectory
+        )
+        let (preparation, cleanup) = try await prepare(builder, request: try request(source))
+        defer { preparation.cleanup(); cleanup.requestCleanup() }
+        let preparedUpload = try await preparation.prepareRequest()
+        let artifact = try #require(
+            preparedUpload.body as? OpenAITranscriptionMultipartUploadArtifact
+        )
+        let stream = try #require(
+            try artifact.makeInputStream(failureHandler: { _ in })
+                as? OpenAITranscriptionMultipartInputStream
+        )
+
+        #expect(stream.streamStatus == .notOpen)
+        #expect(stream.hasBytesAvailable == false)
+        #expect(stream.delegate != nil)
+        #expect(stream.property(forKey: .fileCurrentOffsetKey) == nil)
+        #expect(stream.setProperty(1, forKey: .fileCurrentOffsetKey) == false)
+        var bufferPointer: UnsafeMutablePointer<UInt8>?
+        var bufferLength = -1
+        #expect(stream.getBuffer(&bufferPointer, length: &bufferLength) == false)
+        #expect(bufferPointer == nil)
+        #expect(bufferLength == 0)
+        stream.schedule(in: .main, forMode: .default)
+        stream.remove(from: .main, forMode: .default)
+
+        stream.open()
+        #expect(stream.streamStatus == .open)
+        #expect(stream.hasBytesAvailable)
+        _ = try readAll(stream)
+        #expect(stream.streamStatus == .closed)
+        #expect(stream.hasBytesAvailable == false)
+    }
+
+    @Test func earlyEOFAndPreadFailureAreTypedLocalMultipartFailures() async throws {
+        for mode in [PreadFailureCalls.Mode.earlyEOF, .failure] {
+            let sourceData = Data("local-read-failure-audio".utf8)
+            let source = try temporaryAudio(data: sourceData)
+            let scratchDirectory = temporaryDirectory("multipart-pread-failure")
+            defer {
+                remove(source.deletingLastPathComponent())
+                remove(scratchDirectory)
+            }
+            let calls = PreadFailureCalls(mode: mode)
+            let builder = OpenAITranscriptionRequestBuilder(
+                boundary: "Boundary-Pread-Failure",
+                scratchDirectoryURL: scratchDirectory,
+                fileSystem: POSIXOpenAITranscriptionMultipartFileSystem(calls: calls)
+            )
+            let (preparation, cleanup) = try await prepare(builder, request: try request(source))
+            defer { preparation.cleanup(); cleanup.requestCleanup() }
+            let preparedUpload = try await preparation.prepareRequest()
+
+            #expect(throws: OpenAITranscriptionRequestBuilderError.multipartBodyUnavailable) {
+                _ = try readAll(preparedUpload.body)
+            }
+            #expect(try Data(contentsOf: source) == sourceData)
+        }
+    }
+
+    @Test func sameSizeMutationThroughPreexistingWriterIsRejectedAfterStreamCreation() async throws {
+        let sourceData = Data("immutable-source-audio".utf8)
+        let source = try temporaryAudio(data: sourceData)
+        let scratchDirectory = temporaryDirectory("multipart-preexisting-writer")
+        defer {
+            remove(source.deletingLastPathComponent())
+            remove(scratchDirectory)
+        }
+        let builder = OpenAITranscriptionRequestBuilder(
+            boundary: "Boundary-Preexisting-Writer",
+            scratchDirectoryURL: scratchDirectory
+        )
+        let (preparation, cleanup) = try await prepare(builder, request: try request(source))
+        defer { preparation.cleanup(); cleanup.requestCleanup() }
+        let writableDescriptor = preparation.bodyFileURL.withUnsafeFileSystemRepresentation {
+            path in
+            guard let path else { return Int32(-1) }
+            return Darwin.open(path, O_WRONLY | O_CLOEXEC | O_NOFOLLOW)
+        }
+        guard writableDescriptor >= 0 else {
+            throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable
+        }
+        defer { Darwin.close(writableDescriptor) }
+
+        let preparedUpload = try await preparation.prepareRequest()
+        let artifact = try #require(
+            preparedUpload.body as? OpenAITranscriptionMultipartUploadArtifact
+        )
+        let stream = try artifact.makeInputStream(failureHandler: { _ in })
+        try overwriteDescriptor(
+            writableDescriptor,
+            with: Data(repeating: 0x5a, count: Int(artifact.byteCount))
+        )
+
+        #expect(throws: OpenAITranscriptionRequestBuilderError.multipartBodyUnavailable) {
+            _ = try readAll(stream)
+        }
+        #expect(try Data(contentsOf: source) == sourceData)
+    }
+
     @Test func appendTruncateSameSizeOverwriteAndPathReplacementAreRejected() async throws {
         for mutation in SourceMutation.allCases {
             let byteCount = mutation == .truncate ? 80 * 1024 : 1024
@@ -472,16 +775,18 @@ struct OpenAITranscriptionRequestBuilderTests {
             builder,
             request: try request(source, transcriptionConfiguration: firstConfiguration)
         )
-        let firstRequest = try await first.prepareRequest()
-        let firstBody = try Data(contentsOf: first.bodyFileURL)
+        let firstUpload = try await first.prepareRequest()
+        let firstRequest = firstUpload.request
+        let firstBody = try readAll(firstUpload.body)
         first.cleanup()
         firstCleanup.requestCleanup()
         let (second, secondCleanup) = try await prepare(
             builder,
             request: try request(source, transcriptionConfiguration: secondConfiguration)
         )
-        let secondRequest = try await second.prepareRequest()
-        let secondBody = try Data(contentsOf: second.bodyFileURL)
+        let secondUpload = try await second.prepareRequest()
+        let secondRequest = secondUpload.request
+        let secondBody = try readAll(secondUpload.body)
         second.cleanup()
         secondCleanup.requestCleanup()
 
@@ -518,7 +823,7 @@ struct OpenAITranscriptionRequestBuilderTests {
             try request(sourceURL),
             cleanupRegistration: registration
         )
-        #expect(scratch.unlinkCount == 1)
+        try await waitUntil { scratch.unlinkCount == 1 }
         let error = OpenAITranscriptionRequestBuilderError.unreadableAudioFile(sourceURL)
         var preparationDump = ""
         dump(preparation, to: &preparationDump)
@@ -534,6 +839,30 @@ struct OpenAITranscriptionRequestBuilderTests {
             #expect(!value.contains("scratch-sentinel"))
             #expect(!value.contains("KEY!"))
         }
+    }
+
+    @Test func cleanupRequestNeverWaitsForConcurrentCleanupAndRunsExactlyOnce() async throws {
+        let registration = OpenAITranscriptionMultipartCleanupRegistration()
+        let started = LockedBoolean()
+        let release = DispatchSemaphore(value: 0)
+        let completionCount = LockedInteger()
+        registration.install {
+            started.setTrue()
+            release.wait()
+            completionCount.increment()
+        }
+
+        registration.requestCleanup()
+        registration.requestCleanup()
+        try await waitUntil { started.value }
+        #expect(registration.isCleanupCompleted == false)
+        #expect(completionCount.value == 0)
+
+        release.signal()
+        try await waitUntil { registration.isCleanupCompleted }
+        #expect(completionCount.value == 1)
+        registration.requestCleanup()
+        #expect(completionCount.value == 1)
     }
 
     private func prepare(
@@ -567,14 +896,14 @@ struct OpenAITranscriptionRequestBuilderTests {
     }
 }
 
-private enum SourceMutation: CaseIterable, Sendable {
+nonisolated private enum SourceMutation: CaseIterable, Sendable {
     case append
     case truncate
     case overwrite
     case replacePath
 }
 
-private func mutate(_ url: URL, kind: SourceMutation, original: Data) throws {
+nonisolated private func mutate(_ url: URL, kind: SourceMutation, original: Data) throws {
     switch kind {
     case .append:
         let handle = try FileHandle(forWritingTo: url)
@@ -704,10 +1033,38 @@ private final class FakeScratchFile: OpenAITranscriptionScratchFile, @unchecked 
         }
     }
 
+    func pinFinalizedUploadArtifact(
+        expectedByteCount: Int64
+    ) throws -> any OpenAIFileUploadBody {
+        let data = lock.withLock { body }
+        guard Int64(data.count) == expectedByteCount else {
+            throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
+        }
+        return FakeUploadBody(data: data)
+    }
+
     func close() {}
 
     func unlinkIfOwned() {
         lock.withLock { unlinks += 1 }
+    }
+}
+
+private struct FakeUploadBody: OpenAIFileUploadBody, Sendable {
+    let data: Data
+
+    var byteCount: Int64 { Int64(data.count) }
+
+    func makeInputStream(
+        startingAtOffset: Int64,
+        failureHandler: @escaping @Sendable (OpenAITranscriptionRequestBuilderError) -> Void
+    ) throws -> InputStream {
+        guard startingAtOffset >= 0,
+              startingAtOffset <= Int64(data.count),
+              let offset = Int(exactly: startingAtOffset) else {
+            throw OpenAITranscriptionRequestBuilderError.multipartBodyUnavailable
+        }
+        return InputStream(data: data.dropFirst(offset))
     }
 }
 
@@ -725,6 +1082,7 @@ private final class ScriptedPOSIXCalls:
     private var steps: [WriteStep]
     private var syncInterrupts: Int
     private var reads: [Int] = []
+    private var preads: [(count: Int, offset: Int64)] = []
     private var short = false
     private var interruptedWrite = false
     private var interruptedSync = false
@@ -743,6 +1101,14 @@ private final class ScriptedPOSIXCalls:
 
     var didRetryInterruptedSync: Bool {
         lock.withLock { interruptedSync }
+    }
+
+    var preadCounts: [Int] {
+        lock.withLock { preads.map(\.count) }
+    }
+
+    var preadOffsets: [Int64] {
+        lock.withLock { preads.map(\.offset) }
     }
 
     init(writeSteps: [WriteStep], syncInterrupts: Int = 0) {
@@ -786,6 +1152,141 @@ private final class ScriptedPOSIXCalls:
             return -1
         }
         return Darwin.fsync(fd)
+    }
+
+    func pread(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int, _ offset: Int64) -> Int {
+        lock.withLock { preads.append((count, offset)) }
+        return Darwin.pread(fd, buffer, count, off_t(offset))
+    }
+}
+
+private final class PreadFailureCalls:
+    OpenAITranscriptionPOSIXCalling,
+    @unchecked Sendable {
+    enum Mode {
+        case earlyEOF
+        case failure
+    }
+
+    private let mode: Mode
+
+    init(mode: Mode) {
+        self.mode = mode
+    }
+
+    func read(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int) -> Int {
+        Darwin.read(fd, buffer, count)
+    }
+
+    func write(_ fd: Int32, _ buffer: UnsafeRawPointer, _ count: Int) -> Int {
+        Darwin.write(fd, buffer, count)
+    }
+
+    func synchronize(_ fd: Int32) -> Int32 {
+        Darwin.fsync(fd)
+    }
+
+    func pread(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int, _ offset: Int64) -> Int {
+        switch mode {
+        case .earlyEOF:
+            return 0
+        case .failure:
+            errno = EIO
+            return -1
+        }
+    }
+}
+
+nonisolated private final class BlockingFirstPreadCalls:
+    OpenAITranscriptionPOSIXCalling,
+    @unchecked Sendable {
+    private enum WaitError: Error {
+        case didNotBlock
+    }
+
+    private let semaphore = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var didBlock = false
+    private var didRelease = false
+    private var storedOffsets: [Int64] = []
+
+    var preadInvocationCount: Int {
+        lock.withLock { storedOffsets.count }
+    }
+
+    var preadOffsets: [Int64] {
+        lock.withLock { storedOffsets }
+    }
+
+    func read(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int) -> Int {
+        Darwin.read(fd, buffer, count)
+    }
+
+    func write(_ fd: Int32, _ buffer: UnsafeRawPointer, _ count: Int) -> Int {
+        Darwin.write(fd, buffer, count)
+    }
+
+    func synchronize(_ fd: Int32) -> Int32 {
+        Darwin.fsync(fd)
+    }
+
+    func pread(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int, _ offset: Int64) -> Int {
+        let shouldWait = lock.withLock { () -> Bool in
+            storedOffsets.append(offset)
+            guard !didBlock else { return false }
+            didBlock = true
+            return !didRelease
+        }
+        if shouldWait {
+            semaphore.wait()
+        }
+        return Darwin.pread(fd, buffer, count, off_t(offset))
+    }
+
+    func waitUntilBlocked() async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(1))
+        while !lock.withLock({ didBlock }) {
+            guard clock.now < deadline else { throw WaitError.didNotBlock }
+            try await clock.sleep(for: .milliseconds(1))
+        }
+    }
+
+    func release() {
+        let shouldSignal = lock.withLock { () -> Bool in
+            guard !didRelease else { return false }
+            didRelease = true
+            return true
+        }
+        if shouldSignal {
+            semaphore.signal()
+        }
+    }
+}
+
+nonisolated private final class ConcurrentStreamReadHarness: @unchecked Sendable {
+    private let stream: OpenAITranscriptionMultipartInputStream
+
+    init(stream: OpenAITranscriptionMultipartInputStream) {
+        self.stream = stream
+    }
+
+    func open() {
+        stream.open()
+    }
+
+    func close() {
+        stream.close()
+    }
+
+    var status: Stream.Status {
+        stream.streamStatus
+    }
+
+    func makeReadTask(count: Int) -> Task<Data, Error> {
+        Task.detached { [stream] in
+            try readChunk(stream, count: count)
+        }
     }
 }
 
@@ -862,6 +1363,105 @@ private func temporaryAudio(named: String = "recording.m4a", data: Data) throws 
 
 private func remove(_ url: URL) {
     try? FileManager.default.removeItem(at: url)
+}
+
+private func readAll(_ body: any OpenAIFileUploadBody) throws -> Data {
+    let stream = try body.makeInputStream { _ in }
+    return try readAll(stream)
+}
+
+private func readAll(_ stream: InputStream) throws -> Data {
+    stream.open()
+    defer { stream.close() }
+
+    var result = Data()
+    var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+    while stream.hasBytesAvailable {
+        let count = stream.read(&buffer, maxLength: buffer.count)
+        guard count >= 0 else {
+            throw stream.streamError ?? OpenAITranscriptionRequestBuilderError.multipartBodyUnavailable
+        }
+        if count == 0 { break }
+        result.append(contentsOf: buffer.prefix(count))
+    }
+    return result
+}
+
+nonisolated private func readChunk(
+    _ stream: OpenAITranscriptionMultipartInputStream,
+    count: Int
+) throws -> Data {
+    var buffer = [UInt8](repeating: 0, count: count)
+    let result = stream.read(&buffer, maxLength: count)
+    guard result >= 0 else {
+        throw stream.streamError
+            ?? OpenAITranscriptionRequestBuilderError.multipartBodyUnavailable
+    }
+    return Data(buffer.prefix(result))
+}
+
+nonisolated private func overwriteDescriptor(_ descriptor: Int32, with data: Data) throws {
+    try data.withUnsafeBytes { bytes in
+        guard let base = bytes.baseAddress else { return }
+        var offset = 0
+        while offset < bytes.count {
+            let count = Darwin.pwrite(
+                descriptor,
+                base.advanced(by: offset),
+                bytes.count - offset,
+                off_t(offset)
+            )
+            guard count > 0 else {
+                throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
+            }
+            offset += count
+        }
+    }
+    guard Darwin.fchmod(descriptor, 0o400) == 0,
+          Darwin.fchmod(descriptor, 0o600) == 0,
+          Darwin.fsync(descriptor) == 0 else {
+        throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
+    }
+}
+
+private func waitUntil(
+    timeoutNanoseconds: UInt64 = 1_000_000_000,
+    condition: @escaping @Sendable () -> Bool
+) async throws {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .nanoseconds(Int64(timeoutNanoseconds)))
+    while !condition() {
+        guard clock.now < deadline else { throw RequestBuilderTestTimeout() }
+        try await Task.sleep(nanoseconds: 1_000_000)
+    }
+}
+
+private struct RequestBuilderTestTimeout: Error {}
+
+nonisolated private final class LockedInteger: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValue = 0
+
+    var value: Int {
+        lock.withLock { storedValue }
+    }
+
+    func increment() {
+        lock.withLock { storedValue += 1 }
+    }
+}
+
+nonisolated private final class LockedBoolean: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValue = false
+
+    var value: Bool {
+        lock.withLock { storedValue }
+    }
+
+    func setTrue() {
+        lock.withLock { storedValue = true }
+    }
 }
 
 private struct SourceFileSnapshot: Equatable {

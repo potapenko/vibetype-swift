@@ -42,8 +42,8 @@ This spec covers:
   `https://developers.openai.com/api/docs/guides/speech-to-text`
 - OpenAI Create transcription API reference, reviewed 2026-07-10:
   `https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create`
-- Apple `URLSession.upload(for:fromFile:)`, reviewed 2026-07-10:
-  `https://developer.apple.com/documentation/foundation/urlsession/upload(for:fromfile:)`
+- Apple `URLSession.uploadTask(withStreamedRequest:)`, reviewed 2026-07-10:
+  `https://developer.apple.com/documentation/foundation/urlsession/uploadtask(withstreamedrequest:)`
 
 ## User-visible behavior
 
@@ -69,6 +69,22 @@ This spec covers:
 - Non-audio multipart bytes are capped at 1 MiB, and the complete body size is
   calculated with overflow checking before upload. Oversized metadata is a
   request-settings failure rather than an audio-file failure.
+- After the body has been written and synchronized, preparation must open a
+  read-only descriptor and prove that it identifies the same private regular
+  file as both the writer descriptor and the scratch pathname. Within the
+  app-private random scratch namespace, it validates and removes that pathname,
+  then retains only the read descriptor as the upload artifact. The file must
+  have exactly one link before removal and zero links afterward; a hard-linked
+  body is rejected. Replacing the former pathname after finalization cannot
+  change the bytes sent and a stable replacement survives artifact cleanup.
+- Darwin does not expose a kernel-level conditional unlink for this path. The
+  boundary assumes the containing app's private sandbox without a hostile
+  same-UID process interposing between the final identity check and `unlink`;
+  protection against that out-of-scope race is not claimed.
+- The foreground upload supplies a fresh descriptor-backed input stream when
+  URLSession requests the initial body or an approved replay. Every stream has
+  an independent offset, reads no more than 64 KiB per descriptor operation,
+  and produces the complete finalized body byte-for-byte.
 - The foreground transport accepts at most 1 MiB of provider response data.
   A larger declared or streamed response is cancelled and treated as an
   unreadable provider response.
@@ -254,23 +270,52 @@ runtime request value still does not own its scratch-file lifecycle.
   from the dictation flow. It must not read Keychain, check key availability, or
   fall back to a developer key source while preparing or sending the request.
 - Missing or inaccessible API key blocks before upload.
-- The complete multipart body is uploaded from a file. The provider request
-  carries neither `httpBody` nor `httpBodyStream`, and the API key remains only
-  in the authorization header rather than the scratch file.
+- The complete multipart body is uploaded from a pinned, unlinked file
+  descriptor. The caller's provider request carries neither `httpBody` nor
+  `httpBodyStream`; URLSession receives replayable descriptor-backed streams
+  only through its upload delegate. The API key remains only in the
+  authorization header rather than the scratch file.
 - Multipart scratch storage is private to the containing app, protected and
   excluded from backup where the platform supports those attributes. It uses
   random path components that contain no source filename, attempt identity, or
   user content.
 - Scratch cleanup is idempotent on success, validation failure, provider
-  failure, timeout, explicit cancellation, and parent-task cancellation. It
-  must not wait for a non-cooperative transport completion and must never
-  mutate or remove the source recording.
+  failure, timeout, explicit cancellation, and parent-task cancellation. A
+  cancellation or timeout result must not wait behind a blocked source read,
+  scratch write, synchronization, upload-body read, or concurrent cleanup.
+  Descriptor cleanup may finish after the blocked operation returns, but the
+  scratch pathname must be absent immediately after successful pinning and
+  eventually absent after cancellation during preparation. Cleanup must never
+  mutate or remove the source recording. The same private-namespace threat
+  boundary applies to check-then-unlink cleanup during failed preparation.
+- Cancellation is checked after every potentially blocking local preparation
+  operation and again before pinning or starting URLSession. Work that returns
+  after its request already timed out or was cancelled must not launch an
+  abandoned upload.
 - The adapter uses a normal foreground URL session. File-backed transport does
   not by itself approve a background session or satisfy the separate P6 gate.
-- The foreground session is ephemeral, stores no cookies, cache, or URL
-  credentials, and follows redirects only within the exact original
-  scheme/host/effective-port origin. A rejected redirect never forwards the
-  authorization header or multipart body to another origin.
+- The foreground session is ephemeral and stores no cookies, cache, or URL
+  credentials. It follows only HTTP 307 or 308 redirects within the exact
+  original scheme/host/effective-port origin. Each accepted replay request is
+  rebuilt from the trusted original POST method and approved Accept,
+  Content-Type, Content-Length, and Bearer authorization values; it replays the
+  exact same artifact bytes from offset zero. Cross-origin redirects, 301, 302,
+  303, unknown authorization schemes, authentication-driven or otherwise
+  opaque replays, nonzero-offset resumptions, and requests that cannot be
+  replayed from those trusted values are rejected before credentials or body
+  bytes reach the destination.
+- The original provider URL must use HTTPS and provider URLs containing user
+  information are invalid. URLSession may use
+  normal platform server-trust handling, but all HTTP authentication challenges
+  are rejected instead of supplying a credential or granting another body
+  stream.
+- The fixed transcription endpoint permits at most one approved 307/308
+  redirect per provider call. A second redirect is rejected before another
+  task, credential, or body replay is created; the service's single total
+  deadline continues to bound the original request and its one replay.
+- Failure to open, read, or replay the pinned multipart artifact is a typed
+  local multipart/preparation failure. It must not be presented as network
+  unavailability or a provider rejection.
 - A process crash can leave an unreachable protected scratch file. Bounded
   startup scavenging of only the exact HoldType multipart namespace belongs to
   the later P2 containing-app storage reconciliation slice; this checkpoint
@@ -336,8 +381,9 @@ runtime request value still does not own its scratch-file lifecycle.
   transcript parsing, even when a loader does not cooperate with cancellation.
 - Cancellation and timeout completion must be bounded at the provider adapter:
   after the transport task is cancelled, the calling session must finish
-  without waiting for that loader to cooperate. Any abandoned late completion
-  is ignored.
+  without waiting for the loader or any local file operation to cooperate.
+  Any abandoned late completion is ignored and may perform only bounded,
+  identity-safe cleanup.
 - Request cleanup is identity-aware: completion or cancellation of an older
   request must not clear or cancel a newer request, and a later request can
   complete independently.
@@ -434,6 +480,19 @@ runtime request value still does not own its scratch-file lifecycle.
   bounded.
 - Test explicit cancellation with a loader that observes cancellation but does
   not return until released; the provider call must finish before that release.
+- Test cancellation and timeout while source read, scratch write,
+  synchronization, and upload-body `pread` are blocked. The provider call must
+  finish promptly, the scratch pathname must be absent immediately or
+  eventually as appropriate, and descriptor cleanup must complete after the
+  blocked operation is released without a waiting cleanup state machine.
+- Test that replacing the finalized scratch pathname still uploads the original
+  pinned bytes and preserves the replacement; independent streams must each
+  replay the whole body and support independent offsets.
+- Test exact-origin 307 and 308 replay with the original Bearer credential and
+  byte-identical body, and prove that cross-origin plus 301, 302, and 303
+  destinations receive neither a credential nor body bytes.
+- Test early EOF and descriptor read failures as redacted typed local multipart
+  failures rather than network failures.
 - Test active-text context with fake Accessibility/context readers. Normal tests
   must not read live focused app contents.
 - Test usage estimate handoff with fake storage and fake transcription services.

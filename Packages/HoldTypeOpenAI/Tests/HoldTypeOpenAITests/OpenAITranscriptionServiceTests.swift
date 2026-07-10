@@ -5,6 +5,7 @@
 //  Created by Codex on 6/21/26.
 //
 
+import Darwin
 import Foundation
 import HoldTypeDomain
 import Testing
@@ -265,6 +266,18 @@ struct OpenAITranscriptionServiceTests {
         await transcription.value
     }
 
+    @Test func cancellationDuringBlockedReadWriteAndSyncCompletesBeforeLocalIO() async throws {
+        for stage in BlockingPreparationPOSIXCalls.Stage.allCases {
+            try await verifyBlockedPreparation(stage: stage, expectedError: .cancelled)
+        }
+    }
+
+    @Test func timeoutDuringBlockedReadWriteAndSyncCompletesBeforeLocalIO() async throws {
+        for stage in BlockingPreparationPOSIXCalls.Stage.allCases {
+            try await verifyBlockedPreparation(stage: stage, expectedError: .timedOut)
+        }
+    }
+
     @Test func olderRequestCleanupCannotClearNewerRequestAndNextRequestCanSucceed() async throws {
         let audioFileURL = try makeTemporaryAudioFile()
         defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
@@ -383,6 +396,26 @@ struct OpenAITranscriptionServiceTests {
 
             #expect(loader.bodyFileURLs.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
         }
+    }
+
+    @Test func lateUploadBodyFailureMapsToLocalInvalidRequestNotNetworkFailure() async throws {
+        let audioFileURL = try makeTemporaryAudioFile()
+        defer { try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent()) }
+        let loader = FakeURLLoader(
+            result: .failure(
+                OpenAITranscriptionRequestBuilderError.multipartBodyUnavailable
+            )
+        )
+        let service = makeService(loader: loader)
+
+        await expectTranscriptionError(.invalidRequest) {
+            try await service.transcribe(
+                try makeTranscriptionRequest(audioFileURL: audioFileURL),
+                credential: testCredential()
+            )
+        }
+
+        #expect(loader.requests.count == 1)
     }
 
     @Test func providerStatusCodesMapToProductErrors() async throws {
@@ -765,14 +798,105 @@ struct OpenAITranscriptionServiceTests {
     private func makeService(
         loader: any URLFileUploading,
         sleeper: any TranscriptionTimeoutSleeping = FakeTimeoutSleeper(),
-        requestTimeout: TimeInterval = 7
+        requestTimeout: TimeInterval = 7,
+        requestBuilder: OpenAITranscriptionRequestBuilder = OpenAITranscriptionRequestBuilder(
+            boundary: "Boundary-Test"
+        )
     ) -> OpenAITranscriptionService {
         OpenAITranscriptionService(
-            requestBuilder: OpenAITranscriptionRequestBuilder(boundary: "Boundary-Test"),
+            requestBuilder: requestBuilder,
             urlUploader: loader,
             timeoutSleeper: sleeper,
             requestTimeout: requestTimeout
         )
+    }
+
+    private func verifyBlockedPreparation(
+        stage: BlockingPreparationPOSIXCalls.Stage,
+        expectedError: OpenAITranscriptionServiceError
+    ) async throws {
+        let sourceData = Data(repeating: 0x41, count: 128 * 1024)
+        let audioFileURL = try makeTemporaryAudioFile(contents: sourceData)
+        let scratchDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "holdtype-blocked-preparation-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer {
+            try? FileManager.default.removeItem(at: audioFileURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: scratchDirectory)
+        }
+
+        let calls = BlockingPreparationPOSIXCalls(stage: stage)
+        defer { calls.release() }
+        let loader = FakeURLLoader(
+            result: .success(
+                Data(#"{"text":"must not be reached"}"#.utf8),
+                makeHTTPResponse(statusCode: 200)
+            )
+        )
+        let sleeper: any TranscriptionTimeoutSleeping = expectedError == .timedOut
+            ? BlockedPreparationTimeoutSleeper(calls: calls)
+            : FakeTimeoutSleeper()
+        let service = makeService(
+            loader: loader,
+            sleeper: sleeper,
+            requestTimeout: 3,
+            requestBuilder: OpenAITranscriptionRequestBuilder(
+                boundary: "Boundary-Blocked-Preparation",
+                scratchDirectoryURL: scratchDirectory,
+                fileSystem: POSIXOpenAITranscriptionMultipartFileSystem(calls: calls)
+            )
+        )
+        let probe = AsyncOperationResultProbe<String>()
+        let transcription = Task {
+            do {
+                probe.complete(
+                    with: .success(
+                        try await service.transcribe(
+                            try makeTranscriptionRequest(audioFileURL: audioFileURL),
+                            credential: testCredential()
+                        )
+                    )
+                )
+            } catch {
+                probe.complete(with: .failure(error))
+            }
+        }
+
+        try await calls.waitUntilBlocked()
+        if expectedError == .cancelled {
+            service.cancelActiveTranscription()
+        }
+        let result = try await probe.waitForResult()
+        switch result {
+        case .success:
+            Issue.record("Expected \(expectedError) while \(stage) remained blocked.")
+        case let .failure(error as OpenAITranscriptionServiceError):
+            #expect(error == expectedError)
+        case let .failure(error):
+            Issue.record("Expected OpenAITranscriptionServiceError, got \(error)")
+        }
+
+        try await waitForCondition {
+            guard FileManager.default.fileExists(atPath: scratchDirectory.path) else {
+                return true
+            }
+            let names = try? FileManager.default.contentsOfDirectory(
+                atPath: scratchDirectory.path
+            )
+            return names?.contains(where: { $0.hasSuffix(".multipart") }) == false
+        }
+        let descriptor = try #require(calls.blockedFileDescriptor)
+        #expect(Darwin.fcntl(descriptor, F_GETFD) != -1)
+        #expect(try Data(contentsOf: audioFileURL) == sourceData)
+        #expect(loader.requests.isEmpty)
+
+        calls.release()
+        await transcription.value
+        try await waitForCondition {
+            errno = 0
+            return Darwin.fcntl(descriptor, F_GETFD) == -1 && errno == EBADF
+        }
     }
 
     private func testCredential(_ apiKey: String = "sk-test") throws -> OpenAICredential {
@@ -817,6 +941,24 @@ private func makeHTTPResponse(statusCode: Int) -> HTTPURLResponse {
     )!
 }
 
+private func readAllUploadBody(_ body: any OpenAIFileUploadBody) throws -> Data {
+    let stream = try body.makeInputStream { _ in }
+    stream.open()
+    defer { stream.close() }
+
+    var result = Data()
+    var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+    while stream.hasBytesAvailable {
+        let count = stream.read(&buffer, maxLength: buffer.count)
+        guard count >= 0 else {
+            throw stream.streamError ?? OpenAITranscriptionRequestBuilderError.multipartBodyUnavailable
+        }
+        if count == 0 { break }
+        result.append(contentsOf: buffer.prefix(count))
+    }
+    return result
+}
+
 private final class FakeURLLoader: URLFileUploading, @unchecked Sendable {
     enum Result {
         case success(Data, URLResponse)
@@ -827,7 +969,6 @@ private final class FakeURLLoader: URLFileUploading, @unchecked Sendable {
     private let lock = NSLock()
     private var storedRequests: [URLRequest] = []
     private var storedUploadedBodies: [Data] = []
-    private var storedBodyFileURLs: [URL] = []
 
     var requests: [URLRequest] {
         lock.withLock { storedRequests }
@@ -838,7 +979,7 @@ private final class FakeURLLoader: URLFileUploading, @unchecked Sendable {
     }
 
     var bodyFileURLs: [URL] {
-        lock.withLock { storedBodyFileURLs }
+        []
     }
 
     init(result: Result) {
@@ -847,13 +988,12 @@ private final class FakeURLLoader: URLFileUploading, @unchecked Sendable {
 
     func uploadData(
         for request: URLRequest,
-        fromFile bodyFileURL: URL
+        body: any OpenAIFileUploadBody
     ) async throws -> (Data, URLResponse) {
-        let body = try Data(contentsOf: bodyFileURL)
+        let uploadedBody = try readAllUploadBody(body)
         lock.withLock {
             storedRequests.append(request)
-            storedUploadedBodies.append(body)
-            storedBodyFileURLs.append(bodyFileURL)
+            storedUploadedBodies.append(uploadedBody)
         }
 
         switch result {
@@ -919,14 +1059,13 @@ final class ControlledURLLoader: URLFileUploading, URLLoading, @unchecked Sendab
     private let lock = NSLock()
     private var requestStates: [RequestState] = []
     private var storedRequests: [URLRequest] = []
-    private var storedBodyFileURLs: [URL] = []
 
     var requests: [URLRequest] {
         lock.withLock { storedRequests }
     }
 
     var bodyFileURLs: [URL] {
-        lock.withLock { storedBodyFileURLs }
+        []
     }
 
     init(cancellationBehaviors: [CancellationBehavior]) {
@@ -935,20 +1074,20 @@ final class ControlledURLLoader: URLFileUploading, URLLoading, @unchecked Sendab
 
     func uploadData(
         for request: URLRequest,
-        fromFile bodyFileURL: URL
+        body: any OpenAIFileUploadBody
     ) async throws -> (Data, URLResponse) {
-        try await performRequest(request: request, bodyFileURL: bodyFileURL)
+        _ = try readAllUploadBody(body)
+        return try await performRequest(request: request)
     }
 
     func loadData(for request: URLRequest) async throws -> (Data, URLResponse) {
-        try await performRequest(request: request, bodyFileURL: nil)
+        try await performRequest(request: request)
     }
 
     private func performRequest(
-        request: URLRequest,
-        bodyFileURL: URL?
+        request: URLRequest
     ) async throws -> (Data, URLResponse) {
-        let requestIndex = registerRequest(request: request, bodyFileURL: bodyFileURL)
+        let requestIndex = registerRequest(request: request)
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -1012,7 +1151,7 @@ final class ControlledURLLoader: URLFileUploading, URLLoading, @unchecked Sendab
         continuation?.resume(returning: (data, response))
     }
 
-    private func registerRequest(request: URLRequest, bodyFileURL: URL?) -> Int {
+    private func registerRequest(request: URLRequest) -> Int {
         lock.withLock {
             let requestIndex = requestStates.count
             let behavior = cancellationBehaviors.indices.contains(requestIndex)
@@ -1020,9 +1159,6 @@ final class ControlledURLLoader: URLFileUploading, URLLoading, @unchecked Sendab
                 : .failImmediately
             requestStates.append(RequestState(cancellationBehavior: behavior))
             storedRequests.append(request)
-            if let bodyFileURL {
-                storedBodyFileURLs.append(bodyFileURL)
-            }
             return requestIndex
         }
     }
@@ -1089,6 +1225,108 @@ final class ControlledURLLoader: URLFileUploading, URLLoading, @unchecked Sendab
         }
 
         responseContinuation?.resume(throwing: CancellationError())
+    }
+}
+
+private final class BlockingPreparationPOSIXCalls:
+    OpenAITranscriptionPOSIXCalling,
+    @unchecked Sendable {
+    enum Stage: CaseIterable, Sendable {
+        case read
+        case write
+        case synchronize
+    }
+
+    private enum WaitError: Error {
+        case didNotBlock
+    }
+
+    private let stage: Stage
+    private let semaphore = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var didBlock = false
+    private var didRelease = false
+    private var storedFileDescriptor: Int32?
+
+    var blockedFileDescriptor: Int32? {
+        lock.withLock { storedFileDescriptor }
+    }
+
+    init(stage: Stage) {
+        self.stage = stage
+    }
+
+    func read(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int) -> Int {
+        blockIfNeeded(stage: .read, fileDescriptor: fd)
+        return Darwin.read(fd, buffer, count)
+    }
+
+    func write(_ fd: Int32, _ buffer: UnsafeRawPointer, _ count: Int) -> Int {
+        blockIfNeeded(stage: .write, fileDescriptor: fd)
+        return Darwin.write(fd, buffer, count)
+    }
+
+    func synchronize(_ fd: Int32) -> Int32 {
+        blockIfNeeded(stage: .synchronize, fileDescriptor: fd)
+        return Darwin.fsync(fd)
+    }
+
+    func pread(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int, _ offset: Int64) -> Int {
+        Darwin.pread(fd, buffer, count, off_t(offset))
+    }
+
+    func waitUntilBlocked() async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(1))
+        while !lock.withLock({ didBlock }) {
+            guard clock.now < deadline else { throw WaitError.didNotBlock }
+            try await clock.sleep(for: .milliseconds(1))
+        }
+    }
+
+    func release() {
+        let shouldSignal = lock.withLock { () -> Bool in
+            guard !didRelease else { return false }
+            didRelease = true
+            return true
+        }
+        if shouldSignal {
+            semaphore.signal()
+        }
+    }
+
+    private func blockIfNeeded(stage: Stage, fileDescriptor: Int32) {
+        let shouldWait = lock.withLock { () -> Bool in
+            guard self.stage == stage, !didBlock else { return false }
+            didBlock = true
+            storedFileDescriptor = fileDescriptor
+            return !didRelease
+        }
+        if shouldWait {
+            semaphore.wait()
+        }
+    }
+}
+
+private struct BlockedPreparationTimeoutSleeper: TranscriptionTimeoutSleeping {
+    let calls: BlockingPreparationPOSIXCalls
+
+    func sleep(seconds: TimeInterval) async throws {
+        try await calls.waitUntilBlocked()
+    }
+}
+
+private func waitForCondition(
+    timeout: Duration = .seconds(1),
+    condition: @escaping @Sendable () -> Bool
+) async throws {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while !condition() {
+        guard clock.now < deadline else {
+            throw OpenAIProviderCancellationTestWaitError.operationDidNotFinish
+        }
+        try await clock.sleep(for: .milliseconds(1))
     }
 }
 

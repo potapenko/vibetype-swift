@@ -10,11 +10,11 @@ import Foundation
 nonisolated protocol URLFileUploading: Sendable {
     func uploadData(
         for request: URLRequest,
-        fromFile bodyFileURL: URL
+        body: any OpenAIFileUploadBody
     ) async throws -> (Data, URLResponse)
 }
 
-/// A foreground-only, file-backed upload transport with a bounded in-memory response.
+/// A foreground-only, descriptor-backed upload transport with a bounded response.
 nonisolated struct OpenAIFileUploadTransport: URLFileUploading, Sendable {
     static let maximumResponseByteCount = 1_048_576
 
@@ -44,16 +44,12 @@ nonisolated struct OpenAIFileUploadTransport: URLFileUploading, Sendable {
 
     func uploadData(
         for request: URLRequest,
-        fromFile bodyFileURL: URL
+        body: any OpenAIFileUploadBody
     ) async throws -> (Data, URLResponse) {
-        guard let origin = UploadOrigin(url: request.url) else {
-            throw OpenAIFileUploadTransportError.invalidRequest
-        }
-
-        let transfer = FileUploadTransfer(
-            request: request,
-            bodyFileURL: bodyFileURL,
-            origin: origin,
+        let trustedRequest = try TrustedUploadRequest(request: request, body: body)
+        let transfer = StreamedUploadTransfer(
+            trustedRequest: trustedRequest,
+            body: body,
             maximumResponseByteCount: Self.maximumResponseByteCount,
             configurationFactory: configurationFactory
         )
@@ -139,7 +135,176 @@ nonisolated private struct UploadOrigin: Equatable, Sendable {
     }
 }
 
-nonisolated private final class FileUploadTransfer: NSObject, @unchecked Sendable {
+nonisolated private struct TrustedUploadRequest: Sendable {
+    let originalURL: URL
+    let origin: UploadOrigin
+    let timeoutInterval: TimeInterval
+    let accept: String?
+    let contentType: String
+    let contentLength: String
+    let authorization: String
+
+    init(request: URLRequest, body: any OpenAIFileUploadBody) throws {
+        guard let url = request.url,
+              let origin = UploadOrigin(url: url),
+              origin.scheme == "https",
+              url.user == nil,
+              url.password == nil,
+              request.httpMethod?.uppercased() == "POST",
+              request.httpBody == nil,
+              request.httpBodyStream == nil,
+              body.byteCount > 0,
+              let contentType = request.value(forHTTPHeaderField: "Content-Type"),
+              !contentType.isEmpty,
+              let contentLength = request.value(forHTTPHeaderField: "Content-Length"),
+              contentLength == String(body.byteCount),
+              let authorization = request.value(forHTTPHeaderField: "Authorization"),
+              Self.isTrustedBearerAuthorization(authorization),
+              request.value(forHTTPHeaderField: "Transfer-Encoding") == nil else {
+            throw OpenAIFileUploadTransportError.invalidRequest
+        }
+
+        originalURL = url
+        self.origin = origin
+        timeoutInterval = request.timeoutInterval
+        accept = request.value(forHTTPHeaderField: "Accept")
+        self.contentType = contentType
+        self.contentLength = contentLength
+        self.authorization = authorization
+    }
+
+    func makeRequest(url: URL) throws -> URLRequest {
+        guard UploadOrigin(url: url) == origin,
+              url.user == nil,
+              url.password == nil else {
+            throw OpenAIFileUploadTransportError.redirectRejected
+        }
+
+        var request = URLRequest(
+            url: url,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: timeoutInterval
+        )
+        request.httpMethod = "POST"
+        if let accept {
+            request.setValue(accept, forHTTPHeaderField: "Accept")
+        }
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.setValue(contentLength, forHTTPHeaderField: "Content-Length")
+        request.setValue(authorization, forHTTPHeaderField: "Authorization")
+        request.httpBody = nil
+        request.httpBodyStream = nil
+        return request
+    }
+
+    func permitsBody(for request: URLRequest?) -> Bool {
+        guard let request,
+              UploadOrigin(url: request.url) == origin,
+              request.url?.user == nil,
+              request.url?.password == nil,
+              request.httpMethod?.uppercased() == "POST",
+              request.value(forHTTPHeaderField: "Authorization") == authorization,
+              request.value(forHTTPHeaderField: "Content-Type") == contentType,
+              request.value(forHTTPHeaderField: "Content-Length") == contentLength,
+              request.value(forHTTPHeaderField: "Accept") == accept else {
+            return false
+        }
+        return true
+    }
+
+    private static func isTrustedBearerAuthorization(_ value: String) -> Bool {
+        guard value.hasPrefix("Bearer "),
+              value.count > "Bearer ".count,
+              !value.contains("\r"),
+              !value.contains("\n") else {
+            return false
+        }
+        return value.dropFirst("Bearer ".count).allSatisfy { !$0.isWhitespace }
+    }
+}
+
+nonisolated enum OpenAIUploadAuthenticationPolicy {
+    enum Decision: Equatable, Sendable {
+        case ignoreSupersededTask
+        case performDefaultHandling
+        case rejectActiveChallenge
+    }
+
+    static func decision(
+        isActiveTask: Bool,
+        authenticationMethod: String
+    ) -> Decision {
+        guard isActiveTask else {
+            return .ignoreSupersededTask
+        }
+        return authenticationMethod == NSURLAuthenticationMethodServerTrust
+            ? .performDefaultHandling
+            : .rejectActiveChallenge
+    }
+}
+
+nonisolated final class OpenAIUploadBodyGrantController: @unchecked Sendable {
+    private enum GrantKind {
+        case initial
+        case approvedReplay
+    }
+
+    private struct Grant {
+        let taskIdentifier: Int
+        let kind: GrantKind
+    }
+
+    private let lock = NSLock()
+    private var grant: Grant?
+    private var didInstallInitialGrant = false
+    private var didApproveReplay = false
+
+    func installInitialGrant(forTaskIdentifier taskIdentifier: Int) -> Bool {
+        lock.withLock {
+            guard !didInstallInitialGrant, grant == nil else { return false }
+            didInstallInitialGrant = true
+            grant = Grant(taskIdentifier: taskIdentifier, kind: .initial)
+            return true
+        }
+    }
+
+    func consumeFullBodyGrant(forTaskIdentifier taskIdentifier: Int) -> Bool {
+        lock.withLock {
+            guard grant?.taskIdentifier == taskIdentifier else { return false }
+            grant = nil
+            return true
+        }
+    }
+
+    func approveReplay(forTaskIdentifier taskIdentifier: Int) -> Bool {
+        lock.withLock {
+            guard grant == nil, !didApproveReplay else { return false }
+            didApproveReplay = true
+            grant = Grant(
+                taskIdentifier: taskIdentifier,
+                kind: .approvedReplay
+            )
+            return true
+        }
+    }
+
+    func consumeOffsetReplayGrant(
+        forTaskIdentifier taskIdentifier: Int,
+        offset: Int64,
+        byteCount: Int64
+    ) -> Bool {
+        lock.withLock {
+            guard grant?.taskIdentifier == taskIdentifier,
+                  grant?.kind == .approvedReplay else {
+                return false
+            }
+            grant = nil
+            return offset == 0 && byteCount > 0
+        }
+    }
+}
+
+nonisolated private final class StreamedUploadTransfer: NSObject, @unchecked Sendable {
     typealias Output = (Data, URLResponse)
     typealias ConfigurationFactory = @Sendable () -> URLSessionConfiguration
 
@@ -147,6 +312,10 @@ nonisolated private final class FileUploadTransfer: NSObject, @unchecked Sendabl
         var continuation: CheckedContinuation<Output, Error>?
         var session: URLSession?
         var task: URLSessionUploadTask?
+        var activeTaskIdentifier: Int?
+        var supersededTaskIdentifiers: Set<Int> = []
+        var redirectCount = 0
+        var body: (any OpenAIFileUploadBody)?
         var response: HTTPURLResponse?
         var responseData = Data()
         var terminalResult: Result<Output, Error>?
@@ -160,35 +329,32 @@ nonisolated private final class FileUploadTransfer: NSObject, @unchecked Sendabl
         let cancelTask: Bool
     }
 
-    private let request: URLRequest
-    private let bodyFileURL: URL
-    private let origin: UploadOrigin
+    private let trustedRequest: TrustedUploadRequest
     private let maximumResponseByteCount: Int
     private let configurationFactory: ConfigurationFactory
+    private let bodyGrantController = OpenAIUploadBodyGrantController()
     private let lock = NSLock()
     private var state = State()
 
     init(
-        request: URLRequest,
-        bodyFileURL: URL,
-        origin: UploadOrigin,
+        trustedRequest: TrustedUploadRequest,
+        body: any OpenAIFileUploadBody,
         maximumResponseByteCount: Int,
         configurationFactory: @escaping ConfigurationFactory
     ) {
-        self.request = request
-        self.bodyFileURL = bodyFileURL
-        self.origin = origin
+        self.trustedRequest = trustedRequest
         self.maximumResponseByteCount = maximumResponseByteCount
         self.configurationFactory = configurationFactory
+        state.body = body
     }
 
     func start() async throws -> Output {
-        try await withCheckedThrowingContinuation { continuation in
+        try Task.checkCancellation()
+        return try await withCheckedThrowingContinuation { continuation in
             let terminalResult = lock.withLock { () -> Result<Output, Error>? in
                 if let terminalResult = state.terminalResult {
                     return terminalResult
                 }
-
                 state.continuation = continuation
                 return nil
             }
@@ -198,29 +364,43 @@ nonisolated private final class FileUploadTransfer: NSObject, @unchecked Sendabl
                 return
             }
 
-            let configuration = makeConfiguration()
-            let session = URLSession(
-                configuration: configuration,
-                delegate: self,
-                delegateQueue: nil
-            )
-            let task = session.uploadTask(with: request, fromFile: bodyFileURL)
-
-            let shouldStart = lock.withLock {
-                guard state.terminalResult == nil else {
-                    return false
+            do {
+                let request = try trustedRequest.makeRequest(url: trustedRequest.originalURL)
+                let configuration = OpenAIFileUploadTransport.hardenedConfiguration(
+                    configurationFactory()
+                )
+                let session = URLSession(
+                    configuration: configuration,
+                    delegate: self,
+                    delegateQueue: nil
+                )
+                let task = session.uploadTask(withStreamedRequest: request)
+                guard bodyGrantController.installInitialGrant(
+                    forTaskIdentifier: task.taskIdentifier
+                ) else {
+                    task.cancel()
+                    session.invalidateAndCancel()
+                    throw OpenAIFileUploadTransportError.invalidRequest
                 }
 
-                state.session = session
-                state.task = task
-                return true
-            }
+                let shouldStart = lock.withLock {
+                    guard state.terminalResult == nil else {
+                        return false
+                    }
+                    state.session = session
+                    state.task = task
+                    state.activeTaskIdentifier = task.taskIdentifier
+                    return true
+                }
 
-            if shouldStart {
-                task.resume()
-            } else {
-                task.cancel()
-                session.invalidateAndCancel()
+                if shouldStart {
+                    task.resume()
+                } else {
+                    task.cancel()
+                    session.invalidateAndCancel()
+                }
+            } catch {
+                finish(with: .failure(error), cancelTask: true)
             }
         }
     }
@@ -232,31 +412,34 @@ nonisolated private final class FileUploadTransfer: NSObject, @unchecked Sendabl
         )
     }
 
-    private func makeConfiguration() -> URLSessionConfiguration {
-        OpenAIFileUploadTransport.hardenedConfiguration(configurationFactory())
-    }
-
     private func finish(
         with result: Result<Output, Error>,
-        cancelTask: Bool
+        cancelTask: Bool,
+        requiredActiveTaskIdentifier: Int? = nil
     ) {
         let completion = lock.withLock { () -> Completion? in
             guard state.terminalResult == nil else {
                 return nil
             }
+            if let requiredActiveTaskIdentifier,
+               state.activeTaskIdentifier != requiredActiveTaskIdentifier {
+                return nil
+            }
 
             state.terminalResult = result
-            let continuation = state.continuation
-            state.continuation = nil
             let completion = Completion(
-                continuation: continuation,
+                continuation: state.continuation,
                 session: state.session,
                 task: state.task,
                 result: result,
                 cancelTask: cancelTask
             )
+            state.continuation = nil
             state.session = nil
             state.task = nil
+            state.activeTaskIdentifier = nil
+            state.supersededTaskIdentifiers.removeAll(keepingCapacity: false)
+            state.body = nil
             state.response = nil
             state.responseData.removeAll(keepingCapacity: false)
             return completion
@@ -298,7 +481,6 @@ nonisolated private final class FileUploadTransfer: NSObject, @unchecked Sendabl
         guard let value = response.value(forHTTPHeaderField: "Content-Length") else {
             return false
         }
-
         return decimalByteCount(value, exceeds: maximumResponseByteCount)
     }
 
@@ -313,54 +495,227 @@ nonisolated private final class FileUploadTransfer: NSObject, @unchecked Sendabl
             guard character >= 48, character <= 57 else {
                 return false
             }
-
             let digit = Int(character - 48)
             if byteCount > (limit - digit) / 10 {
                 return true
             }
             byteCount = (byteCount * 10) + digit
         }
-
         return byteCount > limit
     }
 }
 
-extension FileUploadTransfer: URLSessionDataDelegate, URLSessionTaskDelegate {
+extension StreamedUploadTransfer: URLSessionDataDelegate, URLSessionTaskDelegate {
+    nonisolated func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (
+            URLSession.AuthChallengeDisposition,
+            URLCredential?
+        ) -> Void
+    ) {
+        let isActiveTask = lock.withLock {
+            state.terminalResult == nil
+                && state.activeTaskIdentifier == task.taskIdentifier
+        }
+        switch OpenAIUploadAuthenticationPolicy.decision(
+            isActiveTask: isActiveTask,
+            authenticationMethod: challenge.protectionSpace.authenticationMethod
+        ) {
+        case .ignoreSupersededTask:
+            completionHandler(.cancelAuthenticationChallenge, nil)
+        case .performDefaultHandling:
+            completionHandler(.performDefaultHandling, nil)
+        case .rejectActiveChallenge:
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            finish(
+                with: .failure(OpenAIFileUploadTransportError.redirectRejected),
+                cancelTask: true,
+                requiredActiveTaskIdentifier: task.taskIdentifier
+            )
+        }
+    }
+
+    nonisolated func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        needNewBodyStream completionHandler: @escaping (InputStream?) -> Void
+    ) {
+        let isActiveTask = lock.withLock {
+            state.terminalResult == nil
+                && state.activeTaskIdentifier == task.taskIdentifier
+        }
+        guard isActiveTask else {
+            completionHandler(nil)
+            return
+        }
+        guard let body = lock.withLock({ state.body }) else {
+            completionHandler(nil)
+            return
+        }
+        guard trustedRequest.permitsBody(for: task.currentRequest),
+              bodyGrantController.consumeFullBodyGrant(
+                  forTaskIdentifier: task.taskIdentifier
+              ) else {
+            completionHandler(nil)
+            let isStillActive = lock.withLock {
+                state.terminalResult == nil
+                    && state.activeTaskIdentifier == task.taskIdentifier
+            }
+            guard isStillActive else { return }
+            finish(
+                with: .failure(OpenAIFileUploadTransportError.redirectRejected),
+                cancelTask: true,
+                requiredActiveTaskIdentifier: task.taskIdentifier
+            )
+            return
+        }
+
+        do {
+            let taskIdentifier = task.taskIdentifier
+            let stream = try body.makeInputStream { [weak self] error in
+                self?.finish(
+                    with: .failure(error),
+                    cancelTask: true,
+                    requiredActiveTaskIdentifier: taskIdentifier
+                )
+            }
+            let shouldProvide = lock.withLock {
+                state.terminalResult == nil
+                    && state.activeTaskIdentifier == task.taskIdentifier
+            }
+            if shouldProvide {
+                completionHandler(stream)
+            } else {
+                stream.close()
+                completionHandler(nil)
+            }
+        } catch {
+            completionHandler(nil)
+            finish(
+                with: .failure(OpenAITranscriptionRequestBuilderError.multipartBodyUnavailable),
+                cancelTask: true,
+                requiredActiveTaskIdentifier: task.taskIdentifier
+            )
+        }
+    }
+
+    nonisolated func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        needNewBodyStreamFrom offset: Int64,
+        completionHandler: @escaping (InputStream?) -> Void
+    ) {
+        let isActiveTask = lock.withLock {
+            state.terminalResult == nil
+                && state.activeTaskIdentifier == task.taskIdentifier
+        }
+        guard isActiveTask else {
+            completionHandler(nil)
+            return
+        }
+        guard let body = lock.withLock({ state.body }) else {
+            completionHandler(nil)
+            return
+        }
+        guard trustedRequest.permitsBody(for: task.currentRequest),
+              bodyGrantController.consumeOffsetReplayGrant(
+                  forTaskIdentifier: task.taskIdentifier,
+                  offset: offset,
+                  byteCount: body.byteCount
+              ) else {
+            completionHandler(nil)
+            let isStillActive = lock.withLock {
+                state.terminalResult == nil
+                    && state.activeTaskIdentifier == task.taskIdentifier
+            }
+            guard isStillActive else { return }
+            finish(
+                with: .failure(OpenAIFileUploadTransportError.redirectRejected),
+                cancelTask: true,
+                requiredActiveTaskIdentifier: task.taskIdentifier
+            )
+            return
+        }
+
+        do {
+            let taskIdentifier = task.taskIdentifier
+            let stream = try body.makeInputStream(
+                startingAtOffset: offset
+            ) { [weak self] error in
+                self?.finish(
+                    with: .failure(error),
+                    cancelTask: true,
+                    requiredActiveTaskIdentifier: taskIdentifier
+                )
+            }
+            let shouldProvide = lock.withLock {
+                state.terminalResult == nil
+                    && state.activeTaskIdentifier == task.taskIdentifier
+            }
+            if shouldProvide {
+                completionHandler(stream)
+            } else {
+                stream.close()
+                completionHandler(nil)
+            }
+        } catch {
+            completionHandler(nil)
+            finish(
+                with: .failure(OpenAITranscriptionRequestBuilderError.multipartBodyUnavailable),
+                cancelTask: true,
+                requiredActiveTaskIdentifier: task.taskIdentifier
+            )
+        }
+    }
+
     nonisolated func urlSession(
         _ session: URLSession,
         dataTask: URLSessionDataTask,
         didReceive response: URLResponse,
         completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
+        let isActiveTask = lock.withLock {
+            state.terminalResult == nil
+                && state.activeTaskIdentifier == dataTask.taskIdentifier
+        }
+        guard isActiveTask else {
+            completionHandler(.cancel)
+            return
+        }
+
         guard let httpResponse = response as? HTTPURLResponse else {
             completionHandler(.cancel)
             finish(
                 with: .failure(OpenAIFileUploadTransportError.invalidResponse),
-                cancelTask: true
+                cancelTask: true,
+                requiredActiveTaskIdentifier: dataTask.taskIdentifier
             )
             return
         }
-
-        guard UploadOrigin(url: httpResponse.url) == origin else {
+        guard UploadOrigin(url: httpResponse.url) == trustedRequest.origin else {
             completionHandler(.cancel)
             finish(
                 with: .failure(OpenAIFileUploadTransportError.redirectRejected),
-                cancelTask: true
+                cancelTask: true,
+                requiredActiveTaskIdentifier: dataTask.taskIdentifier
             )
             return
         }
-
         guard !isDeclaredResponseTooLarge(httpResponse) else {
             completionHandler(.cancel)
             finish(
                 with: .failure(OpenAIFileUploadTransportError.responseTooLarge),
-                cancelTask: true
+                cancelTask: true,
+                requiredActiveTaskIdentifier: dataTask.taskIdentifier
             )
             return
         }
 
         let shouldAllow = lock.withLock {
-            guard state.terminalResult == nil else {
+            guard state.terminalResult == nil,
+                  state.activeTaskIdentifier == dataTask.taskIdentifier else {
                 return false
             }
             state.response = httpResponse
@@ -375,14 +730,13 @@ extension FileUploadTransfer: URLSessionDataDelegate, URLSessionTaskDelegate {
         didReceive data: Data
     ) {
         let exceededLimit = lock.withLock {
-            guard state.terminalResult == nil else {
+            guard state.terminalResult == nil,
+                  state.activeTaskIdentifier == dataTask.taskIdentifier else {
                 return false
             }
-
             guard data.count <= maximumResponseByteCount - state.responseData.count else {
                 return true
             }
-
             state.responseData.append(data)
             return false
         }
@@ -390,7 +744,8 @@ extension FileUploadTransfer: URLSessionDataDelegate, URLSessionTaskDelegate {
         if exceededLimit {
             finish(
                 with: .failure(OpenAIFileUploadTransportError.responseTooLarge),
-                cancelTask: true
+                cancelTask: true,
+                requiredActiveTaskIdentifier: dataTask.taskIdentifier
             )
         }
     }
@@ -402,16 +757,94 @@ extension FileUploadTransfer: URLSessionDataDelegate, URLSessionTaskDelegate {
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        guard UploadOrigin(url: request.url) == origin else {
+        let isActiveTask = lock.withLock {
+            state.terminalResult == nil
+                && state.activeTaskIdentifier == task.taskIdentifier
+        }
+        guard isActiveTask else {
+            completionHandler(nil)
+            return
+        }
+        guard response.statusCode == 307 || response.statusCode == 308,
+              let destination = request.url,
+              UploadOrigin(url: destination) == trustedRequest.origin else {
             completionHandler(nil)
             finish(
                 with: .failure(OpenAIFileUploadTransportError.redirectRejected),
-                cancelTask: true
+                cancelTask: true,
+                requiredActiveTaskIdentifier: task.taskIdentifier
             )
             return
         }
 
-        completionHandler(request)
+        let reservedRedirect = lock.withLock { () -> Bool in
+            guard state.terminalResult == nil,
+                  state.activeTaskIdentifier == task.taskIdentifier,
+                  state.redirectCount == 0 else {
+                return false
+            }
+            state.redirectCount = 1
+            return true
+        }
+        guard reservedRedirect else {
+            completionHandler(nil)
+            finish(
+                with: .failure(OpenAIFileUploadTransportError.redirectRejected),
+                cancelTask: true,
+                requiredActiveTaskIdentifier: task.taskIdentifier
+            )
+            return
+        }
+
+        let replayRequest: URLRequest
+        do {
+            replayRequest = try trustedRequest.makeRequest(url: destination)
+        } catch {
+            completionHandler(nil)
+            finish(
+                with: .failure(OpenAIFileUploadTransportError.redirectRejected),
+                cancelTask: true,
+                requiredActiveTaskIdentifier: task.taskIdentifier
+            )
+            return
+        }
+
+        let replayTask = session.uploadTask(withStreamedRequest: replayRequest)
+        guard bodyGrantController.approveReplay(
+            forTaskIdentifier: replayTask.taskIdentifier
+        ) else {
+            replayTask.cancel()
+            completionHandler(nil)
+            finish(
+                with: .failure(OpenAIFileUploadTransportError.redirectRejected),
+                cancelTask: true,
+                requiredActiveTaskIdentifier: task.taskIdentifier
+            )
+            return
+        }
+        let shouldStartReplay = lock.withLock { () -> Bool in
+            guard state.terminalResult == nil,
+                  state.activeTaskIdentifier == task.taskIdentifier else {
+                return false
+            }
+            state.supersededTaskIdentifiers.insert(task.taskIdentifier)
+            state.task = replayTask
+            state.activeTaskIdentifier = replayTask.taskIdentifier
+            state.response = nil
+            state.responseData.removeAll(keepingCapacity: false)
+            return true
+        }
+        completionHandler(nil)
+        if shouldStartReplay {
+            replayTask.resume()
+        } else {
+            replayTask.cancel()
+            finish(
+                with: .failure(OpenAIFileUploadTransportError.redirectRejected),
+                cancelTask: true,
+                requiredActiveTaskIdentifier: task.taskIdentifier
+            )
+        }
     }
 
     nonisolated func urlSession(
@@ -419,24 +852,44 @@ extension FileUploadTransfer: URLSessionDataDelegate, URLSessionTaskDelegate {
         task: URLSessionTask,
         didCompleteWithError error: Error?
     ) {
+        let shouldIgnore = lock.withLock { () -> Bool in
+            if state.supersededTaskIdentifiers.remove(task.taskIdentifier) != nil {
+                return true
+            }
+            return state.activeTaskIdentifier != task.taskIdentifier
+        }
+        if shouldIgnore {
+            return
+        }
+
         if let error {
-            if let urlError = error as? URLError {
-                finish(with: .failure(urlError), cancelTask: false)
+            if let localError = error as? OpenAITranscriptionRequestBuilderError {
+                finish(
+                    with: .failure(localError),
+                    cancelTask: false,
+                    requiredActiveTaskIdentifier: task.taskIdentifier
+                )
+            } else if let urlError = error as? URLError {
+                finish(
+                    with: .failure(urlError),
+                    cancelTask: false,
+                    requiredActiveTaskIdentifier: task.taskIdentifier
+                )
             } else {
                 finish(
                     with: .failure(OpenAIFileUploadTransportError.transportFailure),
-                    cancelTask: false
+                    cancelTask: false,
+                    requiredActiveTaskIdentifier: task.taskIdentifier
                 )
             }
             return
         }
 
         let output = lock.withLock { () -> Output? in
-            guard
-                state.terminalResult == nil,
-                let response = state.response,
-                UploadOrigin(url: response.url) == origin
-            else {
+            guard state.terminalResult == nil,
+                  state.activeTaskIdentifier == task.taskIdentifier,
+                  let response = state.response,
+                  UploadOrigin(url: response.url) == trustedRequest.origin else {
                 return nil
             }
             return (state.responseData, response)
@@ -445,10 +898,15 @@ extension FileUploadTransfer: URLSessionDataDelegate, URLSessionTaskDelegate {
         guard let output else {
             finish(
                 with: .failure(OpenAIFileUploadTransportError.invalidResponse),
-                cancelTask: false
+                cancelTask: false,
+                requiredActiveTaskIdentifier: task.taskIdentifier
             )
             return
         }
-        finish(with: .success(output), cancelTask: false)
+        finish(
+            with: .success(output),
+            cancelTask: false,
+            requiredActiveTaskIdentifier: task.taskIdentifier
+        )
     }
 }

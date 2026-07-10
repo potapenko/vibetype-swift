@@ -97,15 +97,17 @@ public struct OpenAITranscriptionService: OpenAITranscriptionServing, Sendable {
                     cleanupRegistration: cleanupRegistration
                 )
                 defer { cleanupRegistration.requestCleanup() }
-                var request = try await preparation.prepareRequest()
+                let preparedUpload = try await preparation.prepareRequest()
+                var request = preparedUpload.request
                 request.timeoutInterval = requestTimeout
                 request.setValue(
                     "Bearer \(credential.apiKey)",
                     forHTTPHeaderField: "Authorization"
                 )
+                try Task.checkCancellation()
                 return try await urlUploader.uploadData(
                     for: request,
-                    fromFile: preparation.bodyFileURL
+                    body: preparedUpload.body
                 )
             } deadline: {
                 try await timeoutSleeper.sleep(seconds: requestTimeout)

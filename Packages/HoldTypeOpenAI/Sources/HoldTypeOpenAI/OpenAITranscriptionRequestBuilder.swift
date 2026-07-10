@@ -231,49 +231,63 @@ nonisolated struct OpenAITranscriptionRequestBuilder: Sendable {
 }
 
 nonisolated final class OpenAITranscriptionMultipartCleanupRegistration: @unchecked Sendable {
-    private let condition = NSCondition()
+    private let lock = NSLock()
     private var cleanup: (@Sendable () -> Void)?
     private var cleanupRequested = false
-    private var cleanupInProgress = false
+    private var cleanupScheduled = false
     private var cleanupCompleted = false
 
     func install(_ cleanup: @escaping @Sendable () -> Void) {
-        condition.lock()
-        if cleanupRequested {
-            cleanupInProgress = true
-            condition.unlock()
-            cleanup()
-            finishCleanup()
-        } else {
+        let action = lock.withLock { () -> (@Sendable () -> Void)? in
+            guard !cleanupCompleted, !cleanupScheduled else {
+                return nil
+            }
             self.cleanup = cleanup
-            condition.unlock()
+            return takeCleanupIfReady()
+        }
+        if let action {
+            schedule(action)
         }
     }
 
     func requestCleanup() {
-        condition.lock()
-        cleanupRequested = true
-        while cleanupInProgress {
-            condition.wait()
+        let action = lock.withLock { () -> (@Sendable () -> Void)? in
+            cleanupRequested = true
+            return takeCleanupIfReady()
         }
-        guard !cleanupCompleted, let action = cleanup else {
-            condition.unlock()
-            return
+        if let action {
+            schedule(action)
         }
-        cleanup = nil
-        cleanupInProgress = true
-        condition.unlock()
-        action()
-        finishCleanup()
     }
 
-    private func finishCleanup() {
-        condition.lock()
-        cleanupInProgress = false
-        cleanupCompleted = true
-        condition.broadcast()
-        condition.unlock()
+    var isCleanupCompleted: Bool {
+        lock.withLock { cleanupCompleted }
     }
+
+    private func takeCleanupIfReady() -> (@Sendable () -> Void)? {
+        guard cleanupRequested,
+              !cleanupScheduled,
+              let cleanup else {
+            return nil
+        }
+        self.cleanup = nil
+        cleanupScheduled = true
+        return cleanup
+    }
+
+    private func schedule(_ cleanup: @escaping @Sendable () -> Void) {
+        DispatchQueue.global(qos: .utility).async { [self] in
+            cleanup()
+            lock.withLock {
+                cleanupCompleted = true
+            }
+        }
+    }
+}
+
+nonisolated struct OpenAITranscriptionPreparedMultipartUpload: Sendable {
+    let request: URLRequest
+    let body: any OpenAIFileUploadBody
 }
 
 nonisolated struct OpenAITranscriptionMultipartPreparation: Sendable {
@@ -308,10 +322,11 @@ nonisolated struct OpenAITranscriptionMultipartPreparation: Sendable {
         self.expectedBodyByteCount = expectedBodyByteCount
     }
 
-    func prepareRequest() async throws -> URLRequest {
+    func prepareRequest() async throws -> OpenAITranscriptionPreparedMultipartUpload {
         do {
             try Task.checkCancellation()
             try scratch.writeAll(prefix)
+            try Task.checkCancellation()
             var audioCount: Int64 = 0
             while audioCount < source.identity.byteCount {
                 try Task.checkCancellation()
@@ -321,6 +336,7 @@ nonisolated struct OpenAITranscriptionMultipartPreparation: Sendable {
                     Int(remaining)
                 )
                 let chunk = try source.read(upToCount: requested)
+                try Task.checkCancellation()
                 guard !chunk.isEmpty else {
                     throw OpenAITranscriptionMultipartFileSystemError.sourceChanged
                 }
@@ -330,16 +346,26 @@ nonisolated struct OpenAITranscriptionMultipartPreparation: Sendable {
                 }
                 audioCount = addition.partialValue
                 try scratch.writeAll(chunk)
+                try Task.checkCancellation()
                 await Task.yield()
             }
-            guard try source.read(upToCount: 1).isEmpty else {
+            let trailingByte = try source.read(upToCount: 1)
+            try Task.checkCancellation()
+            guard trailingByte.isEmpty else {
                 throw OpenAITranscriptionMultipartFileSystemError.sourceChanged
             }
             try source.validateUnchanged()
             try Task.checkCancellation()
             try scratch.writeAll(suffix)
+            try Task.checkCancellation()
             try scratch.synchronizeAndValidate(expectedByteCount: expectedBodyByteCount)
+            try Task.checkCancellation()
             try source.validateUnchanged()
+            try Task.checkCancellation()
+            let uploadBody = try scratch.pinFinalizedUploadArtifact(
+                expectedByteCount: expectedBodyByteCount
+            )
+            try Task.checkCancellation()
             source.close()
             scratch.close()
 
@@ -351,7 +377,11 @@ nonisolated struct OpenAITranscriptionMultipartPreparation: Sendable {
                 forHTTPHeaderField: "Content-Type"
             )
             request.setValue(String(expectedBodyByteCount), forHTTPHeaderField: "Content-Length")
-            return request
+            try Task.checkCancellation()
+            return OpenAITranscriptionPreparedMultipartUpload(
+                request: request,
+                body: uploadBody
+            )
         } catch is CancellationError {
             throw CancellationError()
         } catch OpenAITranscriptionMultipartFileSystemError.sourceChanged {
@@ -465,6 +495,9 @@ nonisolated protocol OpenAITranscriptionScratchFile: Sendable {
     var fileURL: URL { get }
     func writeAll(_ data: Data) throws
     func synchronizeAndValidate(expectedByteCount: Int64) throws
+    func pinFinalizedUploadArtifact(
+        expectedByteCount: Int64
+    ) throws -> any OpenAIFileUploadBody
     func close()
     func unlinkIfOwned()
 }
@@ -478,12 +511,27 @@ nonisolated protocol OpenAITranscriptionPOSIXCalling: Sendable {
     func read(_ fileDescriptor: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int) -> Int
     func write(_ fileDescriptor: Int32, _ buffer: UnsafeRawPointer, _ count: Int) -> Int
     func synchronize(_ fileDescriptor: Int32) -> Int32
+    func pread(
+        _ fileDescriptor: Int32,
+        _ buffer: UnsafeMutableRawPointer,
+        _ count: Int,
+        _ offset: Int64
+    ) -> Int
+}
+
+nonisolated extension OpenAITranscriptionPOSIXCalling {
+    func pread(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int, _ offset: Int64) -> Int {
+        Darwin.pread(fd, buffer, count, off_t(offset))
+    }
 }
 
 nonisolated struct DarwinOpenAITranscriptionPOSIXCalls: OpenAITranscriptionPOSIXCalling {
     func read(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int) -> Int { Darwin.read(fd, buffer, count) }
     func write(_ fd: Int32, _ buffer: UnsafeRawPointer, _ count: Int) -> Int { Darwin.write(fd, buffer, count) }
     func synchronize(_ fd: Int32) -> Int32 { Darwin.fsync(fd) }
+    func pread(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int, _ offset: Int64) -> Int {
+        Darwin.pread(fd, buffer, count, off_t(offset))
+    }
 }
 
 nonisolated struct POSIXOpenAITranscriptionMultipartFileSystem: OpenAITranscriptionMultipartFileSystem {
@@ -532,18 +580,31 @@ nonisolated struct POSIXOpenAITranscriptionMultipartFileSystem: OpenAITranscript
             guard let path else { throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable }
             let fd = Darwin.open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0o600)
             guard fd >= 0 else { throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable }
+            var createdStatus = stat()
+            guard Darwin.fstat(fd, &createdStatus) == 0,
+                  isRegular(createdStatus),
+                  createdStatus.st_uid == geteuid(),
+                  createdStatus.st_nlink == 1,
+                  createdStatus.st_size == 0 else {
+                Darwin.close(fd)
+                throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable
+            }
+            let createdIdentity = fileIdentity(createdStatus)
             guard Darwin.fchmod(fd, 0o600) == 0 else {
                 Darwin.close(fd)
-                Darwin.unlink(path)
+                unlinkScratchIfMatching(fileURL, identity: createdIdentity)
                 throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable
             }
             var status = stat()
             guard Darwin.fstat(fd, &status) == 0,
                   isRegular(status),
                   status.st_uid == geteuid(),
-                  status.st_mode & mode_t(0o777) == mode_t(0o600) else {
+                  status.st_mode & mode_t(0o777) == mode_t(0o600),
+                  status.st_nlink == 1,
+                  status.st_dev == createdStatus.st_dev,
+                  status.st_ino == createdStatus.st_ino else {
                 Darwin.close(fd)
-                Darwin.unlink(path)
+                unlinkScratchIfMatching(fileURL, identity: createdIdentity)
                 throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable
             }
             do {
@@ -565,7 +626,7 @@ nonisolated struct POSIXOpenAITranscriptionMultipartFileSystem: OpenAITranscript
                 )
             } catch {
                 Darwin.close(fd)
-                Darwin.unlink(path)
+                unlinkScratchIfMatching(fileURL, identity: createdIdentity)
                 throw error
             }
         }
@@ -609,16 +670,43 @@ nonisolated struct POSIXOpenAITranscriptionMultipartFileSystem: OpenAITranscript
         var mutableURL = fileURL
         try mutableURL.setResourceValues(values)
     }
+
+    private func unlinkScratchIfMatching(
+        _ fileURL: URL,
+        identity: OpenAITranscriptionFileIdentity
+    ) {
+        fileURL.withUnsafeFileSystemRepresentation { path in
+            guard let path else { return }
+            var status = stat()
+            guard Darwin.lstat(path, &status) == 0,
+                  isRegular(status),
+                  status.st_uid == geteuid(),
+                  UInt64(status.st_dev) == identity.device,
+                  UInt64(status.st_ino) == identity.inode else {
+                return
+            }
+            var result: Int32
+            repeat {
+                result = Darwin.unlink(path)
+            } while result != 0 && errno == EINTR
+        }
+    }
 }
 
 nonisolated private final class POSIXOpenAITranscriptionAudioSource:
     OpenAITranscriptionAudioSource,
     @unchecked Sendable {
+    private struct State {
+        var fileDescriptor: Int32?
+        var activeOperationCount = 0
+        var closeRequested = false
+    }
+
     let identity: OpenAITranscriptionFileIdentity
     private let fileURL: URL
     private let calls: any OpenAITranscriptionPOSIXCalling
     private let lock = NSLock()
-    private var fileDescriptor: Int32?
+    private var state: State
 
     init(
         fileURL: URL,
@@ -627,58 +715,85 @@ nonisolated private final class POSIXOpenAITranscriptionAudioSource:
         calls: any OpenAITranscriptionPOSIXCalling
     ) {
         self.fileURL = fileURL
-        self.fileDescriptor = fileDescriptor
         self.identity = identity
         self.calls = calls
+        state = State(fileDescriptor: fileDescriptor)
     }
 
     func read(upToCount count: Int) throws -> Data {
         guard count > 0 else { return Data() }
-        return try lock.withLock {
-            guard let fd = fileDescriptor else { throw OpenAITranscriptionMultipartFileSystemError.sourceReadFailed }
-            var data = Data(count: count)
-            let result = data.withUnsafeMutableBytes { bytes -> Int in
-                guard let base = bytes.baseAddress else { return 0 }
-                while true {
-                    let result = calls.read(fd, base, count)
-                    if result < 0, errno == EINTR { continue }
-                    return result
-                }
+        let fd = try beginDescriptorUse(
+            failure: OpenAITranscriptionMultipartFileSystemError.sourceReadFailed
+        )
+        defer { finishDescriptorUse() }
+
+        var data = Data(count: count)
+        let result = data.withUnsafeMutableBytes { bytes -> Int in
+            guard let base = bytes.baseAddress else { return 0 }
+            while true {
+                let result = calls.read(fd, base, count)
+                if result < 0, errno == EINTR { continue }
+                return result
             }
-            guard result >= 0, result <= count else {
-                throw OpenAITranscriptionMultipartFileSystemError.sourceReadFailed
-            }
-            data.count = result
-            return data
         }
+        guard result >= 0, result <= count else {
+            throw OpenAITranscriptionMultipartFileSystemError.sourceReadFailed
+        }
+        data.count = result
+        return data
     }
 
     func validateUnchanged() throws {
-        try lock.withLock {
-            guard let fd = fileDescriptor else { throw OpenAITranscriptionMultipartFileSystemError.sourceChanged }
-            var descriptorStatus = stat()
-            guard Darwin.fstat(fd, &descriptorStatus) == 0,
-                  fileIdentity(descriptorStatus) == identity else {
+        let fd = try beginDescriptorUse(
+            failure: OpenAITranscriptionMultipartFileSystemError.sourceChanged
+        )
+        defer { finishDescriptorUse() }
+
+        var descriptorStatus = stat()
+        guard Darwin.fstat(fd, &descriptorStatus) == 0,
+              fileIdentity(descriptorStatus) == identity else {
+            throw OpenAITranscriptionMultipartFileSystemError.sourceChanged
+        }
+        try fileURL.withUnsafeFileSystemRepresentation { path in
+            guard let path else { throw OpenAITranscriptionMultipartFileSystemError.sourceChanged }
+            var pathStatus = stat()
+            guard Darwin.lstat(path, &pathStatus) == 0,
+                  fileIdentity(pathStatus) == identity else {
                 throw OpenAITranscriptionMultipartFileSystemError.sourceChanged
-            }
-            try fileURL.withUnsafeFileSystemRepresentation { path in
-                guard let path else { throw OpenAITranscriptionMultipartFileSystemError.sourceChanged }
-                var pathStatus = stat()
-                guard Darwin.lstat(path, &pathStatus) == 0,
-                      fileIdentity(pathStatus) == identity else {
-                    throw OpenAITranscriptionMultipartFileSystemError.sourceChanged
-                }
             }
         }
     }
 
     func close() {
-        let fd = lock.withLock { () -> Int32? in
-            let fd = fileDescriptor
-            fileDescriptor = nil
-            return fd
+        let descriptor = lock.withLock { () -> Int32? in
+            state.closeRequested = true
+            guard state.activeOperationCount == 0 else { return nil }
+            let descriptor = state.fileDescriptor
+            state.fileDescriptor = nil
+            return descriptor
         }
-        if let fd { Darwin.close(fd) }
+        if let descriptor { Darwin.close(descriptor) }
+    }
+
+    private func beginDescriptorUse(failure: Error) throws -> Int32 {
+        try lock.withLock {
+            guard !state.closeRequested, let descriptor = state.fileDescriptor else {
+                throw failure
+            }
+            state.activeOperationCount += 1
+            return descriptor
+        }
+    }
+
+    private func finishDescriptorUse() {
+        let descriptor = lock.withLock { () -> Int32? in
+            state.activeOperationCount -= 1
+            guard state.activeOperationCount == 0, state.closeRequested else { return nil }
+            let descriptor = state.fileDescriptor
+            state.fileDescriptor = nil
+            return descriptor
+        }
+        if let descriptor { Darwin.close(descriptor) }
     }
 
     deinit { close() }
@@ -687,12 +802,23 @@ nonisolated private final class POSIXOpenAITranscriptionAudioSource:
 nonisolated private final class POSIXOpenAITranscriptionScratchFile:
     OpenAITranscriptionScratchFile,
     @unchecked Sendable {
+    private struct State {
+        var fileDescriptor: Int32?
+        var activeOperationCount = 0
+        var closeRequested = false
+    }
+
+    private enum UnlinkState: Equatable {
+        case available
+        case inProgress
+        case complete
+    }
+
     let fileURL: URL
     private let identity: OpenAITranscriptionFileIdentity
     private let calls: any OpenAITranscriptionPOSIXCalling
     private let lock = NSLock()
-    private var fileDescriptor: Int32?
-    private enum UnlinkState: Equatable { case available, inProgress, complete }
+    private var state: State
     private var unlinkState = UnlinkState.available
 
     init(
@@ -702,82 +828,148 @@ nonisolated private final class POSIXOpenAITranscriptionScratchFile:
         calls: any OpenAITranscriptionPOSIXCalling
     ) {
         self.fileURL = fileURL
-        self.fileDescriptor = fileDescriptor
         self.identity = identity
         self.calls = calls
+        state = State(fileDescriptor: fileDescriptor)
     }
 
     func writeAll(_ data: Data) throws {
-        try lock.withLock {
-            guard let fd = fileDescriptor else { throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed }
-            try data.withUnsafeBytes { bytes in
-                guard let base = bytes.baseAddress else { return }
-                var offset = 0
-                while offset < bytes.count {
-                    let written = calls.write(fd, base.advanced(by: offset), bytes.count - offset)
-                    if written < 0, errno == EINTR { continue }
-                    guard written > 0, written <= bytes.count - offset else {
-                        throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
-                    }
-                    offset += written
+        let fd = try beginDescriptorUse()
+        defer { finishDescriptorUse() }
+
+        try data.withUnsafeBytes { bytes in
+            guard let base = bytes.baseAddress else { return }
+            var offset = 0
+            while offset < bytes.count {
+                let written = calls.write(fd, base.advanced(by: offset), bytes.count - offset)
+                if written < 0, errno == EINTR { continue }
+                guard written > 0, written <= bytes.count - offset else {
+                    throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
                 }
+                offset += written
             }
         }
     }
 
     func synchronizeAndValidate(expectedByteCount: Int64) throws {
-        try lock.withLock {
-            guard let fd = fileDescriptor else { throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed }
-            while calls.synchronize(fd) != 0 {
-                if errno == EINTR { continue }
-                throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
+        let fd = try beginDescriptorUse()
+        defer { finishDescriptorUse() }
+
+        while calls.synchronize(fd) != 0 {
+            if errno == EINTR { continue }
+            throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
+        }
+        try Task.checkCancellation()
+        try validateWriterAndPath(fd: fd, expectedByteCount: expectedByteCount)
+        try Task.checkCancellation()
+    }
+
+    func pinFinalizedUploadArtifact(
+        expectedByteCount: Int64
+    ) throws -> any OpenAIFileUploadBody {
+        guard claimUnlink() else {
+            throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable
+        }
+
+        var shouldRestoreUnlink = true
+        var readDescriptor: Int32 = -1
+        defer {
+            if readDescriptor >= 0 { Darwin.close(readDescriptor) }
+            if shouldRestoreUnlink { finishUnlink(completed: false) }
+        }
+
+        let writerDescriptor = try beginDescriptorUse()
+        defer { finishDescriptorUse() }
+        try Task.checkCancellation()
+        try validateWriterAndPath(
+            fd: writerDescriptor,
+            expectedByteCount: expectedByteCount
+        )
+        try Task.checkCancellation()
+
+        readDescriptor = try fileURL.withUnsafeFileSystemRepresentation { path in
+            guard let path else {
+                throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable
             }
-            var status = stat()
-            guard Darwin.fstat(fd, &status) == 0 else {
-                throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
+            let descriptor = Darwin.open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
+            guard descriptor >= 0 else {
+                throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable
             }
-            let currentIdentity = fileIdentity(status)
-            guard
-                  currentIdentity.device == identity.device,
-                  currentIdentity.inode == identity.inode,
-                  currentIdentity.byteCount == expectedByteCount else {
-                throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
+            return descriptor
+        }
+        try Task.checkCancellation()
+
+        var writerStatus = stat()
+        var readerStatus = stat()
+        guard Darwin.fstat(writerDescriptor, &writerStatus) == 0,
+              Darwin.fstat(readDescriptor, &readerStatus) == 0,
+              matchesOwnedScratch(writerStatus, expectedByteCount: expectedByteCount),
+              matchesOwnedScratch(readerStatus, expectedByteCount: expectedByteCount),
+              sameFile(writerStatus, readerStatus) else {
+            throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable
+        }
+        try Task.checkCancellation()
+
+        try fileURL.withUnsafeFileSystemRepresentation { path in
+            guard let path else {
+                throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable
             }
-            try fileURL.withUnsafeFileSystemRepresentation { path in
-                guard let path else { throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed }
-                var pathStatus = stat()
-                guard Darwin.lstat(path, &pathStatus) == 0,
-                      isRegular(pathStatus),
-                      pathStatus.st_uid == geteuid(),
-                      pathStatus.st_mode & mode_t(0o777) == mode_t(0o600) else {
-                    throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
-                }
-                let pathIdentity = fileIdentity(pathStatus)
-                guard pathIdentity.device == identity.device,
-                      pathIdentity.inode == identity.inode,
-                      pathIdentity.byteCount == expectedByteCount else {
-                    throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
-                }
+            var pathStatus = stat()
+            guard Darwin.lstat(path, &pathStatus) == 0,
+                  matchesOwnedScratch(pathStatus, expectedByteCount: expectedByteCount),
+                  sameFile(writerStatus, pathStatus),
+                  sameFile(readerStatus, pathStatus) else {
+                throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable
+            }
+            try Task.checkCancellation()
+
+            var unlinkResult: Int32
+            repeat {
+                unlinkResult = Darwin.unlink(path)
+            } while unlinkResult != 0 && errno == EINTR
+            guard unlinkResult == 0 else {
+                throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable
             }
         }
+
+        finishUnlink(completed: true)
+        shouldRestoreUnlink = false
+        try Task.checkCancellation()
+
+        var pinnedStatus = stat()
+        guard Darwin.fstat(readDescriptor, &pinnedStatus) == 0,
+              matchesOwnedScratch(
+                  pinnedStatus,
+                  expectedByteCount: expectedByteCount,
+                  expectedLinkCount: 0
+              ),
+              sameFile(readerStatus, pinnedStatus) else {
+            throw OpenAITranscriptionMultipartFileSystemError.scratchUnavailable
+        }
+        try Task.checkCancellation()
+
+        let artifact = OpenAITranscriptionMultipartUploadArtifact(
+            fileDescriptor: readDescriptor,
+            identity: fileIdentity(pinnedStatus),
+            calls: calls
+        )
+        readDescriptor = -1
+        return artifact
     }
 
     func close() {
-        let fd = lock.withLock { () -> Int32? in
-            let fd = fileDescriptor
-            fileDescriptor = nil
-            return fd
+        let descriptor = lock.withLock { () -> Int32? in
+            state.closeRequested = true
+            guard state.activeOperationCount == 0 else { return nil }
+            let descriptor = state.fileDescriptor
+            state.fileDescriptor = nil
+            return descriptor
         }
-        if let fd { Darwin.close(fd) }
+        if let descriptor { Darwin.close(descriptor) }
     }
 
     func unlinkIfOwned() {
-        let shouldTry = lock.withLock { () -> Bool in
-            guard unlinkState == .available else { return false }
-            unlinkState = .inProgress
-            return true
-        }
-        guard shouldTry else { return }
+        guard claimUnlink() else { return }
         var completed = false
         fileURL.withUnsafeFileSystemRepresentation { path in
             guard let path else { return }
@@ -802,10 +994,86 @@ nonisolated private final class POSIXOpenAITranscriptionScratchFile:
             } while unlinkResult != 0 && errno == EINTR
             completed = unlinkResult == 0 || errno == ENOENT
         }
-        lock.withLock { unlinkState = completed ? .complete : .available }
+        finishUnlink(completed: completed)
     }
 
-    deinit { close(); unlinkIfOwned() }
+    private func beginDescriptorUse() throws -> Int32 {
+        try lock.withLock {
+            guard !state.closeRequested, let descriptor = state.fileDescriptor else {
+                throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
+            }
+            state.activeOperationCount += 1
+            return descriptor
+        }
+    }
+
+    private func finishDescriptorUse() {
+        let descriptor = lock.withLock { () -> Int32? in
+            state.activeOperationCount -= 1
+            guard state.activeOperationCount == 0, state.closeRequested else { return nil }
+            let descriptor = state.fileDescriptor
+            state.fileDescriptor = nil
+            return descriptor
+        }
+        if let descriptor { Darwin.close(descriptor) }
+    }
+
+    private func validateWriterAndPath(
+        fd: Int32,
+        expectedByteCount: Int64
+    ) throws {
+        var descriptorStatus = stat()
+        guard Darwin.fstat(fd, &descriptorStatus) == 0,
+              matchesOwnedScratch(descriptorStatus, expectedByteCount: expectedByteCount) else {
+            throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
+        }
+        try fileURL.withUnsafeFileSystemRepresentation { path in
+            guard let path else {
+                throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
+            }
+            var pathStatus = stat()
+            guard Darwin.lstat(path, &pathStatus) == 0,
+                  matchesOwnedScratch(pathStatus, expectedByteCount: expectedByteCount),
+                  sameFile(descriptorStatus, pathStatus) else {
+                throw OpenAITranscriptionMultipartFileSystemError.scratchWriteFailed
+            }
+        }
+    }
+
+    private func claimUnlink() -> Bool {
+        lock.withLock {
+            guard unlinkState == .available else { return false }
+            unlinkState = .inProgress
+            return true
+        }
+    }
+
+    private func finishUnlink(completed: Bool) {
+        lock.withLock {
+            unlinkState = completed ? .complete : .available
+        }
+    }
+
+    private func matchesOwnedScratch(
+        _ status: stat,
+        expectedByteCount: Int64,
+        expectedLinkCount: UInt16 = 1
+    ) -> Bool {
+        isRegular(status)
+            && status.st_uid == geteuid()
+            && status.st_mode & mode_t(0o777) == mode_t(0o600)
+            && Int64(status.st_size) == expectedByteCount
+            && status.st_nlink == expectedLinkCount
+    }
+
+    private func sameFile(_ left: stat, _ right: stat) -> Bool {
+        left.st_dev == right.st_dev && left.st_ino == right.st_ino
+    }
+
+    deinit {
+        close()
+        unlinkIfOwned()
+    }
 }
 
 nonisolated private struct SupportedAudioFile: Sendable { let controlledFileName: String; let contentType: String }
@@ -821,15 +1089,16 @@ nonisolated private extension String {
     }
 }
 
-nonisolated private func isRegular(_ status: stat) -> Bool { status.st_mode & S_IFMT == S_IFREG }
+nonisolated func isRegular(_ status: stat) -> Bool { status.st_mode & S_IFMT == S_IFREG }
 nonisolated private func isSymbolicLink(_ status: stat) -> Bool { status.st_mode & S_IFMT == S_IFLNK }
 nonisolated private func isPrivateScratch(_ status: stat) -> Bool {
     isRegular(status)
         && status.st_uid == geteuid()
         && status.st_mode & mode_t(0o777) == mode_t(0o600)
         && status.st_size == 0
+        && status.st_nlink == 1
 }
-nonisolated private func fileIdentity(_ status: stat) -> OpenAITranscriptionFileIdentity {
+nonisolated func fileIdentity(_ status: stat) -> OpenAITranscriptionFileIdentity {
     OpenAITranscriptionFileIdentity(
         device: UInt64(status.st_dev),
         inode: UInt64(status.st_ino),
