@@ -239,20 +239,22 @@ without discarding a successfully resolved runtime credential or absence.
 
 ### Protected atomic metadata files
 
-- The general settings record and credential-presence marker share one
-  app-private metadata-file boundary. It accepts only regular files and rejects
-  symbolic links, directories, and special files without following them.
+- The general settings record, Library record, and credential-presence marker
+  share one app-private metadata-file boundary. It accepts only regular files
+  and rejects symbolic links, directories, and special files without following
+  them.
 - Reads are bounded before allocation and while bytes are loaded. The marker is
-  limited to 16 KiB and the settings record to 1 MiB; the exact limit is valid,
-  while one byte more is rejected without changing the source.
+  limited to 16 KiB and the settings and Library records to 1 MiB each; the
+  exact limit is valid, while one byte more is rejected without changing the
+  source.
 - A read uses one pinned regular-file identity and accepts bytes only when its
   size and modification/change timestamps remain stable through the complete
   read. A save stops before publish if the durable destination changes, even
   when a raced write keeps the same inode and byte count.
-- A settings load that exceeds its limit is reported separately from a settings
-  value whose canonical encoding is too large to save. The marker uses one
-  storage-limit failure for either direction. These failures do not expose file
-  locations, source content, system error numbers, or attacker-controlled
+- A settings or Library load that exceeds its limit is reported separately from
+  a value whose canonical encoding is too large to save. The marker uses one
+  storage-limit failure for either direction. These failures do not expose
+  file locations, source content, system error numbers, or attacker-controlled
   fields or values.
 - An oversized save fails before a temporary file is created and leaves the
   durable destination unchanged. A valid save uses an exclusive, owner-only
@@ -312,6 +314,61 @@ without discarding a successfully resolved runtime credential or absence.
 - Simulator tests prove that Complete protection is requested but may not
   report an effective protection class on the resulting file. Effective Data
   Protection remains a signed physical-device verification gate.
+
+### App-private Library v1
+
+- The containing app's canonical Library record lives at the stable relative
+  path `HoldType/ios-library.json` inside its Application Support directory. It
+  is never stored in `UserDefaults`, an App Group, CloudKit, or iCloud Drive.
+- The runtime Library value is an `Equatable` and `Sendable`, non-`Codable`
+  composition of `CustomDictionary`, `EmojiCommandsConfiguration`, and the
+  ordered `[TextReplacementRule]` collection. Its complete defaults are an
+  empty dictionary, enabled emoji commands with only English selected, no
+  custom emoji commands, and no replacement rules.
+- The private v1 root contains only `schemaVersion`, `dictionary`,
+  `emojiCommands`, and `replacementRules`. A canonical save writes every group
+  and field and uses sorted object keys. It preserves exact replacement-rule
+  order and the relative order of dictionary entries and custom commands that
+  survive normalization; normalization may reduce those arrays. Dictionary
+  entries and custom emoji commands use the current shared-domain rules before
+  they become durable. Replacement search, replacement, enabled state,
+  identifier, and row order remain raw; repeated search text is valid and is
+  not deduplicated.
+- A load may default a missing known root group or a missing known group field.
+  Every field of an existing custom-command or replacement-rule row is
+  required. Nulls, wrong types, non-object rows, malformed identifiers, and
+  unexpected fields at any level fail instead of defaulting or being ignored.
+  A custom-command row also fails with a redacted known-field error when its
+  normalized emoji or normalized spoken phrases are empty. Among otherwise
+  valid commands, current domain normalization keeps the first semantic
+  duplicate.
+- `schemaVersion` is required and must be exactly integer `1`. Version `0` and
+  future versions are unsupported, and no legacy shape or migration is
+  inferred until an earlier durable schema actually exists.
+- The only built-in emoji-set identifiers accepted by v1 are the exact values
+  `en`, `ru`, `es`, `de`, `fr`, and `pt`; case or surrounding-whitespace
+  variants fail on load and runtime save. The stored selection contains zero or
+  one identifier; every identifier is validated before cardinality, so an
+  unknown identifier fails even when a second item is present. More than one
+  known item fails instead of silently choosing one. Custom-command UUIDs must
+  be unique within their collection, and replacement-rule UUIDs must be unique
+  within theirs. The duplicate check happens on the raw rows before normalized
+  usability is validated and before semantic normalization can keep only the
+  first equivalent custom command. Reusing one UUID across the two
+  independently addressed collections is allowed.
+- Public errors identify only known field locations and failure classes. They
+  never echo dictionary text, emoji or command content, replacement content,
+  unknown identifiers or fields, raw file locations, or system error numbers.
+- A missing file returns the complete defaults without creating a file.
+  Corrupt, invalid, or unsupported source bytes are preserved byte-for-byte
+  and are never rewritten as defaults during load.
+- The process-owned actor serializes Library loads and saves. The shared
+  protected atomic-file boundary limits both source and canonical encoding to
+  1 MiB, requests Complete protection before the first content write, and
+  keeps the final Library record eligible for system-managed device backup. A
+  failed replacement preserves the previous durable bytes.
+- Simulator verification may prove only that Complete protection was requested.
+  Effective protection remains a signed physical-device gate.
 
 ### Credential-presence marker v1
 

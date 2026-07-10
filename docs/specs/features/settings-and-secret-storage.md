@@ -7,6 +7,15 @@ Define the first settings and secret-storage contract for HoldType.
 The app needs simple local settings for dictation behavior while keeping the
 OpenAI API key out of plain text settings and logs.
 
+## Platform boundary
+
+This document is the macOS Settings and persistence contract. Its
+`UserDefaults`, macOS Keychain, Finder, Login Item, and Sparkle clauses remain
+unchanged for the macOS compatibility facade. iOS reuses the shared domain
+behavior and documented defaults, but its canonical UI and persistence
+ownership are governed by `ios-settings-and-secret-storage.md`; iOS does not
+inherit or write these macOS `UserDefaults` keys.
+
 ## Scope
 
 This spec covers:

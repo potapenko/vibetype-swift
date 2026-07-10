@@ -82,11 +82,19 @@ separate editing or text-expansion product.
 
 ## Route / state / data implications
 
-UserDefaults may store:
+Persistence is platform-owned:
 
-- whether emoji commands are enabled;
-- the active built-in command-set identifier;
-- user-authored custom emoji commands.
+- The macOS compatibility facade may continue to store the emoji-command
+  enabled state, the optional selected built-in command-set identifier, and
+  user-authored custom commands in its existing `UserDefaults` keys.
+- On iOS, those same values are canonical app-private Library v1 content under
+  `ios-settings-and-secret-storage.md`; they are never stored in
+  `UserDefaults` or the App Group.
+- The persisted built-in selection contains zero or one built-in identifier.
+  English is selected by default. No selected built-in identifier represents
+  the Custom tab and does not disable otherwise enabled custom commands.
+- Built-in command catalogs are bundled app-owned data and are not copied into
+  either persistence store.
 
 The built-in command catalog should include these common emoji across every
 built-in language set:
@@ -110,5 +118,5 @@ until there is dedicated dictation QA for those scripts.
 
 ## Unknowns requiring confirmation
 
-- Whether additional command sets should be enabled by default based on the
-  selected transcription language.
+- Whether the default selected built-in command set should follow the selected
+  transcription language after dedicated dictation QA.

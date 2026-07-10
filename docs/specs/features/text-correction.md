@@ -152,13 +152,24 @@ cancellation remain platform-adapter concerns.
 
 ## Route / state / data implications
 
-UserDefaults may store:
+On macOS, the compatibility facade may continue to store these values in its
+existing `UserDefaults` keys:
 
 - whether OpenAI correction is enabled
 - selected correction model
 - correction prompt text, defaulting to the standard minimal-correction prompt
 - whether local plain-typography cleanup is enabled
 - ordered literal replacement rules
+
+On iOS, correction enablement, model, prompt, and local-cleanup preference live
+in the app-private general settings repository. Ordered
+`TextReplacementRule` values live in the app-private Library v1 repository.
+Neither repository uses `UserDefaults` or the App Group.
+
+Library persistence preserves replacement-rule identifiers, enabled state,
+search and replacement strings, duplicates, and array order. It does not trim,
+case-fold, deduplicate, reorder, or silently remove an empty-search row. An
+empty search is ignored only when the local replacement pipeline executes.
 
 Keychain still stores only the OpenAI API key.
 

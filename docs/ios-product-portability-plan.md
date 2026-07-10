@@ -271,7 +271,7 @@ audited macOS baseline, then document every intentional iOS difference:
 | API key | Containing app | App-only Keychain with iOS accessibility policy | Never |
 | Credential-presence marker | Containing app | Non-secret app-private status, excluded from backup | Never |
 | Small preferences and models | Containing app settings repository | App defaults behind versioned migrations | Published subset only |
-| Dictionary, emoji commands, replacements | Containing app library repository | Versioned app-private structured file, atomic writes, file protection | Optional compact read-only snapshot after spec |
+| Dictionary, emoji commands, replacements | Containing app library repository | Versioned app-private structured file; atomic writes; Complete protection; system-managed backup eligible | None in v1; any future normalized lexicon subset requires a separate spec and M0B physical-device evidence |
 | Usage events | Containing app | Bounded app-private persistence | Never |
 | Pending provider attempt | Containing app | Minimal atomic app-private journal plus protected audio | Never |
 | Latest/pending accepted output | Containing app | Protected versioned delivery record, 24-hour cap, excluded from backup | Bounded result snapshot only |
