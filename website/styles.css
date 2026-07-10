@@ -404,17 +404,12 @@ h3 {
   line-height: 1.5;
 }
 
-.hero-price-note {
+.hero-price-line {
   margin: 9px 0 0;
-  color: var(--text-faint);
-  font-size: 0.72rem;
-  line-height: 1.48;
-}
-
-.hero-price-note code {
-  color: inherit;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.9em;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 620;
+  line-height: 1.46;
 }
 
 .hero-visual {
@@ -1960,7 +1955,7 @@ h3 {
     padding-top: 4px;
   }
 
-  .hero-price-note {
+  .hero-price-line {
     font-size: 0.68rem;
   }
 

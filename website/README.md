@@ -94,11 +94,14 @@ The allowed first-viewport copy is limited to the HoldType brand, essential
 navigation, the approved headline `Speak the whole thought.`, the approved
 support line `HoldType puts it where you’re working.`, the Mac/BYOK description,
 the two approved actions, the macOS/cost qualification, one restrained
-usage-cost badge, its factual rate qualification, and the explicit illustration
+usage-cost badge, one human supporting line, and the explicit illustration
 caption. No testimonial, unsupported metric, or unavailable demo action is
 permitted above the fold. The approved badge is
-`≈ $1 per 1,000 ten-second dictations`; it must remain visually secondary to the
-product outcome and must not imply that $10 is a price ceiling.
+`Even 100 a day · ≈ $0.10 · for quick voice messages`, supported by the human
+line `A hundred quick messages is already a very talkative day.` Technical
+duration and model-rate qualifications stay in the detailed cost section. The
+badge must remain visually secondary to the product outcome and must not
+present 100 as a usage cap, guaranteed maximum, or typical day.
 
 ### Page anatomy
 
@@ -108,8 +111,8 @@ product outcome and must not imply that $10 is a price ceiling.
 4. Three product-decision columns.
 5. Real-use-case band.
 6. Translation/vocabulary and Last Result recovery proof.
-7. OpenAI billing, the qualified $10 usage example, and exact data-boundary
-   explanation.
+7. OpenAI billing, the qualified 100-dictation usage example, and exact
+   data-boundary explanation.
 8. Authentic first-person founder story and microphone photo.
 9. GitHub/Homebrew setup, a three-step API-key guide with an opt-in video, and
    native FAQ disclosures.
@@ -148,9 +151,11 @@ UI states were redrawn or retouched.
 - HoldType has no account or recurring fee. OpenAI may require prepaid API
   credit and deducts actual request usage from the user's Platform balance.
 - The approved cost examples use the current estimated
-  `gpt-4o-transcribe` rate of `$0.006/minute`: about `$1` for 1,000 ten-second
-  dictations and about `$10` for 10,000. They are estimates, not a fixed price
-  or ceiling, and optional correction and translation are separate requests.
+  `gpt-4o-transcribe` rate of `$0.006/minute`: about `$0.10` for 100 quick voice
+  messages representing roughly 17 minutes of recorded speech, or about `$3`
+  if the same total is repeated daily for 30 days. These are illustrations, not
+  a fixed price, usage cap, or typical-day claim, and optional correction and
+  translation are separate requests.
 - It uses the user's OpenAI Platform API key, and OpenAI bills API usage
   separately.
 - The setup guide never asks for the API key on the website. It links to the

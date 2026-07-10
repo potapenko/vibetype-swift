@@ -124,10 +124,10 @@ HoldType has no subscription. OpenAI deducts API usage from the Platform
 account connected through your key; new API accounts may require prepaid
 credit.
 
-At OpenAI's current estimated `gpt-4o-transcribe` rate, about **$1 covers 1,000
-ten-second dictations**. Reaching $10 would mean roughly 10,000 of those short
-dictations, or about 333 every day for a 30-day month. This is an estimate based
-on recorded audio duration, not a fixed HoldType plan or price ceiling.
+At OpenAI's current estimated `gpt-4o-transcribe` rate, about **$0.10 covers 100
+quick dictations**—roughly 17 minutes of recorded speech in total. Repeat the
+same daily total for 30 days and the estimated transcription cost is about $3.
+This is an illustration, not a usage cap or claim about typical behavior.
 
 The Billing screen estimates successful audio transcriptions made on this Mac.
 It does not include correction or translation requests, and it is not an

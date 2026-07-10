@@ -132,16 +132,19 @@ A simple data-flow visual can make this easier to scan:
 
 `Microphone → HoldType → OpenAI transcription → optional text step → active app`
 
-Use one factual cost conversion rather than an abstract minutes-per-day table:
+Use one factual, low-friction cost conversion rather than an abstract
+minutes-per-day table:
 
-> About $1 covers 1,000 ten-second dictations at the current estimated
-> `gpt-4o-transcribe` rate. Reaching $10 would mean roughly 10,000 such
-> dictations, or about 333 every day for a 30-day month.
+> About $0.10 covers 100 quick voice messages at the current estimated
+> `gpt-4o-transcribe` rate—roughly 17 minutes of recorded speech in total.
+> Repeating the same daily total for 30 days is about $3.
 
-The hero may use the restrained `≈ $1 per 1,000 ten-second dictations` badge.
-The full $10 conversion belongs in this cost section. Both require a visible
-qualification that the rate is approximate, OpenAI-controlled, and excludes
-optional correction and translation.
+The hero may use the restrained
+`Even 100 a day · ≈ $0.10 · for quick voice messages` badge and the supporting
+line `A hundred quick messages is already a very talkative day.` Keep the
+17-minute, model-rate, and $3 monthly qualifications in the detailed cost
+section instead of the first viewport. The detailed example must still state
+that optional correction and translation are separate.
 
 ### 6. Founder Story
 
@@ -232,12 +235,14 @@ Do not publish `3x faster`, `5x faster`, `99% accurate`, `perfect`, `private`,
 or `works in every app` without a documented HoldType-specific method and the
 necessary qualifications.
 
-Do not claim that $10 is a price ceiling, that HoldType is always cheaper than
-a flat subscription, that free and paid competitor tiers use different
-recognition quality, or that competing providers deliberately reduce quality.
-Cost examples must name the model, reviewed rate, recording duration, and
-excluded optional requests. Quality preference belongs in the founder's
-first-person experience unless a reproducible HoldType benchmark exists.
+Do not describe 100 dictations as a daily maximum or typical usage, claim that
+HoldType is always cheaper than a flat subscription, say that free and paid
+competitor tiers use different recognition quality, or suggest that competing
+providers deliberately reduce quality. Cost examples must name the model,
+reviewed rate, recording duration, and excluded optional requests in the
+detailed cost section; the hero may use the approved rounded example backed by
+that explanation. Quality preference belongs in the founder's first-person
+experience unless a reproducible HoldType benchmark exists.
 
 Prefer claims that are already observable:
 
