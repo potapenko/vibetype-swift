@@ -119,23 +119,7 @@
       "body1": "翻訳は指定したときだけ実行されます。対象言語を選び、{keyboard.translationShortcut} を使うと、文字起こしと翻訳を一つの流れで行えます。",
       "body2": "{appUi.localDictionary} に登録した名前、プロジェクト用語、ファイル名は、文字起こしリクエストの綴りの参考情報として追加されます。",
       "imageAlt": "翻訳ショートカットと対象言語のコントロールが表示された {brand.holdType} の {appUi.translation} 設定",
-      "caption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "実際の {brand.holdType} の {appUi.translation} 設定です。スマートフォンでは、フォーカスされた切り抜きを横にスワイプして確認できます。"
-          },
-          {
-            "type": "link",
-            "ref": "translationScreenshot",
-            "text": "フルサイズ画像を開く"
-          },
-          {
-            "type": "text",
-            "value": "。"
-          }
-        ]
-      },
+      "caption": "実際の {brand.holdType} の {appUi.translation} 設定です。スマートフォンでは、フォーカスされた切り抜きを横にスワイプして確認できます。",
       "lightboxCaption": "{brand.holdType} の {appUi.translation} 設定"
     },
     "menu": {
@@ -176,23 +160,7 @@
       "note": "{appUi.billing} 画面は、成功した音声文字起こしについてのローカル見積もりです。{brand.openAI} の請求書ではなく、修正や翻訳のリクエストは含まれません。",
       "pricingLink": "{brand.openAI} API の料金",
       "imageAlt": "ローカルの文字起こし利用量の見積もりを表示する {brand.holdType} の {appUi.billing} 設定",
-      "imageCaption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "スマートフォンでは、同じ実際の {appUi.billing} スクリーンショットのフォーカスされた切り抜きを横にスワイプできます。"
-          },
-          {
-            "type": "link",
-            "ref": "billingScreenshot",
-            "text": "フルサイズ画像を開く"
-          },
-          {
-            "type": "text",
-            "value": "。"
-          }
-        ]
-      },
+      "imageCaption": "スマートフォンでは、同じ実際の {appUi.billing} スクリーンショットのフォーカスされた切り抜きを横にスワイプできます。",
       "lightboxCaption": "{brand.holdType} の {appUi.billing} 設定とローカルの利用量見積もり"
     }
   },

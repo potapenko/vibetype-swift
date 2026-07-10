@@ -119,23 +119,7 @@
       "body1": "La traduction s’exécute uniquement sur demande. Choisissez une langue cible, puis utilisez {keyboard.translationShortcut} pour transcrire et traduire dans un même flux.",
       "body2": "Les entrées de {appUi.localDictionary} ajoutent à la requête de transcription du contexte orthographique pour les noms, les termes propres à vos projets et les noms de fichiers.",
       "imageAlt": "Réglages {appUi.translation} de {brand.holdType} avec le raccourci de traduction et les commandes de langue cible",
-      "caption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "Réglages {appUi.translation} réels de {brand.holdType}. Sur téléphone, faites glisser horizontalement la zone agrandie pour l’examiner. "
-          },
-          {
-            "type": "link",
-            "ref": "translationScreenshot",
-            "text": "Ouvrir l’image en taille réelle"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "caption": "Réglages {appUi.translation} réels de {brand.holdType}. Sur téléphone, faites glisser horizontalement la zone agrandie pour l’examiner.",
       "lightboxCaption": "Réglages {appUi.translation} de {brand.holdType}"
     },
     "menu": {
@@ -176,23 +160,7 @@
       "note": "L’écran {appUi.billing} affiche une estimation locale des transcriptions audio réussies. Ce n’est pas une facture {brand.openAI} et il n’inclut pas les requêtes de correction ou de traduction.",
       "pricingLink": "Tarifs de l’API {brand.openAI}",
       "imageAlt": "Réglages {appUi.billing} de {brand.holdType} affichant une estimation locale de l’utilisation de la transcription",
-      "imageCaption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "Sur téléphone, faites glisser horizontalement la zone agrandie de cette même capture réelle de {appUi.billing}. "
-          },
-          {
-            "type": "link",
-            "ref": "billingScreenshot",
-            "text": "Ouvrir l’image en taille réelle"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "imageCaption": "Sur téléphone, faites glisser horizontalement la zone agrandie de cette même capture réelle de {appUi.billing}.",
       "lightboxCaption": "Réglages {appUi.billing} de {brand.holdType} et estimation locale de l’utilisation"
     }
   },

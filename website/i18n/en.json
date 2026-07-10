@@ -119,23 +119,7 @@
       "body1": "Translation runs only when requested. Choose a target language, then use {keyboard.translationShortcut} to transcribe and translate in one flow.",
       "body2": "{appUi.localDictionary} entries add spelling context for names, project terms, and file names to the transcription request.",
       "imageAlt": "{brand.holdType} {appUi.translation} settings with the translation shortcut and target language controls",
-      "caption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "Real {brand.holdType} {appUi.translation} settings. On phones, swipe the focused crop horizontally to inspect it. "
-          },
-          {
-            "type": "link",
-            "ref": "translationScreenshot",
-            "text": "Open the full-size image"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "caption": "Real {brand.holdType} {appUi.translation} settings. On phones, swipe the focused crop horizontally to inspect it.",
       "lightboxCaption": "{brand.holdType} {appUi.translation} settings"
     },
     "menu": {
@@ -176,23 +160,7 @@
       "note": "The {appUi.billing} screen is a local estimate for successful audio transcriptions. It is not an {brand.openAI} invoice and does not include correction or translation requests.",
       "pricingLink": "{brand.openAI} API pricing",
       "imageAlt": "{brand.holdType} {appUi.billing} settings showing a local transcription usage estimate",
-      "imageCaption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "On phones, swipe the focused crop of the same real {appUi.billing} screenshot horizontally. "
-          },
-          {
-            "type": "link",
-            "ref": "billingScreenshot",
-            "text": "Open the full-size image"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "imageCaption": "On phones, swipe the focused crop of the same real {appUi.billing} screenshot horizontally.",
       "lightboxCaption": "{brand.holdType} {appUi.billing} settings and local usage estimate"
     }
   },

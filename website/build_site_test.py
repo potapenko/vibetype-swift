@@ -27,9 +27,12 @@ class PageProbe(HTMLParser):
         self.html_attributes: dict[str, str | None] = {}
         self.links: list[dict[str, str | None]] = []
         self.language_links: list[dict[str, str | None]] = []
+        self.lightbox_links: list[dict[str, str | None]] = []
+        self.lightbox_link_image_count = 0
         self.metadata: list[dict[str, str | None]] = []
         self.title_parts: list[str] = []
         self.in_title = False
+        self.in_lightbox_link = False
 
     @property
     def title(self) -> str:
@@ -47,10 +50,17 @@ class PageProbe(HTMLParser):
             self.metadata.append(attributes)
         elif tag == "a" and "data-locale-link" in attributes:
             self.language_links.append(attributes)
+        elif tag == "a" and "data-lightbox-link" in attributes:
+            self.lightbox_links.append(attributes)
+            self.in_lightbox_link = True
+        elif tag == "img" and self.in_lightbox_link:
+            self.lightbox_link_image_count += 1
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "title":
             self.in_title = False
+        elif tag == "a" and self.in_lightbox_link:
+            self.in_lightbox_link = False
 
     def handle_data(self, data: str) -> None:
         if self.in_title:
@@ -115,6 +125,7 @@ class BuildSiteTests(unittest.TestCase):
             rendered_pages: dict[str, str] = {}
             for code, (route, direction, open_graph_locale) in expected_locales.items():
                 page = output / route / "index.html" if route else output / "index.html"
+                asset_prefix = "../" if route else ""
                 rendered = page.read_text(encoding="utf-8")
                 rendered_pages[code] = rendered
                 probe = PageProbe()
@@ -140,6 +151,15 @@ class BuildSiteTests(unittest.TestCase):
                 self.assertEqual(
                     {link["hreflang"] for link in probe.language_links},
                     set(expected_locales),
+                )
+                self.assertEqual(len(probe.lightbox_links), 2)
+                self.assertEqual(probe.lightbox_link_image_count, 2)
+                self.assertEqual(
+                    {link["href"] for link in probe.lightbox_links},
+                    {
+                        f"{asset_prefix}assets/settings-billing.png",
+                        f"{asset_prefix}assets/settings-translation.png",
+                    },
                 )
 
                 metadata = {
@@ -267,8 +287,8 @@ class BuildSiteTests(unittest.TestCase):
             source = self.copied_source(root)
             catalog_path = source / "i18n" / "es.json"
             catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-            catalog["features"]["translation"]["caption"]["parts"][1]["ref"] = (
-                "billingScreenshot"
+            catalog["apiKeyGuide"]["steps"]["openPage"]["parts"][1]["ref"] = (
+                "openAIKeyHelp"
             )
             catalog_path.write_text(json.dumps(catalog, ensure_ascii=False), encoding="utf-8")
 

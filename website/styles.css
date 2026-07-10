@@ -697,10 +697,25 @@ h3 {
   line-height: 1.45;
 }
 
-.product-shot figcaption a,
-.billing-shot figcaption a {
-  color: var(--accent-ink);
-  font-weight: 620;
+.product-shot-link {
+  display: block;
+  border-radius: 18px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.billing-shot .product-shot-link {
+  border-radius: 13px;
+}
+
+.product-shot-link:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.product-shot-link picture,
+.product-shot-link img {
+  cursor: pointer;
 }
 
 .hero-visual > figcaption {

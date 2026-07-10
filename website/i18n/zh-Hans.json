@@ -119,23 +119,7 @@
       "body1": "仅在你提出要求时才会翻译。选择目标语言，然后使用 {keyboard.translationShortcut}，即可在同一流程中完成转写和翻译。",
       "body2": "{appUi.localDictionary} 中的条目会为姓名、项目术语和文件名提供拼写上下文，并随转写请求一并发送。",
       "imageAlt": "显示翻译快捷键和目标语言控件的 {brand.holdType} {appUi.translation} 设置",
-      "caption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "真实的 {brand.holdType} {appUi.translation} 设置。在手机上，可以横向滑动聚焦的裁剪区域进行查看。"
-          },
-          {
-            "type": "link",
-            "ref": "translationScreenshot",
-            "text": "打开完整尺寸图片"
-          },
-          {
-            "type": "text",
-            "value": "。"
-          }
-        ]
-      },
+      "caption": "真实的 {brand.holdType} {appUi.translation} 设置。在手机上，可以横向滑动聚焦的裁剪区域进行查看。",
       "lightboxCaption": "{brand.holdType} {appUi.translation} 设置"
     },
     "menu": {
@@ -176,23 +160,7 @@
       "note": "{appUi.billing} 页面是在本地对成功音频转写量作出的估算。它不是 {brand.openAI} 发票，也不包含修正或翻译请求。",
       "pricingLink": "{brand.openAI} API 定价",
       "imageAlt": "显示本地转写用量估算的 {brand.holdType} {appUi.billing} 设置",
-      "imageCaption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "在手机上，可以横向滑动同一张真实 {appUi.billing} 截图中聚焦的裁剪区域。"
-          },
-          {
-            "type": "link",
-            "ref": "billingScreenshot",
-            "text": "打开完整尺寸图片"
-          },
-          {
-            "type": "text",
-            "value": "。"
-          }
-        ]
-      },
+      "imageCaption": "在手机上，可以横向滑动同一张真实 {appUi.billing} 截图中聚焦的裁剪区域。",
       "lightboxCaption": "{brand.holdType} {appUi.billing} 设置和本地用量估算"
     }
   },

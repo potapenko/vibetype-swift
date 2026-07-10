@@ -119,23 +119,7 @@
       "body1": "번역은 요청할 때만 실행됩니다. 대상 언어를 선택한 다음 {keyboard.translationShortcut}을 사용하면 한 번의 흐름으로 받아쓰기와 번역을 할 수 있습니다.",
       "body2": "{appUi.localDictionary} 항목은 이름, 프로젝트 용어와 파일명의 철자 맥락을 받아쓰기 요청에 추가합니다.",
       "imageAlt": "번역 단축키와 대상 언어 제어 항목이 표시된 {brand.holdType} {appUi.translation} 설정",
-      "caption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "실제 {brand.holdType} {appUi.translation} 설정입니다. 휴대전화에서는 초점이 맞춰진 잘라낸 영역을 가로로 밀어 살펴볼 수 있습니다."
-          },
-          {
-            "type": "link",
-            "ref": "translationScreenshot",
-            "text": "전체 크기 이미지 열기"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "caption": "실제 {brand.holdType} {appUi.translation} 설정입니다. 휴대전화에서는 초점이 맞춰진 잘라낸 영역을 가로로 밀어 살펴볼 수 있습니다.",
       "lightboxCaption": "{brand.holdType} {appUi.translation} 설정"
     },
     "menu": {
@@ -176,23 +160,7 @@
       "note": "{appUi.billing} 화면은 성공한 오디오 받아쓰기 사용량을 로컬에서 추정한 값입니다. {brand.openAI} 청구서가 아니며 교정 또는 번역 요청은 포함하지 않습니다.",
       "pricingLink": "{brand.openAI} API 요금",
       "imageAlt": "로컬 받아쓰기 사용량 추정치를 보여 주는 {brand.holdType} {appUi.billing} 설정",
-      "imageCaption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "휴대전화에서는 같은 실제 {appUi.billing} 스크린샷의 초점이 맞춰진 잘라낸 영역을 가로로 밀어 볼 수 있습니다."
-          },
-          {
-            "type": "link",
-            "ref": "billingScreenshot",
-            "text": "전체 크기 이미지 열기"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "imageCaption": "휴대전화에서는 같은 실제 {appUi.billing} 스크린샷의 초점이 맞춰진 잘라낸 영역을 가로로 밀어 볼 수 있습니다.",
       "lightboxCaption": "{brand.holdType} {appUi.billing} 설정과 로컬 사용량 추정치"
     }
   },

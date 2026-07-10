@@ -119,23 +119,7 @@
       "body1": "A tradução só é executada quando você solicita. Escolha um idioma de destino e use {keyboard.translationShortcut} para transcrever e traduzir em um único fluxo.",
       "body2": "As entradas de {appUi.localDictionary} acrescentam à solicitação de transcrição o contexto ortográfico de nomes, termos de projetos e nomes de arquivos.",
       "imageAlt": "Configurações de {appUi.translation} do {brand.holdType}, com o atalho de tradução e os controles de idioma de destino",
-      "caption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "Configurações reais de {appUi.translation} do {brand.holdType}. Em celulares, deslize horizontalmente sobre o recorte em foco para examiná-lo. "
-          },
-          {
-            "type": "link",
-            "ref": "translationScreenshot",
-            "text": "Abrir a imagem em tamanho completo"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "caption": "Configurações reais de {appUi.translation} do {brand.holdType}. Em celulares, deslize horizontalmente sobre o recorte em foco para examiná-lo.",
       "lightboxCaption": "Configurações de {appUi.translation} do {brand.holdType}"
     },
     "menu": {
@@ -176,23 +160,7 @@
       "note": "A tela {appUi.billing} mostra uma estimativa local das transcrições de áudio concluídas com sucesso. Ela não é uma fatura da {brand.openAI} e não inclui solicitações de correção ou tradução.",
       "pricingLink": "Preços da API da {brand.openAI}",
       "imageAlt": "Configurações de {appUi.billing} do {brand.holdType} mostrando uma estimativa local do uso de transcrição",
-      "imageCaption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "Em celulares, deslize horizontalmente sobre o recorte em foco da mesma captura de tela real de {appUi.billing}. "
-          },
-          {
-            "type": "link",
-            "ref": "billingScreenshot",
-            "text": "Abrir a imagem em tamanho completo"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "imageCaption": "Em celulares, deslize horizontalmente sobre o recorte em foco da mesma captura de tela real de {appUi.billing}.",
       "lightboxCaption": "Configurações de {appUi.billing} do {brand.holdType} e estimativa local de uso"
     }
   },

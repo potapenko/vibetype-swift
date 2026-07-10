@@ -119,23 +119,7 @@
       "body1": "Eine Übersetzung wird nur auf Anfrage ausgeführt. Wähle eine Zielsprache und verwende {keyboard.translationShortcut}, um in einem Schritt zu transkribieren und zu übersetzen.",
       "body2": "Einträge in {appUi.localDictionary} ergänzen die Transkriptionsanfrage um Schreibweisen für Namen, Projektbegriffe und Dateinamen.",
       "imageAlt": "{appUi.translation}-Einstellungen von {brand.holdType} mit Übersetzungs-Kurzbefehl und Auswahl der Zielsprache",
-      "caption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "Echte {appUi.translation}-Einstellungen von {brand.holdType}. Wische auf dem Smartphone den fokussierten Ausschnitt horizontal, um ihn anzusehen. "
-          },
-          {
-            "type": "link",
-            "ref": "translationScreenshot",
-            "text": "Bild in voller Größe öffnen"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "caption": "Echte {appUi.translation}-Einstellungen von {brand.holdType}. Wische auf dem Smartphone den fokussierten Ausschnitt horizontal, um ihn anzusehen.",
       "lightboxCaption": "{appUi.translation}-Einstellungen von {brand.holdType}"
     },
     "menu": {
@@ -176,23 +160,7 @@
       "note": "Der Bildschirm {appUi.billing} zeigt eine lokale Schätzung erfolgreicher Audiotranskriptionen. Er ist keine Rechnung von {brand.openAI} und berücksichtigt keine Korrektur- oder Übersetzungsanfragen.",
       "pricingLink": "Preise der API von {brand.openAI}",
       "imageAlt": "{appUi.billing}-Einstellungen von {brand.holdType} mit einer lokalen Schätzung der Transkriptionsnutzung",
-      "imageCaption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "Wische auf dem Smartphone den fokussierten Ausschnitt desselben echten {appUi.billing}-Screenshots horizontal. "
-          },
-          {
-            "type": "link",
-            "ref": "billingScreenshot",
-            "text": "Bild in voller Größe öffnen"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "imageCaption": "Wische auf dem Smartphone den fokussierten Ausschnitt desselben echten {appUi.billing}-Screenshots horizontal.",
       "lightboxCaption": "{appUi.billing}-Einstellungen von {brand.holdType} und lokale Nutzungsschätzung"
     }
   },

@@ -32,11 +32,14 @@ that already uses GitHub Pages.
 - The embedded tutorial starts as a local facade. YouTube content loads only
   after the user explicitly chooses Play; without JavaScript, a normal YouTube
   link remains available.
-- Full-size product-image links open the original image in an in-page modal when
-  JavaScript is available. The image fits inside the viewport and keeps its
-  product-specific alternative text.
+- Clicking a product screenshot opens the original image in an in-page modal
+  when JavaScript is available. Screenshot captions do not repeat this action
+  as a separate text link, and pointer input shows the standard link cursor.
+  The image fits inside the viewport and keeps its product-specific alternative
+  text.
 - The image modal closes through its visible Close control, Escape, or a click
-  outside the image. Closing returns focus to the link that opened it.
+  outside the image. Closing returns focus to the screenshot link that opened
+  it.
 - `appcast.xml` remains available at the stable URL embedded in shipped apps.
 - Every release-notes URL referenced by the published appcast remains reachable
   after later website or app releases.
@@ -100,8 +103,8 @@ that already uses GitHub Pages.
   marker, custom-domain setup and DNS cutover stop.
 - If the third-party tutorial is removed, blocked, or outdated, the official
   OpenAI links and written setup steps remain sufficient to finish setup.
-- Without JavaScript, every full-size image remains a normal link to the
-  original local asset.
+- Without JavaScript, every expandable screenshot remains a normal image link
+  to the original local asset.
 - A landing-page failure must not replace or remove the existing Sparkle feed.
 - A release must not report success if its Pages deployment removes the landing
   page or publishes update metadata that differs from the release asset.
@@ -133,5 +136,6 @@ that already uses GitHub Pages.
 - Landing-page QA verifies that no YouTube iframe exists before Play, one
   privacy-enhanced iframe replaces the facade after Play, and the guide remains
   readable at desktop and phone widths.
-- Landing-page QA opens both product screenshots in the shared modal and checks
-  Close, Escape, outside-click dismissal, focus restoration, and phone sizing.
+- Landing-page QA opens both product screenshots themselves in the shared modal
+  and checks the pointer cursor, absence of duplicate caption links, Close,
+  Escape, outside-click dismissal, focus restoration, and phone sizing.

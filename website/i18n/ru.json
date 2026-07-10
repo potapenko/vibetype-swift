@@ -119,23 +119,7 @@
       "body1": "Перевод выполняется только по запросу. Выберите язык перевода, затем используйте {keyboard.translationShortcut}, чтобы расшифровать и перевести речь за один раз.",
       "body2": "Записи в {appUi.localDictionary} добавляют в запрос на расшифровку правильное написание имён, проектных терминов и названий файлов.",
       "imageAlt": "Настройки {appUi.translation} в {brand.holdType} с сочетанием клавиш для перевода и выбором языка",
-      "caption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "Реальные настройки {appUi.translation} в {brand.holdType}. На телефоне сдвигайте выделенный фрагмент по горизонтали, чтобы рассмотреть его. "
-          },
-          {
-            "type": "link",
-            "ref": "translationScreenshot",
-            "text": "Открыть изображение целиком"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "caption": "Реальные настройки {appUi.translation} в {brand.holdType}. На телефоне сдвигайте выделенный фрагмент по горизонтали, чтобы рассмотреть его.",
       "lightboxCaption": "Настройки {appUi.translation} в {brand.holdType}"
     },
     "menu": {
@@ -176,23 +160,7 @@
       "note": "Экран {appUi.billing} показывает локальную оценку расходов по успешно расшифрованным аудиозаписям. Это не счёт от {brand.openAI}; коррекция и перевод в оценку не входят.",
       "pricingLink": "Тарифы API {brand.openAI}",
       "imageAlt": "Настройки {appUi.billing} в {brand.holdType} с локальной оценкой использования расшифровки",
-      "imageCaption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "На телефоне сдвигайте по горизонтали выделенный фрагмент того же реального снимка экрана {appUi.billing}. "
-          },
-          {
-            "type": "link",
-            "ref": "billingScreenshot",
-            "text": "Открыть изображение целиком"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "imageCaption": "На телефоне сдвигайте по горизонтали выделенный фрагмент того же реального снимка экрана {appUi.billing}.",
       "lightboxCaption": "Настройки {appUi.billing} в {brand.holdType} и локальная оценка расходов"
     }
   },

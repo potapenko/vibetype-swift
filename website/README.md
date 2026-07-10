@@ -102,11 +102,13 @@ records at the registrar.
 
 ## Full-size screenshot behavior
 
-The Translation and Billing full-size links use one shared in-page modal when
-JavaScript is available. It keeps the original image inside the viewport,
-provides a visible Close control, closes with Escape or an outside click, locks
-background scrolling, and returns focus to the opening link. Without
-JavaScript, each link continues to open the original local image.
+The Translation and Billing screenshots themselves use one shared in-page
+modal when JavaScript is available; captions do not duplicate the action with a
+text link. The screenshots show the standard pointer cursor and keep a native
+link to the original image as their no-JavaScript fallback. The modal keeps the
+original image inside the viewport, provides a visible Close control, closes
+with Escape or an outside click, locks background scrolling, and returns focus
+to the opening screenshot.
 
 ## Design direction
 

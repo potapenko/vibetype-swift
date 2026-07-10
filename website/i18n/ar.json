@@ -119,23 +119,7 @@
       "body1": "لا تعمل الترجمة إلا عند طلبها. اختر اللغة الهدف، ثم استخدم {keyboard.translationShortcut} لتحويل الكلام إلى نص وترجمته في عملية واحدة.",
       "body2": "تضيف إدخالات {appUi.localDictionary} سياقًا إملائيًا للأسماء ومصطلحات المشاريع وأسماء الملفات إلى طلب تحويل الكلام إلى نص.",
       "imageAlt": "إعدادات {appUi.translation} في {brand.holdType} مع اختصار الترجمة وعناصر التحكم في اللغة الهدف",
-      "caption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "إعدادات {appUi.translation} الحقيقية في {brand.holdType}. على الهواتف، مرر الجزء المحدد أفقيًا لتفقده. "
-          },
-          {
-            "type": "link",
-            "ref": "translationScreenshot",
-            "text": "فتح الصورة بالحجم الكامل"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "caption": "إعدادات {appUi.translation} الحقيقية في {brand.holdType}. على الهواتف، مرر الجزء المحدد أفقيًا لتفقده.",
       "lightboxCaption": "إعدادات {appUi.translation} في {brand.holdType}"
     },
     "menu": {
@@ -176,23 +160,7 @@
       "note": "تعرض شاشة {appUi.billing} تقديرًا محليًا لعمليات تحويل الصوت إلى نص الناجحة. وهي ليست فاتورة من {brand.openAI} ولا تشمل طلبات التصحيح أو الترجمة.",
       "pricingLink": "أسعار API من {brand.openAI}",
       "imageAlt": "إعدادات {appUi.billing} في {brand.holdType} تعرض تقديرًا محليًا لاستخدام النسخ",
-      "imageCaption": {
-        "parts": [
-          {
-            "type": "text",
-            "value": "على الهواتف، مرر أفقيًا الجزء المحدد من لقطة شاشة {appUi.billing} الحقيقية نفسها. "
-          },
-          {
-            "type": "link",
-            "ref": "billingScreenshot",
-            "text": "فتح الصورة بالحجم الكامل"
-          },
-          {
-            "type": "text",
-            "value": "."
-          }
-        ]
-      },
+      "imageCaption": "على الهواتف، مرر أفقيًا الجزء المحدد من لقطة شاشة {appUi.billing} الحقيقية نفسها.",
       "lightboxCaption": "إعدادات {appUi.billing} في {brand.holdType} وتقدير الاستخدام المحلي"
     }
   },
