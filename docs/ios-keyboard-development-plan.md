@@ -311,6 +311,13 @@ host app, state, expected result, actual result, and go/no-go decision.
   credential, settings, Library, and Usage decoders now share bounded strict
   JSON structural validation; that validator and those repositories remain
   unlinked from the keyboard and do not change the bridge wire contract. The
+  provider scratch namespace now also has a process-once bounded startup
+  maintenance pass, scheduled only by the normal macOS and iOS containing-app
+  startup paths. It exposes no scratch identity or result to the extension, and
+  the built keyboard still links only its own controller and bridge objects.
+  Protected recording identity/storage and the single-record
+  `PendingRecording` journal are the next P2 checkpoint and remain app-private,
+  outside App Group and keyboard linkage. The
   runtime-only
   four-case `VoiceAttemptStage` is portable too, while preflight, outcomes,
   recovery eligibility, and durable resume checkpoints remain separate. The

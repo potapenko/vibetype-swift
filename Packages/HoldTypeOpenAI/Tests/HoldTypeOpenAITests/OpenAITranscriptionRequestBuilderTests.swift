@@ -128,6 +128,61 @@ struct OpenAITranscriptionRequestBuilderTests {
         #expect(try Data(contentsOf: source) == audio)
     }
 
+    @Test func privateScratchConfigurationTargetsDescriptorAndRejectsInexactValues() throws {
+        let directory = temporaryDirectory("multipart-descriptor-protection")
+        let fileURL = directory.appendingPathComponent("scratch.multipart")
+        let movedOwnedURL = directory.appendingPathComponent("moved-owned.multipart")
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        #expect(FileManager.default.createFile(atPath: fileURL.path, contents: Data()))
+        defer { remove(directory) }
+
+        let descriptor = Darwin.open(fileURL.path, O_RDWR | O_CLOEXEC | O_NOFOLLOW)
+        #expect(descriptor >= 0)
+        guard descriptor >= 0 else { return }
+        defer { Darwin.close(descriptor) }
+
+        try FileManager.default.moveItem(at: fileURL, to: movedOwnedURL)
+        #expect(FileManager.default.createFile(atPath: fileURL.path, contents: Data()))
+
+        let calls = DarwinOpenAITranscriptionPOSIXCalls()
+        #expect(calls.applyPrivateMultipartScratchConfiguration(on: descriptor))
+        #expect(calls.hasExactPrivateMultipartScratchConfiguration(on: descriptor))
+        #expect(Darwin.fcntl(descriptor, F_GETPROTECTIONCLASS) == 1)
+        let ownedResourceValues = try movedOwnedURL.resourceValues(
+            forKeys: [.isExcludedFromBackupKey]
+        )
+        let replacementResourceValues = try fileURL.resourceValues(
+            forKeys: [.isExcludedFromBackupKey]
+        )
+        #expect(ownedResourceValues.isExcludedFromBackup == true)
+        #expect(replacementResourceValues.isExcludedFromBackup != true)
+
+        let attributeName = "com.apple.metadata:com_apple_backup_excludeItem"
+        let inexactValue = Data([0x76, 0x31, 0x00])
+        let replacementResult = attributeName.withCString { name in
+            inexactValue.withUnsafeBytes { bytes in
+                Darwin.fsetxattr(
+                    descriptor,
+                    name,
+                    bytes.baseAddress,
+                    bytes.count,
+                    0,
+                    0
+                )
+            }
+        }
+        #expect(replacementResult == 0)
+        #expect(!calls.hasExactPrivateMultipartScratchConfiguration(on: descriptor))
+
+        #expect(calls.applyPrivateMultipartScratchConfiguration(on: descriptor))
+        #expect(calls.hasExactPrivateMultipartScratchConfiguration(on: descriptor))
+        #expect(Darwin.fcntl(descriptor, F_SETPROTECTIONCLASS, 4) == 0)
+        #expect(!calls.hasExactPrivateMultipartScratchConfiguration(on: descriptor))
+    }
+
     @Test func scratchCreationFailuresPreserveSourceAndRemoveOnlyOwnedNames() async throws {
         for failure in ScratchCreationFailure.allCases {
             let audio = Data("source-stays-unchanged".utf8)
@@ -141,16 +196,7 @@ struct OpenAITranscriptionRequestBuilderTests {
                 remove(scratchDirectory)
             }
             let fileSystem = POSIXOpenAITranscriptionMultipartFileSystem(
-                calls: ScratchCreationFailurePOSIXCalls(failure: failure),
-                scratchResourceValueApplier: { url in
-                    guard failure != .protection else {
-                        throw ScratchCreationFailureError.injected
-                    }
-                    var values = URLResourceValues()
-                    values.isExcludedFromBackup = true
-                    var mutableURL = url
-                    try mutableURL.setResourceValues(values)
-                }
+                calls: ScratchCreationFailurePOSIXCalls(failure: failure)
             )
             let builder = OpenAITranscriptionRequestBuilder(
                 scratchDirectoryURL: scratchDirectory,
@@ -1132,13 +1178,10 @@ private struct FakeUploadBody: OpenAIFileUploadBody, Sendable {
 
 nonisolated private enum ScratchCreationFailure: String, CaseIterable, Sendable {
     case marker
-    case protection
+    case protectionApplication
+    case protectionVerification
     case lock
     case publish
-}
-
-nonisolated private enum ScratchCreationFailureError: Error {
-    case injected
 }
 
 nonisolated private struct ScratchCreationFailurePOSIXCalls:
@@ -1168,6 +1211,18 @@ nonisolated private struct ScratchCreationFailurePOSIXCalls:
     func installMultipartScratchMarker(on fileDescriptor: Int32) -> Bool {
         failure != .marker
             && OpenAIMultipartScratchNamespace.installMarker(on: fileDescriptor)
+    }
+
+    func applyPrivateMultipartScratchConfiguration(on fileDescriptor: Int32) -> Bool {
+        failure != .protectionApplication
+            && DarwinOpenAITranscriptionPOSIXCalls()
+                .applyPrivateMultipartScratchConfiguration(on: fileDescriptor)
+    }
+
+    func hasExactPrivateMultipartScratchConfiguration(on fileDescriptor: Int32) -> Bool {
+        failure != .protectionVerification
+            && DarwinOpenAITranscriptionPOSIXCalls()
+                .hasExactPrivateMultipartScratchConfiguration(on: fileDescriptor)
     }
 
     func lockMultipartScratch(on fileDescriptor: Int32) -> Bool {

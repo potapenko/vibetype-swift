@@ -1,6 +1,205 @@
 import Darwin
 import Foundation
 
+nonisolated enum OpenAIMultipartScratchPOSIXCallResult<Value> {
+    case success(Value)
+    case failure(Int32)
+}
+
+nonisolated protocol OpenAIMultipartScratchPOSIXAdapter {
+    func openFile(atPath path: String, flags: Int32)
+        -> OpenAIMultipartScratchPOSIXCallResult<Int32>
+    func fileStatus(for fileDescriptor: Int32)
+        -> OpenAIMultipartScratchPOSIXCallResult<stat>
+    func effectiveUserID() -> OpenAIMultipartScratchPOSIXCallResult<uid_t>
+    func openDirectoryStream(for fileDescriptor: Int32)
+        -> OpenAIMultipartScratchPOSIXCallResult<UnsafeMutablePointer<DIR>>
+    func nextDirectoryEntry(in stream: UnsafeMutablePointer<DIR>)
+        -> OpenAIMultipartScratchPOSIXCallResult<OpenAIMultipartScratchDirectoryEntry?>
+    func directoryDescriptor(for stream: UnsafeMutablePointer<DIR>)
+        -> OpenAIMultipartScratchPOSIXCallResult<Int32>
+    func openFile(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32>
+    func extendedAttribute(
+        named name: String,
+        on fileDescriptor: Int32,
+        maximumByteCount: Int
+    ) -> OpenAIMultipartScratchPOSIXCallResult<[UInt8]>
+    func setExtendedAttribute(
+        named name: String,
+        value: [UInt8],
+        on fileDescriptor: Int32,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void>
+    func lock(fileDescriptor: Int32, operation: Int32)
+        -> OpenAIMultipartScratchPOSIXCallResult<Void>
+    func pathStatus(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<stat>
+    func unlink(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void>
+    func closeFile(_ fileDescriptor: Int32)
+    func closeDirectoryStream(_ stream: UnsafeMutablePointer<DIR>)
+}
+
+nonisolated struct DarwinOpenAIMultipartScratchPOSIXAdapter:
+    OpenAIMultipartScratchPOSIXAdapter {
+    func openFile(
+        atPath path: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32> {
+        let result = path.withCString { Darwin.open($0, flags) }
+        return result >= 0 ? .success(result) : .failure(errno)
+    }
+
+    func fileStatus(
+        for fileDescriptor: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<stat> {
+        var status = stat()
+        return Darwin.fstat(fileDescriptor, &status) == 0
+            ? .success(status)
+            : .failure(errno)
+    }
+
+    func effectiveUserID() -> OpenAIMultipartScratchPOSIXCallResult<uid_t> {
+        .success(Darwin.geteuid())
+    }
+
+    func openDirectoryStream(
+        for fileDescriptor: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<UnsafeMutablePointer<DIR>> {
+        guard let stream = Darwin.fdopendir(fileDescriptor) else {
+            return .failure(errno)
+        }
+        return .success(stream)
+    }
+
+    func nextDirectoryEntry(
+        in stream: UnsafeMutablePointer<DIR>
+    ) -> OpenAIMultipartScratchPOSIXCallResult<OpenAIMultipartScratchDirectoryEntry?> {
+        errno = 0
+        guard let entry = Darwin.readdir(stream) else {
+            return errno == 0 ? .success(nil) : .failure(errno)
+        }
+        let name = withUnsafePointer(to: &entry.pointee.d_name) { pointer in
+            pointer.withMemoryRebound(
+                to: CChar.self,
+                capacity: Int(entry.pointee.d_namlen) + 1
+            ) { String(validatingCString: $0) }
+        }
+        return .success(name.map(OpenAIMultipartScratchDirectoryEntry.name) ?? .invalidName)
+    }
+
+    func directoryDescriptor(
+        for stream: UnsafeMutablePointer<DIR>
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32> {
+        let result = Darwin.dirfd(stream)
+        return result >= 0 ? .success(result) : .failure(errno)
+    }
+
+    func openFile(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32> {
+        let result = fileName.withCString {
+            Darwin.openat(directoryDescriptor, $0, flags)
+        }
+        return result >= 0 ? .success(result) : .failure(errno)
+    }
+
+    func extendedAttribute(
+        named name: String,
+        on fileDescriptor: Int32,
+        maximumByteCount: Int
+    ) -> OpenAIMultipartScratchPOSIXCallResult<[UInt8]> {
+        var bytes = [UInt8](repeating: 0, count: maximumByteCount)
+        let result = name.withCString { attributeName in
+            bytes.withUnsafeMutableBytes { buffer in
+                Darwin.fgetxattr(
+                    fileDescriptor,
+                    attributeName,
+                    buffer.baseAddress,
+                    buffer.count,
+                    0,
+                    0
+                )
+            }
+        }
+        guard result >= 0 else {
+            return .failure(errno)
+        }
+        return .success(Array(bytes.prefix(result)))
+    }
+
+    func setExtendedAttribute(
+        named name: String,
+        value: [UInt8],
+        on fileDescriptor: Int32,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void> {
+        let result = name.withCString { attributeName in
+            value.withUnsafeBytes { bytes in
+                Darwin.fsetxattr(
+                    fileDescriptor,
+                    attributeName,
+                    bytes.baseAddress,
+                    bytes.count,
+                    0,
+                    flags
+                )
+            }
+        }
+        return result == 0 ? .success(()) : .failure(errno)
+    }
+
+    func lock(
+        fileDescriptor: Int32,
+        operation: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void> {
+        flock(fileDescriptor, operation) == 0 ? .success(()) : .failure(errno)
+    }
+
+    func pathStatus(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<stat> {
+        var status = stat()
+        let result = fileName.withCString {
+            Darwin.fstatat(directoryDescriptor, $0, &status, flags)
+        }
+        return result == 0 ? .success(status) : .failure(errno)
+    }
+
+    func unlink(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void> {
+        let result = fileName.withCString {
+            Darwin.unlinkat(directoryDescriptor, $0, flags)
+        }
+        return result == 0 ? .success(()) : .failure(errno)
+    }
+
+    func closeFile(_ fileDescriptor: Int32) {
+        Darwin.close(fileDescriptor)
+    }
+
+    func closeDirectoryStream(_ stream: UnsafeMutablePointer<DIR>) {
+        Darwin.closedir(stream)
+    }
+}
+
 nonisolated enum OpenAIMultipartScratchNamespace {
     static let directoryName = "holdtype-openai-multipart"
     static let v1Prefix = "htmp-v1-"
@@ -54,36 +253,21 @@ nonisolated enum OpenAIMultipartScratchNamespace {
     }
 
     static func installMarker(on fileDescriptor: Int32) -> Bool {
-        markerName.withCString { name in
-            markerValue.withUnsafeBytes { value in
-                Darwin.fsetxattr(
-                    fileDescriptor,
-                    name,
-                    value.baseAddress,
-                    value.count,
-                    0,
-                    XATTR_CREATE
-                ) == 0
-            }
-        }
+        let adapter = DarwinOpenAIMultipartScratchPOSIXAdapter()
+        return markerIsInstalled(
+            on: fileDescriptor,
+            adapter: adapter,
+            shouldStartOperation: { true }
+        )
     }
 
     static func hasExactMarker(on fileDescriptor: Int32) -> Bool {
-        var bytes = [UInt8](repeating: 0, count: markerValue.count + 1)
-        let count = markerName.withCString { name in
-            bytes.withUnsafeMutableBytes { buffer in
-                Darwin.fgetxattr(
-                    fileDescriptor,
-                    name,
-                    buffer.baseAddress,
-                    buffer.count,
-                    0,
-                    0
-                )
-            }
-        }
-        return count == markerValue.count
-            && Array(bytes.prefix(markerValue.count)) == markerValue
+        let adapter = DarwinOpenAIMultipartScratchPOSIXAdapter()
+        return markerIsExact(
+            on: fileDescriptor,
+            adapter: adapter,
+            shouldStartOperation: { true }
+        )
     }
 }
 
@@ -496,72 +680,103 @@ nonisolated struct OpenAIMultipartScratchScavenger {
 
 nonisolated struct POSIXOpenAIMultipartScratchFileSystem:
     OpenAIMultipartScratchFileSystem {
+    private let adapter: any OpenAIMultipartScratchPOSIXAdapter
+
+    init(
+        adapter: any OpenAIMultipartScratchPOSIXAdapter =
+            DarwinOpenAIMultipartScratchPOSIXAdapter()
+    ) {
+        self.adapter = adapter
+    }
+
     func openNamespace(
         at directoryURL: URL,
         shouldStartOperation: () -> Bool
     ) throws -> (any OpenAIMultipartScratchDirectory)? {
-        directoryURL.withUnsafeFileSystemRepresentation { path in
-            guard let path, shouldStartOperation() else {
-                return nil
-            }
-            let descriptor = Darwin.open(
-                path,
-                O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
+        let openResult = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.openFile(
+                atPath: directoryURL.path,
+                flags: O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
             )
-            guard descriptor >= 0 else {
-                return nil
-            }
-
-            var status = stat()
-            guard shouldStartOperation(),
-                  Darwin.fstat(descriptor, &status) == 0,
-                  status.st_mode & S_IFMT == S_IFDIR,
-                  status.st_uid == geteuid(),
-                  status.st_mode & mode_t(0o777) == mode_t(0o700) else {
-                Darwin.close(descriptor)
-                return nil
-            }
-            guard shouldStartOperation(),
-                  let stream = Darwin.fdopendir(descriptor) else {
-                Darwin.close(descriptor)
-                return nil
-            }
-            return POSIXOpenAIMultipartScratchDirectory(stream: stream)
         }
+        guard case .some(.success(let descriptor)) = openResult else {
+            return nil
+        }
+
+        let statusResult = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.fileStatus(for: descriptor)
+        }
+        let userResult = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.effectiveUserID()
+        }
+        guard case .some(.success(let status)) = statusResult,
+              case .some(.success(let effectiveUserID)) = userResult,
+              status.st_mode & S_IFMT == S_IFDIR,
+              status.st_uid == effectiveUserID,
+              status.st_mode & mode_t(0o777) == mode_t(0o700) else {
+            adapter.closeFile(descriptor)
+            return nil
+        }
+
+        let streamResult = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.openDirectoryStream(for: descriptor)
+        }
+        guard case .some(.success(let stream)) = streamResult else {
+            adapter.closeFile(descriptor)
+            return nil
+        }
+        return POSIXOpenAIMultipartScratchDirectory(
+            stream: stream,
+            effectiveUserID: effectiveUserID,
+            adapter: adapter
+        )
     }
 }
 
-nonisolated private final class POSIXOpenAIMultipartScratchDirectory:
+nonisolated final class POSIXOpenAIMultipartScratchDirectory:
     OpenAIMultipartScratchDirectory {
     private var stream: UnsafeMutablePointer<DIR>?
+    private let effectiveUserID: uid_t
+    private let adapter: any OpenAIMultipartScratchPOSIXAdapter
 
-    init(stream: UnsafeMutablePointer<DIR>) {
+    init(
+        stream: UnsafeMutablePointer<DIR>,
+        effectiveUserID: uid_t,
+        adapter: any OpenAIMultipartScratchPOSIXAdapter
+    ) {
         self.stream = stream
+        self.effectiveUserID = effectiveUserID
+        self.adapter = adapter
     }
 
     func nextEntry(
         shouldStartOperation: () -> Bool
     ) throws -> OpenAIMultipartScratchDirectoryEntry? {
-        guard let stream, shouldStartOperation() else {
+        guard let stream else {
             return nil
         }
-        errno = 0
-        guard let entry = Darwin.readdir(stream) else {
-            if errno != 0 {
-                throw POSIXOpenAIMultipartScratchError.directoryReadFailed
-            }
+        let result = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.nextDirectoryEntry(in: stream)
+        }
+        guard let result else {
             return nil
         }
-        let name = withUnsafePointer(to: &entry.pointee.d_name) { pointer in
-            pointer.withMemoryRebound(
-                to: CChar.self,
-                capacity: Int(entry.pointee.d_namlen) + 1
-            ) { String(validatingCString: $0) }
+        switch result {
+        case .success(let entry):
+            return entry
+        case .failure:
+            throw POSIXOpenAIMultipartScratchError.directoryReadFailed
         }
-        guard let name else {
-            return .invalidName
-        }
-        return .name(name)
     }
 
     func openCandidate(
@@ -569,33 +784,54 @@ nonisolated private final class POSIXOpenAIMultipartScratchDirectory:
         kind: OpenAIMultipartScratchKind,
         shouldStartOperation: () -> Bool
     ) throws -> (any OpenAIMultipartScratchCandidate)? {
-        guard let stream, shouldStartOperation() else {
+        guard let stream else {
             return nil
         }
-        let directoryDescriptor = Darwin.dirfd(stream)
-        let descriptor = fileName.withCString { name in
-            Darwin.openat(
-                directoryDescriptor,
-                name,
-                O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
-            )
+        let directoryResult = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.directoryDescriptor(for: stream)
         }
-        guard descriptor >= 0 else {
+        guard case .some(.success(let directoryDescriptor)) = directoryResult else {
             return nil
         }
 
-        var status = stat()
-        guard shouldStartOperation(),
-              Darwin.fstat(descriptor, &status) == 0,
-              isEligibleScratchStatus(status),
+        let openResult = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.openFile(
+                relativeTo: directoryDescriptor,
+                named: fileName,
+                flags: O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
+            )
+        }
+        guard case .some(.success(let descriptor)) = openResult else {
+            return nil
+        }
+
+        let statusResult = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.fileStatus(for: descriptor)
+        }
+        guard case .some(.success(let status)) = statusResult,
+              isEligibleScratchStatus(status, effectiveUserID: effectiveUserID),
               (kind != .markedV1
-                || (shouldStartOperation()
-                    && OpenAIMultipartScratchNamespace.hasExactMarker(
-                        on: descriptor
-                    ))),
-              shouldStartOperation(),
-              flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
-            Darwin.close(descriptor)
+                || markerIsExact(
+                    on: descriptor,
+                    adapter: adapter,
+                    shouldStartOperation: shouldStartOperation
+                )),
+              case .some(.success) = retryingScratchPOSIXCall(
+                shouldStartOperation: shouldStartOperation,
+                operation: {
+                    adapter.lock(
+                        fileDescriptor: descriptor,
+                        operation: LOCK_EX | LOCK_NB
+                    )
+                }
+              ) else {
+            adapter.closeFile(descriptor)
             return nil
         }
         return POSIXOpenAIMultipartScratchCandidate(
@@ -603,7 +839,9 @@ nonisolated private final class POSIXOpenAIMultipartScratchDirectory:
             fileDescriptor: descriptor,
             fileName: fileName,
             kind: kind,
-            identity: fileIdentity(status)
+            identity: fileIdentity(status),
+            effectiveUserID: effectiveUserID,
+            adapter: adapter
         )
     }
 
@@ -612,7 +850,7 @@ nonisolated private final class POSIXOpenAIMultipartScratchDirectory:
             return
         }
         self.stream = nil
-        Darwin.closedir(stream)
+        adapter.closeDirectoryStream(stream)
     }
 
     deinit {
@@ -620,26 +858,32 @@ nonisolated private final class POSIXOpenAIMultipartScratchDirectory:
     }
 }
 
-nonisolated private final class POSIXOpenAIMultipartScratchCandidate:
+nonisolated final class POSIXOpenAIMultipartScratchCandidate:
     OpenAIMultipartScratchCandidate {
     private let directoryDescriptor: Int32
     private var fileDescriptor: Int32?
     private let fileName: String
     private let kind: OpenAIMultipartScratchKind
     private let identity: OpenAITranscriptionFileIdentity
+    private let effectiveUserID: uid_t
+    private let adapter: any OpenAIMultipartScratchPOSIXAdapter
 
     init(
         directoryDescriptor: Int32,
         fileDescriptor: Int32,
         fileName: String,
         kind: OpenAIMultipartScratchKind,
-        identity: OpenAITranscriptionFileIdentity
+        identity: OpenAITranscriptionFileIdentity,
+        effectiveUserID: uid_t,
+        adapter: any OpenAIMultipartScratchPOSIXAdapter
     ) {
         self.directoryDescriptor = directoryDescriptor
         self.fileDescriptor = fileDescriptor
         self.fileName = fileName
         self.kind = kind
         self.identity = identity
+        self.effectiveUserID = effectiveUserID
+        self.adapter = adapter
     }
 
     func makeDeletionSnapshot(
@@ -650,33 +894,40 @@ nonisolated private final class POSIXOpenAIMultipartScratchCandidate:
         guard let fileDescriptor else {
             return nil
         }
-        var descriptorStatus = stat()
-        guard shouldStartOperation(),
-              Darwin.fstat(fileDescriptor, &descriptorStatus) == 0,
-              isEligibleScratchStatus(descriptorStatus),
+        let descriptorResult = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.fileStatus(for: fileDescriptor)
+        }
+        guard case .some(.success(let descriptorStatus)) = descriptorResult,
+              isEligibleScratchStatus(
+                descriptorStatus,
+                effectiveUserID: effectiveUserID
+              ),
               fileIdentity(descriptorStatus) == identity,
               (kind != .markedV1
-                || (shouldStartOperation()
-                    && OpenAIMultipartScratchNamespace.hasExactMarker(
-                        on: fileDescriptor
-                    ))) else {
+                || markerIsExact(
+                    on: fileDescriptor,
+                    adapter: adapter,
+                    shouldStartOperation: shouldStartOperation
+                )) else {
             return nil
         }
 
-        var pathStatus = stat()
-        guard shouldStartOperation() else {
-            return nil
-        }
-        let statusResult = fileName.withCString { name in
-            Darwin.fstatat(
-                directoryDescriptor,
-                name,
-                &pathStatus,
-                AT_SYMLINK_NOFOLLOW
+        let pathResult = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.pathStatus(
+                relativeTo: directoryDescriptor,
+                named: fileName,
+                flags: AT_SYMLINK_NOFOLLOW
             )
         }
-        guard statusResult == 0,
-              isEligibleScratchStatus(pathStatus),
+        guard case .some(.success(let pathStatus)) = pathResult,
+              isEligibleScratchStatus(
+                pathStatus,
+                effectiveUserID: effectiveUserID
+              ),
               fileIdentity(pathStatus) == identity,
               newestTimestamp(for: descriptorStatus).isAtLeast(
                   minimumAgeInSeconds,
@@ -698,55 +949,74 @@ nonisolated private final class POSIXOpenAIMultipartScratchCandidate:
         guard let fileDescriptor else {
             return false
         }
-        var descriptorStatus = stat()
-        guard shouldStartOperation(),
-              Darwin.fstat(fileDescriptor, &descriptorStatus) == 0,
-              isEligibleScratchStatus(descriptorStatus),
+        let descriptorResult = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.fileStatus(for: fileDescriptor)
+        }
+        guard case .some(.success(let descriptorStatus)) = descriptorResult,
+              isEligibleScratchStatus(
+                descriptorStatus,
+                effectiveUserID: effectiveUserID
+              ),
               fileIdentity(descriptorStatus) == snapshot.identity,
               newestTimestamp(for: descriptorStatus).isAtLeast(
                   snapshot.minimumAgeInSeconds,
                   before: snapshot.referenceTime
               ),
               (kind != .markedV1
-                || (shouldStartOperation()
-                    && OpenAIMultipartScratchNamespace.hasExactMarker(
-                        on: fileDescriptor
-                    ))),
-              shouldStartOperation(),
-              flock(fileDescriptor, LOCK_EX | LOCK_NB) == 0 else {
+                || markerIsExact(
+                    on: fileDescriptor,
+                    adapter: adapter,
+                    shouldStartOperation: shouldStartOperation
+                )),
+              case .some(.success) = retryingScratchPOSIXCall(
+                shouldStartOperation: shouldStartOperation,
+                operation: {
+                    adapter.lock(
+                        fileDescriptor: fileDescriptor,
+                        operation: LOCK_EX | LOCK_NB
+                    )
+                }
+              ) else {
             return false
         }
 
-        var pathStatus = stat()
-        guard shouldStartOperation() else {
-            return false
-        }
-        let statusResult = fileName.withCString { name in
-            Darwin.fstatat(
-                directoryDescriptor,
-                name,
-                &pathStatus,
-                AT_SYMLINK_NOFOLLOW
+        let pathResult = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.pathStatus(
+                relativeTo: directoryDescriptor,
+                named: fileName,
+                flags: AT_SYMLINK_NOFOLLOW
             )
         }
-        guard statusResult == 0,
-              isEligibleScratchStatus(pathStatus),
+        guard case .some(.success(let pathStatus)) = pathResult,
+              isEligibleScratchStatus(
+                pathStatus,
+                effectiveUserID: effectiveUserID
+              ),
               fileIdentity(pathStatus) == snapshot.identity,
               newestTimestamp(for: pathStatus).isAtLeast(
                   snapshot.minimumAgeInSeconds,
                   before: snapshot.referenceTime
-              ),
-              shouldStartOperation() else {
+              ) else {
             return false
         }
 
-        var result: Int32
-        repeat {
-            result = fileName.withCString { name in
-                Darwin.unlinkat(directoryDescriptor, name, 0)
-            }
-        } while result != 0 && errno == EINTR
-        return result == 0
+        let unlinkResult = retryingScratchPOSIXCall(
+            shouldStartOperation: shouldStartOperation
+        ) {
+            adapter.unlink(
+                relativeTo: directoryDescriptor,
+                named: fileName,
+                flags: 0
+            )
+        }
+        guard case .some(.success) = unlinkResult else {
+            return false
+        }
+        return true
     }
 
     func close() {
@@ -754,7 +1024,7 @@ nonisolated private final class POSIXOpenAIMultipartScratchCandidate:
             return
         }
         self.fileDescriptor = nil
-        Darwin.close(fileDescriptor)
+        adapter.closeFile(fileDescriptor)
     }
 
     deinit {
@@ -766,9 +1036,67 @@ nonisolated private enum POSIXOpenAIMultipartScratchError: Error {
     case directoryReadFailed
 }
 
-nonisolated private func isEligibleScratchStatus(_ status: stat) -> Bool {
+nonisolated private func retryingScratchPOSIXCall<Value>(
+    shouldStartOperation: () -> Bool,
+    operation: () -> OpenAIMultipartScratchPOSIXCallResult<Value>
+) -> OpenAIMultipartScratchPOSIXCallResult<Value>? {
+    while shouldStartOperation() {
+        let result = operation()
+        if case .failure(EINTR) = result {
+            continue
+        }
+        return result
+    }
+    return nil
+}
+
+nonisolated private func markerIsInstalled(
+    on fileDescriptor: Int32,
+    adapter: any OpenAIMultipartScratchPOSIXAdapter,
+    shouldStartOperation: () -> Bool
+) -> Bool {
+    let result = retryingScratchPOSIXCall(
+        shouldStartOperation: shouldStartOperation
+    ) {
+        adapter.setExtendedAttribute(
+            named: OpenAIMultipartScratchNamespace.markerName,
+            value: OpenAIMultipartScratchNamespace.markerValue,
+            on: fileDescriptor,
+            flags: XATTR_CREATE
+        )
+    }
+    guard case .some(.success) = result else {
+        return false
+    }
+    return true
+}
+
+nonisolated private func markerIsExact(
+    on fileDescriptor: Int32,
+    adapter: any OpenAIMultipartScratchPOSIXAdapter,
+    shouldStartOperation: () -> Bool
+) -> Bool {
+    let result = retryingScratchPOSIXCall(
+        shouldStartOperation: shouldStartOperation
+    ) {
+        adapter.extendedAttribute(
+            named: OpenAIMultipartScratchNamespace.markerName,
+            on: fileDescriptor,
+            maximumByteCount: OpenAIMultipartScratchNamespace.markerValue.count + 1
+        )
+    }
+    guard case .some(.success(let bytes)) = result else {
+        return false
+    }
+    return bytes == OpenAIMultipartScratchNamespace.markerValue
+}
+
+nonisolated private func isEligibleScratchStatus(
+    _ status: stat,
+    effectiveUserID: uid_t
+) -> Bool {
     status.st_mode & S_IFMT == S_IFREG
-        && status.st_uid == geteuid()
+        && status.st_uid == effectiveUserID
         && status.st_mode & mode_t(0o777) == mode_t(0o600)
         && status.st_nlink == 1
         && status.st_size >= 0

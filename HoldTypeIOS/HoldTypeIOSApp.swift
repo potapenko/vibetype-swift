@@ -11,7 +11,15 @@ import SwiftUI
 @main
 struct HoldTypeIOSApp: App {
     init() {
-        OpenAIProviderStartupMaintenance.schedule()
+        self.init {
+            OpenAIProviderStartupMaintenance.schedule()
+        }
+    }
+
+    init(scheduleProviderStartupMaintenance: @MainActor () -> Void) {
+        _ = IOSContainingAppStartup(
+            scheduleProviderStartupMaintenance: scheduleProviderStartupMaintenance
+        )
     }
 
     var body: some Scene {

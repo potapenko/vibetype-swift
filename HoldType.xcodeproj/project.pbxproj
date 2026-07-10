@@ -67,6 +67,13 @@
 			remoteGlobalIDString = D4A1750A2FF000000000000A;
 			remoteInfo = HoldTypeKeyboard;
 		};
+		D4A181012FF6000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9DB749612FE6D7300053C3F3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9DB749A62FE7A0000053C3F3;
+			remoteInfo = "HoldType-iOS";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -401,6 +408,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				D4A181022FF6000000000002 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				9DB749AA2FE7B0000053C3F3 /* Shared */,
@@ -648,6 +656,11 @@
 			isa = PBXTargetDependency;
 			target = D4A1750A2FF000000000000A /* HoldTypeKeyboard */;
 			targetProxy = D4A1750B2FF000000000000B /* PBXContainerItemProxy */;
+		};
+		D4A181022FF6000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9DB749A62FE7A0000053C3F3 /* HoldType-iOS */;
+			targetProxy = D4A181012FF6000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1089,6 +1102,7 @@
 		9DB749B72FE800000053C3F3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1106,12 +1120,14 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HoldType-iOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HoldType-iOS";
 			};
 			name = Debug;
 		};
 		9DB749B82FE800000053C3F3 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1129,6 +1145,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HoldType-iOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HoldType-iOS";
 			};
 			name = Release;
 		};

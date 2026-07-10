@@ -882,14 +882,22 @@ are forbidden.
 macOS app remain unlinked. Signed-device Keychain behavior remains a physical
 gate. `HoldTypeOpenAI` now owns the unchanged credential contract plus
 transcription, correction, translation, real cancellation, and bounded
-file-backed multipart upload. Multipart preparation synchronizes one private
-body, pins a validated read descriptor, removes its validated random pathname
-inside the app-private scratch namespace, and streams bounded independent
-`pread` views without exposing the descriptor or scratch path publicly. This
-does not claim kernel-level conditional-unlink protection against a hostile
-same-UID interposer between the final check and removal. Cancellation and
-timeout completion never wait for blocked
-local I/O or cleanup. The foreground transport permits at most one exact-origin
+file-backed multipart upload. Multipart preparation creates one marked,
+owner-only protected body through a verified private-directory descriptor,
+holds an exclusive creator lock, and publishes the same inode under the strict
+v1 name before writing request bytes. It then synchronizes the body, pins a
+validated read descriptor, removes the validated pathname, and streams bounded
+independent `pread` views without exposing the descriptor or scratch path
+publicly. A process-once, content-free containing-app hook performs one bounded
+startup pass over that exact namespace. It removes only old unlocked v1 or
+legacy-shaped orphans after final descriptor/path/xattr/age checks; it never
+creates or repairs the namespace and never touches source recordings. The
+normal macOS launch schedules it after the Input Monitoring recovery guard, and
+iOS schedules it from its containing-app startup seam. The keyboard remains
+unlinked. This does not claim kernel-level conditional-unlink protection
+against a hostile same-UID interposer between the final check and removal.
+Cancellation and timeout completion never wait for blocked local I/O or
+cleanup. The foreground transport permits at most one exact-origin
 307/308 replay, binds every body grant to the exact URLSession task, rebuilds
 trusted headers, rejects authentication and nonzero-offset replay, and keeps
 the service's single deadline over the whole chain. Its public surface contains
@@ -897,7 +905,7 @@ only the three
 service protocols, concrete services, service errors, the request-builder
 error required by the transcription error, and the credential contract;
 transport, request builders, file-system adapters, DTOs, and injection seams
-remain internal. Ninety-three package tests cover the boundary without live
+remain internal. One hundred nine package tests cover the boundary without live
 provider calls. Both containing apps link the product, the macOS app uses
 narrow compatibility aliases, normal-import iOS smoke constructs all three
 services, and the keyboard remains unlinked. Keychain access and UI remain
@@ -1142,13 +1150,16 @@ already decided by their P0 specs.
 
 The provider foundation, general iOS settings v1, credential reconciliation,
 shared protected atomic-file substrate, app-private Library v1, local
-transcription Usage v1, and bounded JSON structural validation are now
-implemented without moving secrets, canonical content, or usage state into App
-Group or the keyboard. The next P2 checkpoint is bounded startup scavenging for
-abandoned private multipart scratch files. Then continue with protected
-recording identity/storage and the minimal PendingRecording journal that
-durably owns the provider-attempt UUID before dispatch. Durable History and
-delivery records remain separate checkpoints.
+transcription Usage v1, bounded JSON structural validation, and bounded
+multipart startup scavenging are now implemented without moving secrets,
+canonical content, usage state, or scratch paths into App Group or the
+keyboard. The next P2 checkpoint is protected app-private recording
+identity/storage plus the minimal single-record `PendingRecording` journal that
+durably owns the local transcription/usage UUID before provider dispatch.
+Before implementation, freeze its exact Application Support paths, strict v1
+wire fields and size limit, duration/byte-count integrity fields, durable phase
+vocabulary, and discard/crash ordering. Durable History, delivery records,
+relaunch UI, and automatic reconciliation remain separate checkpoints.
 
 The app-private credential marker, settings, Library, and Usage repositories
 now run one strict bounded structural pass before Foundation decoding. It
@@ -1158,10 +1169,11 @@ the source and each repository's redacted size/corruption error contract. The
 App Group bridge and legacy macOS/UserDefaults stores remain outside this
 checkpoint and retain their own bounded contracts.
 
-Keep startup scavenging for abandoned private multipart scratch files as an
-explicit later P2 provider gate. It must stay bounded, must never touch source
-recordings, and must not expose a public scratch-file contract or link provider
-code to the keyboard.
+The completed startup-maintenance checkpoint remains containing-app-only and
+must keep its exact resource bounds and extension isolation as later storage
+work is added. `PendingRecording` and protected source audio use their own
+Application Support namespace; they are never candidates for multipart scratch
+maintenance.
 
 These lanes require no live provider or real secret. Simulator and fake-backed
 evidence are sufficient for their checkpoint commits, while signed-device

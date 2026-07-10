@@ -211,16 +211,20 @@ struct DictationHotkeyCoordinatorTests {
         )
 
         try coordinator.start()
-        hotkeyService.trigger(.keyDown)
-        await yieldUntil { recordingAction.performCount == 1 }
-
-        hotkeyService.trigger(.keyUp)
-        await yieldUntil { eventLogger.events.contains(.hotkeyStopDeferred) }
+        let startTask = Task { @MainActor in
+            await coordinator.handle(.keyDown())
+        }
+        await gate.waitUntilWaiterIsSuspended()
 
         #expect(recordingAction.performCount == 1)
 
+        await coordinator.handle(.keyUp())
+
+        #expect(eventLogger.events.contains(.hotkeyStopDeferred))
+        #expect(recordingAction.performCount == 1)
+
         await gate.open()
-        await yieldUntil { recordingAction.performCount == 2 }
+        await startTask.value
 
         #expect(recordingAction.status == .success(transcript: "Hotkey transcript"))
         #expect(recordingAction.observedStatuses == [.idle, .recording])
@@ -302,6 +306,7 @@ private final class FakeHotkeyRecordingAction {
 private actor AsyncHotkeyGate {
     private var isOpen = false
     private var continuations: [CheckedContinuation<Void, Never>] = []
+    private var waiterObservationContinuations: [CheckedContinuation<Void, Never>] = []
 
     func wait() async {
         if isOpen {
@@ -310,6 +315,21 @@ private actor AsyncHotkeyGate {
 
         await withCheckedContinuation { continuation in
             continuations.append(continuation)
+            let observations = waiterObservationContinuations
+            waiterObservationContinuations.removeAll()
+            for observation in observations {
+                observation.resume()
+            }
+        }
+    }
+
+    func waitUntilWaiterIsSuspended() async {
+        if !continuations.isEmpty {
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            waiterObservationContinuations.append(continuation)
         }
     }
 

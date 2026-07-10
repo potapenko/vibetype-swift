@@ -123,6 +123,7 @@ struct OpenAITextCorrectionServiceTests {
         }
 
         #expect(loader.requests.count == 1)
+        try await loader.waitForCancellationCount(1)
         #expect(loader.cancellationCount == 1)
         #expect(sleeper.sleepCalls == [2])
     }
@@ -157,6 +158,7 @@ struct OpenAITextCorrectionServiceTests {
         await expectCorrectionError(.cancelled) {
             try await cancelledTask.value
         }
+        try await loader.waitForCancellationCount(1)
         #expect(await loader.observedCancellationCount() == 1)
 
         let correction = try await service.correct(
@@ -254,6 +256,7 @@ struct OpenAITextCorrectionServiceTests {
         await expectCorrectionError(.cancelled) {
             try await newTask.value
         }
+        try await loader.waitForCancellationCount(2)
         #expect(await loader.observedCancellationCount() == 2)
     }
 
@@ -395,6 +398,21 @@ private final class CorrectionFakeURLLoader: URLLoading, @unchecked Sendable {
             throw error
         }
     }
+
+    func waitForCancellationCount(_ expectedCount: Int) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(1))
+
+        while cancellationCount < expectedCount, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+
+        guard cancellationCount >= expectedCount else {
+            throw CorrectionTestWaitError.timedOutWaitingForCancellationCount(
+                expectedCount
+            )
+        }
+    }
 }
 
 private actor CorrectionSequencedURLLoader: URLLoading {
@@ -457,10 +475,26 @@ private actor CorrectionSequencedURLLoader: URLLoading {
     func observedCancellationCount() -> Int {
         cancellationCount
     }
+
+    func waitForCancellationCount(_ expectedCount: Int) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(1))
+
+        while cancellationCount < expectedCount, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+
+        guard cancellationCount >= expectedCount else {
+            throw CorrectionTestWaitError.timedOutWaitingForCancellationCount(
+                expectedCount
+            )
+        }
+    }
 }
 
 private enum CorrectionTestWaitError: Error {
     case timedOutWaitingForRequestCount(Int)
+    case timedOutWaitingForCancellationCount(Int)
 }
 
 private final class CorrectionFakeTimeoutSleeper: TranscriptionTimeoutSleeping, @unchecked Sendable {

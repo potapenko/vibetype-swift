@@ -1,6 +1,8 @@
 import HoldTypeOpenAI
 import Testing
+@testable import HoldTypeIOS
 
+@MainActor
 struct OpenAIProviderServicesIOSTests {
     @Test func publicBoundaryConstructsAllProviderServicesWithoutStartingNetworkWork() {
         let transcription: any OpenAITranscriptionServing = OpenAITranscriptionService()
@@ -26,7 +28,14 @@ struct OpenAIProviderServicesIOSTests {
         requireSendable(OpenAITextTranslationService.self)
     }
 
-    @Test func publicStartupMaintenanceScheduleHasAContentFreeSignature() {
+    @Test func containingAppInitializationSchedulesContentFreeProviderMaintenance() {
+        var scheduleCount = 0
+
+        _ = HoldTypeIOSApp(scheduleProviderStartupMaintenance: {
+            scheduleCount += 1
+        })
+
+        #expect(scheduleCount == 1)
         requireContentFreeSchedule(OpenAIProviderStartupMaintenance.schedule)
     }
 

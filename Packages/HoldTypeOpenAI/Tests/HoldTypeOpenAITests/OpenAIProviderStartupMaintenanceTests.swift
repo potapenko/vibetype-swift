@@ -343,6 +343,104 @@ struct OpenAIProviderStartupMaintenanceTests {
         let third = scanner.run()
         #expect(third.removedFileCount == 0)
     }
+
+    @Test func posixFinalRecheckPreservesModeLinkAndAgeMutations() throws {
+        for mutation in POSIXFinalScratchMutation.allCases {
+            try verifyPOSIXFinalMutationIsPreserved(mutation)
+        }
+    }
+
+    @Test func injectedAdapterRejectsFinalMarkerMutationAfterStableIdentity() {
+        let adapter = FinalMutationScratchPOSIXAdapter(scenario: .marker)
+
+        let summary = scanner(using: adapter).run()
+
+        #expect(summary.removedFileCount == 0)
+        #expect(adapter.markerReadCallCount == 3)
+        #expect(adapter.finalDescriptorStatusWasRequested)
+        #expect(adapter.unlinkCallCount == 0)
+    }
+
+    @Test func injectedAdapterRejectsFinalPathReplacementAfterStableDescriptor() {
+        let adapter = FinalMutationScratchPOSIXAdapter(scenario: .pathIdentity)
+
+        let summary = scanner(using: adapter).run()
+
+        #expect(summary.removedFileCount == 0)
+        #expect(adapter.finalDescriptorStatusWasRequested)
+        #expect(adapter.pathStatusCallCount == 2)
+        #expect(adapter.unlinkCallCount == 0)
+    }
+
+    @Test func injectedAdapterRejectsPostSnapshotGrowthBeyondByteBudget() {
+        let adapter = FinalMutationScratchPOSIXAdapter(scenario: .sizeBeyondBudget)
+
+        let summary = scanner(using: adapter).run()
+
+        #expect(
+            summary.accountedByteCount
+                == OpenAIMultipartScratchScavenger.maximumAccountedByteCount
+        )
+        #expect(summary.removedFileCount == 0)
+        #expect(adapter.finalDescriptorStatusWasRequested)
+        #expect(adapter.pathStatusCallCount == 2)
+        #expect(adapter.unlinkCallCount == 0)
+    }
+
+    @Test func lowLevelAdapterStopsBeforeDeadlineAndBeforeEINTRRetry() {
+        let adapter = DeadlineScratchPOSIXAdapter(
+            openResults: [.failure(EINTR), .success(10)]
+        )
+        let scanner = OpenAIMultipartScratchScavenger(
+            namespaceURL: URL(fileURLWithPath: "/unused"),
+            fileSystem: POSIXOpenAIMultipartScratchFileSystem(adapter: adapter),
+            wallClock: { .init(seconds: 1, nanoseconds: 0) },
+            monotonicClock: {
+                adapter.openCallCount == 0
+                    ? 0
+                    : OpenAIMultipartScratchScavenger.maximumElapsedNanoseconds
+            }
+        )
+
+        let summary = scanner.run()
+
+        #expect(summary.stopReason == .timeLimit)
+        #expect(adapter.openCallCount == 1)
+        #expect(adapter.nonCleanupCallCount == 1)
+    }
+
+    @Test func lowLevelAdapterStopsWhenDeadlineCrossesBeforeFinalUnlink() throws {
+        let namespace = scratchTemporaryDirectory("maintenance-unlink-deadline")
+        defer { try? FileManager.default.removeItem(at: namespace) }
+        #expect(Darwin.chmod(namespace.path, 0o700) == 0)
+        let file = try makePOSIXScratch(
+            in: namespace,
+            name: OpenAIMultipartScratchNamespace.legacyFileName(for: UUID())
+        )
+        var now = timespec()
+        #expect(Darwin.clock_gettime(CLOCK_REALTIME, &now) == 0)
+        let reference = OpenAIMultipartScratchTimestamp(
+            seconds: Int64(now.tv_sec) + (48 * 60 * 60),
+            nanoseconds: Int64(now.tv_nsec)
+        )
+        let adapter = FinalUnlinkDeadlineScratchPOSIXAdapter()
+        let scanner = OpenAIMultipartScratchScavenger(
+            namespaceURL: namespace,
+            fileSystem: POSIXOpenAIMultipartScratchFileSystem(adapter: adapter),
+            wallClock: { reference },
+            monotonicClock: {
+                adapter.didCompleteFinalPathStatus
+                    ? OpenAIMultipartScratchScavenger.maximumElapsedNanoseconds
+                    : 0
+            }
+        )
+
+        let summary = scanner.run()
+
+        #expect(summary.stopReason == .timeLimit)
+        #expect(adapter.unlinkCallCount == 0)
+        #expect(FileManager.default.fileExists(atPath: file.path))
+    }
 }
 
 nonisolated private final class FakeScratchFileSystem: OpenAIMultipartScratchFileSystem {
@@ -498,6 +596,571 @@ nonisolated private final class CapturingScratchDispatch: @unchecked Sendable {
 
     func append(_ operation: @escaping @Sendable () -> Void) {
         lock.withLock { operations.append(operation) }
+    }
+}
+
+nonisolated private enum POSIXFinalScratchMutation: CaseIterable {
+    case mode
+    case linkCount
+    case age
+}
+
+nonisolated private func verifyPOSIXFinalMutationIsPreserved(
+    _ mutation: POSIXFinalScratchMutation
+) throws {
+    let namespace = scratchTemporaryDirectory("maintenance-final-\(mutation)")
+    defer { try? FileManager.default.removeItem(at: namespace) }
+    guard Darwin.chmod(namespace.path, 0o700) == 0 else {
+        throw CocoaError(.fileWriteNoPermission)
+    }
+
+    let kind = OpenAIMultipartScratchKind.legacy
+    let name = OpenAIMultipartScratchNamespace.legacyFileName(for: UUID())
+    let file = try makePOSIXScratch(
+        in: namespace,
+        name: name
+    )
+
+    var now = timespec()
+    guard Darwin.clock_gettime(CLOCK_REALTIME, &now) == 0 else {
+        throw CocoaError(.fileReadUnknown)
+    }
+    let reference = OpenAIMultipartScratchTimestamp(
+        seconds: Int64(now.tv_sec) + (48 * 60 * 60),
+        nanoseconds: Int64(now.tv_nsec)
+    )
+    let fileSystem = POSIXOpenAIMultipartScratchFileSystem()
+    guard let directory = try fileSystem.openNamespace(
+        at: namespace,
+        shouldStartOperation: { true }
+    ) else {
+        throw CocoaError(.fileReadNoPermission)
+    }
+    defer { directory.close() }
+    guard let candidate = try directory.openCandidate(
+        named: name,
+        kind: kind,
+        shouldStartOperation: { true }
+    ) else {
+        throw CocoaError(.fileReadNoPermission)
+    }
+    defer { candidate.close() }
+    guard var snapshot = candidate.makeDeletionSnapshot(
+        referenceTime: reference,
+        minimumAgeInSeconds: kind.minimumAgeInSeconds,
+        shouldStartOperation: { true }
+    ) else {
+        throw CocoaError(.fileReadUnknown)
+    }
+
+    switch mutation {
+    case .mode:
+        guard Darwin.chmod(file.path, 0o640) == 0 else {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+    case .linkCount:
+        try FileManager.default.linkItem(
+            at: file,
+            to: namespace.appendingPathComponent("link-peer")
+        )
+    case .age:
+        let futureDate = Date(timeIntervalSince1970: TimeInterval(reference.seconds + 1))
+        try FileManager.default.setAttributes(
+            [.modificationDate: futureDate],
+            ofItemAtPath: file.path
+        )
+        var status = stat()
+        guard Darwin.lstat(file.path, &status) == 0 else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        snapshot = OpenAIMultipartScratchDeletionSnapshot(
+            identity: fileIdentity(status),
+            referenceTime: reference,
+            minimumAgeInSeconds: kind.minimumAgeInSeconds
+        )
+    }
+
+    let wasRemoved = candidate.removeIfUnchanged(
+        snapshot,
+        shouldStartOperation: { true }
+    )
+
+    #expect(!wasRemoved, "Mutation must be rejected: \(mutation)")
+    #expect(
+        FileManager.default.fileExists(atPath: file.path),
+        "The candidate pathname must survive: \(mutation)"
+    )
+}
+
+nonisolated private enum FinalMutationScratchScenario: Equatable {
+    case marker
+    case pathIdentity
+    case sizeBeyondBudget
+
+    var fileName: String {
+        switch self {
+        case .marker:
+            "htmp-v1-01234567-89ab-cdef-8123-456789abcdef.multipart"
+        case .pathIdentity, .sizeBeyondBudget:
+            "01234567-89AB-CDEF-8123-456789ABCDEF.multipart"
+        }
+    }
+
+    var snapshotByteCount: Int64 {
+        switch self {
+        case .marker, .pathIdentity:
+            1
+        case .sizeBeyondBudget:
+            OpenAIMultipartScratchScavenger.maximumAccountedByteCount
+        }
+    }
+}
+
+nonisolated private func scanner(
+    using adapter: FinalMutationScratchPOSIXAdapter
+) -> OpenAIMultipartScratchScavenger {
+    OpenAIMultipartScratchScavenger(
+        namespaceURL: URL(fileURLWithPath: "/unused"),
+        fileSystem: POSIXOpenAIMultipartScratchFileSystem(adapter: adapter),
+        wallClock: { .init(seconds: 200_000, nanoseconds: 0) },
+        monotonicClock: { 0 }
+    )
+}
+
+nonisolated private final class FinalMutationScratchPOSIXAdapter:
+    OpenAIMultipartScratchPOSIXAdapter,
+    @unchecked Sendable {
+    private static let namespaceDescriptor: Int32 = 10
+    private static let directoryDescriptor: Int32 = 11
+    private static let candidateDescriptor: Int32 = 20
+    private static let effectiveUserID = uid_t(501)
+
+    private let lock = NSLock()
+    private let scenario: FinalMutationScratchScenario
+    private var didReturnEntry = false
+    private var descriptorStatusCalls = 0
+    private var storedPathStatusCallCount = 0
+    private var storedMarkerReadCallCount = 0
+    private var storedUnlinkCallCount = 0
+
+    init(scenario: FinalMutationScratchScenario) {
+        self.scenario = scenario
+    }
+
+    var finalDescriptorStatusWasRequested: Bool {
+        lock.withLock { descriptorStatusCalls >= 3 }
+    }
+
+    var pathStatusCallCount: Int {
+        lock.withLock { storedPathStatusCallCount }
+    }
+
+    var markerReadCallCount: Int {
+        lock.withLock { storedMarkerReadCallCount }
+    }
+
+    var unlinkCallCount: Int {
+        lock.withLock { storedUnlinkCallCount }
+    }
+
+    func openFile(
+        atPath path: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32> {
+        .success(Self.namespaceDescriptor)
+    }
+
+    func fileStatus(
+        for fileDescriptor: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<stat> {
+        guard fileDescriptor == Self.candidateDescriptor else {
+            return .success(scriptedScratchNamespaceStatus())
+        }
+        return lock.withLock {
+            descriptorStatusCalls += 1
+            return .success(
+                scriptedScratchCandidateStatus(
+                    inode: 100,
+                    byteCount: scenario.snapshotByteCount
+                )
+            )
+        }
+    }
+
+    func effectiveUserID() -> OpenAIMultipartScratchPOSIXCallResult<uid_t> {
+        .success(Self.effectiveUserID)
+    }
+
+    func openDirectoryStream(
+        for fileDescriptor: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<UnsafeMutablePointer<DIR>> {
+        .success(UnsafeMutablePointer<DIR>(bitPattern: 1)!)
+    }
+
+    func nextDirectoryEntry(
+        in stream: UnsafeMutablePointer<DIR>
+    ) -> OpenAIMultipartScratchPOSIXCallResult<OpenAIMultipartScratchDirectoryEntry?> {
+        lock.withLock {
+            guard !didReturnEntry else {
+                return .success(nil)
+            }
+            didReturnEntry = true
+            return .success(.name(scenario.fileName))
+        }
+    }
+
+    func directoryDescriptor(
+        for stream: UnsafeMutablePointer<DIR>
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32> {
+        .success(Self.directoryDescriptor)
+    }
+
+    func openFile(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32> {
+        .success(Self.candidateDescriptor)
+    }
+
+    func extendedAttribute(
+        named name: String,
+        on fileDescriptor: Int32,
+        maximumByteCount: Int
+    ) -> OpenAIMultipartScratchPOSIXCallResult<[UInt8]> {
+        lock.withLock {
+            storedMarkerReadCallCount += 1
+            if scenario == .marker && storedMarkerReadCallCount >= 3 {
+                return .success([])
+            }
+            return .success(OpenAIMultipartScratchNamespace.markerValue)
+        }
+    }
+
+    func setExtendedAttribute(
+        named name: String,
+        value: [UInt8],
+        on fileDescriptor: Int32,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void> {
+        .failure(EIO)
+    }
+
+    func lock(
+        fileDescriptor: Int32,
+        operation: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void> {
+        .success(())
+    }
+
+    func pathStatus(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<stat> {
+        lock.withLock {
+            storedPathStatusCallCount += 1
+            let inode: ino_t = scenario == .pathIdentity
+                && storedPathStatusCallCount >= 2 ? 101 : 100
+            let byteCount = scenario == .sizeBeyondBudget
+                && storedPathStatusCallCount >= 2
+                ? scenario.snapshotByteCount + 1
+                : scenario.snapshotByteCount
+            return .success(
+                scriptedScratchCandidateStatus(
+                    inode: inode,
+                    byteCount: byteCount
+                )
+            )
+        }
+    }
+
+    func unlink(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void> {
+        lock.withLock { storedUnlinkCallCount += 1 }
+        return .success(())
+    }
+
+    func closeFile(_ fileDescriptor: Int32) {}
+
+    func closeDirectoryStream(_ stream: UnsafeMutablePointer<DIR>) {}
+
+    private func scriptedScratchNamespaceStatus() -> stat {
+        var status = stat()
+        status.st_mode = S_IFDIR | mode_t(0o700)
+        status.st_uid = Self.effectiveUserID
+        return status
+    }
+
+    private func scriptedScratchCandidateStatus(
+        inode: ino_t,
+        byteCount: Int64
+    ) -> stat {
+        var status = stat()
+        status.st_dev = 1
+        status.st_ino = inode
+        status.st_mode = S_IFREG | mode_t(0o600)
+        status.st_nlink = 1
+        status.st_uid = Self.effectiveUserID
+        status.st_size = off_t(byteCount)
+        status.st_mtimespec = timespec(tv_sec: 0, tv_nsec: 0)
+        status.st_ctimespec = timespec(tv_sec: 0, tv_nsec: 0)
+        return status
+    }
+}
+
+nonisolated private final class DeadlineScratchPOSIXAdapter:
+    OpenAIMultipartScratchPOSIXAdapter,
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var openResults: [OpenAIMultipartScratchPOSIXCallResult<Int32>]
+    private var storedOpenCallCount = 0
+    private var storedNonCleanupCallCount = 0
+
+    init(openResults: [OpenAIMultipartScratchPOSIXCallResult<Int32>]) {
+        self.openResults = openResults
+    }
+
+    var openCallCount: Int {
+        lock.withLock { storedOpenCallCount }
+    }
+
+    var nonCleanupCallCount: Int {
+        lock.withLock { storedNonCleanupCallCount }
+    }
+
+    func openFile(
+        atPath path: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32> {
+        lock.withLock {
+            storedOpenCallCount += 1
+            storedNonCleanupCallCount += 1
+            guard !openResults.isEmpty else {
+                return .failure(EIO)
+            }
+            return openResults.removeFirst()
+        }
+    }
+
+    func fileStatus(
+        for fileDescriptor: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<stat> {
+        unexpectedCall()
+    }
+
+    func effectiveUserID() -> OpenAIMultipartScratchPOSIXCallResult<uid_t> {
+        unexpectedCall()
+    }
+
+    func openDirectoryStream(
+        for fileDescriptor: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<UnsafeMutablePointer<DIR>> {
+        unexpectedCall()
+    }
+
+    func nextDirectoryEntry(
+        in stream: UnsafeMutablePointer<DIR>
+    ) -> OpenAIMultipartScratchPOSIXCallResult<OpenAIMultipartScratchDirectoryEntry?> {
+        unexpectedCall()
+    }
+
+    func directoryDescriptor(
+        for stream: UnsafeMutablePointer<DIR>
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32> {
+        unexpectedCall()
+    }
+
+    func openFile(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32> {
+        unexpectedCall()
+    }
+
+    func extendedAttribute(
+        named name: String,
+        on fileDescriptor: Int32,
+        maximumByteCount: Int
+    ) -> OpenAIMultipartScratchPOSIXCallResult<[UInt8]> {
+        unexpectedCall()
+    }
+
+    func setExtendedAttribute(
+        named name: String,
+        value: [UInt8],
+        on fileDescriptor: Int32,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void> {
+        unexpectedCall()
+    }
+
+    func lock(
+        fileDescriptor: Int32,
+        operation: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void> {
+        unexpectedCall()
+    }
+
+    func pathStatus(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<stat> {
+        unexpectedCall()
+    }
+
+    func unlink(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void> {
+        unexpectedCall()
+    }
+
+    func closeFile(_ fileDescriptor: Int32) {}
+
+    func closeDirectoryStream(_ stream: UnsafeMutablePointer<DIR>) {}
+
+    private func unexpectedCall<Value>() -> OpenAIMultipartScratchPOSIXCallResult<Value> {
+        lock.withLock { storedNonCleanupCallCount += 1 }
+        return .failure(EIO)
+    }
+}
+
+nonisolated private final class FinalUnlinkDeadlineScratchPOSIXAdapter:
+    OpenAIMultipartScratchPOSIXAdapter,
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private let base = DarwinOpenAIMultipartScratchPOSIXAdapter()
+    private var pathStatusCallCount = 0
+    private var storedUnlinkCallCount = 0
+
+    var didCompleteFinalPathStatus: Bool {
+        lock.withLock { pathStatusCallCount >= 2 }
+    }
+
+    var unlinkCallCount: Int {
+        lock.withLock { storedUnlinkCallCount }
+    }
+
+    func openFile(
+        atPath path: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32> {
+        base.openFile(atPath: path, flags: flags)
+    }
+
+    func fileStatus(
+        for fileDescriptor: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<stat> {
+        base.fileStatus(for: fileDescriptor)
+    }
+
+    func effectiveUserID() -> OpenAIMultipartScratchPOSIXCallResult<uid_t> {
+        base.effectiveUserID()
+    }
+
+    func openDirectoryStream(
+        for fileDescriptor: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<UnsafeMutablePointer<DIR>> {
+        base.openDirectoryStream(for: fileDescriptor)
+    }
+
+    func nextDirectoryEntry(
+        in stream: UnsafeMutablePointer<DIR>
+    ) -> OpenAIMultipartScratchPOSIXCallResult<OpenAIMultipartScratchDirectoryEntry?> {
+        base.nextDirectoryEntry(in: stream)
+    }
+
+    func directoryDescriptor(
+        for stream: UnsafeMutablePointer<DIR>
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32> {
+        base.directoryDescriptor(for: stream)
+    }
+
+    func openFile(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Int32> {
+        base.openFile(
+            relativeTo: directoryDescriptor,
+            named: fileName,
+            flags: flags
+        )
+    }
+
+    func extendedAttribute(
+        named name: String,
+        on fileDescriptor: Int32,
+        maximumByteCount: Int
+    ) -> OpenAIMultipartScratchPOSIXCallResult<[UInt8]> {
+        base.extendedAttribute(
+            named: name,
+            on: fileDescriptor,
+            maximumByteCount: maximumByteCount
+        )
+    }
+
+    func setExtendedAttribute(
+        named name: String,
+        value: [UInt8],
+        on fileDescriptor: Int32,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void> {
+        base.setExtendedAttribute(
+            named: name,
+            value: value,
+            on: fileDescriptor,
+            flags: flags
+        )
+    }
+
+    func lock(
+        fileDescriptor: Int32,
+        operation: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void> {
+        base.lock(fileDescriptor: fileDescriptor, operation: operation)
+    }
+
+    func pathStatus(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<stat> {
+        let result = base.pathStatus(
+            relativeTo: directoryDescriptor,
+            named: fileName,
+            flags: flags
+        )
+        lock.withLock { pathStatusCallCount += 1 }
+        return result
+    }
+
+    func unlink(
+        relativeTo directoryDescriptor: Int32,
+        named fileName: String,
+        flags: Int32
+    ) -> OpenAIMultipartScratchPOSIXCallResult<Void> {
+        lock.withLock { storedUnlinkCallCount += 1 }
+        return base.unlink(
+            relativeTo: directoryDescriptor,
+            named: fileName,
+            flags: flags
+        )
+    }
+
+    func closeFile(_ fileDescriptor: Int32) {
+        base.closeFile(fileDescriptor)
+    }
+
+    func closeDirectoryStream(_ stream: UnsafeMutablePointer<DIR>) {
+        base.closeDirectoryStream(stream)
     }
 }
 

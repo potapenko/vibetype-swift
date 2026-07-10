@@ -155,6 +155,7 @@ struct OpenAITextTranslationServiceTests {
         }
 
         #expect(loader.requests.count == 1)
+        try await loader.waitForCancellationCount(1)
         #expect(loader.cancellationCount == 1)
         #expect(sleeper.sleepCalls == [2])
     }
@@ -188,6 +189,7 @@ struct OpenAITextTranslationServiceTests {
         await expectTranslationError(.cancelled) {
             try await cancelledTask.value
         }
+        try await loader.waitForCancellationCount(1)
         #expect(await loader.observedCancellationCount() == 1)
 
         let translation = try await service.translate(
@@ -281,6 +283,7 @@ struct OpenAITextTranslationServiceTests {
         await expectTranslationError(.cancelled) {
             try await newTask.value
         }
+        try await loader.waitForCancellationCount(2)
         #expect(await loader.observedCancellationCount() == 2)
     }
 
@@ -480,6 +483,21 @@ private final class TranslationFakeURLLoader: URLLoading, @unchecked Sendable {
             throw error
         }
     }
+
+    func waitForCancellationCount(_ expectedCount: Int) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(1))
+
+        while cancellationCount < expectedCount, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+
+        guard cancellationCount >= expectedCount else {
+            throw TranslationTestWaitError.timedOutWaitingForCancellationCount(
+                expectedCount
+            )
+        }
+    }
 }
 
 private actor TranslationSequencedURLLoader: URLLoading {
@@ -542,10 +560,26 @@ private actor TranslationSequencedURLLoader: URLLoading {
     func observedCancellationCount() -> Int {
         cancellationCount
     }
+
+    func waitForCancellationCount(_ expectedCount: Int) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(1))
+
+        while cancellationCount < expectedCount, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+
+        guard cancellationCount >= expectedCount else {
+            throw TranslationTestWaitError.timedOutWaitingForCancellationCount(
+                expectedCount
+            )
+        }
+    }
 }
 
 private enum TranslationTestWaitError: Error {
     case timedOutWaitingForRequestCount(Int)
+    case timedOutWaitingForCancellationCount(Int)
 }
 
 private final class TranslationFakeTimeoutSleeper: TranscriptionTimeoutSleeping, @unchecked Sendable {
