@@ -15,19 +15,22 @@ struct TranscriptRecoveryHistoryStoreTests {
 
     @Test func recordsAcceptedTranscriptsNewestFirstInMemory() throws {
         let store = TranscriptRecoveryHistoryStore()
-        var settings = AppSettings.defaults
-        settings.transcriptionModel = "gpt-4o-mini-transcribe"
-        settings.language = .english
 
         try store.recordAcceptedTranscript(
-            "  First transcript  ",
-            settings: settings,
-            audioDuration: 1.5
+            try makeRequest(
+                "  First transcript  ",
+                transcriptionModel: "gpt-4o-mini-transcribe",
+                language: .english,
+                audioDuration: 1.5
+            )
         )
         try store.recordAcceptedTranscript(
-            "Second transcript",
-            settings: settings,
-            audioDuration: 2.5
+            try makeRequest(
+                "Second transcript",
+                transcriptionModel: "gpt-4o-mini-transcribe",
+                language: .english,
+                audioDuration: 2.5
+            )
         )
 
         #expect(store.entries.map(\.transcriptText) == ["Second transcript", "First transcript"])
@@ -38,13 +41,12 @@ struct TranscriptRecoveryHistoryStoreTests {
 
     @Test func disabledSettingDoesNotRecordTranscript() throws {
         let store = TranscriptRecoveryHistoryStore()
-        var settings = AppSettings.defaults
-        settings.saveTranscriptHistory = false
 
         try store.recordAcceptedTranscript(
-            "Private transcript",
-            settings: settings,
-            audioDuration: nil
+            try makeRequest(
+                "Private transcript",
+                historyEnabled: false
+            )
         )
 
         #expect(store.entries.isEmpty)
@@ -53,14 +55,14 @@ struct TranscriptRecoveryHistoryStoreTests {
     @Test func recordsCachedAudioFileURLWhenRecordingCacheKeepsRecordings() throws {
         let store = TranscriptRecoveryHistoryStore()
         let cachedAudioFileURL = URL(fileURLWithPath: "/tmp/HoldType-cache-enabled.m4a")
-        var settings = AppSettings.defaults
-        settings.recordingCachePolicy = .keepLast(10)
 
         try store.recordAcceptedTranscript(
-            "Cached transcript",
-            settings: settings,
-            audioDuration: 3.5,
-            cachedAudioFileURL: cachedAudioFileURL
+            try makeRequest(
+                "Cached transcript",
+                recordingCachePolicy: .keepLast(10),
+                audioDuration: 3.5,
+                cachedAudioFileURL: cachedAudioFileURL
+            )
         )
 
         #expect(store.entries.first?.cachedAudioFileURL == cachedAudioFileURL)
@@ -69,14 +71,14 @@ struct TranscriptRecoveryHistoryStoreTests {
     @Test func dropsCachedAudioFileURLWhenRecordingCacheDeletesImmediately() throws {
         let store = TranscriptRecoveryHistoryStore()
         let cachedAudioFileURL = URL(fileURLWithPath: "/tmp/HoldType-cache-disabled.m4a")
-        var settings = AppSettings.defaults
-        settings.recordingCachePolicy = .deleteImmediately
 
         try store.recordAcceptedTranscript(
-            "Uncached transcript",
-            settings: settings,
-            audioDuration: 3.5,
-            cachedAudioFileURL: cachedAudioFileURL
+            try makeRequest(
+                "Uncached transcript",
+                recordingCachePolicy: .deleteImmediately,
+                audioDuration: 3.5,
+                cachedAudioFileURL: cachedAudioFileURL
+            )
         )
 
         #expect(store.entries.first?.cachedAudioFileURL == nil)
@@ -87,9 +89,7 @@ struct TranscriptRecoveryHistoryStoreTests {
 
         for offset in 0..<21 {
             try store.recordAcceptedTranscript(
-                "Transcript \(offset)",
-                settings: .defaults,
-                audioDuration: nil
+                try makeRequest("Transcript \(offset)")
             )
         }
 
@@ -103,9 +103,7 @@ struct TranscriptRecoveryHistoryStoreTests {
         let store = TranscriptRecoveryHistoryStore()
 
         try store.recordAcceptedTranscript(
-            "Recoverable transcript",
-            settings: .defaults,
-            audioDuration: nil
+            try makeRequest("Recoverable transcript")
         )
 
         store.clear()
@@ -117,14 +115,10 @@ struct TranscriptRecoveryHistoryStoreTests {
         let store = TranscriptRecoveryHistoryStore()
 
         try store.recordAcceptedTranscript(
-            "Keep this transcript",
-            settings: .defaults,
-            audioDuration: nil
+            try makeRequest("Keep this transcript")
         )
         try store.recordAcceptedTranscript(
-            "Delete this transcript",
-            settings: .defaults,
-            audioDuration: nil
+            try makeRequest("Delete this transcript")
         )
 
         let entryToDelete = try #require(store.entries.first)
@@ -134,16 +128,38 @@ struct TranscriptRecoveryHistoryStoreTests {
         #expect(store.deleteEntry(id: UUID()) == false)
     }
 
-    @Test func rejectsWhitespaceOnlyTranscript() {
+    @Test func whitespaceOnlyRawTextIsRejectedBeforeTheStoreBoundary() {
         let store = TranscriptRecoveryHistoryStore()
 
-        #expect(throws: TranscriptRecoveryHistoryError.emptyTranscript) {
-            try store.recordAcceptedTranscript(
-                " \n\t ",
-                settings: .defaults,
-                audioDuration: nil
-            )
+        #expect(throws: AcceptedTranscript.ValidationError.emptyText) {
+            _ = try makeRequest(" \n\t ")
         }
         #expect(store.entries.isEmpty)
+    }
+
+    private func makeRequest(
+        _ rawText: String,
+        transcriptionModel: String = TranscriptionConfiguration.defaultModel,
+        language: TranscriptionLanguage = .automatic,
+        customLanguageCode: String = "",
+        historyEnabled: Bool = true,
+        recordingCachePolicy: RecordingCachePolicy = .deleteImmediately,
+        audioDuration: TimeInterval? = nil,
+        cachedAudioFileURL: URL? = nil
+    ) throws -> AcceptedTranscriptHistoryRequest {
+        try AcceptedTranscriptHistoryRequest(
+            acceptedTranscript: AcceptedTranscript(rawText: rawText),
+            transcriptionConfiguration: TranscriptionConfiguration(
+                model: transcriptionModel,
+                language: language,
+                customLanguageCode: customLanguageCode
+            ),
+            retentionConfiguration: RetentionConfiguration(
+                historyEnabled: historyEnabled,
+                recordingCachePolicy: recordingCachePolicy
+            ),
+            audioDuration: audioDuration,
+            cachedAudioFileURL: cachedAudioFileURL
+        )
     }
 }

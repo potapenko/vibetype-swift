@@ -13,12 +13,7 @@ import HoldTypeDomain
 protocol TranscriptRecoveryHistoryRecording: AnyObject {
     var entries: [TranscriptHistoryEntry] { get }
 
-    func recordAcceptedTranscript(
-        _ transcript: String,
-        settings: AppSettings,
-        audioDuration: TimeInterval?,
-        cachedAudioFileURL: URL?
-    ) throws
+    func recordAcceptedTranscript(_ request: AcceptedTranscriptHistoryRequest) throws
     func clear()
 }
 
@@ -50,27 +45,19 @@ final class TranscriptRecoveryHistoryStore: ObservableObject, TranscriptRecovery
         self.retentionLimit = max(1, retentionLimit)
     }
 
-    func recordAcceptedTranscript(
-        _ transcript: String,
-        settings: AppSettings,
-        audioDuration: TimeInterval? = nil,
-        cachedAudioFileURL: URL? = nil
-    ) throws {
-        guard settings.saveTranscriptHistory else {
+    func recordAcceptedTranscript(_ request: AcceptedTranscriptHistoryRequest) throws {
+        guard request.historyEnabled else {
             return
         }
 
-        let retainedCachedAudioFileURL = settings.recordingCachePolicy.keepsRecordings
-            ? cachedAudioFileURL
-            : nil
         let entry: TranscriptHistoryEntry
         do {
             entry = try TranscriptHistoryEntry(
-                transcriptText: transcript,
-                transcriptionModel: settings.resolvedTranscriptionModel,
-                languageCode: settings.resolvedLanguageCode,
-                audioDuration: audioDuration,
-                cachedAudioFileURL: retainedCachedAudioFileURL
+                transcriptText: request.acceptedTranscript.text,
+                transcriptionModel: request.transcriptionModel,
+                languageCode: request.languageCode,
+                audioDuration: request.audioDuration,
+                cachedAudioFileURL: request.cachedAudioFileURL
             )
         } catch TranscriptHistoryEntry.ValidationError.emptyTranscriptText {
             throw TranscriptRecoveryHistoryError.emptyTranscript
