@@ -5,6 +5,94 @@ import Testing
 @testable import HoldTypePersistence
 
 struct IOSAcceptedHistoryStoreTests {
+    @Test func guardedBaselineAcceptsOnlyMissingOrValidEmptyState() async throws {
+        let missing = AcceptedHistoryStoreFixture()
+        let missingEvidence = try await missing.store.proveGuardedBaseline()
+        #expect(
+            String(describing: missingEvidence)
+                == "IOSAcceptedHistoryGuardedBaselineEvidence(redacted)"
+        )
+        #expect(missingEvidence.customMirror.children.isEmpty)
+
+        let empty = AcceptedHistoryStoreFixture()
+        empty.journal.install(
+            try IOSAcceptedHistoryEnvelope(revision: 1, entries: [])
+        )
+        _ = try await empty.store.proveGuardedBaseline()
+
+        let nonempty = AcceptedHistoryStoreFixture()
+        nonempty.journal.install(
+            try IOSAcceptedHistoryEnvelope(
+                revision: 1,
+                entries: [try acceptedHistoryStoredEntry(index: 900)]
+            )
+        )
+        await #expect(throws: IOSAcceptedHistoryError.compareAndSwapFailed) {
+            _ = try await nonempty.store.proveGuardedBaseline()
+        }
+    }
+
+    @Test func guardedBaselineRejectsDecisionAndPruneUncertainty() async throws {
+        let decision = AcceptedHistoryStoreFixture()
+        let candidate = try await historyCapabilities(index: 901)
+        decision.journal.failNextCreate(
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+        await #expect(throws: IOSAcceptedHistoryError.commitUncertain) {
+            _ = try await decision.store.decideUpsert(
+                delivery: candidate.delivery,
+                policy: candidate.policy
+            )
+        }
+        await #expect(throws: IOSAcceptedHistoryError.commitUncertain) {
+            _ = try await decision.store.proveGuardedBaseline()
+        }
+
+        let prune = AcceptedHistoryStoreFixture()
+        prune.journal.install(
+            try IOSAcceptedHistoryEnvelope(
+                revision: 1,
+                entries: [
+                    try acceptedHistoryStoredEntry(
+                        index: 902,
+                        generation: 1
+                    ),
+                ]
+            )
+        )
+        let policy = try await historyPolicyReceipt(
+            generation: 2,
+            enabled: false
+        )
+        prune.journal.failNextReplace(
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+        await #expect(throws: IOSAcceptedHistoryError.commitUncertain) {
+            try await prune.store.pruneInvalidatedRows(using: policy)
+        }
+        await #expect(throws: IOSAcceptedHistoryError.commitUncertain) {
+            _ = try await prune.store.proveGuardedBaseline()
+        }
+    }
+
+    @Test func guardedBaselinePropagatesTypedReadFailures() async {
+        let fixture = AcceptedHistoryStoreFixture()
+        for error in [
+            IOSAcceptedHistoryError.sourceTooLarge,
+            .malformedData,
+            .unsupportedSchemaVersion,
+            .dataProtectionUnavailable,
+            .readFailed,
+        ] {
+            fixture.journal.failNextLoad(with: error)
+            await #expect(throws: error) {
+                _ = try await fixture.store.proveGuardedBaseline()
+            }
+        }
+    }
+
     @Test func missingReadDoesNotWriteAndFirstDecisionCreatesRevisionOne() async throws {
         let fixture = AcceptedHistoryStoreFixture()
         #expect(try await fixture.store.load() == nil)
@@ -1818,6 +1906,7 @@ private final class AcceptedHistoryFakeJournal:
     private var nextToken: UInt64 = 1
     private var createFailure: Failure?
     private var replaceFailure: Failure?
+    private var loadFailure: IOSAcceptedHistoryError?
     private var delayedLoadCount = 0
     private var storedEvents: [String] = []
     var maintenanceReport = IOSStrictProtectedRecordMaintenanceReport.empty
@@ -1864,13 +1953,21 @@ private final class AcceptedHistoryFakeJournal:
         }
     }
 
+    func failNextLoad(with error: IOSAcceptedHistoryError) {
+        lock.withLock { loadFailure = error }
+    }
+
     func delayNextLoads(_ count: Int) {
         lock.withLock { delayedLoadCount = count }
     }
 
     func load() throws -> IOSAcceptedHistoryJournalSnapshot? {
-        let result: (IOSAcceptedHistoryJournalSnapshot?, Bool) = lock.withLock {
+        let result: (IOSAcceptedHistoryJournalSnapshot?, Bool) = try lock.withLock {
             storedEvents.append("load")
+            if let loadFailure {
+                self.loadFailure = nil
+                throw loadFailure
+            }
             let shouldDelay = delayedLoadCount > 0
             if shouldDelay { delayedLoadCount -= 1 }
             return (snapshot, shouldDelay)

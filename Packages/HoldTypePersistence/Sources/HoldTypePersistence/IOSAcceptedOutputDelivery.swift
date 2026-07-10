@@ -91,6 +91,7 @@ public struct IOSAcceptedOutputDeliveryPreparation: Sendable {
     public let automaticInsertionPreferenceEnabled: Bool
     public let keepLatestResult: Bool
     public let historyWrite: IOSAcceptedOutputHistoryWrite?
+    let historyCapture: IOSAcceptedOutputHistoryCapture?
 
     init(
         deliveryID: UUID,
@@ -120,6 +121,7 @@ public struct IOSAcceptedOutputDeliveryPreparation: Sendable {
             automaticInsertionPreferenceEnabled
         self.keepLatestResult = keepLatestResult
         self.historyWrite = historyWrite
+        historyCapture = nil
     }
 
     public init(
@@ -133,18 +135,24 @@ public struct IOSAcceptedOutputDeliveryPreparation: Sendable {
         keepLatestResult: Bool,
         historyCapture: IOSAcceptedOutputHistoryCapture
     ) throws {
-        try self.init(
-            deliveryID: deliveryID,
-            sessionID: sessionID,
-            attemptID: attemptID,
-            transcriptID: transcriptID,
-            rawAcceptedText: rawAcceptedText,
-            outputIntent: outputIntent,
-            automaticInsertionPreferenceEnabled:
-                automaticInsertionPreferenceEnabled,
-            keepLatestResult: keepLatestResult,
-            historyWrite: historyCapture.historyWrite
-        )
+        guard let acceptedText = IOSAcceptedOutputDeliveryValidation
+            .normalizedAcceptedText(rawAcceptedText),
+              historyCapture.historyWrite?.state != .committed,
+              historyCapture.historyWrite?.state != .cancelled else {
+            throw IOSAcceptedOutputDeliveryError.invalidPreparation
+        }
+
+        self.deliveryID = deliveryID
+        self.sessionID = sessionID
+        self.attemptID = attemptID
+        self.transcriptID = transcriptID
+        self.acceptedText = acceptedText
+        self.outputIntent = outputIntent
+        self.automaticInsertionPreferenceEnabled =
+            automaticInsertionPreferenceEnabled
+        self.keepLatestResult = keepLatestResult
+        historyWrite = historyCapture.historyWrite
+        self.historyCapture = historyCapture
     }
 }
 
@@ -166,6 +174,7 @@ extension IOSAcceptedOutputDeliveryPreparation: Equatable {
                 == rhs.automaticInsertionPreferenceEnabled
             && lhs.keepLatestResult == rhs.keepLatestResult
             && lhs.historyWrite == rhs.historyWrite
+            && lhs.historyCapture == rhs.historyCapture
     }
 }
 

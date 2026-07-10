@@ -4,6 +4,92 @@ import Testing
 @testable import HoldTypePersistence
 
 struct IOSAcceptedHistoryOutboxStoreTests {
+    @Test func guardedBaselineAcceptsOnlyMissingOrValidEmptyState() async throws {
+        let missing = OutboxStoreFixture(now: outboxStoreDate())
+        let missingEvidence = try await missing.store.proveGuardedBaseline()
+        #expect(
+            String(describing: missingEvidence)
+                == "IOSAcceptedHistoryOutboxGuardedBaselineEvidence(redacted)"
+        )
+        #expect(missingEvidence.customMirror.children.isEmpty)
+
+        let empty = OutboxStoreFixture(now: outboxStoreDate())
+        empty.journal.install(
+            try IOSAcceptedHistoryOutboxEnvelope(revision: 1, entries: [])
+        )
+        _ = try await empty.store.proveGuardedBaseline()
+
+        let nonempty = OutboxStoreFixture(now: outboxStoreDate())
+        nonempty.journal.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [try outboxStoredEntry(index: 900)]
+            )
+        )
+        await #expect(throws: IOSAcceptedHistoryOutboxError.compareAndSwapFailed) {
+            _ = try await nonempty.store.proveGuardedBaseline()
+        }
+    }
+
+    @Test func guardedBaselineRejectsMembershipAndRetirementUncertainty() async throws {
+        let now = outboxStoreDate()
+        let membership = OutboxStoreFixture(now: now)
+        let candidate = try await outboxCapabilities(index: 901, createdAt: now)
+        membership.journal.failNextCreate(
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+        await #expect(throws: IOSAcceptedHistoryOutboxError.commitUncertain) {
+            _ = try await membership.store.transfer(
+                delivery: candidate.delivery,
+                policy: candidate.policy
+            )
+        }
+        await #expect(throws: IOSAcceptedHistoryOutboxError.commitUncertain) {
+            _ = try await membership.store.proveGuardedBaseline()
+        }
+
+        let retirement = OutboxStoreFixture(now: now)
+        let retirementCandidate = try await outboxCapabilities(
+            index: 902,
+            createdAt: now
+        )
+        let receipt = try await outboxMembershipReceipt(
+            fixture: retirement,
+            capabilities: retirementCandidate
+        )
+        let decision = try await outboxRowReceipt(membership: receipt)
+        retirement.journal.failNextReplace(
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+        await #expect(throws: IOSAcceptedHistoryOutboxError.commitUncertain) {
+            try await retirement.store.retireProcessed(
+                membership: receipt,
+                decision: decision
+            )
+        }
+        await #expect(throws: IOSAcceptedHistoryOutboxError.commitUncertain) {
+            _ = try await retirement.store.proveGuardedBaseline()
+        }
+    }
+
+    @Test func guardedBaselinePropagatesTypedReadFailures() async {
+        let fixture = OutboxStoreFixture(now: outboxStoreDate())
+        for error in [
+            IOSAcceptedHistoryOutboxError.sourceTooLarge,
+            .malformedData,
+            .unsupportedSchemaVersion,
+            .dataProtectionUnavailable,
+            .readFailed,
+        ] {
+            fixture.journal.failNextLoad(with: error)
+            await #expect(throws: error) {
+                _ = try await fixture.store.proveGuardedBaseline()
+            }
+        }
+    }
+
     @Test func missingReadAndFirstTransferAreStrictAndReceiptIsIdentityBound() async throws {
         let fixture = OutboxStoreFixture(now: outboxStoreDate())
         #expect(try await fixture.store.load() == nil)
@@ -1790,6 +1876,7 @@ private final class OutboxFakeJournal:
     private var nextToken: UInt64 = 1
     private var createFailure: Failure?
     private var replaceFailure: Failure?
+    private var loadFailure: IOSAcceptedHistoryOutboxError?
     private var delayedLoadCount = 0
     private var storedEvents: [String] = []
 
@@ -1833,14 +1920,22 @@ private final class OutboxFakeJournal:
         }
     }
 
+    func failNextLoad(with error: IOSAcceptedHistoryOutboxError) {
+        lock.withLock { loadFailure = error }
+    }
+
     func delayNextLoads(_ count: Int) {
         lock.withLock { delayedLoadCount = count }
     }
 
     func load() throws -> IOSAcceptedHistoryOutboxJournalSnapshot? {
         let result: (IOSAcceptedHistoryOutboxJournalSnapshot?, Bool) =
-            lock.withLock {
+            try lock.withLock {
                 storedEvents.append("load")
+                if let loadFailure {
+                    self.loadFailure = nil
+                    throw loadFailure
+                }
                 let shouldDelay = delayedLoadCount > 0
                 if shouldDelay { delayedLoadCount -= 1 }
                 return (snapshot, shouldDelay)

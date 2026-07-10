@@ -1,5 +1,20 @@
 import Foundation
 
+struct IOSAcceptedHistoryOutboxGuardedBaselineEvidence: Sendable {
+    fileprivate init() {}
+}
+
+extension IOSAcceptedHistoryOutboxGuardedBaselineEvidence:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSAcceptedHistoryOutboxGuardedBaselineEvidence(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 struct IOSAcceptedHistoryOutboxJournalMutationAuthorization: Sendable {
     fileprivate init() {}
 }
@@ -264,6 +279,17 @@ actor IOSAcceptedHistoryOutboxStore {
             throw IOSAcceptedHistoryOutboxError.commitUncertain
         }
         return try journal.load()?.envelope
+    }
+
+    func proveGuardedBaseline()
+        throws -> IOSAcceptedHistoryOutboxGuardedBaselineEvidence {
+        guard uncertainIntent == nil else {
+            throw IOSAcceptedHistoryOutboxError.commitUncertain
+        }
+        guard try journal.load()?.envelope.entries.isEmpty != false else {
+            throw IOSAcceptedHistoryOutboxError.compareAndSwapFailed
+        }
+        return IOSAcceptedHistoryOutboxGuardedBaselineEvidence()
     }
 
     func observe() throws -> [IOSAcceptedHistoryOutboxObservation]? {

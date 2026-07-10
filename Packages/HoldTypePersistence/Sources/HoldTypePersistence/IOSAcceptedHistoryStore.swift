@@ -1,6 +1,20 @@
 import Foundation
 import HoldTypeDomain
 
+struct IOSAcceptedHistoryGuardedBaselineEvidence: Sendable {
+    fileprivate init() {}
+}
+
+extension IOSAcceptedHistoryGuardedBaselineEvidence: CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSAcceptedHistoryGuardedBaselineEvidence(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 struct IOSAcceptedHistoryJournalMutationAuthorization: Sendable {
     fileprivate init() {}
 }
@@ -286,6 +300,18 @@ actor IOSAcceptedHistoryStore {
             throw IOSAcceptedHistoryError.commitUncertain
         }
         return try journal.load()?.envelope
+    }
+
+    func proveGuardedBaseline()
+        throws -> IOSAcceptedHistoryGuardedBaselineEvidence {
+        guard uncertainIntent == nil,
+              uncertainPruneIntent == nil else {
+            throw IOSAcceptedHistoryError.commitUncertain
+        }
+        guard try journal.load()?.envelope.entries.isEmpty != false else {
+            throw IOSAcceptedHistoryError.compareAndSwapFailed
+        }
+        return IOSAcceptedHistoryGuardedBaselineEvidence()
     }
 
     func decideUpsert(

@@ -1,5 +1,20 @@
 import Foundation
 
+struct IOSAcceptedOutputDeliveryGuardedBaselineEvidence: Sendable {
+    fileprivate init() {}
+}
+
+extension IOSAcceptedOutputDeliveryGuardedBaselineEvidence:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSAcceptedOutputDeliveryGuardedBaselineEvidence(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 public struct IOSAcceptedOutputDeliveryMaintenanceReport: Equatable, Sendable {
     public let inspectedEntryCount: Int
     public let inspectedByteCount: Int64
@@ -129,7 +144,7 @@ public actor IOSAcceptedOutputDeliveryStore {
     private var uncertainPendingHistoryClear: UncertainPendingHistoryClear?
     private var uncertainAcceptanceIntent: UncertainAcceptanceIntent?
 
-    public init(applicationSupportDirectoryURL: URL) {
+    init(applicationSupportDirectoryURL: URL) {
         journal = FoundationIOSAcceptedOutputDeliveryJournalRepository(
             applicationSupportDirectoryURL: applicationSupportDirectoryURL
         )
@@ -192,6 +207,15 @@ public actor IOSAcceptedOutputDeliveryStore {
         try requireNoUncertainAcceptance()
         guard let snapshot = try journal.load() else { return nil }
         return observation(for: snapshot.record)
+    }
+
+    func proveGuardedBaseline()
+        throws -> IOSAcceptedOutputDeliveryGuardedBaselineEvidence {
+        try requireNoUncertainHistoryMutation()
+        guard try journal.load()?.record.historyWrite == nil else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        return IOSAcceptedOutputDeliveryGuardedBaselineEvidence()
     }
 
     /// Performs the mandatory identical durability-confirmation rewrite before

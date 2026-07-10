@@ -217,9 +217,21 @@ cleanup. Protected-data unavailability is temporary, never absence.
 ## Coordinator, Receipts, And Ordering
 
 One containing-app coordinator serializes policy, accepted, outbox, and delivery
-operations. Repositories never coordinate themselves. It issues opaque,
-process-local, non-Codable, redacted receipts bound to exact identity, policy
-generation, logical revision, and file revision:
+operations. Repositories never coordinate themselves. Raw policy, accepted,
+outbox, and delivery stores are coordinator-owned.
+Production assembly cannot construct duplicate owners for one Application
+Support root; internal constructors are test and injection seams only.
+If previously distinct lexical or physical roots converge, every involved
+coordinator context fails closed before repository I/O; no owner is selected
+silently. A registered capture requires an existing physical Application
+Support root and revalidates the same resolved-path and file-identity binding
+before returning authority. A binding change during the transaction returns no
+capture. This inherits the app-private stable-namespace assumption; hostile
+same-user namespace interposition is outside this foundation contract.
+
+The coordinator issues opaque, process-local, non-Codable, redacted receipts
+bound to exact identity, policy generation, logical revision, and file
+revision:
 
 Within one app process, coordinator transactions use a FIFO, non-reentrant gate
 across suspension points. Cancellation before acquisition performs no

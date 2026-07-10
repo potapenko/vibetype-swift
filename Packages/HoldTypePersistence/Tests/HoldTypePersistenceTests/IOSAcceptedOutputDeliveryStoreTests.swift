@@ -4,6 +4,167 @@ import Testing
 @testable import HoldTypePersistence
 
 struct IOSAcceptedOutputDeliveryStoreTests {
+    @Test func guardedBaselineAcceptsMissingAndNilHistoryAtEveryTemporalState() async throws {
+        let missing = AcceptedDeliveryStoreFixture()
+        let missingEvidence = try await missing.store.proveGuardedBaseline()
+        #expect(
+            String(describing: missingEvidence)
+                == "IOSAcceptedOutputDeliveryGuardedBaselineEvidence(redacted)"
+        )
+        #expect(missingEvidence.customMirror.children.isEmpty)
+
+        let fixture = AcceptedDeliveryStoreFixture()
+        let accepted = try await fixture.store.accept(
+            fixture.preparation(historyWrite: nil)
+        )
+        _ = try await fixture.store.proveGuardedBaseline()
+
+        fixture.clock.wall = accepted.expiresAt
+        _ = try await fixture.store.proveGuardedBaseline()
+
+        fixture.clock.wall = accepted.createdAt.addingTimeInterval(-1)
+        _ = try await fixture.store.proveGuardedBaseline()
+    }
+
+    @Test func guardedBaselineRejectsEveryMarkerRegardlessOfTemporalState() async throws {
+        let states: [(IOSAcceptedOutputHistoryWriteState, TimeInterval)] = [
+            (.pending, 0),
+            (.committed, 86_400),
+            (.cancelled, -1),
+        ]
+        for (state, clockOffset) in states {
+            let fixture = AcceptedDeliveryStoreFixture()
+            let pending = try fixture.historyWrite()
+            let preparation = fixture.preparation(historyWrite: pending)
+            let accepted = try await fixture.store.accept(preparation)
+            let marker = try pending.replacingState(state)
+            fixture.journal.install(
+                try IOSAcceptedOutputDeliveryRecord(
+                    revision: accepted.revision,
+                    deliveryID: accepted.deliveryID,
+                    sessionID: accepted.sessionID,
+                    attemptID: accepted.attemptID,
+                    transcriptID: accepted.transcriptID,
+                    acceptedText: accepted.acceptedText,
+                    outputIntent: accepted.outputIntent,
+                    createdAt: accepted.createdAt,
+                    updatedAt: accepted.updatedAt,
+                    expiresAt: accepted.expiresAt,
+                    deliveryState: accepted.deliveryState,
+                    automaticInsertionPreferenceEnabled:
+                        accepted.automaticInsertionPreferenceEnabled,
+                    keepLatestResult: accepted.keepLatestResult,
+                    publicationGeneration: accepted.publicationGeneration,
+                    historyWrite: marker
+                )
+            )
+            fixture.clock.wall = accepted.createdAt.addingTimeInterval(
+                clockOffset
+            )
+
+            await #expect(
+                throws: IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+            ) {
+                _ = try await fixture.store.proveGuardedBaseline()
+            }
+        }
+    }
+
+    @Test func guardedBaselineRejectsEveryUncertaintyFamily() async throws {
+        let acceptance = AcceptedDeliveryStoreFixture()
+        acceptance.journal.failNextCreate(
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+        await #expect(throws: IOSAcceptedOutputDeliveryError.commitUncertain) {
+            _ = try await acceptance.store.accept(acceptance.preparation())
+        }
+        await #expect(throws: IOSAcceptedOutputDeliveryError.commitUncertain) {
+            _ = try await acceptance.store.proveGuardedBaseline()
+        }
+
+        let transition = AcceptedDeliveryStoreFixture()
+        let (_, transitionAuthorization) = try await transition
+            .acceptAndAuthorize()
+        let rowReceipt = try await transition.retainedRowReceipt(
+            for: transitionAuthorization
+        )
+        transition.journal.failNextReplace(
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+        await #expect(throws: IOSAcceptedOutputDeliveryError.commitUncertain) {
+            _ = try await transition.store.commitHistoryWrite(
+                authorization: transitionAuthorization,
+                rowReceipt: rowReceipt
+            )
+        }
+        await #expect(throws: IOSAcceptedOutputDeliveryError.commitUncertain) {
+            _ = try await transition.store.proveGuardedBaseline()
+        }
+
+        let replacement = AcceptedDeliveryStoreFixture()
+        let (_, replacementAuthorization) = try await replacement
+            .acceptAndAuthorize()
+        let replacementProof = IOSAcceptedOutputHistoryOwnershipProof(
+            outboxReceipt: try await replacement.outboxReceipt(
+                for: replacementAuthorization
+            )
+        )
+        replacement.journal.failNextReplace(
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+        await #expect(throws: IOSAcceptedOutputDeliveryError.commitUncertain) {
+            _ = try await replacement.store.replacePendingHistory(
+                with: replacement.preparation(rawAcceptedText: "replacement"),
+                authorization: replacementAuthorization,
+                ownershipProof: replacementProof
+            )
+        }
+        await #expect(throws: IOSAcceptedOutputDeliveryError.commitUncertain) {
+            _ = try await replacement.store.proveGuardedBaseline()
+        }
+
+        let clear = AcceptedDeliveryStoreFixture()
+        let (_, clearAuthorization) = try await clear.acceptAndAuthorize()
+        let clearProof = IOSAcceptedOutputHistoryOwnershipProof(
+            outboxReceipt: try await clear.outboxReceipt(
+                for: clearAuthorization
+            )
+        )
+        clear.journal.failNextReplace(
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+        await #expect(throws: IOSAcceptedOutputDeliveryError.commitUncertain) {
+            _ = try await clear.store.clearPendingHistory(
+                authorization: clearAuthorization,
+                ownershipProof: clearProof
+            )
+        }
+        await #expect(throws: IOSAcceptedOutputDeliveryError.commitUncertain) {
+            _ = try await clear.store.proveGuardedBaseline()
+        }
+    }
+
+    @Test func guardedBaselinePropagatesTypedReadFailures() async {
+        let fixture = AcceptedDeliveryStoreFixture()
+        for error in [
+            IOSAcceptedOutputDeliveryError.sourceTooLarge,
+            .malformedData,
+            .unsupportedSchemaVersion,
+            .dataProtectionUnavailable,
+            .readFailed,
+        ] {
+            fixture.journal.failLoads(with: error)
+            await #expect(throws: error) {
+                _ = try await fixture.store.proveGuardedBaseline()
+            }
+            fixture.journal.failLoads(with: nil)
+        }
+    }
+
     @Test func acceptanceCommitsGenerationZeroAndAnExactImmutableDeadline() async throws {
         let fixture = AcceptedDeliveryStoreFixture()
 

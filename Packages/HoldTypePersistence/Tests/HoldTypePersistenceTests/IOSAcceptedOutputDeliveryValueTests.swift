@@ -178,6 +178,7 @@ struct IOSAcceptedOutputDeliveryValueTests {
             historyCapture: capture
         )
         #expect(preparation.historyWrite == marker)
+        #expect(preparation.historyCapture == capture)
 
         let disabledCapture = IOSAcceptedOutputHistoryCapture(
             testingPolicyReceipt: receipt,
@@ -195,6 +196,7 @@ struct IOSAcceptedOutputDeliveryValueTests {
             historyCapture: disabledCapture
         )
         #expect(disabledPreparation.historyWrite == nil)
+        #expect(disabledPreparation.historyCapture == disabledCapture)
 
         let rendered = String(describing: capture)
             + String(reflecting: capture)
@@ -202,6 +204,76 @@ struct IOSAcceptedOutputDeliveryValueTests {
         #expect(!rendered.contains("CAPTURE-SECRET-MODEL"))
         #expect(!rendered.contains("CAPTURE-SECRET-TEXT"))
         #expect(rendered.contains("redacted"))
+    }
+
+    @Test func preparationEqualityIncludesTheExactPhysicalCapture() async throws {
+        let state = IOSHistoryPolicyState.baseline
+        let firstReceipt = try await IOSHistoryPolicyStore(
+            journal: AcceptedDeliveryPolicyFakeJournal(
+                state: state,
+                fileRevisionToken: 100
+            )
+        ).confirm(expected: IOSHistoryPolicyExpectation(state: state))
+        let secondReceipt = try await IOSHistoryPolicyStore(
+            journal: AcceptedDeliveryPolicyFakeJournal(
+                state: state,
+                fileRevisionToken: 200
+            )
+        ).confirm(expected: IOSHistoryPolicyExpectation(state: state))
+        let marker = try IOSAcceptedOutputHistoryWrite(
+            policyGeneration: 1,
+            transcriptionModel: "model",
+            transcriptionLanguageCode: "en",
+            durationMilliseconds: 10
+        )
+        let firstCapture = IOSAcceptedOutputHistoryCapture(
+            testingPolicyReceipt: firstReceipt,
+            historyWrite: marker
+        )
+        let secondCapture = IOSAcceptedOutputHistoryCapture(
+            testingPolicyReceipt: secondReceipt,
+            historyWrite: marker
+        )
+        let deliveryID = UUID()
+        let sessionID = UUID()
+        let attemptID = UUID()
+        let transcriptID = UUID()
+
+        func preparation(
+            capture: IOSAcceptedOutputHistoryCapture
+        ) throws -> IOSAcceptedOutputDeliveryPreparation {
+            try IOSAcceptedOutputDeliveryPreparation(
+                deliveryID: deliveryID,
+                sessionID: sessionID,
+                attemptID: attemptID,
+                transcriptID: transcriptID,
+                rawAcceptedText: "accepted",
+                outputIntent: .standard,
+                automaticInsertionPreferenceEnabled: true,
+                keepLatestResult: true,
+                historyCapture: capture
+            )
+        }
+
+        let first = try preparation(capture: firstCapture)
+        let identical = try preparation(capture: firstCapture)
+        let physicallyDifferent = try preparation(capture: secondCapture)
+        let raw = try IOSAcceptedOutputDeliveryPreparation(
+            deliveryID: deliveryID,
+            sessionID: sessionID,
+            attemptID: attemptID,
+            transcriptID: transcriptID,
+            rawAcceptedText: "accepted",
+            outputIntent: .standard,
+            automaticInsertionPreferenceEnabled: true,
+            keepLatestResult: true,
+            historyWrite: marker
+        )
+
+        #expect(first == identical)
+        #expect(first != physicallyDifferent)
+        #expect(first != raw)
+        #expect(first.historyWrite == physicallyDifferent.historyWrite)
     }
 
     @Test func recordRejectsImpossibleStateGenerationAndTombstoneCombinations() throws {
