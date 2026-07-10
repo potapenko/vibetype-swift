@@ -508,6 +508,100 @@ open -a HoldType</code></pre>
             </a>
           </div>
         </div>
+
+        <div
+          class="container api-key-guide"
+          id="api-key-guide"
+          aria-labelledby="api-key-guide-title"
+        >
+          <div class="api-key-copy">
+            <p class="section-label">New to API keys?</p>
+            <h3 id="api-key-guide-title">Create one in a couple of minutes.</h3>
+            <p class="api-key-intro">
+              An API key is a private credential that lets HoldType send audio for
+              transcription through your OpenAI Platform account. It is separate from
+              your ChatGPT login and subscription.
+            </p>
+            <ol class="api-key-steps">
+              <li>
+                Sign in to OpenAI Platform and open the
+                <a
+                  href="https://platform.openai.com/api-keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >API key page</a>.
+              </li>
+              <li>Create a secret key and copy it when OpenAI shows it.</li>
+              <li>In HoldType, open Settings → OpenAI, paste the key, and save.</li>
+            </ol>
+            <div class="api-key-actions">
+              <a
+                class="button button-quiet"
+                href="https://platform.openai.com/api-keys"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Create an OpenAI key
+              </a>
+              <a
+                class="text-link"
+                href="https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Official instructions
+              </a>
+            </div>
+            <p class="api-key-note">
+              OpenAI shows the full key only when it is created. Keep it private and
+              paste it only into HoldType, which stores it locally in macOS Keychain.
+              API billing is separate from ChatGPT, and a new Platform account may
+              require prepaid credit.
+            </p>
+          </div>
+
+          <figure class="api-key-video">
+            <div class="video-shell" data-video-shell>
+              <button
+                class="video-facade"
+                type="button"
+                data-video-facade
+                data-video-id="CGncYPblQA8"
+                data-video-title="How to Create a ChatGPT API Key (2026 Tutorial)"
+                aria-label="Play the two-minute API key tutorial"
+              >
+                <span class="video-play" aria-hidden="true">
+                  <svg viewBox="0 0 48 48" focusable="false">
+                    <path d="M19 14.5v19l16-9.5-16-9.5Z"></path>
+                  </svg>
+                </span>
+                <span class="video-facade-copy">
+                  <span class="video-kicker">2-minute walkthrough</span>
+                  <strong>See how an OpenAI API key is created</strong>
+                  <span>Play the tutorial</span>
+                </span>
+              </button>
+              <noscript>
+                <a
+                  class="video-noscript"
+                  href="https://www.youtube.com/watch?v=CGncYPblQA8"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Watch the API key tutorial on YouTube
+                </a>
+              </noscript>
+            </div>
+            <figcaption>
+              Third-party tutorial by
+              <a
+                href="https://www.youtube.com/@Geekrar"
+                target="_blank"
+                rel="noopener noreferrer"
+              >GEEKrar</a>, 2:16, published June 2026. YouTube loads only after Play.
+            </figcaption>
+          </figure>
+        </div>
       </section>
 
       <section class="faq section-rule" id="faq" aria-labelledby="faq-title">
@@ -521,7 +615,9 @@ open -a HoldType</code></pre>
               <summary>Why is an OpenAI API key required?</summary>
               <p>
                 HoldType sends transcription requests through your own OpenAI Platform
-                account. The key is stored locally in macOS Keychain.
+                account. The key is stored locally in macOS Keychain. If API keys are
+                new to you, follow the <a href="#api-key-guide">three-step guide</a>
+                above.
               </p>
             </details>
             <details>

@@ -197,3 +197,25 @@ copyButtons.forEach((button) => {
     }
   });
 });
+
+const videoFacades = document.querySelectorAll("[data-video-facade]");
+
+videoFacades.forEach((button) => {
+  button.addEventListener("click", () => {
+    const videoId = button.dataset.videoId;
+    if (!videoId || !/^[A-Za-z0-9_-]{11}$/.test(videoId)) return;
+
+    const iframe = document.createElement("iframe");
+    iframe.className = "video-iframe";
+    iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`;
+    iframe.title = button.dataset.videoTitle || "YouTube tutorial";
+    iframe.allow =
+      "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share";
+    iframe.referrerPolicy = "strict-origin-when-cross-origin";
+    iframe.setAttribute("allowfullscreen", "");
+    iframe.tabIndex = 0;
+
+    button.replaceWith(iframe);
+    iframe.focus();
+  });
+});

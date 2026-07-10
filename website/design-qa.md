@@ -103,6 +103,29 @@ story, installation instructions, and a fuller FAQ.
   prepaid-credit and optional-request qualifications.
 - Browser console remained at zero warnings and zero errors.
 
+## API-key guide follow-up — 2026-07-10
+
+- Added a three-step beginner guide beneath installation with direct links to
+  OpenAI's API-key page and current Help Center article. The page never asks the
+  user to enter or paste a secret.
+- Verified the supplementary GEEKrar tutorial metadata on YouTube: 2:16,
+  published June 2026. The local facade is attributed and does not depend on a
+  remote thumbnail.
+- Before Play, the guide contained one facade, zero iframes, and zero YouTube,
+  `ytimg`, or `googlevideo` resource entries. After Play, the facade was replaced
+  by exactly one focused `youtube-nocookie.com` iframe with the expected video
+  ID.
+- With JavaScript disabled, the facade is hidden and a normal `Watch the API key
+  tutorial on YouTube` link remains available.
+- Checked `1440×900`, `390×844`, and `320×568`; the guide, actions, and video
+  shell stay inside the viewport with no page-level horizontal overflow.
+- Browser console remained at zero warnings and zero errors before and after
+  loading the player.
+- Browser captures were saved outside the repository at
+  `/tmp/holdtype-api-key-guide-final-desktop-1440x900.jpg`,
+  `/tmp/holdtype-api-key-guide-player-1440x900.jpg`, and
+  `/tmp/holdtype-api-key-guide-mobile-390x844.jpg`.
+
 ## Final result
 
 final result: passed

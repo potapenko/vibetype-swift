@@ -19,6 +19,12 @@ without breaking the Sparkle update feed that already uses GitHub Pages.
   root without an application build step.
 - Download links continue to use the stable GitHub latest-release URL.
 - The Homebrew Copy button copies the complete project-tap installation block.
+- API-key setup is explained in short written steps with direct links to the
+  official OpenAI key page and Help Center article. A third-party video is
+  supplementary and never the only setup path.
+- The embedded tutorial starts as a local facade. YouTube content loads only
+  after the user explicitly chooses Play; without JavaScript, a normal YouTube
+  link remains available.
 - `appcast.xml` remains available at the stable URL embedded in shipped apps.
 - Every release-notes URL referenced by the published appcast remains reachable
   after later website or app releases.
@@ -36,12 +42,19 @@ without breaking the Sparkle update feed that already uses GitHub Pages.
   publish and leave a partial artifact live.
 - No custom `CNAME` is published until the domain DNS and GitHub Pages custom
   domain are intentionally configured together.
+- The API-key guide must not ask the user to paste a key into the website. It
+  directs the user to paste the secret only into HoldType, where the app stores
+  it locally in macOS Keychain.
+- The video facade must not create a YouTube iframe or request YouTube media
+  before Play. The loaded player uses YouTube's privacy-enhanced embed domain.
 
 ## Failure policy
 
 - If the latest stable release, its appcast, or any referenced release notes
   cannot be resolved within a bounded timeout, the new deployment fails and the
   previously published Pages site remains in place.
+- If the third-party tutorial is removed, blocked, or outdated, the official
+  OpenAI links and written setup steps remain sufficient to finish setup.
 - A landing-page failure must not replace or remove the existing Sparkle feed.
 - A release must not report success if its Pages deployment removes the landing
   page or publishes update metadata that differs from the release asset.
@@ -64,3 +77,6 @@ without breaking the Sparkle update feed that already uses GitHub Pages.
   reconstruction of every referenced release-notes file.
 - Runtime verification checks the deployed root page, current appcast, current
   release notes, Copy interaction, responsive layouts, and browser console.
+- Landing-page QA verifies that no YouTube iframe exists before Play, one
+  privacy-enhanced iframe replaces the facade after Play, and the guide remains
+  readable at desktop and phone widths.

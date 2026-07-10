@@ -111,13 +111,16 @@ product outcome and must not imply that $10 is a price ceiling.
 7. OpenAI billing, the qualified $10 usage example, and exact data-boundary
    explanation.
 8. Authentic first-person founder story and microphone photo.
-9. GitHub/Homebrew setup and native FAQ disclosures.
+9. GitHub/Homebrew setup, a three-step API-key guide with an opt-in video, and
+   native FAQ disclosures.
 10. Final download CTA and source-available footer.
 
 ## Asset provenance
 
-All assets are copied from this repository so the page has no runtime asset
-dependency outside `website/`. Original source files are not modified.
+The initial page and its visual assets are self-contained under `website/`.
+The optional API-key tutorial creates a YouTube privacy-enhanced iframe only
+after the user presses Play; the default page makes no YouTube media request.
+Original repository assets are not modified.
 
 | Landing asset | Repository source | Treatment |
 | --- | --- | --- |
@@ -150,6 +153,12 @@ UI states were redrawn or retouched.
   or ceiling, and optional correction and translation are separate requests.
 - It uses the user's OpenAI Platform API key, and OpenAI bills API usage
   separately.
+- The setup guide never asks for the API key on the website. It links to the
+  official OpenAI key page, tells the user to paste the secret only into
+  HoldType, and explains that the app stores it locally in macOS Keychain.
+- The third-party API-key video is supplementary, attributed, and click-to-load.
+  Written steps and official OpenAI links remain sufficient if YouTube is
+  unavailable or the tutorial becomes outdated.
 - Audio goes to OpenAI for transcription. Optional correction and translation
   are separate text requests.
 - Completed audio is not retained by default; bounded session-only Retry audio

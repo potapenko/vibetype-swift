@@ -173,6 +173,21 @@ Use evidence that can be checked:
 Repeat the primary download CTA, then provide the shortest setup path. Homebrew
 is secondary to the disk image.
 
+For people unfamiliar with API keys, add a compact guide directly under setup:
+
+1. explain that an API key is a private OpenAI Platform credential, separate
+   from a ChatGPT login or subscription;
+2. link to OpenAI's official API-key page and Help Center article;
+3. tell the user to create and copy the key, then paste it only into
+   HoldType Settings → OpenAI;
+4. state that the app stores it locally in macOS Keychain and that the website
+   never asks for the secret.
+
+A short third-party video may sit beside these steps, but it is supplementary.
+Show an attributed local facade first and create a privacy-enhanced YouTube
+iframe only after Play. Preserve a normal YouTube link without JavaScript, and
+keep the written path complete if the video is removed, blocked, or outdated.
+
 FAQ should answer:
 
 - Why is an OpenAI API key required?
@@ -191,7 +206,7 @@ Priority 0:
 
 - 10–20 second end-to-end demo in a real target app;
 - hero frame that shows the cursor, floating indicator, and inserted text;
-- a short first-run guide for permissions and the OpenAI key;
+- a first-run permissions walkthrough beyond the published API-key guide;
 - a working public website before linking it from the README;
 - a documented cost example that states what the estimate includes.
 
