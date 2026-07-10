@@ -649,6 +649,14 @@ struct IOSAcceptedHistoryStoreTests {
                 policy: other.policy
             )
         }
+        await #expect(throws: IOSAcceptedHistoryError.commitUncertain) {
+            try await fixture.store.pruneInvalidatedRows(
+                using: try await historyPolicyReceipt(
+                    generation: 2,
+                    enabled: false
+                )
+            )
+        }
         let confirmed = try await fixture.store.decideUpsert(
             delivery: first.delivery,
             policy: first.policy
@@ -1113,6 +1121,311 @@ struct IOSAcceptedHistoryStoreTests {
         )
         #expect(fixture.journal.currentEnvelope?.revision == 3)
         #expect(fixture.journal.currentEnvelope?.entries.count == 2)
+    }
+
+    @Test func pruneMissingIsNoOpAndCurrentGenerationRewritesIdentically() async throws {
+        let policy = try await historyPolicyReceipt(
+            generation: 2,
+            enabled: false
+        )
+        let missingFixture = AcceptedHistoryStoreFixture()
+        try await missingFixture.store.pruneInvalidatedRows(using: policy)
+        #expect(missingFixture.journal.currentEnvelope == nil)
+        #expect(missingFixture.journal.events == ["load"])
+
+        let current = try acceptedHistoryStoredEntry(
+            index: 541,
+            generation: 2,
+            cacheIdentifier: "cache/current.m4a"
+        )
+        let noOpFixture = AcceptedHistoryStoreFixture()
+        let source = try IOSAcceptedHistoryEnvelope(
+            revision: 7,
+            entries: [current]
+        )
+        noOpFixture.journal.install(source)
+        noOpFixture.journal.resetEvents()
+
+        try await noOpFixture.store.pruneInvalidatedRows(using: policy)
+        #expect(noOpFixture.journal.currentEnvelope == source)
+        #expect(noOpFixture.journal.events == ["load", "replace:7"])
+    }
+
+    @Test func pruneRemovesOnlyOlderRowsAndRetainsEmptyEnvelope() async throws {
+        let policy = try await historyPolicyReceipt(
+            generation: 2,
+            enabled: false
+        )
+        let base = acceptedHistoryStoreDate()
+        let staleFirst = try acceptedHistoryStoredEntry(
+            index: 542,
+            generation: 1,
+            createdAt: base.addingTimeInterval(-40)
+        )
+        let currentFirst = try acceptedHistoryStoredEntry(
+            index: 543,
+            generation: 2,
+            createdAt: base.addingTimeInterval(-30),
+            cacheIdentifier: "cache/first.m4a"
+        )
+        let staleSecond = try acceptedHistoryStoredEntry(
+            index: 544,
+            generation: 1,
+            createdAt: base.addingTimeInterval(-20)
+        )
+        let currentSecond = try acceptedHistoryStoredEntry(
+            index: 545,
+            generation: 2,
+            createdAt: base.addingTimeInterval(-10),
+            cacheIdentifier: "cache/second.m4a"
+        )
+        let fixture = AcceptedHistoryStoreFixture()
+        fixture.journal.install(
+            try IOSAcceptedHistoryEnvelope(
+                revision: 5,
+                entries: [
+                    currentSecond, staleSecond, currentFirst, staleFirst,
+                ]
+            )
+        )
+
+        try await fixture.store.pruneInvalidatedRows(using: policy)
+        #expect(fixture.journal.currentEnvelope?.revision == 6)
+        #expect(fixture.journal.currentEnvelope?.entries == [
+            currentSecond, currentFirst,
+        ])
+
+        let emptyFixture = AcceptedHistoryStoreFixture()
+        emptyFixture.journal.install(
+            try IOSAcceptedHistoryEnvelope(
+                revision: 3,
+                entries: [staleSecond, staleFirst]
+            )
+        )
+        try await emptyFixture.store.pruneInvalidatedRows(using: policy)
+        #expect(emptyFixture.journal.currentEnvelope?.revision == 4)
+        #expect(emptyFixture.journal.currentEnvelope?.entries.isEmpty == true)
+    }
+
+    @Test func pruneRejectsFutureGenerationAndMutationOverflow() async throws {
+        let policy = try await historyPolicyReceipt(
+            generation: 2,
+            enabled: false
+        )
+        let future = try acceptedHistoryStoredEntry(
+            index: 546,
+            generation: 3
+        )
+        let futureFixture = AcceptedHistoryStoreFixture()
+        let futureSource = try IOSAcceptedHistoryEnvelope(
+            revision: 9,
+            entries: [future]
+        )
+        futureFixture.journal.install(futureSource)
+        futureFixture.journal.resetEvents()
+        await #expect(
+            throws: IOSAcceptedHistoryError.stalePolicyGeneration
+        ) {
+            try await futureFixture.store.pruneInvalidatedRows(using: policy)
+        }
+        #expect(futureFixture.journal.currentEnvelope == futureSource)
+        #expect(futureFixture.journal.events == ["load"])
+
+        let stale = try acceptedHistoryStoredEntry(
+            index: 547,
+            generation: 1
+        )
+        let overflowFixture = AcceptedHistoryStoreFixture()
+        let overflowSource = try IOSAcceptedHistoryEnvelope(
+            revision: Int64.max,
+            entries: [stale]
+        )
+        overflowFixture.journal.install(overflowSource)
+        overflowFixture.journal.resetEvents()
+        await #expect(throws: IOSAcceptedHistoryError.revisionOverflow) {
+            try await overflowFixture.store.pruneInvalidatedRows(using: policy)
+        }
+        #expect(overflowFixture.journal.currentEnvelope == overflowSource)
+        #expect(overflowFixture.journal.events == ["load"])
+
+        let noOpAtMaximum = AcceptedHistoryStoreFixture()
+        let current = try acceptedHistoryStoredEntry(
+            index: 548,
+            generation: 2
+        )
+        noOpAtMaximum.journal.install(
+            try IOSAcceptedHistoryEnvelope(
+                revision: Int64.max,
+                entries: [current]
+            )
+        )
+        try await noOpAtMaximum.store.pruneInvalidatedRows(using: policy)
+        #expect(noOpAtMaximum.journal.currentEnvelope?.revision == Int64.max)
+    }
+
+    @Test func pruneUsesPhysicalCASAcrossStoreActors() async throws {
+        let policy = try await historyPolicyReceipt(
+            generation: 2,
+            enabled: false
+        )
+        let stale = try acceptedHistoryStoredEntry(
+            index: 549,
+            generation: 1,
+            createdAt: acceptedHistoryStoreDate().addingTimeInterval(-1)
+        )
+        let current = try acceptedHistoryStoredEntry(
+            index: 550,
+            generation: 2
+        )
+        let fixture = AcceptedHistoryStoreFixture()
+        fixture.journal.install(
+            try IOSAcceptedHistoryEnvelope(
+                revision: 3,
+                entries: [current, stale]
+            )
+        )
+        fixture.journal.delayNextLoads(2)
+        let first = Task {
+            try await fixture.store.pruneInvalidatedRows(using: policy)
+        }
+        let second = Task {
+            try await fixture.makeStore().pruneInvalidatedRows(using: policy)
+        }
+        let results = await [first.result, second.result]
+        #expect(results.filter {
+            if case .success = $0 { return true }
+            return false
+        }.count == 1)
+        #expect(fixture.journal.currentEnvelope?.revision == 4)
+        #expect(fixture.journal.currentEnvelope?.entries == [current])
+
+        try await fixture.store.pruneInvalidatedRows(using: policy)
+        #expect(fixture.journal.currentEnvelope?.revision == 4)
+    }
+
+    @Test func pruneUncertaintyIsExactReceiptAndStoreWide() async throws {
+        let base = acceptedHistoryStoreDate()
+        for removesRows in [true, false] {
+            for commitWasVisible in [true, false] {
+                let fixture = AcceptedHistoryStoreFixture()
+                let capabilities = try await historyCapabilities(
+                    index: removesRows ? 551 : 552,
+                    generation: 2,
+                    createdAt: base
+                )
+                let current = try historyEntry(from: capabilities.delivery)
+                let stale = try acceptedHistoryStoredEntry(
+                    index: commitWasVisible ? 553 : 554,
+                    generation: 1,
+                    createdAt: base.addingTimeInterval(-1)
+                )
+                let source = try IOSAcceptedHistoryEnvelope(
+                    revision: 7,
+                    entries: removesRows ? [current, stale] : [current]
+                )
+                fixture.journal.install(source)
+                let policy = try await historyPolicyReceipt(
+                    generation: 2,
+                    enabled: false
+                )
+                let mismatch = try await historyPolicyReceipt(
+                    generation: 3,
+                    enabled: true
+                )
+                fixture.journal.failNextReplace(
+                    with: .commitUncertain,
+                    commitBeforeThrowing: commitWasVisible
+                )
+
+                await #expect(throws: IOSAcceptedHistoryError.commitUncertain) {
+                    try await fixture.store.pruneInvalidatedRows(using: policy)
+                }
+                await #expect(throws: IOSAcceptedHistoryError.commitUncertain) {
+                    try await fixture.store.pruneInvalidatedRows(using: mismatch)
+                }
+                await #expect(throws: IOSAcceptedHistoryError.commitUncertain) {
+                    _ = try await fixture.store.load()
+                }
+                await #expect(throws: IOSAcceptedHistoryError.commitUncertain) {
+                    _ = try await fixture.store.performStagingMaintenance()
+                }
+                let other = try await historyCapabilities(
+                    index: 555,
+                    generation: 2,
+                    createdAt: base.addingTimeInterval(1)
+                )
+                await #expect(throws: IOSAcceptedHistoryError.commitUncertain) {
+                    _ = try await fixture.store.decideUpsert(
+                        delivery: other.delivery,
+                        policy: other.policy
+                    )
+                }
+                await #expect(throws: IOSAcceptedHistoryError.commitUncertain) {
+                    _ = try await fixture.store.confirmMembership(
+                        delivery: capabilities.delivery,
+                        policy: capabilities.policy
+                    )
+                }
+
+                try await fixture.store.pruneInvalidatedRows(using: policy)
+                #expect(
+                    fixture.journal.currentEnvelope?.revision
+                        == (removesRows ? 8 : 7)
+                )
+                #expect(fixture.journal.currentEnvelope?.entries == [current])
+            }
+        }
+    }
+
+    @Test func pruneUncertaintyRejectsSupersedingAcceptedWinner() async throws {
+        let base = acceptedHistoryStoreDate()
+        let fixture = AcceptedHistoryStoreFixture()
+        let currentCapabilities = try await historyCapabilities(
+            index: 556,
+            generation: 2,
+            createdAt: base
+        )
+        let current = try historyEntry(from: currentCapabilities.delivery)
+        let stale = try acceptedHistoryStoredEntry(
+            index: 557,
+            generation: 1,
+            createdAt: base.addingTimeInterval(-1)
+        )
+        fixture.journal.install(
+            try IOSAcceptedHistoryEnvelope(
+                revision: 5,
+                entries: [current, stale]
+            )
+        )
+        let policy = try await historyPolicyReceipt(
+            generation: 2,
+            enabled: false
+        )
+        fixture.journal.failNextReplace(
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+        await #expect(throws: IOSAcceptedHistoryError.commitUncertain) {
+            try await fixture.store.pruneInvalidatedRows(using: policy)
+        }
+
+        let winner = try await historyCapabilities(
+            index: 558,
+            generation: 2,
+            createdAt: base.addingTimeInterval(1)
+        )
+        _ = try await fixture.makeStore().decideUpsert(
+            delivery: winner.delivery,
+            policy: winner.policy
+        )
+        let winnerEnvelope = fixture.journal.currentEnvelope
+        await #expect(
+            throws: IOSAcceptedHistoryError.compareAndSwapFailed
+        ) {
+            try await fixture.store.pruneInvalidatedRows(using: policy)
+        }
+        #expect(fixture.journal.currentEnvelope == winnerEnvelope)
+        #expect(try await fixture.store.load() == winnerEnvelope)
     }
 
     @Test func maintenanceReportIsForwardedWithoutHistoryPayload() async throws {

@@ -253,9 +253,16 @@ actor IOSAcceptedHistoryStore {
         let outcome: Outcome
     }
 
+    private struct UncertainPruneIntent: Equatable, Sendable {
+        let source: IOSAcceptedHistoryJournalSnapshot
+        let policy: IOSHistoryPolicyReceipt
+        let outcome: IOSAcceptedHistoryEnvelope
+    }
+
     private let journal: any IOSAcceptedHistoryJournalStoring
     private let now: @Sendable () -> Date
     private var uncertainIntent: UncertainIntent?
+    private var uncertainPruneIntent: UncertainPruneIntent?
 
     init(applicationSupportDirectoryURL: URL) {
         journal = FoundationIOSAcceptedHistoryJournalRepository(
@@ -275,13 +282,17 @@ actor IOSAcceptedHistoryStore {
     /// Raw state is coordinator-only because stale generations remain on disk
     /// after a committed policy cutover until lifecycle reconciliation.
     func load() throws -> IOSAcceptedHistoryEnvelope? {
-        try journal.load()?.envelope
+        guard uncertainPruneIntent == nil else {
+            throw IOSAcceptedHistoryError.commitUncertain
+        }
+        return try journal.load()?.envelope
     }
 
     func decideUpsert(
         delivery: IOSAcceptedOutputDeliveryAuthorization,
         policy: IOSHistoryPolicyReceipt
     ) throws -> IOSAcceptedHistoryRowReceipt {
+        try requireNoPruneUncertainty()
         let candidate = try IOSAcceptedHistoryCandidate(
             delivery: delivery,
             policy: policy
@@ -293,6 +304,7 @@ actor IOSAcceptedHistoryStore {
         outbox: IOSAcceptedHistoryOutboxReceipt,
         policy: IOSHistoryPolicyReceipt
     ) throws -> IOSAcceptedHistoryRowReceipt {
+        try requireNoPruneUncertainty()
         let candidate = try IOSAcceptedHistoryCandidate(
             outbox: outbox,
             policy: policy
@@ -306,6 +318,7 @@ actor IOSAcceptedHistoryStore {
         delivery: IOSAcceptedOutputDeliveryAuthorization,
         policy: IOSHistoryPolicyReceipt
     ) throws -> IOSAcceptedHistoryRowReceipt {
+        try requireNoPruneUncertainty()
         let candidate = try IOSAcceptedHistoryCandidate(
             delivery: delivery,
             policy: policy
@@ -317,6 +330,7 @@ actor IOSAcceptedHistoryStore {
         outbox: IOSAcceptedHistoryOutboxReceipt,
         policy: IOSHistoryPolicyReceipt
     ) throws -> IOSAcceptedHistoryRowReceipt {
+        try requireNoPruneUncertainty()
         let candidate = try IOSAcceptedHistoryCandidate(
             outbox: outbox,
             policy: policy
@@ -324,10 +338,38 @@ actor IOSAcceptedHistoryStore {
         return try confirmMembership(candidate)
     }
 
+    func pruneInvalidatedRows(
+        using policy: IOSHistoryPolicyReceipt
+    ) throws {
+        if let uncertainPruneIntent {
+            guard policy == uncertainPruneIntent.policy else {
+                throw IOSAcceptedHistoryError.commitUncertain
+            }
+            return try reconcilePrune(
+                uncertainPruneIntent,
+                current: try journal.load()
+            )
+        }
+        guard uncertainIntent == nil else {
+            throw IOSAcceptedHistoryError.commitUncertain
+        }
+        guard let current = try journal.load() else { return }
+        let outcome = try pruneOutcome(
+            current.envelope,
+            policyGeneration: policy.state.policyGeneration
+        )
+        try publishPrune(
+            outcome,
+            source: current,
+            policy: policy
+        )
+    }
+
     @discardableResult
     func performStagingMaintenance()
         throws -> IOSAcceptedHistoryMaintenanceReport {
-        IOSAcceptedHistoryMaintenanceReport(
+        try requireNoPruneUncertainty()
+        return IOSAcceptedHistoryMaintenanceReport(
             try journal.performStagingMaintenance(now: now())
         )
     }
@@ -338,6 +380,95 @@ private extension IOSAcceptedHistoryStore {
         case live
         case expired
         case clockRollbackAmbiguous
+    }
+
+    private func requireNoPruneUncertainty() throws {
+        guard uncertainPruneIntent == nil else {
+            throw IOSAcceptedHistoryError.commitUncertain
+        }
+    }
+
+    private func pruneOutcome(
+        _ source: IOSAcceptedHistoryEnvelope,
+        policyGeneration: Int64
+    ) throws -> IOSAcceptedHistoryEnvelope {
+        guard source.entries.allSatisfy({
+            $0.policyGeneration <= policyGeneration
+        }) else {
+            throw IOSAcceptedHistoryError.stalePolicyGeneration
+        }
+        let entries = source.entries.filter {
+            $0.policyGeneration == policyGeneration
+        }
+        guard entries != source.entries else { return source }
+        let nextRevision = source.revision.addingReportingOverflow(1)
+        guard !nextRevision.overflow else {
+            throw IOSAcceptedHistoryError.revisionOverflow
+        }
+        return try IOSAcceptedHistoryEnvelope(
+            revision: nextRevision.partialValue,
+            entries: entries
+        )
+    }
+
+    private func publishPrune(
+        _ outcome: IOSAcceptedHistoryEnvelope,
+        source: IOSAcceptedHistoryJournalSnapshot,
+        policy: IOSHistoryPolicyReceipt
+    ) throws {
+        let intent = UncertainPruneIntent(
+            source: source,
+            policy: policy,
+            outcome: outcome
+        )
+        do {
+            let snapshot = try journal.replace(
+                outcome,
+                expected: source,
+                authorization: IOSAcceptedHistoryJournalMutationAuthorization()
+            )
+            guard snapshot.envelope == outcome else {
+                uncertainPruneIntent = intent
+                throw IOSAcceptedHistoryError.commitUncertain
+            }
+            uncertainPruneIntent = nil
+        } catch IOSAcceptedHistoryError.commitUncertain {
+            uncertainPruneIntent = intent
+            throw IOSAcceptedHistoryError.commitUncertain
+        }
+    }
+
+    private func reconcilePrune(
+        _ intent: UncertainPruneIntent,
+        current: IOSAcceptedHistoryJournalSnapshot?
+    ) throws {
+        let sourceStillCurrent = current == intent.source
+        if let current,
+           current.envelope == intent.outcome,
+           !sourceStillCurrent {
+            return try publishPrune(
+                intent.outcome,
+                source: current,
+                policy: intent.policy
+            )
+        }
+        guard let current, sourceStillCurrent else {
+            uncertainPruneIntent = nil
+            throw IOSAcceptedHistoryError.compareAndSwapFailed
+        }
+        let revalidated = try pruneOutcome(
+            current.envelope,
+            policyGeneration: intent.policy.state.policyGeneration
+        )
+        guard revalidated == intent.outcome else {
+            uncertainPruneIntent = nil
+            throw IOSAcceptedHistoryError.compareAndSwapFailed
+        }
+        return try publishPrune(
+            intent.outcome,
+            source: current,
+            policy: intent.policy
+        )
     }
 
     private func decideUpsert(
