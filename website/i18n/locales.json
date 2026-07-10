@@ -5,6 +5,7 @@
       "code": "en",
       "path": "/",
       "dir": "ltr",
+      "ogLocale": "en_US",
       "nativeName": "English",
       "browserMatches": [
         "en"
@@ -14,6 +15,7 @@
       "code": "es",
       "path": "/es/",
       "dir": "ltr",
+      "ogLocale": "es_ES",
       "nativeName": "Español",
       "browserMatches": [
         "es"
@@ -23,6 +25,7 @@
       "code": "de",
       "path": "/de/",
       "dir": "ltr",
+      "ogLocale": "de_DE",
       "nativeName": "Deutsch",
       "browserMatches": [
         "de"
@@ -32,6 +35,7 @@
       "code": "fr",
       "path": "/fr/",
       "dir": "ltr",
+      "ogLocale": "fr_FR",
       "nativeName": "Français",
       "browserMatches": [
         "fr"
@@ -41,6 +45,7 @@
       "code": "pt-BR",
       "path": "/pt-br/",
       "dir": "ltr",
+      "ogLocale": "pt_BR",
       "nativeName": "Português (Brasil)",
       "browserMatches": [
         "pt"
@@ -50,6 +55,7 @@
       "code": "ja",
       "path": "/ja/",
       "dir": "ltr",
+      "ogLocale": "ja_JP",
       "nativeName": "日本語",
       "browserMatches": [
         "ja"
@@ -59,6 +65,7 @@
       "code": "zh-Hans",
       "path": "/zh-hans/",
       "dir": "ltr",
+      "ogLocale": "zh_CN",
       "nativeName": "简体中文",
       "browserMatches": [
         "zh-Hans",
@@ -70,6 +77,7 @@
       "code": "ko",
       "path": "/ko/",
       "dir": "ltr",
+      "ogLocale": "ko_KR",
       "nativeName": "한국어",
       "browserMatches": [
         "ko"
@@ -79,6 +87,7 @@
       "code": "ru",
       "path": "/ru/",
       "dir": "ltr",
+      "ogLocale": "ru_RU",
       "nativeName": "Русский",
       "browserMatches": [
         "ru"
@@ -88,6 +97,7 @@
       "code": "ar",
       "path": "/ar/",
       "dir": "rtl",
+      "ogLocale": "ar_AR",
       "nativeName": "العربية",
       "browserMatches": [
         "ar"

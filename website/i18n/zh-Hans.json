@@ -15,7 +15,7 @@
     "switcherLabel": "语言",
     "switcherAria": "选择语言",
     "suggestionAria": "语言建议",
-    "suggestionMessage": "此页面提供 {languageName} 版本。",
+    "suggestionMessage": "此页面提供简体中文版本。",
     "suggestionAction": "查看页面",
     "suggestionDismiss": "暂不",
     "suggestionDismissAria": "关闭语言建议"

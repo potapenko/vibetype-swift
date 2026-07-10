@@ -15,7 +15,7 @@
     "switcherLabel": "言語",
     "switcherAria": "言語を選択",
     "suggestionAria": "言語の提案",
-    "suggestionMessage": "このページは {languageName} でご覧いただけます。",
+    "suggestionMessage": "このページは日本語でご覧いただけます。",
     "suggestionAction": "ページを見る",
     "suggestionDismiss": "今はしない",
     "suggestionDismissAria": "言語の提案を閉じる"

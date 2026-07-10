@@ -1,13 +1,59 @@
+const localeConfigElement = document.querySelector("#locale-config");
+
+const defaultLocaleConfig = {
+  currentLocale: "en",
+  defaultLocale: "en",
+  isDefaultRoute: true,
+  assetPrefix: "assets/",
+  preferenceStorageKey: "holdtype.preferredLocale.v1",
+  dismissedSessionKey: "holdtype.localeSuggestionDismissed.v1",
+  strings: {
+    "header.menuClosed": "Menu",
+    "header.menuOpen": "Close",
+    "hero.demo.status.listening": "Listening",
+    "hero.demo.status.transcribing": "Transcribing",
+    "hero.demo.status.inserted": "Inserted",
+    "install.homebrew.copyIdle": "Copy",
+    "install.homebrew.copyCopied": "Copied",
+    "install.homebrew.copyRetry": "Try again",
+    "install.homebrew.copySuccessStatus": "Homebrew command copied.",
+    "install.homebrew.copyFailureStatus": "Copy failed. Select the command manually.",
+    "apiKeyGuide.video.fallbackIframeTitle": "YouTube tutorial",
+    "lightbox.fallbackImageAlt": "Full-size HoldType screenshot",
+  },
+  locales: [],
+};
+
+let localeConfig = defaultLocaleConfig;
+
+try {
+  const parsedLocaleConfig = localeConfigElement
+    ? JSON.parse(localeConfigElement.textContent)
+    : null;
+  if (parsedLocaleConfig && typeof parsedLocaleConfig === "object") {
+    localeConfig = { ...defaultLocaleConfig, ...parsedLocaleConfig };
+    localeConfig.strings = {
+      ...defaultLocaleConfig.strings,
+      ...(parsedLocaleConfig.strings || {}),
+    };
+  }
+} catch {
+  localeConfig = defaultLocaleConfig;
+}
+
+const localizedString = (key) => localeConfig.strings[key] || defaultLocaleConfig.strings[key] || key;
+
 const navToggle = document.querySelector("[data-nav-toggle]");
 const siteNav = document.querySelector("[data-site-nav]");
 const navLabel = document.querySelector("[data-nav-label]");
+const languageSelector = document.querySelector("[data-language-selector]");
 
 function closeNavigation({ returnFocus = false } = {}) {
   if (!navToggle || !siteNav || !navLabel) return;
 
   siteNav.classList.remove("is-open");
   navToggle.setAttribute("aria-expanded", "false");
-  navLabel.textContent = "Menu";
+  navLabel.textContent = localizedString("header.menuClosed");
 
   if (returnFocus) navToggle.focus();
 }
@@ -18,7 +64,10 @@ if (navToggle && siteNav && navLabel) {
 
     siteNav.classList.toggle("is-open", nextOpenState);
     navToggle.setAttribute("aria-expanded", String(nextOpenState));
-    navLabel.textContent = nextOpenState ? "Close" : "Menu";
+    navLabel.textContent = localizedString(
+      nextOpenState ? "header.menuOpen" : "header.menuClosed",
+    );
+    if (nextOpenState && languageSelector) languageSelector.open = false;
   });
 
   siteNav.addEventListener("click", (event) => {
@@ -59,10 +108,161 @@ if (navToggle && siteNav && navLabel) {
     }
   });
 
-  window.matchMedia("(min-width: 861px)").addEventListener("change", (event) => {
+  window.matchMedia("(min-width: 1121px)").addEventListener("change", (event) => {
     if (event.matches) closeNavigation();
   });
 }
+
+function readStorage(storage, key) {
+  try {
+    return storage?.getItem(key) || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(storage, key, value) {
+  try {
+    storage?.setItem(key, value);
+  } catch {
+    // Storage is an optional enhancement. Links continue to navigate without it.
+  }
+}
+
+function browserStorage(name) {
+  try {
+    return window[name];
+  } catch {
+    return null;
+  }
+}
+
+const persistentLocaleStorage = browserStorage("localStorage");
+const localeSessionStorage = browserStorage("sessionStorage");
+
+const localeLinks = document.querySelectorAll("[data-locale-link]");
+
+localeLinks.forEach((link) => {
+  link.addEventListener("click", () => {
+    const locale = link.dataset.locale || link.dataset.localeLink;
+    if (locale) {
+      writeStorage(persistentLocaleStorage, localeConfig.preferenceStorageKey, locale);
+    }
+
+    if (window.location.hash) {
+      const destination = new URL(link.href, window.location.href);
+      destination.hash = window.location.hash;
+      link.href = destination.href;
+    }
+  });
+});
+
+if (languageSelector) {
+  const languageSummary = languageSelector.querySelector("summary");
+
+  languageSelector.addEventListener("toggle", () => {
+    if (languageSelector.open) closeNavigation();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (languageSelector.open && !languageSelector.contains(event.target)) {
+      languageSelector.open = false;
+    }
+  });
+
+  languageSelector.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && languageSelector.open) {
+      event.preventDefault();
+      languageSelector.open = false;
+      languageSummary?.focus();
+    }
+  });
+}
+
+const languageSuggestion = document.querySelector("[data-language-suggestion]");
+const languageSuggestionText = languageSuggestion?.querySelector(
+  "[data-language-suggestion-text]",
+);
+const languageSuggestionAction = languageSuggestion?.querySelector(
+  "[data-language-suggestion-action]",
+);
+const languageSuggestionDismiss = languageSuggestion?.querySelector(
+  "[data-language-suggestion-dismiss]",
+);
+
+function localeForPreference(preference) {
+  if (!preference || !Array.isArray(localeConfig.locales)) return null;
+  const normalized = preference.replaceAll("_", "-").toLowerCase();
+
+  return (
+    localeConfig.locales.find((locale) => locale.code.toLowerCase() === normalized) ||
+    localeConfig.locales.find((locale) =>
+      locale.browserMatches?.some((candidate) => {
+        const match = candidate.toLowerCase();
+        return normalized === match || normalized.startsWith(`${match}-`);
+      }),
+    ) ||
+    null
+  );
+}
+
+function suggestedLocale() {
+  const savedLocale = readStorage(persistentLocaleStorage, localeConfig.preferenceStorageKey);
+  if (savedLocale) {
+    const savedMatch = localeForPreference(savedLocale);
+    if (savedMatch) return savedMatch;
+  }
+
+  const browserLanguages = Array.isArray(navigator.languages)
+    ? navigator.languages
+    : [navigator.language].filter(Boolean);
+  for (const language of browserLanguages) {
+    const match = localeForPreference(language);
+    if (match) return match;
+  }
+  return null;
+}
+
+function showLanguageSuggestion() {
+  if (
+    !languageSuggestion ||
+    !languageSuggestionText ||
+    !languageSuggestionAction ||
+    !languageSuggestionDismiss ||
+    !localeConfig.isDefaultRoute ||
+    readStorage(localeSessionStorage, localeConfig.dismissedSessionKey)
+  ) {
+    return;
+  }
+
+  const suggestion = suggestedLocale();
+  if (!suggestion || suggestion.code === localeConfig.defaultLocale) return;
+
+  languageSuggestionText.textContent = suggestion.suggestionMessage;
+  languageSuggestionAction.textContent = suggestion.suggestionAction;
+  languageSuggestionAction.href = suggestion.href;
+  languageSuggestionAction.dataset.locale = suggestion.code;
+  languageSuggestionDismiss.textContent = suggestion.suggestionDismiss;
+  languageSuggestionDismiss.setAttribute("aria-label", suggestion.suggestionDismissAria);
+  languageSuggestion.setAttribute("aria-label", suggestion.suggestionAria);
+  languageSuggestion.lang = suggestion.code;
+  languageSuggestion.dir = suggestion.dir;
+  languageSuggestion.hidden = false;
+}
+
+languageSuggestionAction?.addEventListener("click", () => {
+  const locale = languageSuggestionAction.dataset.locale;
+  if (locale) {
+    writeStorage(persistentLocaleStorage, localeConfig.preferenceStorageKey, locale);
+  }
+});
+
+languageSuggestionDismiss?.addEventListener("click", () => {
+  writeStorage(localeSessionStorage, localeConfig.dismissedSessionKey, "true");
+  languageSuggestion.hidden = true;
+});
+
+showLanguageSuggestion();
 
 const demo = document.querySelector("[data-demo]");
 const demoIndicator = document.querySelector("[data-demo-indicator]");
@@ -73,18 +273,18 @@ const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const demoStates = [
   {
     name: "listening",
-    label: "Listening",
-    image: "assets/indicator-listening.png",
+    label: localizedString("hero.demo.status.listening"),
+    image: `${localeConfig.assetPrefix}indicator-listening.png`,
   },
   {
     name: "transcribing",
-    label: "Transcribing",
-    image: "assets/indicator-transcribing.png",
+    label: localizedString("hero.demo.status.transcribing"),
+    image: `${localeConfig.assetPrefix}indicator-transcribing.png`,
   },
   {
     name: "inserted",
-    label: "Inserted",
-    image: "assets/app-icon.png",
+    label: localizedString("hero.demo.status.inserted"),
+    image: `${localeConfig.assetPrefix}app-icon.png`,
   },
 ];
 
@@ -183,17 +383,21 @@ copyButtons.forEach((button) => {
 
     try {
       await copyToClipboard(target.textContent.trim());
-      button.textContent = "Copied";
+      button.textContent = localizedString("install.homebrew.copyCopied");
       button.dataset.state = "copied";
-      if (status) status.textContent = "Homebrew command copied.";
+      if (status) {
+        status.textContent = localizedString("install.homebrew.copySuccessStatus");
+      }
 
       window.setTimeout(() => {
-        button.textContent = "Copy";
+        button.textContent = localizedString("install.homebrew.copyIdle");
         delete button.dataset.state;
       }, 1800);
     } catch {
-      button.textContent = "Try again";
-      if (status) status.textContent = "Copy failed. Select the command manually.";
+      button.textContent = localizedString("install.homebrew.copyRetry");
+      if (status) {
+        status.textContent = localizedString("install.homebrew.copyFailureStatus");
+      }
     }
   });
 });
@@ -208,7 +412,9 @@ videoFacades.forEach((button) => {
     const iframe = document.createElement("iframe");
     iframe.className = "video-iframe";
     iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`;
-    iframe.title = button.dataset.videoTitle || "YouTube tutorial";
+    iframe.title =
+      button.dataset.videoTitle ||
+      localizedString("apiKeyGuide.video.fallbackIframeTitle");
     iframe.allow =
       "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share";
     iframe.referrerPolicy = "strict-origin-when-cross-origin";
@@ -262,7 +468,8 @@ if (imageLightbox && lightboxImage && lightboxCaption && lightboxClose) {
 
     link.addEventListener("click", (event) => {
       const sourceImage = link.closest("figure")?.querySelector("img");
-      const imageAlt = sourceImage?.alt || "Full-size HoldType screenshot";
+      const imageAlt =
+        sourceImage?.alt || localizedString("lightbox.fallbackImageAlt");
 
       event.preventDefault();
       activeLightboxTrigger = link;

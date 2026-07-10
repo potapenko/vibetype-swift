@@ -1,13 +1,17 @@
 # HoldType static landing page
 
-This folder is a self-contained, build-free product landing page for HoldType.
+This folder contains the source for HoldType's statically generated product
+landing page. The build uses only Python's standard library and emits one
+complete, self-contained site for all ten supported locales.
 
 ## Run locally
 
 From the repository root:
 
 ```sh
-python3 -m http.server 4173 --directory website
+SITE_PREVIEW_DIR="$(mktemp -d)"
+python3 website/build_site.py --output-dir "$SITE_PREVIEW_DIR/public"
+python3 -m http.server 4173 --directory "$SITE_PREVIEW_DIR/public"
 ```
 
 Then open <http://localhost:4173/>.
@@ -16,7 +20,27 @@ The critical page content, navigation anchors, screenshots, FAQ content, and
 download links remain available when JavaScript is disabled. JavaScript is used
 only for progressive enhancements: mobile navigation, the labelled illustrative
 hero sequence, the Homebrew Copy button, the opt-in video player, and the
-full-size screenshot lightbox.
+full-size screenshot lightbox, the language menu, and the optional root-page
+locale suggestion. Each localized URL contains its complete translated content
+in generated HTML, so JavaScript is not required to read or navigate the site.
+
+## Localization
+
+The public routes are `/` (English and `x-default`), `/es/`, `/de/`, `/fr/`,
+`/pt-br/`, `/ja/`, `/zh-hans/`, `/ko/`, `/ru/`, and `/ar/`. Every page includes
+a canonical URL plus reciprocal `hreflang` links; `sitemap.xml` lists the same
+route set. Arabic is generated with `dir="rtl"`.
+
+The URL is authoritative. On `/` only, JavaScript may offer a non-blocking
+language suggestion based on an explicit saved choice or `navigator.languages`.
+It never silently redirects and does not use IP geolocation, browser location
+permission, cookies, or a DigitalOcean-specific geo service. An explicit choice
+is stored locally in the browser and can always be changed from the header.
+
+Edit shared facts and trusted links in `i18n/site.json`, locale metadata in
+`i18n/locales.json`, and copy in the corresponding locale catalog. The builder
+fails on missing or extra keys, placeholder drift, raw catalog HTML, unsafe
+output directories, and unexpected locale routes.
 
 ## Hosting
 
@@ -31,9 +55,10 @@ release workflows still build one complete Pages artifact so a website change
 or app release cannot erase update metadata. Do not point the shipped update
 feed at `holdtype.app` as part of a landing-only deployment.
 
-`README.md` and `design-qa.md` are repository documentation and are deliberately
-excluded from both public artifacts. The App Platform build copies only
-`index.html`, `styles.css`, `script.js`, and `assets/` into its output directory.
+`README.md`, `design-qa.md`, the generator, and the source catalogs are
+repository inputs or documentation and are deliberately excluded from public
+artifacts. App Platform runs `build_site.py` and publishes only generated HTML,
+shared CSS/JavaScript/assets, `sitemap.xml`, and `robots.txt`.
 
 ### Publish explicitly
 
@@ -64,10 +89,13 @@ records at the registrar.
 
 ## Files
 
-- `index.html` — semantic page content and product copy.
+- `index.html` — semantic page template with localization markers.
 - `styles.css` — responsive visual system and reduced-motion behavior.
-- `script.js` — mobile menu, hero illustration, Copy, opt-in video, and image
-  lightbox interactions.
+- `script.js` — language choice/suggestion plus the mobile menu, hero
+  illustration, Copy, opt-in video, and image lightbox interactions.
+- `build_site.py` — deterministic static-site generator and catalog validator.
+- `build_site_test.py` — focused generator, route, SEO, RTL, and safety tests.
+- `i18n/` — locale registry, shared trusted data, and ten copy catalogs.
 - `assets/` — local copies of real HoldType product assets.
 - `design-qa.md` — final concept-to-browser fidelity report, added after visual QA.
 
@@ -232,7 +260,8 @@ Checked on 2026-07-09:
 
 ## Implementation constraints
 
-There is no framework, package manager, build step, external font, CDN, form,
-cookie, analytics script, tracker, backend, or API route. All URLs used for local
-assets are relative so the folder can be served at a domain root or under a
-static-hosting subpath.
+There is no framework, package manager, external font, CDN, form, cookie,
+analytics script, tracker, backend, or API route. The standard-library build is
+bounded by the release tooling. All URLs used for local assets are relative so
+the generated artifact can be served at a domain root or under a static-hosting
+subpath.

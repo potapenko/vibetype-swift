@@ -194,6 +194,39 @@ story, installation instructions, and a fuller FAQ.
   `/tmp/holdtype-hero-badge-edge-mobile-visual-390x844.png`. The ImageGen design
   reference remains under the local Codex generated-images directory.
 
+## Ten-locale landing follow-up — 2026-07-10
+
+- Built and served the final generated artifact rather than the source template.
+  Confirmed the exact route set for English, Spanish, German, French, Brazilian
+  Portuguese, Japanese, Simplified Chinese, Korean, Russian, and Arabic.
+- Verified a selector-driven Arabic-to-Japanese transition, correct `lang` and
+  `dir` state, native language names, route-authoritative content, and zero
+  page-level overflow at `1440×1000` and `390×844`.
+- Arabic desktop and phone passes confirmed mirrored layout, readable isolated
+  Latin product/UI terms, logical FAQ spacing, a physically LTR Homebrew command
+  panel, and normal tracking for Arabic copy. Japanese and German phone passes
+  confirmed CJK heading tracking, long-copy wrapping, and no horizontal overflow.
+- Mobile Menu opened with localized labels; Escape closed it, reset
+  `aria-expanded`, and returned focus to the button. The language selector
+  exposed ten ordinary localized links at both desktop and phone widths.
+- Selecting Japanese persisted that explicit preference. A fresh English-root
+  tab offered the Japanese route without redirecting and localized the message,
+  action, dismiss text, and accessible labels. Dismissing the equivalent Russian
+  suggestion hid it for the browser session.
+- With script execution disabled, the English phone layout retained the complete
+  navigation, Download action, core content, and ten native `<details>` language
+  links. Following the Spanish link loaded the complete Spanish static page.
+- Browser console: zero warnings and zero errors. The bounded local server log
+  contained successful or cache-valid responses and no missing-resource response.
+- Evidence was saved outside the repository at
+  `/tmp/holdtype-localization-ar-desktop.png`,
+  `/tmp/holdtype-localization-ar-mobile.png`,
+  `/tmp/holdtype-localization-ja-mobile.png`,
+  `/tmp/holdtype-localization-nojs-mobile.png`, and
+  `/tmp/holdtype-localization-nojs-menu-mobile.png`.
+- No remaining actionable P0, P1, or P2 localization, responsive, interaction,
+  accessibility, SEO, or RTL finding remained after the final pass.
+
 ## Final result
 
 final result: passed

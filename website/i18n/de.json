@@ -15,7 +15,7 @@
     "switcherLabel": "Sprache",
     "switcherAria": "Sprache auswählen",
     "suggestionAria": "Sprachvorschlag",
-    "suggestionMessage": "Diese Seite ist auf {languageName} verfügbar.",
+    "suggestionMessage": "Diese Seite ist auf Deutsch verfügbar.",
     "suggestionAction": "Seite öffnen",
     "suggestionDismiss": "Nicht jetzt",
     "suggestionDismissAria": "Sprachvorschlag schließen"

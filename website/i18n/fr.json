@@ -15,7 +15,7 @@
     "switcherLabel": "Langue",
     "switcherAria": "Choisir la langue",
     "suggestionAria": "Suggestion de langue",
-    "suggestionMessage": "Cette page est disponible en {languageName}.",
+    "suggestionMessage": "Cette page est disponible en français.",
     "suggestionAction": "Voir la page",
     "suggestionDismiss": "Pas maintenant",
     "suggestionDismissAria": "Ignorer la suggestion de langue"

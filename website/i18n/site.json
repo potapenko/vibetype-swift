@@ -1,18 +1,4 @@
 {
-  "origin": "https://holdtype.app",
-  "defaultLocale": "en",
-  "openGraphLocales": {
-    "en": "en_US",
-    "es": "es_ES",
-    "de": "de_DE",
-    "fr": "fr_FR",
-    "pt-BR": "pt_BR",
-    "ja": "ja_JP",
-    "zh-Hans": "zh_CN",
-    "ko": "ko_KR",
-    "ru": "ru_RU",
-    "ar": "ar_AR"
-  },
   "tokens": {
     "brand.holdType": {
       "value": "HoldType",
@@ -264,12 +250,18 @@
       "href": "assets/settings-translation.png",
       "attrs": {
         "data-lightbox-link": ""
+      },
+      "localizedAttrs": {
+        "data-lightbox-caption": "features.translation.lightboxCaption"
       }
     },
     "billingScreenshot": {
       "href": "assets/settings-billing.png",
       "attrs": {
         "data-lightbox-link": ""
+      },
+      "localizedAttrs": {
+        "data-lightbox-caption": "privacy.billing.lightboxCaption"
       }
     }
   },

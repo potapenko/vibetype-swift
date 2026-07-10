@@ -15,7 +15,7 @@
     "switcherLabel": "اللغة",
     "switcherAria": "اختر اللغة",
     "suggestionAria": "اقتراح لغة",
-    "suggestionMessage": "هذه الصفحة متاحة باللغة {languageName}.",
+    "suggestionMessage": "هذه الصفحة متاحة باللغة العربية.",
     "suggestionAction": "عرض الصفحة",
     "suggestionDismiss": "ليس الآن",
     "suggestionDismissAria": "تجاهل اقتراح اللغة"

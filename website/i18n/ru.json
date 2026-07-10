@@ -15,7 +15,7 @@
     "switcherLabel": "Язык",
     "switcherAria": "Выбрать язык",
     "suggestionAria": "Предложение сменить язык",
-    "suggestionMessage": "Эта страница доступна на языке: {languageName}.",
+    "suggestionMessage": "Эта страница доступна на русском языке.",
     "suggestionAction": "Открыть страницу",
     "suggestionDismiss": "Не сейчас",
     "suggestionDismissAria": "Закрыть предложение сменить язык"
