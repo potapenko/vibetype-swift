@@ -39,7 +39,8 @@ that already uses GitHub Pages.
   text.
 - The image modal closes through its visible Close control, Escape, or a click
   outside the image. Closing returns focus to the screenshot link that opened
-  it.
+  it. Pointer dismissal does not show a focus outline after closing; Escape and
+  keyboard activation of Close keep the restored focus visible.
 - `appcast.xml` remains available at the stable URL embedded in shipped apps.
 - Every release-notes URL referenced by the published appcast remains reachable
   after later website or app releases.

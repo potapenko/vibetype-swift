@@ -433,6 +433,7 @@ const lightboxClose = imageLightbox?.querySelector("[data-lightbox-close]");
 const lightboxLinks = document.querySelectorAll("[data-lightbox-link]");
 
 let activeLightboxTrigger = null;
+let lightboxCloseActivatedWithKeyboard = false;
 
 const lightboxBackgroundElements = imageLightbox
   ? [...document.body.children].filter(
@@ -440,7 +441,7 @@ const lightboxBackgroundElements = imageLightbox
     )
   : [];
 
-function closeImageLightbox() {
+function closeImageLightbox({ showRestoredFocusOutline = false } = {}) {
   if (!imageLightbox || !lightboxImage || !lightboxCaption || imageLightbox.hidden) {
     return;
   }
@@ -457,7 +458,20 @@ function closeImageLightbox() {
 
   const trigger = activeLightboxTrigger;
   activeLightboxTrigger = null;
-  if (trigger?.isConnected) trigger.focus();
+  if (trigger?.isConnected) {
+    trigger.classList.toggle(
+      "is-pointer-focus-restored",
+      !showRestoredFocusOutline,
+    );
+    trigger.focus();
+    if (!showRestoredFocusOutline) {
+      trigger.addEventListener(
+        "blur",
+        () => trigger.classList.remove("is-pointer-focus-restored"),
+        { once: true },
+      );
+    }
+  }
 }
 
 if (imageLightbox && lightboxImage && lightboxCaption && lightboxClose) {
@@ -472,6 +486,7 @@ if (imageLightbox && lightboxImage && lightboxCaption && lightboxClose) {
         sourceImage?.alt || localizedString("lightbox.fallbackImageAlt");
 
       event.preventDefault();
+      link.classList.remove("is-pointer-focus-restored");
       activeLightboxTrigger = link;
       lightboxImage.src = link.href;
       lightboxImage.alt = imageAlt;
@@ -486,7 +501,22 @@ if (imageLightbox && lightboxImage && lightboxCaption && lightboxClose) {
     });
   });
 
-  lightboxClose.addEventListener("click", closeImageLightbox);
+  lightboxClose.addEventListener("pointerdown", () => {
+    lightboxCloseActivatedWithKeyboard = false;
+  });
+
+  lightboxClose.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      lightboxCloseActivatedWithKeyboard = true;
+    }
+  });
+
+  lightboxClose.addEventListener("click", () => {
+    closeImageLightbox({
+      showRestoredFocusOutline: lightboxCloseActivatedWithKeyboard,
+    });
+    lightboxCloseActivatedWithKeyboard = false;
+  });
 
   imageLightbox.addEventListener("click", (event) => {
     const protectedTarget = event.target.closest?.(
@@ -498,7 +528,7 @@ if (imageLightbox && lightboxImage && lightboxCaption && lightboxClose) {
   imageLightbox.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      closeImageLightbox();
+      closeImageLightbox({ showRestoredFocusOutline: true });
       return;
     }
 

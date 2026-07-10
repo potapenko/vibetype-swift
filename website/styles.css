@@ -713,6 +713,10 @@ h3 {
   outline-offset: 4px;
 }
 
+.product-shot-link.is-pointer-focus-restored:focus-visible {
+  outline: none;
+}
+
 .product-shot-link picture,
 .product-shot-link img {
   cursor: pointer;

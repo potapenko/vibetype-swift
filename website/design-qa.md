@@ -161,6 +161,19 @@ story, installation instructions, and a fuller FAQ.
   `/tmp/holdtype-screenshot-click-mobile.png`, and
   `/tmp/holdtype-screenshot-caption-mobile.png`.
 
+## Restored screenshot focus follow-up — 2026-07-10
+
+- Removed the blue screenshot outline after closing the lightbox with pointer
+  input while keeping the screenshot itself focused for accessibility.
+- Confirmed that Escape still restores a visible focus outline for keyboard
+  navigation.
+- Verified the pointer-close result at `1280×720` and `390×844`; the mobile
+  page remains exactly `390px` wide and the browser console has no warnings or
+  errors.
+- Final captures were saved outside the repository at
+  `/tmp/holdtype-focus-ring-fixed-desktop.png` and
+  `/tmp/holdtype-focus-ring-fixed-mobile.png`.
+
 ## Hero price-sticker placement follow-up — 2026-07-10
 
 - Removed the price sticker and its supporting paragraph from the left hero
