@@ -103,8 +103,10 @@ replacement, or its first maintenance pass after expiry, and removes its own
 temporary atomic-write files. The extension similarly cleans its commands,
 acknowledgements, heartbeat, and temporary files when it next runs with the
 required access. A reader never deletes another writer's mutable pathname after
-a stale read. All transient App Group records use Data Protection and are
-excluded from device backup.
+a stale read. All transient App Group records use complete file protection and
+are excluded from device backup after every atomic creation or replacement.
+The Phase-0 probe's until-first-authentication file policy is not a production
+contract and must be replaced before P6 bridge hardening.
 
 TTL validation is unconditional even when neither process is running: an
 expired record is never eligible for display, command handling, or insertion.

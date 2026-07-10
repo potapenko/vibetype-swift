@@ -1,7 +1,7 @@
 # HoldType iOS Full Product Portability Plan
 
-Status: active implementation roadmap, P0 contracts and the first thirty P1
-Domain slices complete; updated 2026-07-10.
+Status: active implementation roadmap; P0 and P1 complete, P2 next; updated
+2026-07-10.
 
 This document plans the complete iPhone and iPad companion product around the
 HoldType keyboard. It does not authorize Swift, target, entitlement, or
@@ -192,18 +192,26 @@ model.
 ### Split the current monolith
 
 `AppSettings` currently mixes roughly thirty shared and macOS-only values. It
-must not become the cross-platform public API. Extract these domain types:
+must not become the cross-platform public API. P1 decomposes it into the
+smallest behavior-owning domain values rather than preserving speculative
+umbrella names:
 
 - `TranscriptionConfiguration`;
-- `TextProcessingConfiguration`;
+- `TextCorrectionConfiguration`, `TranscriptPostProcessingConfiguration`, and
+  ordered `TextReplacementRule` values instead of one broad
+  `TextProcessingConfiguration`;
 - `TranslationConfiguration`;
-- `PersonalizationConfiguration` for dictionary and emoji commands;
+- `CustomDictionary` and `EmojiCommandsConfiguration` instead of one broad
+  `PersonalizationConfiguration`;
 - `RetentionConfiguration` for history and recordings;
 - `VoiceSessionPreferences`;
-- `OutputDeliveryPreferences`;
-- `KeyboardPreferences`;
-- `MacBehaviorConfiguration`;
-- `IOSBehaviorConfiguration`.
+- `OutputDeliveryPreferences`.
+
+Do not create placeholder `KeyboardPreferences`, `MacBehaviorConfiguration`,
+or `IOSBehaviorConfiguration` values in P1. macOS-only behavior remains in the
+compatibility facade. P3 introduces only iOS settings that already have a live
+containing-app consumer, while P6/P7 define the versioned keyboard snapshot and
+production typing preferences after their named gates.
 
 Keep the existing `AppSettings` and its current UserDefaults keys as a macOS
 facade during migration. Adapters convert between the facade and shared domain
@@ -790,6 +798,28 @@ ordinary cancel and provider timeout do not invent interruption or expiry, and
 macOS produces neither case. iOS lifecycle/expiry adapters and durable outcome
 reconciliation remain later milestone work.
 
+`AcceptedTranscriptHistoryRequest` now narrows the accepted-History handoff to
+one validated `AcceptedTranscript`, one resolved transcription model, one
+optional resolved language code, optional audio duration, one
+cache-policy-gated transient audio URL, and the captured History-enabled
+preference. The value is `Equatable`, `Sendable`, and non-Codable; its
+initializer uses but does not retain `TranscriptionConfiguration` or
+`RetentionConfiguration`. The macOS controller builds it only after final text
+is accepted and from the attempt's captured settings snapshot.
+`TranscriptRecoveryHistoryRecording` and its store no longer receive raw text
+or full `AppSettings`; disabled History remains a no-op, attribution and
+cache-link behavior stay frozen at handoff time, and
+newest-first retention, deletion, clearing, non-fatal write failure, Retry, and
+output ordering remain unchanged. The current session-only entry and absolute
+URL are compatibility state only; stable relative audio identity, versioned
+durable repositories, migration, and journaling remain P2 work.
+
+P1 exit is complete: the shared Foundation-only domain builds and runs the same
+151 behavioral tests on macOS and iOS, with separate normal-import iOS smoke
+coverage. The macOS compatibility facades preserve existing behavior, and the
+remaining provider, persistence, Apple audio, and bridge work belongs to named
+later milestones rather than to Domain extraction.
+
 ### P2 — Mobile-ready provider and persistence foundations
 
 - extract OpenAI transcription, correction, and translation;
@@ -868,6 +898,9 @@ background session.
 - add one minimal extension-owned voice command and one insertion
   acknowledgement record, carrying the source document identifier from the
   explicit start command into the matching app-owned result;
+- replace the Phase-0 bridge file policy before any production record ships:
+  every transient App Group file uses complete file protection, is excluded
+  from backup after each atomic replacement, and keeps writer-owned cleanup;
 - add the content-free five-minute readiness heartbeat for truthful Full Access
   status;
 - show explicit armed/listening/processing/expired state and immediate Stop;
@@ -989,33 +1022,28 @@ already decided by their P0 specs.
 
 ## Recommended Next Slice
 
-Do not begin by porting `SettingsView` or adding every macOS source file to the
-iOS target. The first thirty value/configuration/dependency slices are complete,
-including the portable terminal attempt outcome. The next P1 slice removes raw
-text and full `AppSettings` from the accepted-history handoff without defining
-the P2 durable history schema:
+Do not begin P2 by porting `SettingsView`, the full legacy persistence graph, or
+every OpenAI source file at once. Start with two independent foundations and
+checkpoint them separately:
 
-1. specify and add a public runtime-only `AcceptedTranscriptHistoryRequest`
-   containing one `AcceptedTranscript`, one resolved transcription model, one
-   optional resolved language code, optional audio duration, optional transient
-   cached-audio URL, and the captured History-enabled preference;
-2. construct it from one `TranscriptionConfiguration` and one
-   `RetentionConfiguration`, preserving model/language fallback and retaining
-   the cache URL only when the captured cache policy keeps recordings;
-3. make it `Equatable` and `Sendable`, but not Codable, identified, timestamped,
-   persisted, logged, or transported through App Group or the keyboard. Keep
-   output intent, stage, failure/retry data, credentials, and provider state out;
-4. change the macOS `TranscriptRecoveryHistoryRecording` boundary to receive
-   only the request. The controller passes its already accepted final text and
-   captured settings projection; the store no longer receives raw text or full
-   `AppSettings`;
-5. preserve disabled-History no-op behavior, resolved attribution, cache-link
-   gating, newest-first 20-entry retention, delete/clear behavior, non-fatal
-   history-write failure, and existing output/recovery ordering;
-6. add package and normal-import iOS tests plus AppSettings, controller, fake,
-   and store regressions. Keep `TranscriptHistoryEntry`, absolute-path legacy
-   storage, versioned durable repositories, stable relative audio identity,
-   migration, and pipeline-wide portable failure categories outside this slice.
+1. create the `HoldTypePersistence` package around the versioned, app-private,
+   non-secret credential-presence marker. Preserve missing, present, absent,
+   unknown, and in-progress mutation semantics; reject corrupt or future data
+   without overwriting it; use atomic replacement, Data Protection, and backup
+   exclusion; and prove through package and normal-import iOS tests that no key,
+   account, service name, provider payload, or keyboard/App Group state enters
+   the record. Real Keychain operations and reconciliation remain a later
+   adapter slice;
+2. make cancellation own the actual transport task in transcription,
+   correction, and translation. Cancellation is idempotent, completes the
+   active call through its existing cancelled error, rejects late responses,
+   leaves timeout classified as timeout, and does not poison a later request.
+   Keep file-backed multipart upload, provider-module movement, retries,
+   persistence, and failure-taxonomy redesign outside that checkpoint.
+
+These lanes require no live provider, physical-device evidence, secret,
+provisioning change, or user-visible setting. They may proceed in parallel, but
+each must preserve the full macOS suite and the normal iOS simulator suite.
 
 ## Research Basis
 

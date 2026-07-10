@@ -268,7 +268,7 @@ host app, state, expected result, actual result, and go/no-go decision.
   interaction: pending the first physical-device/manual pass and operator-local
   Apple Developer Team/App Group provisioning.
 - M0B/M0C physical-device evidence: pending.
-- P1 portable-domain extraction: active; `AcceptedTranscript` and
+- P1 portable-domain extraction: complete; `AcceptedTranscript` and
   `TranscriptionPromptContext` plus transcription language/validation and
   `TranscriptionConfiguration` plus custom-dictionary normalization package
   slices, `TextReplacementRule`, and emoji command models/catalog are complete;
@@ -319,7 +319,12 @@ host app, state, expected result, actual result, and go/no-go decision.
   result, genuinely retained recoverable failure, lifecycle interruption, and
   Quick Session expiry kept separate from work phase, stage attribution,
   delivery, setup, and presentation. macOS maps only its honest ready/recovery
-  subset and does not synthesize interruption or expiry.
+  subset and does not synthesize interruption or expiry. The accepted-History
+  handoff is portable now too: the app adapter receives validated text plus
+  frozen model/language/duration/cache/history intent instead of raw text and
+  full macOS settings. This remains containing-app-only runtime state; no
+  History record, absolute audio URL, or provider metadata enters the keyboard
+  or App Group bridge.
   App Group command/session records, keyboard linking, and actual keyboard
   insertion remain unchanged until their owning milestones.
 - Full QWERTY and background Quick Session: gated and not started.

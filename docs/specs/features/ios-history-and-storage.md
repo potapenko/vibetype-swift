@@ -109,6 +109,36 @@ three explicit data lifecycles.
   operation stops. Copy and non-audio Share of unrelated accepted text remain
   available and do not mutate the active voice chain.
 
+## Runtime Accepted-History Handoff
+
+`AcceptedTranscriptHistoryRequest` is the transient P1 input to the current
+accepted-History adapter. It contains exactly one already validated
+`AcceptedTranscript`, one resolved non-empty transcription model, one optional
+resolved language code, optional audio duration, one optional transient
+app-local cached-audio URL, and the captured History-enabled preference.
+
+The initializer resolves model and language from one
+`TranscriptionConfiguration` and captures History/cache intent from one
+`RetentionConfiguration`; it uses but does not retain either configuration.
+Blank model fallback and fixed/custom language normalization remain unchanged.
+The cached-audio URL is retained only when the captured recording-cache policy
+keeps recordings. The History adapter performs a no-op when the captured
+History preference is off.
+
+The request is `Equatable`, `Sendable`, and non-Codable. It has no raw-text
+validation path, stable ID, date, output intent, stage, failure/retry data,
+credential, provider payload, persistence, logging, App Group, or keyboard
+semantics. Its absolute URL is compatibility-only runtime state and is not the
+stable relative audio identity required by the iOS repository.
+
+The macOS controller constructs the request only after final text has become an
+`AcceptedTranscript`, using the same captured settings snapshot and audio
+metadata already owned by that attempt. `TranscriptRecoveryHistoryRecording`
+receives only this request; neither raw text nor full `AppSettings` crosses the
+boundary. The current in-memory/session-only `TranscriptHistoryEntry`, its
+legacy persistence shape, and all P2 versioned repository, migration, output-
+intent, delivery-record, and atomic-journal contracts remain unchanged.
+
 ## Stored fields
 
 An accepted entry may store:
