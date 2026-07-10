@@ -363,7 +363,7 @@ h3 {
   position: absolute;
   z-index: 4;
   top: -38px;
-  right: max(-51px, calc((var(--container) - 100vw) / 2 + 4px));
+  right: max(-29px, calc((var(--container) - 100vw) / 2 + 26px));
   pointer-events: none;
 }
 
