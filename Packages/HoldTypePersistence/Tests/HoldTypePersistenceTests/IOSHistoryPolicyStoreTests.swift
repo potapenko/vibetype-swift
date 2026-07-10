@@ -10,6 +10,121 @@ struct IOSHistoryPolicyStoreTests {
         #expect(fixture.journal.events == ["load"])
     }
 
+    @Test func guardedBaselineCreationStartsAtPhysicalOneOne() async throws {
+        let fixture = HistoryPolicyStoreFixture()
+
+        let receipt = try await fixture.establishBaseline()
+
+        #expect(receipt.state == .baseline)
+        #expect(fixture.journal.currentState == .baseline)
+        #expect(fixture.journal.events == ["load", "create:1"])
+    }
+
+    @Test func exactBaselineSlotRaceConvergesThroughIdenticalRewrite() async throws {
+        let fixture = HistoryPolicyStoreFixture()
+        fixture.journal.failNextCreate(
+            with: .slotOccupied,
+            commitBeforeThrowing: true
+        )
+
+        let receipt = try await fixture.establishBaseline()
+
+        #expect(receipt.state == .baseline)
+        #expect(fixture.journal.currentState == .baseline)
+        #expect(fixture.journal.events == [
+            "load", "create:1", "load", "replace:1",
+        ])
+    }
+
+    @Test func visibleBaselineUncertaintyRequiresAuthorizedRetry() async throws {
+        let fixture = HistoryPolicyStoreFixture()
+        fixture.journal.failNextCreate(
+            with: .commitUncertain,
+            commitBeforeThrowing: true
+        )
+
+        await #expect(throws: IOSHistoryPolicyError.commitUncertain) {
+            try await fixture.establishBaseline()
+        }
+        #expect(fixture.journal.currentState == .baseline)
+        await #expect(throws: IOSHistoryPolicyError.commitUncertain) {
+            try await fixture.store.confirm(
+                expected: IOSHistoryPolicyExpectation(state: .baseline)
+            )
+        }
+
+        let receipt = try await fixture.establishBaseline()
+        #expect(receipt.state == .baseline)
+        #expect(fixture.journal.events.suffix(2) == ["load", "replace:1"])
+    }
+
+    @Test func invisibleBaselineUncertaintyRetriesCreateWithoutDefaultingLoad() async throws {
+        let fixture = HistoryPolicyStoreFixture()
+        fixture.journal.failNextCreate(
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+
+        await #expect(throws: IOSHistoryPolicyError.commitUncertain) {
+            try await fixture.establishBaseline()
+        }
+        #expect(fixture.journal.currentState == nil)
+        #expect(try await fixture.store.load() == nil)
+        await #expect(throws: IOSHistoryPolicyError.commitUncertain) {
+            try await fixture.store.confirm(
+                expected: IOSHistoryPolicyExpectation(state: .baseline)
+            )
+        }
+
+        let receipt = try await fixture.establishBaseline()
+        #expect(receipt.state == .baseline)
+        #expect(
+            fixture.journal.events.filter { $0 == "create:1" }.count == 2
+        )
+    }
+
+    @Test func baselineUncertaintyRejectsANonBaselineDurableWinner() async throws {
+        let fixture = HistoryPolicyStoreFixture()
+        fixture.journal.failNextCreate(
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+        await #expect(throws: IOSHistoryPolicyError.commitUncertain) {
+            try await fixture.establishBaseline()
+        }
+        let winner = try IOSHistoryPolicyState(
+            revision: 2,
+            historyEnabled: false,
+            policyGeneration: 2
+        )
+        fixture.journal.install(winner)
+
+        await #expect(throws: IOSHistoryPolicyError.compareAndSwapFailed) {
+            try await fixture.establishBaseline()
+        }
+        let recovered = try await fixture.store.confirm(
+            expected: IOSHistoryPolicyExpectation(state: winner)
+        )
+        #expect(recovered.state == winner)
+    }
+
+    @Test func existingNonBaselinePolicyIsNeverOverwrittenByBootstrap() async throws {
+        let fixture = HistoryPolicyStoreFixture()
+        let existing = try IOSHistoryPolicyState(
+            revision: 2,
+            historyEnabled: true,
+            policyGeneration: 2
+        )
+        fixture.journal.install(existing)
+
+        await #expect(throws: IOSHistoryPolicyError.compareAndSwapFailed) {
+            try await fixture.establishBaseline()
+        }
+        #expect(fixture.journal.currentState == existing)
+        #expect(!fixture.journal.events.contains("create:1"))
+        #expect(!fixture.journal.events.contains("replace:1"))
+    }
+
     @Test func clearDisableAndEnableHaveExactMutationAndNoOpRules() async throws {
         let fixture = HistoryPolicyStoreFixture()
         let baseline = try await fixture.establishBaseline()
@@ -285,6 +400,7 @@ private final class HistoryPolicyFakeJournal:
     private let lock = NSLock()
     private var snapshot: IOSHistoryPolicyJournalSnapshot?
     private var nextToken: UInt64 = 1
+    private var createFailure: Failure?
     private var replaceFailure: Failure?
     private var storedEvents: [String] = []
     private var storedReplacementStates: [IOSHistoryPolicyState] = []
@@ -327,10 +443,54 @@ private final class HistoryPolicyFakeJournal:
         }
     }
 
+    func failNextCreate(
+        with error: IOSHistoryPolicyError,
+        commitBeforeThrowing: Bool
+    ) {
+        lock.withLock {
+            createFailure = Failure(
+                error: error,
+                commitBeforeThrowing: commitBeforeThrowing
+            )
+        }
+    }
+
     func load() throws -> IOSHistoryPolicyJournalSnapshot? {
         lock.withLock {
             storedEvents.append("load")
             return snapshot
+        }
+    }
+
+    func create(
+        _ state: IOSHistoryPolicyState,
+        authorization: IOSHistoryPolicyBaselineAuthorization
+    ) throws -> IOSHistoryPolicyJournalSnapshot {
+        _ = authorization
+        return try lock.withLock {
+            storedEvents.append("create:\(state.revision)")
+            guard state == .baseline else {
+                throw IOSHistoryPolicyError.invalidRecord
+            }
+            guard snapshot == nil else {
+                throw IOSHistoryPolicyError.slotOccupied
+            }
+            if let failure = createFailure {
+                createFailure = nil
+                if failure.commitBeforeThrowing {
+                    snapshot = IOSHistoryPolicyJournalSnapshot(
+                        state: state,
+                        fileRevision: makeRevisionLocked()
+                    )
+                }
+                throw failure.error
+            }
+            let created = IOSHistoryPolicyJournalSnapshot(
+                state: state,
+                fileRevision: makeRevisionLocked()
+            )
+            snapshot = created
+            return created
         }
     }
 
@@ -388,9 +548,10 @@ private final class HistoryPolicyStoreFixture: @unchecked Sendable {
     }
 
     func establishBaseline() async throws -> IOSHistoryPolicyReceipt {
-        journal.install(.baseline)
-        return try await store.confirm(
-            expected: IOSHistoryPolicyExpectation(state: .baseline)
+        try await store.establishAndConfirmBaseline(
+            authorization: IOSHistoryPolicyBaselineAuthorization(
+                testingToken: ()
+            )
         )
     }
 }

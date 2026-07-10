@@ -9,6 +9,10 @@ struct IOSHistoryPolicyJournalSnapshot: Equatable, Sendable {
 
 protocol IOSHistoryPolicyJournalStoring: Sendable {
     func load() throws -> IOSHistoryPolicyJournalSnapshot?
+    func create(
+        _ state: IOSHistoryPolicyState,
+        authorization: IOSHistoryPolicyBaselineAuthorization
+    ) throws -> IOSHistoryPolicyJournalSnapshot
     func replace(
         _ state: IOSHistoryPolicyState,
         expected: IOSHistoryPolicyJournalSnapshot
@@ -16,6 +20,17 @@ protocol IOSHistoryPolicyJournalStoring: Sendable {
     func performStagingMaintenance(
         now: Date
     ) throws -> IOSStrictProtectedRecordMaintenanceReport
+}
+
+extension IOSHistoryPolicyJournalStoring {
+    func create(
+        _ state: IOSHistoryPolicyState,
+        authorization: IOSHistoryPolicyBaselineAuthorization
+    ) throws -> IOSHistoryPolicyJournalSnapshot {
+        _ = state
+        _ = authorization
+        throw IOSHistoryPolicyError.writeFailed
+    }
 }
 
 enum IOSHistoryPolicyJournal {
@@ -56,6 +71,32 @@ struct FoundationIOSHistoryPolicyJournalRepository:
             state: try IOSHistoryPolicyWireCodec.decode(file.data),
             fileRevision: file.revision
         )
+    }
+
+    func create(
+        _ state: IOSHistoryPolicyState,
+        authorization: IOSHistoryPolicyBaselineAuthorization
+    ) throws -> IOSHistoryPolicyJournalSnapshot {
+        _ = authorization
+        guard state == .baseline else {
+            throw IOSHistoryPolicyError.invalidRecord
+        }
+        let data = try IOSHistoryPolicyWireCodec.encode(state)
+        do {
+            let revision = try fileSystem.createFile(with: data)
+            return IOSHistoryPolicyJournalSnapshot(
+                state: state,
+                fileRevision: revision
+            )
+        } catch IOSStrictProtectedRecordFileSystemError.destinationConflict {
+            throw IOSHistoryPolicyError.slotOccupied
+        } catch IOSStrictProtectedRecordFileSystemError.protectedDataUnavailable {
+            throw IOSHistoryPolicyError.dataProtectionUnavailable
+        } catch IOSStrictProtectedRecordFileSystemError.commitUncertain {
+            throw IOSHistoryPolicyError.commitUncertain
+        } catch {
+            throw IOSHistoryPolicyError.writeFailed
+        }
     }
 
     func replace(

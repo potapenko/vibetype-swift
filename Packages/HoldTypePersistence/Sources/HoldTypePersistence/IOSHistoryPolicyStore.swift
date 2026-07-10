@@ -21,14 +21,24 @@ extension IOSHistoryPolicyReceipt: CustomStringConvertible,
 /// App-private raw policy owner. Production authority is issued only by the
 /// accepted-History coordinator that proves baseline eligibility first.
 actor IOSHistoryPolicyStore {
+    private enum Source: Equatable {
+        case missing
+        case existing(IOSHistoryPolicyJournalSnapshot)
+    }
+
+    private enum Operation: Equatable {
+        case establishBaseline
+        case mutation(Mutation)
+    }
+
     private enum Mutation: Equatable {
         case clear
         case setEnabled(Bool)
     }
 
     private struct UncertainIntent: Equatable {
-        let source: IOSHistoryPolicyJournalSnapshot
-        let mutation: Mutation
+        let source: Source
+        let operation: Operation
         let intended: IOSHistoryPolicyState
     }
 
@@ -56,16 +66,79 @@ actor IOSHistoryPolicyStore {
         try journal.load()?.state
     }
 
+    /// Establishes the physical 1/1 policy only after the coordinator has
+    /// sealed one joint observation proving that every legacy owner is empty.
+    func establishAndConfirmBaseline(
+        authorization: IOSHistoryPolicyBaselineAuthorization
+    ) throws -> IOSHistoryPolicyReceipt {
+        _ = authorization
+        let current = try journal.load()
+
+        if let uncertainIntent {
+            guard uncertainIntent.operation == .establishBaseline else {
+                throw IOSHistoryPolicyError.commitUncertain
+            }
+            return try reconcileBaseline(
+                uncertainIntent,
+                authorization: authorization,
+                current: current
+            )
+        }
+
+        if let current {
+            guard current.state == .baseline else {
+                throw IOSHistoryPolicyError.compareAndSwapFailed
+            }
+            return try replace(
+                .baseline,
+                expected: current,
+                recording: UncertainIntent(
+                    source: .existing(current),
+                    operation: .establishBaseline,
+                    intended: .baseline
+                )
+            )
+        }
+
+        let intent = UncertainIntent(
+            source: .missing,
+            operation: .establishBaseline,
+            intended: .baseline
+        )
+        do {
+            return try createBaseline(
+                authorization: authorization,
+                recording: intent
+            )
+        } catch IOSHistoryPolicyError.slotOccupied {
+            guard let raced = try journal.load(),
+                  raced.state == .baseline else {
+                throw IOSHistoryPolicyError.compareAndSwapFailed
+            }
+            return try replace(
+                .baseline,
+                expected: raced,
+                recording: UncertainIntent(
+                    source: .existing(raced),
+                    operation: .establishBaseline,
+                    intended: .baseline
+                )
+            )
+        }
+    }
+
     /// Reconstructs process-local authority after relaunch by rewriting the
     /// exact logical value and confirming the new physical file revision.
     func confirm(
         expected: IOSHistoryPolicyExpectation
     ) throws -> IOSHistoryPolicyReceipt {
-        guard let current = try journal.load() else {
-            throw IOSHistoryPolicyError.compareAndSwapFailed
-        }
+        let current = try journal.load()
 
         if let uncertainIntent {
+            guard case .mutation = uncertainIntent.operation,
+                  let current else {
+                throw IOSHistoryPolicyError.commitUncertain
+            }
             guard expected.matches(uncertainIntent.intended),
                   current.state == uncertainIntent.intended else {
                 throw IOSHistoryPolicyError.commitUncertain
@@ -75,6 +148,10 @@ actor IOSHistoryPolicyStore {
                 expected: current,
                 recording: uncertainIntent
             )
+        }
+
+        guard let current else {
+            throw IOSHistoryPolicyError.compareAndSwapFailed
         }
 
         guard expected.matches(current.state) else {
@@ -115,17 +192,23 @@ private extension IOSHistoryPolicyStore {
         _ mutation: Mutation,
         using receipt: IOSHistoryPolicyReceipt
     ) throws -> IOSHistoryPolicyReceipt {
-        guard let current = try journal.load() else {
-            throw IOSHistoryPolicyError.compareAndSwapFailed
-        }
+        let current = try journal.load()
 
         if let uncertainIntent {
+            guard case .mutation = uncertainIntent.operation,
+                  let current else {
+                throw IOSHistoryPolicyError.commitUncertain
+            }
             return try reconcile(
                 uncertainIntent,
                 mutation: mutation,
                 receipt: receipt,
                 current: current
             )
+        }
+
+        guard let current else {
+            throw IOSHistoryPolicyError.compareAndSwapFailed
         }
 
         if case .setEnabled(let enabled) = mutation,
@@ -141,8 +224,8 @@ private extension IOSHistoryPolicyStore {
             applying: mutation
         )
         let intent = UncertainIntent(
-            source: receipt.snapshot,
-            mutation: mutation,
+            source: .existing(receipt.snapshot),
+            operation: .mutation(mutation),
             intended: intended
         )
 
@@ -163,8 +246,8 @@ private extension IOSHistoryPolicyStore {
         receipt: IOSHistoryPolicyReceipt,
         current: IOSHistoryPolicyJournalSnapshot
     ) throws -> IOSHistoryPolicyReceipt {
-        guard intent.source == receipt.snapshot,
-              intent.mutation == mutation,
+        guard intent.source == .existing(receipt.snapshot),
+              intent.operation == .mutation(mutation),
               try successor(of: receipt.state, applying: mutation)
                 == intent.intended else {
             throw IOSHistoryPolicyError.commitUncertain
@@ -186,6 +269,71 @@ private extension IOSHistoryPolicyStore {
             expected: current,
             recording: intent
         )
+    }
+
+    private func reconcileBaseline(
+        _ intent: UncertainIntent,
+        authorization: IOSHistoryPolicyBaselineAuthorization,
+        current: IOSHistoryPolicyJournalSnapshot?
+    ) throws -> IOSHistoryPolicyReceipt {
+        guard intent.intended == .baseline else {
+            throw IOSHistoryPolicyError.commitUncertain
+        }
+
+        switch (intent.source, current) {
+        case (.missing, .none):
+            do {
+                return try createBaseline(
+                    authorization: authorization,
+                    recording: intent
+                )
+            } catch IOSHistoryPolicyError.slotOccupied {
+                guard let raced = try journal.load(),
+                      raced.state == .baseline else {
+                    uncertainIntent = nil
+                    throw IOSHistoryPolicyError.compareAndSwapFailed
+                }
+                return try replace(
+                    .baseline,
+                    expected: raced,
+                    recording: UncertainIntent(
+                        source: .existing(raced),
+                        operation: .establishBaseline,
+                        intended: .baseline
+                    )
+                )
+            }
+        case (_, .some(let current)) where current.state == .baseline:
+            return try replace(
+                .baseline,
+                expected: current,
+                recording: UncertainIntent(
+                    source: .existing(current),
+                    operation: .establishBaseline,
+                    intended: .baseline
+                )
+            )
+        default:
+            uncertainIntent = nil
+            throw IOSHistoryPolicyError.compareAndSwapFailed
+        }
+    }
+
+    private func createBaseline(
+        authorization: IOSHistoryPolicyBaselineAuthorization,
+        recording intent: UncertainIntent
+    ) throws -> IOSHistoryPolicyReceipt {
+        do {
+            let created = try journal.create(
+                .baseline,
+                authorization: authorization
+            )
+            uncertainIntent = nil
+            return IOSHistoryPolicyReceipt(snapshot: created)
+        } catch IOSHistoryPolicyError.commitUncertain {
+            uncertainIntent = intent
+            throw IOSHistoryPolicyError.commitUncertain
+        }
     }
 
     private func replace(

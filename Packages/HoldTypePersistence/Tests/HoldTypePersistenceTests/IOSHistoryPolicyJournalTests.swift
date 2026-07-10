@@ -128,6 +128,62 @@ struct IOSHistoryPolicyJournalTests {
         }
     }
 
+    @Test func repositoryCreateIsExclusiveGuardedAndMapsTypedFailures() throws {
+        let authorization = IOSHistoryPolicyBaselineAuthorization(
+            testingToken: ()
+        )
+        let fileSystem = HistoryPolicyFakeFileSystem()
+        let repository = FoundationIOSHistoryPolicyJournalRepository(
+            fileSystem: fileSystem
+        )
+
+        let created = try repository.create(
+            .baseline,
+            authorization: authorization
+        )
+        #expect(created.state == .baseline)
+        #expect(try repository.load() == created)
+        #expect(throws: IOSHistoryPolicyError.slotOccupied) {
+            try repository.create(.baseline, authorization: authorization)
+        }
+
+        let nonBaselineFileSystem = HistoryPolicyFakeFileSystem()
+        let nonBaselineRepository = FoundationIOSHistoryPolicyJournalRepository(
+            fileSystem: nonBaselineFileSystem
+        )
+        #expect(throws: IOSHistoryPolicyError.invalidRecord) {
+            try nonBaselineRepository.create(
+                policyState(revision: 2, historyEnabled: true),
+                authorization: authorization
+            )
+        }
+        #expect(nonBaselineFileSystem.file == nil)
+
+        let uncertainFileSystem = HistoryPolicyFakeFileSystem()
+        uncertainFileSystem.createError = .commitUncertain
+        let uncertainRepository = FoundationIOSHistoryPolicyJournalRepository(
+            fileSystem: uncertainFileSystem
+        )
+        #expect(throws: IOSHistoryPolicyError.commitUncertain) {
+            try uncertainRepository.create(
+                .baseline,
+                authorization: authorization
+            )
+        }
+
+        let protectedFileSystem = HistoryPolicyFakeFileSystem()
+        protectedFileSystem.createError = .protectedDataUnavailable
+        let protectedRepository = FoundationIOSHistoryPolicyJournalRepository(
+            fileSystem: protectedFileSystem
+        )
+        #expect(throws: IOSHistoryPolicyError.dataProtectionUnavailable) {
+            try protectedRepository.create(
+                .baseline,
+                authorization: authorization
+            )
+        }
+    }
+
     @Test func repositoryPreservesCorruptFutureAndProtectedSlots() throws {
         let fileSystem = HistoryPolicyFakeFileSystem()
         let repository = FoundationIOSHistoryPolicyJournalRepository(
@@ -178,12 +234,11 @@ struct IOSHistoryPolicyJournalTests {
         let repository = FoundationIOSHistoryPolicyJournalRepository(
             applicationSupportDirectoryURL: base
         )
-        let fileSystem = FoundationIOSStrictProtectedRecordFileSystem(
-            applicationSupportDirectoryURL: base,
-            configuration: .historyPolicy
-        )
-        _ = try fileSystem.createFile(
-            with: IOSHistoryPolicyWireCodec.encode(.baseline)
+        _ = try repository.create(
+            .baseline,
+            authorization: IOSHistoryPolicyBaselineAuthorization(
+                testingToken: ()
+            )
         )
 
         let rootURL = fileURLRoot(in: base)
@@ -275,6 +330,7 @@ private final class HistoryPolicyFakeFileSystem:
     @unchecked Sendable {
     var file: IOSStrictProtectedRecordFile?
     var readError: IOSStrictProtectedRecordFileSystemError?
+    var createError: IOSStrictProtectedRecordFileSystemError?
     var replaceError: IOSStrictProtectedRecordFileSystemError?
     private var nextToken: UInt64 = 1
 
@@ -296,6 +352,7 @@ private final class HistoryPolicyFakeFileSystem:
         guard file == nil else {
             throw IOSStrictProtectedRecordFileSystemError.destinationConflict
         }
+        if let createError { throw createError }
         let revision = makeRevision()
         file = IOSStrictProtectedRecordFile(data: data, revision: revision)
         return revision
