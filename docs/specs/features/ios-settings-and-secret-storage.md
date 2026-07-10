@@ -174,6 +174,27 @@ interrupted mutation.
   recoverable audio, recording cache, runtime logs, and the API key follow
   their own explicit backup policies and are not inferred from this rule.
 
+### Credential-presence marker v1
+
+- The runtime marker is a non-transport value with an update date and exactly
+  one state: `present`, `absent`, `unknown`, or `mutationInProgress`.
+- `mutationInProgress` also records exactly one mutation kind,
+  `saveOrReplace` or `remove`. Other states never carry a mutation kind.
+- The private v1 file contains only `schemaVersion`, `state`, `updatedAt`, and
+  the conditional `mutationKind`. It contains no key material, masked key,
+  Keychain service or account, provider status or content, App Group data, or
+  keyboard data.
+- A missing file means that no marker has been recorded; it does not imply
+  `absent`.
+- Every replacement is atomic, requests complete file protection, and excludes
+  the marker from device backup. A failed replacement preserves the previously
+  durable bytes.
+- Corrupt data, unsupported schema versions, unexpected fields, and invalid
+  state/mutation combinations produce a typed local error. The source file is
+  preserved for recovery and is never rewritten as part of a failed load.
+- Version dispatch starts at v1. There is no inferred legacy schema or migration
+  until an actual earlier persisted format exists.
+
 ## Validation and editor behavior
 
 - Empty Custom language falls back to Auto. A non-empty code must be a valid

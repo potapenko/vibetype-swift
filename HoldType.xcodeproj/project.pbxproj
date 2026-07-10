@@ -28,6 +28,8 @@
 		D4A176052FF1000000000005 /* HoldTypeDomain in Frameworks */ = {isa = PBXBuildFile; productRef = D4A176022FF1000000000002 /* HoldTypeDomain */; };
 		D4A176062FF1000000000006 /* HoldTypeDomain in Frameworks */ = {isa = PBXBuildFile; productRef = D4A176032FF1000000000003 /* HoldTypeDomain */; };
 		D4A176072FF1000000000007 /* HoldTypeDomain in Frameworks */ = {isa = PBXBuildFile; productRef = D4A176082FF1000000000008 /* HoldTypeDomain */; };
+		D4A178042FF3000000000004 /* HoldTypePersistence in Frameworks */ = {isa = PBXBuildFile; productRef = D4A178022FF3000000000002 /* HoldTypePersistence */; };
+		D4A178052FF3000000000005 /* HoldTypePersistence in Frameworks */ = {isa = PBXBuildFile; productRef = D4A178032FF3000000000003 /* HoldTypePersistence */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -152,6 +154,11 @@
 			path = Packages/HoldTypeDomain/Tests/HoldTypeDomainTests;
 			sourceTree = "<group>";
 		};
+		D4A178012FF3000000000001 /* HoldTypePersistenceTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/HoldTypePersistence/Tests/HoldTypePersistenceTests;
+			sourceTree = "<group>";
+		};
 		D4A175032FF0000000000003 /* HoldTypeKeyboard */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -197,6 +204,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D4A176052FF1000000000005 /* HoldTypeDomain in Frameworks */,
+				D4A178042FF3000000000004 /* HoldTypePersistence in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -205,6 +213,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D4A176062FF1000000000006 /* HoldTypeDomain in Frameworks */,
+				D4A178052FF3000000000005 /* HoldTypePersistence in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -229,6 +238,7 @@
 				D4A175042FF0000000000004 /* KeyboardShared */,
 				9DB749B12FE800000053C3F3 /* HoldTypeIOSTests */,
 				D4A177012FF2000000000001 /* HoldTypeDomainTests */,
+				D4A178012FF3000000000001 /* HoldTypePersistenceTests */,
 				9DB749792FE6D7320053C3F3 /* HoldTypeTests */,
 				9DB749832FE6D7320053C3F3 /* HoldTypeUITests */,
 				9DB7496A2FE6D7300053C3F3 /* Products */,
@@ -345,6 +355,7 @@
 			name = "HoldType-iOS";
 			packageProductDependencies = (
 				D4A176022FF1000000000002 /* HoldTypeDomain */,
+				D4A178022FF3000000000002 /* HoldTypePersistence */,
 			);
 			productName = "HoldType-iOS";
 			productReference = 9DB749A12FE7A0000053C3F3 /* HoldType-iOS.app */;
@@ -367,10 +378,12 @@
 				D4A175042FF0000000000004 /* KeyboardShared */,
 				9DB749B12FE800000053C3F3 /* HoldTypeIOSTests */,
 				D4A177012FF2000000000001 /* HoldTypeDomainTests */,
+				D4A178012FF3000000000001 /* HoldTypePersistenceTests */,
 			);
 			name = HoldTypeIOSTests;
 			packageProductDependencies = (
 				D4A176032FF1000000000003 /* HoldTypeDomain */,
+				D4A178032FF3000000000003 /* HoldTypePersistence */,
 			);
 			productName = HoldTypeIOSTests;
 			productReference = 9DB749B02FE800000053C3F3 /* HoldTypeIOSTests.xctest */;
@@ -445,6 +458,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				D4A176002FF1000000000000 /* XCLocalSwiftPackageReference "HoldTypeDomain" */,
+				D4A178002FF3000000000000 /* XCLocalSwiftPackageReference "HoldTypePersistence" */,
 				D4A1740C2FEF17400000000C /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -607,6 +621,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/HoldTypeDomain;
 		};
+		D4A178002FF3000000000000 /* XCLocalSwiftPackageReference "HoldTypePersistence" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/HoldTypePersistence;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -645,6 +663,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D4A176002FF1000000000000 /* XCLocalSwiftPackageReference "HoldTypeDomain" */;
 			productName = HoldTypeDomain;
+		};
+		D4A178022FF3000000000002 /* HoldTypePersistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4A178002FF3000000000000 /* XCLocalSwiftPackageReference "HoldTypePersistence" */;
+			productName = HoldTypePersistence;
+		};
+		D4A178032FF3000000000003 /* HoldTypePersistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4A178002FF3000000000000 /* XCLocalSwiftPackageReference "HoldTypePersistence" */;
+			productName = HoldTypePersistence;
 		};
 /* End XCSwiftPackageProductDependency section */
 
