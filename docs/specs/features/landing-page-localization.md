@@ -76,6 +76,9 @@ is no separate `/en/` page.
   enhancement is unavailable.
 - Translation does not change commands, URLs, product names, pricing meaning,
   privacy promises, or the boundary that users supply their own OpenAI API key.
+- A product-copy change that changes meaning ships with semantically equivalent
+  updates in every supported locale. Matching JSON keys without updating the
+  translated message is not a complete localization.
 - Pricing examples describe the count as messages or dictations without
   characterizing their length, speed, or typical size in any locale.
 - GitHub Pages publication remains a complete artifact containing the landing

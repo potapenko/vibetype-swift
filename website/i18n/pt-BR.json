@@ -1,15 +1,15 @@
 {
   "locale": "pt-BR",
   "meta": {
-    "title": "{brand.holdType} — Fale tudo o que está pensando",
-    "description": "O {brand.holdType} é uma ferramenta de entrada de voz para {brand.macOS}, feita para prompts longos, mensagens, documentos e notas. Use sua própria chave de API da {brand.openAI}, sem conta nem assinatura do {brand.holdType}.",
+    "title": "{brand.holdType} — o “clone” mais honesto do Wispr Flow",
+    "description": "O {brand.holdType} é o “clone” mais honesto do Wispr Flow: ditado nativo para {brand.macOS} com sua chave de API da {brand.openAI}, sem assinatura do {brand.holdType} e sem reescrita obrigatória.",
     "socialImageAlt": "Ícone do app {brand.holdType}"
   },
   "common": {
     "skipToContent": "Ir para o conteúdo",
     "brandHomeAria": "Página inicial do {brand.holdType}",
     "primaryNavigationAria": "Navegação principal",
-    "downloadForMacOS": "Baixar para {brand.macOS}"
+    "downloadForMacOS": "Baixar grátis para {brand.macOS}"
   },
   "localeUi": {
     "switcherLabel": "Idioma",
@@ -29,42 +29,42 @@
     "faq": "Dúvidas frequentes"
   },
   "hero": {
-    "title": "Fale tudo o que está pensando.",
+    "title": "O “clone” mais honesto do Wispr Flow.",
     "lede": "Sem conta. Controle total sobre o seu ditado. Você paga à OpenAI, não ao {brand.holdType}.",
     "qualification": "App gratuito · Uso da API da {brand.openAI} cobrado à parte · {fact.minimumOS}",
     "price": {
-      "aria": "Mesmo {pricing.dailyDictations} ditados por dia custam cerca de {pricing.dailyPrice} neste exemplo de uso intensivo.",
-      "kicker": "Mesmo {pricing.dailyDictations} ditados por dia",
+      "aria": "Pela tarifa estimada atual de transcrição, {pricing.dailyDictations} ditados custam cerca de {pricing.dailyPrice}.",
+      "kicker": "{pricing.dailyDictations} ditados",
       "value": "≈ {pricing.dailyPrice}",
-      "suffix": "em uso intensivo"
+      "suffix": "pela tarifa estimada atual"
     },
     "demo": {
       "editorIllustration": "Um plano de startup perfeitamente realista",
-      "documentTitle": "Atualização do projeto",
+      "documentTitle": "Ganhar US$ 1 milhão com um SaaS",
       "toolbarSample": "Aa  ···",
-      "intro": "Aqui está um resumo do progresso e dos próximos passos.",
-      "sectionTitle": "Resumo",
-      "listeningBody": "Pressione e segure {keyboard.rightCommand} enquanto fala naturalmente.",
-      "transcribingBody": "Preparando o texto aceito…",
-      "insertedBody": "Lançamos a versão mais recente na semana passada. O retorno foi positivo, e o próximo passo é aprimorar a experiência inicial e manter a escrita simples e fluida.",
+      "intro": "Uma primeira meta conservadora.",
+      "sectionTitle": "Plano de execução",
+      "listeningBody": "Segure {keyboard.rightCommand} e dite a parte fácil.",
+      "transcribingBody": "Transcrevendo o plano da startup…",
+      "insertedBody": "Criar um SaaS pequeno, encontrar o product-market fit, chegar a US$ 1 milhão de ARR e manter o suporte abaixo de dez minutos por semana. Sem verba de marketing.",
       "status": {
         "listening": "Ouvindo",
         "transcribing": "Transcrevendo",
-        "inserted": "Inserido"
+        "inserted": "Plano inserido. Fácil."
       },
-      "caption": "Fluxo ilustrado: o {brand.holdType} ouve, transcreve e insere o texto em um editor genérico. Não é uma demonstração gravada."
+      "caption": "Fluxo ilustrado do {brand.holdType}, não uma demonstração gravada. O Codex não ganhou US$ 1 milhão de verdade. Ainda."
     }
   },
   "workflow": {
-    "title": "Transforme sua voz em texto — exatamente onde você está.",
+    "title": "Segure. Fale. Solte. A transcrição aparece no cursor.",
     "steps": {
       "hold": {
         "title": "Segure",
-        "body": "Pressione e segure {keyboard.rightCommand}"
+        "body": "Segure {keyboard.rightCommand} onde você pode digitar"
       },
       "speak": {
         "title": "Fale",
-        "body": "Diga tudo o que está pensando"
+        "body": "Dite o texto de que precisa"
       },
       "release": {
         "title": "Solte",
@@ -73,39 +73,39 @@
       "inserted": {
         "artLabel": "Texto",
         "title": "Inserido",
-        "body": "O texto aparece junto ao cursor"
+        "body": "A transcrição aparece no cursor"
       }
     }
   },
   "reasons": {
-    "a11yTitle": "Por que usar o {brand.holdType}",
+    "a11yTitle": "O que torna o {brand.holdType} “honesto”",
     "subscription": {
-      "title": "Sem mais uma assinatura para lembrar",
-      "body": "O {brand.holdType} não acrescenta nenhuma mensalidade. A {brand.openAI} desconta o uso da API da sua conta da {brand.openAIPlatform} quando as solicitações são feitas."
+      "title": "Sua chave da OpenAI. Cobrança direta.",
+      "body": "A {brand.openAI} cobra a conta da {brand.openAIPlatform} vinculada à sua chave. O {brand.holdType} não acrescenta mensalidade."
     },
     "model": {
       "title": "Modelo {model.gpt4oTranscribe}",
       "body": "Segundo a {brand.openAI}, o modelo comete menos erros de palavras e melhora o reconhecimento de idiomas e a precisão em relação aos modelos {model.whisper} originais."
     },
     "openAI": {
-      "title": "Sem segunda etapa obrigatória",
-      "body": "Por padrão, a transcrição volta sem passar por um segundo modelo. Ative a correção apenas quando precisar."
+      "title": "Sem segunda passagem obrigatória",
+      "body": "Por padrão, a transcrição volta sem passar por um segundo modelo. Ative a correção só quando quiser."
     }
   },
   "useCases": {
-    "title": "Para os textos que acabam encurtados quando você digita.",
-    "intro": "O {brand.holdType} foi feito para ideias completas, seja o destino um agente de programação, uma mensagem ou um documento.",
+    "title": "Um app de ditado. Não uma plataforma de escrita com IA.",
+    "intro": "O {brand.holdType} faz três coisas práticas: insere texto no cursor, traduz quando você manda e fornece o contexto ortográfico de nomes e termos técnicos.",
     "aiPrompts": {
-      "title": "Prompts longos para IA",
-      "body": "Dê ao {brand.codex}, ao {brand.claude} ou ao {brand.chatGPT} o contexto que é fácil deixar de fora quando um prompt precisa ser digitado linha por linha."
+      "title": "Ditado onde você trabalha",
+      "body": "Dite prompts diretamente no {brand.codex}, no {brand.claude} ou no {brand.chatGPT}. Sem editor intermediário nem etapa obrigatória de reescrita."
     },
     "everyday": {
-      "title": "Textos do dia a dia",
-      "body": "Dite e-mails, avaliações, documentação, conversas e notas sem precisar passar o rascunho por outro editor."
+      "title": "Sem editor intermediário",
+      "body": "Dite e-mails, avaliações, documentação, conversas e notas diretamente no cursor."
     },
     "bilingual": {
-      "title": "Trabalho em dois idiomas",
-      "body": "Fale no idioma em que a ideia surgir naturalmente e, ao pedir uma tradução, insira o texto no idioma de destino configurado."
+      "title": "Tradução quando você pedir",
+      "body": "Use o atalho de tradução quando quiser. O ditado comum não dispara uma solicitação de tradução."
     }
   },
   "features": {
@@ -113,8 +113,8 @@
     "appUiLanguageNote": "O app {brand.holdType} atual e as capturas de tela do produto usam uma interface em inglês.",
     "translation": {
       "label": "Idioma e vocabulário",
-      "title": "Fale naturalmente. Insira o texto adequado ao trabalho à sua frente.",
-      "body1": "A tradução só é executada quando você solicita. Escolha um idioma de destino e use {keyboard.translationShortcut} para transcrever e traduzir em um único fluxo.",
+      "title": "Traduza só quando você pedir.",
+      "body1": "Escolha o idioma de destino e use {keyboard.translationShortcut}. A tradução roda como uma solicitação de texto separada depois da transcrição.",
       "body2": "As entradas de {appUi.localDictionary} acrescentam à solicitação de transcrição o contexto ortográfico de nomes, termos de projetos e nomes de arquivos.",
       "imageAlt": "Configurações de {appUi.translation} do {brand.holdType}, com o atalho de tradução e os controles de idioma de destino",
       "caption": "Configurações reais de {appUi.translation} do {brand.holdType}. Em celulares, deslize horizontalmente sobre o recorte em foco para examiná-lo.",
@@ -123,38 +123,38 @@
     "menu": {
       "imageAlt": "Janela da barra de menus do {brand.holdType} com ações para transcrever, traduzir, usar {appUi.pasteLastResult}, acessar o histórico, abrir os ajustes e sair",
       "imageCaption": "Controles reais da barra de menus, incluindo a recuperação por {appUi.lastResult}.",
-      "label": "Sempre ao seu alcance",
-      "title": "Comece, traduza, recupere e ajuste tudo pela barra de menus.",
+      "label": "Recuperação e controle",
+      "title": "Não perca a transcrição se a inserção falhar.",
       "body1": "Se a inserção falhar, a transcrição aceita continuará disponível em {appUi.lastResult}. Cole-a com {keyboard.pasteShortcut} sem substituir a área de transferência do sistema {brand.macOS}.",
-      "body2": "A correção opcional da {brand.openAI} vem desativada por padrão. A correção tipográfica local ainda pode ser executada sem outra solicitação a um modelo."
+      "body2": "A correção por modelo da {brand.openAI} vem desativada por padrão. A barra de menus reúne ditado, tradução, recuperação, histórico e ajustes."
     }
   },
   "privacy": {
-    "label": "Limites de custo e dados",
-    "title": "Transparência sobre o que fica no dispositivo — e o que vai para a {brand.openAI}.",
-    "intro": "O {brand.holdType} não tem sistema de contas, backend próprio, telemetria, análises nem sincronização em nuvem. A transcrição é uma solicitação à API da {brand.openAI}, feita com a chave que você configura.",
+    "label": "Sem conta nem backend do HoldType",
+    "title": "Seu Mac → {brand.openAI} → seu cursor.",
+    "intro": "O {brand.holdType} não tem sistema de contas, backend do produto, telemetria, análises nem sincronização em nuvem. O áudio vai direto para a {brand.openAI} usando a chave de API que você fornece.",
     "flow": {
-      "aria": "Fluxo de dados do {brand.holdType}",
+      "aria": "O caminho dos dados do {brand.holdType} é explícito",
       "microphone": "Microfone",
       "holdType": "{brand.holdType}",
       "openAI": "Transcrição da {brand.openAI}",
       "activeApp": "App ativo"
     },
     "dataPath": {
-      "title": "O caminho dos seus dados",
+      "title": "Os limites estão à vista",
       "items": {
-        "apiKey": "A chave de API fica armazenada localmente no {brand.macOSKeychain}.",
-        "audio": "O áudio é enviado à {brand.openAI} para transcrição.",
-        "optionalTextRequests": "A correção e a tradução opcionais são solicitações de texto separadas.",
-        "failedAudio": "Após a conclusão, o áudio não é retido por padrão. Falhas recuperáveis podem manter, apenas durante a sessão, uma quantidade limitada de áudio para {appUi.retry}.",
-        "recordingCache": "A retenção opcional do cache de gravações é local e controlada pelo usuário."
+        "apiKey": "Sua chave de API fica no {brand.macOSKeychain}.",
+        "audio": "Seu Mac → {brand.openAI} → seu cursor.",
+        "optionalTextRequests": "A reescrita é opcional. A tradução só roda quando você pede.",
+        "failedAudio": "Falhas recuperáveis podem manter uma quantidade limitada de áudio apenas durante a sessão para {appUi.retry}; gravações concluídas não são retidas por padrão.",
+        "recordingCache": "O HoldType funciona só no Mac e não finge ser uma plataforma em nuvem para equipes; o cache opcional de gravações continua local."
       }
     },
     "billing": {
-      "title": "Pague pelo uso, não pelo acesso",
-      "body": "O {brand.holdType} não tem assinatura. A {brand.openAI} desconta o uso real da API da conta da {brand.openAIPlatform} vinculada à sua chave; o {brand.holdType} não cobra mensalidade.",
-      "exampleTitle": "{pricing.dailyDictations} mensagens. Cerca de {pricing.dailyPrice}.",
-      "exampleBody": "{pricing.dailyDictations} mensagens somam aproximadamente {pricing.recordedMinutes} minutos de fala gravada. Repita o mesmo total diário durante {pricing.daysInMonth} dias e o custo estimado de transcrição será de cerca de {pricing.monthlyPrice}.",
+      "title": "A cobrança tem uma origem clara",
+      "body": "O {brand.holdType} usa a chave que você fornece. A {brand.openAI} cobra a conta da {brand.openAIPlatform} vinculada; o {brand.holdType} não cobra mensalidade nem contabiliza ditados por meio de uma conta própria.",
+      "exampleTitle": "{pricing.dailyDictations} ditados. Cerca de {pricing.dailyPrice}.",
+      "exampleBody": "{pricing.dailyDictations} ditados representam aproximadamente {pricing.recordedMinutes} minutos de fala gravada. Repita esse volume por {pricing.daysInMonth} dias e o custo estimado de transcrição será de cerca de {pricing.monthlyPrice}.",
       "note": "A tela {appUi.billing} mostra uma estimativa local das transcrições de áudio concluídas com sucesso. Ela não é uma fatura da {brand.openAI} e não inclui solicitações de correção ou tradução.",
       "pricingLink": "Preços da API da {brand.openAI}",
       "imageAlt": "Configurações de {appUi.billing} do {brand.holdType} mostrando uma estimativa local do uso de transcrição",
@@ -167,9 +167,9 @@
     "imageCaption": "Não é necessário ter equipamento de gravação especial.",
     "label": "Por que criei o {brand.holdType}",
     "title": "Eu queria uma ferramenta de ditado. Sem toda essa merda.",
-    "body1": "O problema era a frequência com que um prompt longo, uma avaliação ou uma explicação acabava mais curto antes que eu terminasse de digitá-lo. Falando, ficou mais fácil expressar a ideia completa.",
-    "body2": "Testei ferramentas por assinatura e apps baseados em diferentes opções de modelos locais e na nuvem. Eles resolvem problemas distintos. No meu trabalho diário, a transcrição da {brand.openAI} foi a que mais vezes produziu uma primeira versão em que confiei.",
-    "body3": "Eu queria uma configuração mais enxuta: um só provedor, uma opção padrão sensata, cobrança direta da API e nenhuma assinatura do produto para lembrar. O {brand.holdType} é criado e testado com o mesmo fluxo de trabalho centrado em voz que ele pretende oferecer."
+    "body1": "Eu queria saber quem estava me cobrando e por que toda transcrição precisava ser reescrita por um segundo modelo. Não queria outra caixa-preta entre minha voz e o cursor.",
+    "body2": "No meu trabalho diário, a transcrição da {brand.openAI} foi a que mais vezes entregou uma primeira versão em que confiei. A reescrita opcional fica desligada até eu decidir ativá-la.",
+    "body3": "O {brand.holdType} é o app nativo em Swift que criei para isso: sua chave de API, cobrança direta da OpenAI, sem conta do produto e sem mensalidade."
   },
   "install": {
     "label": "Primeiros passos",
@@ -195,7 +195,7 @@
   },
   "apiKeyGuide": {
     "label": "Nunca usou chaves de API?",
-    "title": "Crie uma em poucos minutos.",
+    "title": "Crie uma chave de API e depois adicione-a nos ajustes.",
     "intro": "Uma chave de API é uma credencial privada que permite ao {brand.holdType} enviar áudio para transcrição por meio da sua conta da {brand.openAIPlatform}. Ela é independente do seu login e da sua assinatura do {brand.chatGPT}.",
     "steps": {
       "openPage": {
@@ -306,11 +306,11 @@
   },
   "finalCta": {
     "title": "Controle total sobre o seu ditado.",
-    "body": "App gratuito · Sem assinatura do {brand.holdType} · Uso da {brand.openAI} cobrado diretamente · {fact.minimumOS}"
+    "body": "App gratuito · Sua chave de API da {brand.openAI} · Sem assinatura do {brand.holdType} · {fact.minimumOS}"
   },
   "footer": {
-    "description": "Entrada de voz nativa para {brand.macOS}. Código-fonte disponível sob a {license.fsl11}, com uma futura licença {license.mit}.",
-    "sourceLink": "Ver código-fonte no {brand.github}"
+    "description": "Ditado nativo para {brand.macOS}. Código-fonte disponível sob a {license.fsl11}, com futura licença {license.mit}.",
+    "sourceLink": "Confira o código-fonte no {brand.github}"
   },
   "lightbox": {
     "dialogAria": "Captura de tela do {brand.holdType} em tamanho completo",
