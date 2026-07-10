@@ -53,6 +53,12 @@ microphone activity or losing completed recordings.
   to a stable attempt-owned relative identifier and writes the identifier to
   the minimal `PendingRecording` journal; the runtime URL is never the durable
   identity.
+- The P2 handoff first publishes an app-private protected copy and then commits
+  the strict single-record journal defined by `ios-history-and-storage.md`.
+  Provider work receives the copy only after its local transcription UUID is
+  durable. The recording service's source remains untouched until the complete
+  handoff returns, so a local persistence failure cannot trigger provider work
+  or destroy the only completed artifact.
 
 ## Audio-session behavior
 

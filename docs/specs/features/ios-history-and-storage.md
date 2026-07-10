@@ -159,11 +159,14 @@ A failed entry may store:
 - optional duration
 - relative identifier for protected retry-only audio
 
-The pending journal stores only the attempt/session ID, relative audio
+The pending journal stores only the attempt ID, relative audio
 identifier, creation/update dates, processing phase, output intent, optional
 current audio-transcription idempotency UUID, and compact configuration
-identifiers needed to explain recovery. The UUID is committed before provider
-dispatch and reused only when replaying that same request/handoff; every
+identifiers needed to explain recovery, plus immutable duration and byte-count
+consistency fields. They bound and cross-check the protected artifact but never
+replace the mandatory media/container validation below. The UUID is committed
+before provider dispatch and reused only as the identity of that same live
+in-process handoff; re-entry does not authorize a second dispatch. Every
 genuinely new provider request, including Retry, replaces it with a new UUID.
 Provider retry resolves fresh settings and credentials.
 
@@ -180,6 +183,161 @@ transcription attribution; it does not pre-decide iOS Translation recovery.
 History and journal records never store API keys, authorization headers,
 provider responses, prompts, dictionary contents, surrounding text, analytics,
 or ordinary keystrokes.
+
+### PendingRecording v1 Foundation
+
+The first P2 storage checkpoint owns one app-private protected recording and
+one strict journal. Its canonical locations under the containing app's
+Application Support directory are:
+
+- `HoldType/ios-pending-recording.json` for the journal;
+- `HoldType/Recordings/Pending/` for protected audio;
+- `Recordings/Pending/recording-v1-<lowercase canonical attempt UUID>.m4a` or
+  `.wav` as the only durable relative audio identifier.
+
+The filename UUID must equal the journal attempt ID. Absolute sandbox URLs are
+runtime-only. These paths never enter App Group storage and are unrelated to
+the provider multipart scratch namespace.
+
+The public runtime record is `Equatable`, `Sendable`, and non-Codable. It has
+exactly the attempt ID, relative audio identifier, creation and update dates,
+durable phase, output intent, optional transcription ID, resolved non-empty
+transcription model, optional resolved language code, integer duration in
+milliseconds, and byte count. The strict JSON v1 object contains
+exactly `schemaVersion`, `attemptID`, `audioRelativeIdentifier`, `createdAt`,
+`updatedAt`, `phase`, `outputIntent`, `transcriptionID`,
+`transcriptionModel`, `transcriptionLanguageCode`, `durationMilliseconds`, and
+`byteCount`. Optional values are present as JSON `null`, UUIDs use lowercase
+canonical spelling, and timestamps use canonical UTC milliseconds. The journal
+is at most 64 KiB. Unknown, missing, duplicate, wrongly typed, non-canonical,
+or unsupported-version data is an error and is preserved byte-for-byte. A
+valid, corrupt, or future-version slot is never interpreted as empty. Valid v1
+data can use the v1 recovery actions below. Corrupt and future-version bytes
+remain blocked and preserved for later opaque recovery tooling; this checkpoint
+does not claim that expected-attempt Discard can decode or remove them.
+
+Durable phases have these exact versioned values and transitions:
+
+- `readyForTranscription` is the initial committed state and requires a null
+  transcription ID;
+- `awaitingRecovery` requires a null transcription ID and an explicit user
+  Retry or Discard before provider work;
+- `transcribing` requires a committed transcription ID;
+- `postProcessing` follows `transcribing` and preserves that ID;
+- `outputDelivery` follows `postProcessing` and preserves that ID.
+
+Normal Done prepares `readyForTranscription`. A valid partial retained after an
+interruption, Quick Session expiry, or Stop Voice Session prepares directly as
+`awaitingRecovery` and never starts provider work automatically. Explicit
+processing cancellation or an eligible pre-delivery failure moves
+`transcribing` or `postProcessing` to `awaitingRecovery`, clears the active
+transcription ID durably, and only then completes cancellation. Explicit Retry
+moves `awaitingRecovery` to `transcribing` with a fresh ID and current compact
+configuration identifiers. Same-phase calls are idempotent only when all
+identity-bearing inputs match. Other skips, backwards transitions, and a
+phase/ID mismatch fail without rewriting the journal. The runtime-only
+`VoiceAttemptStage` and its declaration order never define these values.
+
+After process loss, a valid `transcribing`, `postProcessing`, or unresolved
+`outputDelivery` record moves to `awaitingRecovery` only after the containing
+app proves that no matching live owner and no canonical destination record
+exists. That local transition clears the old transcription ID before Retry is
+presented. It never resumes or repeats provider work automatically. A
+`readyForTranscription` record also remains explicit after relaunch; its name
+does not authorize automatic dispatch.
+
+Every mutating callback must present the expected attempt ID, transcription ID
+when one exists, and current phase. A cancelled, superseded, or late callback
+cannot advance, discard, publish, or transfer a different durable owner.
+
+The containing-app attempt owner allocates one local transcription UUID and the
+store atomically commits it while moving `readyForTranscription` to
+`transcribing`, then returns the validated audio handoff. Provider and transport
+internals never generate this durable identity. Re-entering that same begun
+handoff with the same proposed UUID may return the already-live handoff but
+never authorizes a second network dispatch. After process loss, the old UUID
+cannot dispatch again; the process-loss transition must first clear it and only
+an explicit Retry may commit a fresh UUID for new provider work. An explicit
+eligible Retry from `awaitingRecovery` allocates and commits that new UUID,
+updates the compact model/language identifiers from current settings, preserves
+the attempt ID, audio identity, creation date, duration, byte count, and output
+intent, and returns only after the new `transcribing` record is durable. This
+UUID is the local usage/replay identity, not an OpenAI idempotency header.
+
+Preparing a pending attempt follows this order:
+
+1. reject a valid, corrupt, or future journal and perform a bounded read-only
+   check that the dedicated audio namespace contains no staging, final, marked,
+   malformed, or otherwise unresolved entry;
+2. validate and copy one completed runtime artifact to an exclusive protected
+   temporary file;
+3. durably publish the protected audio without replacing an existing path;
+4. atomically commit the initial journal;
+5. return the runtime record; only then may the caller remove its source file.
+
+The source must be an owned, no-follow, single-link regular `.m4a` or `.wav`
+whose positive byte count exactly matches the runtime artifact and is strictly
+less than 25,000,000 bytes. Duration is canonicalized to the nearest whole
+millisecond using `toNearestOrAwayFromZero` and must fall in `1..<300000`.
+Copying is streaming and bounded to
+64-KiB chunks; recording audio is never loaded into one `Data` value. The copy
+has one ten-second monotonic deadline, checks it before every syscall and EINTR
+retry, and permits at most eight consecutive EINTR retries per operation. The
+dedicated namespace is owned by the effective user, is not a symlink, and has
+exact mode `0700`. The destination has exact mode `0600`, one
+link, and the descriptor-bound xattr
+`com.holdtype.ios.pending-recording-audio` with exact bytes `v1`. It receives
+Complete Data Protection and backup exclusion on the descriptor before its
+first byte, and both properties are read back exactly. The creator lock is held
+through exclusive no-overwrite publication, audio and directory
+synchronization, and journal commit. Descriptor and relative-path identity are
+revalidated before and after every commit point. Journal replacement uses the
+same descriptor-bound protection/backup verification, exact owner/mode/link
+checks, no-follow path checks, and a required directory synchronization. The
+repository never edits or removes the source artifact; any later source cleanup
+must revalidate the originally captured identity and remains outside this
+checkpoint.
+
+Journal duration and byte count are consistency fields, not proof that a media
+container is playable. Before audio publication, the protected copy must pass
+bounded media/container validation with a two-second deadline. Every provider
+handoff repeats that bounded validation while the protected file is pinned and
+then repeats descriptor/path identity checks. A malformed, unreadable, or
+duration-inconsistent `.m4a`/`.wav` remains a typed local failure and never
+authorizes provider work. The validated media duration must itself fall in
+`1..<300000` milliseconds and differ from the journal value by no more than 250
+milliseconds.
+
+If protected-audio publication fails, only the owned temporary file may be
+cleaned up. If journal commit fails after audio publication, the protected
+audio is preserved, provider work is forbidden, and the failure remains a
+local recovery condition. The checkpoint does not automatically upload,
+repair, migrate, or delete orphaned audio at launch.
+
+Only one containing-app repository actor may own this namespace in a process.
+An unresolved valid journal blocks another attempt. Load and provider handoff
+revalidate the exact relative identifier, regular-file identity, ownership,
+single-link count, owner-only mode, byte count, protection, and backup policy.
+A missing or invalid linked artifact is a typed local error; journal bytes and
+remaining audio are preserved. Device-lock/Data-Protection unavailability is a
+temporary typed condition, never proof that a file is absent or corrupt.
+
+Explicit Discard requires the expected attempt ID and removes the protected
+audio before the journal. A crash between those steps therefore leaves a
+visible journal with missing audio instead of hidden retained audio. Repeating
+Discard for that same journal is idempotent. Journal removal is permitted only
+after audio removal or already-absent state is successfully verified. Any audio
+validation/removal error preserves the journal and returns a typed local
+failure. A missing journal never authorizes deletion of an orphan by filename
+alone. Reconciliation, History transfer, recording-cache transfer, delivery
+records, relaunch UI, and automatic source cleanup remain later checkpoints.
+
+Future app-only reconciliation is non-recursive and recognizes only the exact
+filename grammar plus descriptor-bound v1 marker. Its frozen per-pass caps are
+256 inspected entries, 32 removals, 512 MiB of logical bytes, and one second of
+monotonic elapsed time. It may age-remove only clearly incomplete marked
+staging files; valid final audio without metadata requires an explicit
+Keep/Export/Discard decision and is never silently age-deleted.
 
 Usage bookkeeping is independent of History ownership. Once a non-empty audio
 transcription response is accepted, its idempotent local usage handoff remains
@@ -257,8 +415,11 @@ identity without deleting the only valid artifact.
   treated as an empty successful history load.
 - A missing linked audio file removes Play/Retry availability and leaves enough
   metadata to explain that the recording is unavailable.
-- Orphaned app-owned audio discovered during reconciliation is either attached
-  to its valid pending journal or removed by a bounded HoldType-only cleanup.
+- Orphaned app-owned audio discovered during reconciliation is attached to its
+  valid pending journal when identity proves that ownership. A valid final
+  recording without metadata is quarantined for explicit Keep/Export/Discard
+  and is never age-deleted. Only exact incomplete marked staging files may be
+  removed by bounded HoldType-only cleanup.
 - If metadata persistence fails after recording completes, HoldType keeps the
   protected audio and shows a local storage failure instead of contacting the
   provider.
@@ -282,6 +443,14 @@ identity without deleting the only valid artifact.
   ordering, deletion, Clear History, disable-immediate-clear, and re-enable.
 - Test pending journal creation before provider dispatch, relaunch recovery,
   explicit retry, discard, corrupt metadata, and missing audio.
+- Test the exact v1 paths and wire shape, 64-KiB journal bound, canonical
+  UUID/date/relative identifiers, phase/ID invariants, legal transitions,
+  same-handoff UUID reuse, and fresh UUID creation for explicit Retry.
+- Test no-follow source validation, byte/duration/provider limits, 64-KiB
+  streaming, partial/EINTR I/O, Complete protection before first write, backup
+  exclusion, no-overwrite publication, source preservation, journal failure
+  after audio publication, bounded media validation and duration consistency,
+  orphan detection, process-loss recovery, and audio-first idempotent Discard.
 - Test every journal ownership transition, including crashes between
   destination commit and journal removal, Translation intent preservation,
   History on/off, processing cancellation, and cache on/off.
