@@ -10,6 +10,16 @@
       "translate": false,
       "direction": "ltr"
     },
+    "model.gpt4oTranscribe": {
+      "value": "GPT-4o Transcribe",
+      "translate": false,
+      "direction": "ltr"
+    },
+    "model.whisper": {
+      "value": "Whisper",
+      "translate": false,
+      "direction": "ltr"
+    },
     "brand.openAIPlatform": {
       "value": "OpenAI Platform",
       "translate": false,

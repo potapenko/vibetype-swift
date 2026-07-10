@@ -103,9 +103,13 @@ Present this section under `What "honest" means here`:
 
 1. **The bill has a source:** OpenAI deducts API usage from the Platform account
    connected through the user's key; HoldType adds no monthly fee.
-2. **The rewrite pass is optional:** model-based correction is off by default.
-3. **The data path is explicit:** Mac to OpenAI to the active cursor.
-4. **The limits are visible:** HoldType is Mac-only and is not presented as a
+2. **The model has a name:** GPT-4o Transcribe is the default. OpenAI documents
+   better word error rate, language recognition, and accuracy than its original
+   Whisper models in the
+   [model documentation](https://developers.openai.com/api/docs/models/gpt-4o-transcribe).
+3. **The rewrite pass is optional:** model-based correction is off by default.
+4. **The data path is explicit:** Mac to OpenAI to the active cursor.
+5. **The limits are visible:** HoldType is Mac-only and is not presented as a
    team cloud platform.
 
 ### 4. Work It Fits
@@ -240,10 +244,11 @@ Do not publish `3x faster`, `5x faster`, `99% accurate`, `perfect`, `private`,
 or `works in every app` without a documented HoldType-specific method and the
 necessary qualifications.
 
-Do not turn the current transcription model into a marketing claim. The landing
-page may name it once in subdued technical copy and may link to OpenAI's own
-model documentation. Do not claim that a competitor uses `whisper-1` or an
-older Whisper model unless the competitor publishes that fact.
+The landing page may name GPT-4o Transcribe once in the honesty contract and
+repeat OpenAI's documented comparison with its original Whisper models. Keep
+the comparison attributable to OpenAI and do not turn it into an unmeasured
+HoldType-specific speed or accuracy claim. Do not claim that a competitor uses
+`whisper-1` or an older Whisper model unless the competitor publishes that fact.
 
 Do not describe 100 dictations as a daily maximum or typical usage, claim that
 HoldType is always cheaper than a flat subscription, say that free and paid
@@ -251,8 +256,9 @@ competitor tiers use different recognition quality, or suggest that competing
 providers deliberately reduce quality. Cost examples must name the reviewed
 provider rate, recording duration, and excluded optional requests in the
 detailed cost section; the hero may use the approved rounded example backed by
-that explanation. Quality preference must not become a model slogan unless a
-reproducible HoldType benchmark exists.
+that explanation. Quality preference must not become an absolute `fastest`,
+`best`, or `most accurate` product claim unless a reproducible HoldType
+benchmark exists.
 
 Prefer claims that are already observable:
 

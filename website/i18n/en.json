@@ -46,7 +46,7 @@
       "intro": "A conservative first milestone.",
       "sectionTitle": "Execution plan",
       "listeningBody": "Hold {keyboard.rightCommand} and dictate the easy part.",
-      "transcribingBody": "Sending the startup plan to GPT-4o Transcribe…",
+      "transcribingBody": "Transcribing the startup plan…",
       "insertedBody": "Build a tiny SaaS, find product-market fit, reach $1M ARR, and keep support under ten minutes a week. No marketing budget.",
       "status": {
         "listening": "Listening",
@@ -84,9 +84,13 @@
       "title": "Your OpenAI key. Direct billing.",
       "body": "{brand.openAI} charges the {brand.openAIPlatform} account connected through your key. {brand.holdType} adds no monthly fee."
     },
+    "model": {
+      "title": "{model.gpt4oTranscribe} by default",
+      "body": "{brand.openAI} reports fewer word errors, better language recognition, and higher accuracy than its original {model.whisper} models."
+    },
     "openAI": {
-      "title": "No mandatory {brand.openAI} rewrite",
-      "body": "Model-based correction is off by default. Turn it on only when you want it."
+      "title": "No mandatory second pass",
+      "body": "By default, the transcript returns without a second model pass. Turn correction on only when you want it."
     }
   },
   "useCases": {

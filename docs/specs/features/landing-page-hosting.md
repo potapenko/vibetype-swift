@@ -28,24 +28,27 @@ that already uses GitHub Pages.
   remains available in the footer, and the hero does not repeat product claims
   as a separate row of proof chips.
 - The landing page must turn `honest` into a visible product contract rather
-  than leaving it as praise. The contract covers the billing source, optional
-  rewrite pass, explicit Mac-to-OpenAI data path, and Mac-only product boundary.
+  than leaving it as praise. The contract covers the billing source, the
+  default transcription model, optional rewrite pass, explicit Mac-to-OpenAI
+  data path, and Mac-only product boundary.
 - The exact transcription-model name may appear at most once in public copy,
-  in subdued secondary text such as the muted transcribing message inside the
-  hero illustration. It must not appear in metadata, the hero headline, lead,
-  or support copy, proof chips, section headings, founder copy, the final call
-  to action, or the footer.
+  in the second card of the honesty contract. The card may repeat OpenAI's
+  documented comparison with the original Whisper models, but must not claim
+  an unmeasured HoldType-specific speed or accuracy result. The exact model
+  name must not also appear in metadata, hero copy, founder copy, the final
+  call to action, or the footer.
 - The hero editor illustration uses a dry, self-ironic fictional plan to build
   a small SaaS and reach `$1M ARR`. Its caption explicitly identifies the scene
   as an illustration rather than a recorded demo and does not imply that Codex
   produced that business result. The listening and transcribing labels,
   animation states, outer hero, calls to action, and pricing sticker remain
   unchanged when this sample copy changes.
-- Product copy may describe the request path, billing boundary, and native
-  implementation. It must not turn the current model into a headline or claim
-  that HoldType is the fastest or most accurate dictation product, publish a
-  comparative speed multiplier, or attribute an undocumented recognition model
-  to a competitor without a dated, reproducible evidence package.
+- Product copy may describe the request path, billing boundary, native
+  implementation, and documented advantages of the default transcription
+  model over OpenAI's original Whisper models. It must not claim that HoldType
+  is the fastest or most accurate dictation product, publish a comparative
+  speed multiplier, or attribute an undocumented recognition model to a
+  competitor without a dated, reproducible evidence package.
 - The generated pages remain usable at the DigitalOcean technical hostname and
   at the custom-domain routes without a server-side application runtime.
 - Download links continue to use the stable GitHub latest-release URL.

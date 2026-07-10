@@ -207,7 +207,7 @@
                   <p class="demo-placeholder" data-i18n="hero.demo.listeningBody">Hold Right Command and dictate the easy part.</p>
                 </div>
                 <div class="demo-panel" data-demo-panel="transcribing" hidden>
-                  <p class="demo-placeholder" data-i18n="hero.demo.transcribingBody">Sending the startup plan to GPT-4o Transcribe…</p>
+                  <p class="demo-placeholder" data-i18n="hero.demo.transcribingBody">Transcribing the startup plan…</p>
                 </div>
                 <div class="demo-panel" data-demo-panel="inserted">
                   <p>
@@ -300,19 +300,27 @@
             </article>
             <article>
               <p class="reason-number" aria-hidden="true">02</p>
-              <h3 data-i18n="reasons.openAI.title">No mandatory OpenAI rewrite</h3>
-              <p data-i18n="reasons.openAI.body">
-                Model-based correction is off by default. Turn it on only when you
-                want it.
+              <h3 data-i18n="reasons.model.title">GPT-4o Transcribe by default</h3>
+              <p data-i18n="reasons.model.body">
+                OpenAI reports fewer word errors, better language recognition, and
+                higher accuracy than its original Whisper models.
               </p>
             </article>
             <article>
               <p class="reason-number" aria-hidden="true">03</p>
+              <h3 data-i18n="reasons.openAI.title">No mandatory second pass</h3>
+              <p data-i18n="reasons.openAI.body">
+                By default, the transcript returns without a second model pass. Turn
+                correction on only when you want it.
+              </p>
+            </article>
+            <article>
+              <p class="reason-number" aria-hidden="true">04</p>
               <h3 data-i18n="privacy.flow.aria">The HoldType data path is explicit</h3>
               <p data-i18n="privacy.dataPath.items.audio">Your Mac → OpenAI → your cursor.</p>
             </article>
             <article>
-              <p class="reason-number" aria-hidden="true">04</p>
+              <p class="reason-number" aria-hidden="true">05</p>
               <h3 data-i18n="privacy.dataPath.title">The limits are visible</h3>
               <p data-i18n="privacy.dataPath.items.recordingCache">
                 HoldType is Mac-only. It does not pretend to be a team cloud platform;

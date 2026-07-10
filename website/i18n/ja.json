@@ -84,9 +84,13 @@
       "title": "サブスクリプション不要",
       "body": "{brand.holdType} に月額料金はありません。リクエストを行うと、{brand.openAI} が API 利用料を {brand.openAIPlatform} アカウントから差し引きます。"
     },
+    "model": {
+      "title": "標準モデルは {model.gpt4oTranscribe}",
+      "body": "{brand.openAI} によると、元の {model.whisper} モデルよりも単語の誤りが少なく、言語認識と精度が向上しています。"
+    },
     "openAI": {
-      "title": "最初から {brand.openAI} に特化",
-      "body": "品質を優先した一つの標準設定ですぐに始められます。最初の音声入力の前に、プロバイダーを比較したりローカルモデルをダウンロードしたりする必要はありません。"
+      "title": "必須の二段階目はありません",
+      "body": "標準では、別のモデルによる二段階目を通さずに文字起こしが返ります。補正は必要なときだけオンにできます。"
     }
   },
   "useCases": {

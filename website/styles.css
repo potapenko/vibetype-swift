@@ -838,27 +838,35 @@ h3 {
 
 .reason-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .reason-grid article {
+  grid-column: span 2;
   padding: 20px 42px 12px;
   border-inline-start: 1px solid var(--line);
 }
 
-.reason-grid article:nth-child(odd) {
+.reason-grid article:first-child {
   padding-inline-start: 12px;
   border-inline-start: 0;
 }
 
-.reason-grid article:nth-child(even) {
+.reason-grid article:last-child {
   padding-inline-end: 12px;
 }
 
-.reason-grid article:nth-child(n + 3) {
+.reason-grid article:nth-child(4),
+.reason-grid article:nth-child(5) {
+  grid-column: span 3;
   margin-top: 24px;
   padding-top: 32px;
   border-top: 1px solid var(--line);
+}
+
+.reason-grid article:nth-child(4) {
+  padding-inline-start: 12px;
+  border-inline-start: 0;
 }
 
 .reason-number {
@@ -1974,9 +1982,7 @@ body.has-image-lightbox {
 
   .reason-grid article,
   .reason-grid article:first-child,
-  .reason-grid article:last-child,
-  .reason-grid article:nth-child(odd),
-  .reason-grid article:nth-child(even) {
+  .reason-grid article:last-child {
     grid-column: auto;
     margin-top: 0;
     padding: 28px 0;
@@ -2224,9 +2230,7 @@ body.has-image-lightbox {
 
   .reason-grid article,
   .reason-grid article:first-child,
-  .reason-grid article:last-child,
-  .reason-grid article:nth-child(odd),
-  .reason-grid article:nth-child(even) {
+  .reason-grid article:last-child {
     padding-block: 30px;
   }
 

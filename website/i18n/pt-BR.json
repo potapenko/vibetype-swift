@@ -84,9 +84,13 @@
       "title": "Sem mais uma assinatura para lembrar",
       "body": "O {brand.holdType} não acrescenta nenhuma mensalidade. A {brand.openAI} desconta o uso da API da sua conta da {brand.openAIPlatform} quando as solicitações são feitas."
     },
+    "model": {
+      "title": "{model.gpt4oTranscribe} por padrão",
+      "body": "Segundo a {brand.openAI}, o modelo comete menos erros de palavras e melhora o reconhecimento de idiomas e a precisão em relação aos modelos {model.whisper} originais."
+    },
     "openAI": {
-      "title": "{brand.openAI} por princípio",
-      "body": "Comece com uma única opção padrão que prioriza a qualidade. Não é preciso comparar provedores nem baixar um modelo local antes do primeiro ditado."
+      "title": "Sem segunda etapa obrigatória",
+      "body": "Por padrão, a transcrição volta sem passar por um segundo modelo. Ative a correção apenas quando precisar."
     }
   },
   "useCases": {

@@ -84,9 +84,13 @@
       "title": "신경 쓸 구독 없음",
       "body": "{brand.holdType}에는 월 요금이 없습니다. 요청이 발생하면 {brand.openAI}가 {brand.openAIPlatform} 계정에서 API 사용료를 차감합니다."
     },
+    "model": {
+      "title": "기본 모델은 {model.gpt4oTranscribe}",
+      "body": "{brand.openAI}에 따르면 기존 {model.whisper} 모델보다 단어 오류가 적고 언어 인식과 정확도가 향상됐습니다."
+    },
     "openAI": {
-      "title": "처음부터 {brand.openAI}에 맞춘 설계",
-      "body": "품질을 우선한 하나의 기본 설정으로 시작하세요. 첫 받아쓰기 전에 제공업체를 비교하거나 로컬 모델을 다운로드할 필요가 없습니다."
+      "title": "필수 2차 처리 없음",
+      "body": "기본적으로 다른 모델의 2차 처리 없이 받아쓰기 결과가 돌아옵니다. 교정은 필요할 때만 켜세요."
     }
   },
   "useCases": {

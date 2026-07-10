@@ -84,9 +84,13 @@
       "title": "Sin suscripciones que recordar",
       "body": "{brand.holdType} no añade ninguna cuota mensual. {brand.openAI} descuenta el uso de la API de tu cuenta de {brand.openAIPlatform} cuando se realizan solicitudes."
     },
+    "model": {
+      "title": "{model.gpt4oTranscribe} de forma predeterminada",
+      "body": "Según {brand.openAI}, ofrece menos errores de palabras, mejor reconocimiento de idiomas y más precisión que los modelos {model.whisper} originales."
+    },
     "openAI": {
-      "title": "{brand.openAI} desde el principio",
-      "body": "Empieza con una única opción predeterminada centrada en la calidad. No necesitas comparar proveedores ni descargar un modelo local antes del primer dictado."
+      "title": "Sin una segunda pasada obligatoria",
+      "body": "De forma predeterminada, la transcripción vuelve sin una segunda pasada por otro modelo. Activa la corrección solo cuando la necesites."
     }
   },
   "useCases": {

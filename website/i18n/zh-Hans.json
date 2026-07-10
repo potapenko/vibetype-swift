@@ -84,9 +84,13 @@
       "title": "无需惦记订阅",
       "body": "{brand.holdType} 不收取月费。发起请求时，{brand.openAI} 会从你的 {brand.openAIPlatform} 账户中扣除 API 使用费。"
     },
+    "model": {
+      "title": "默认使用 {model.gpt4oTranscribe}",
+      "body": "{brand.openAI} 表示，与早期 {model.whisper} 模型相比，该模型的词错误更少，语言识别和准确性也更高。"
+    },
     "openAI": {
-      "title": "专为 {brand.openAI} 设计",
-      "body": "从一个质量优先的默认方案开始。首次听写前，无需比较不同服务商，也无需下载本地模型。"
+      "title": "无需强制进行第二遍处理",
+      "body": "默认情况下，转写结果无需再经过另一个模型处理。仅在需要时开启纠错。"
     }
   },
   "useCases": {

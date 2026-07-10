@@ -84,9 +84,13 @@
       "title": "Aucun abonnement à gérer",
       "body": "{brand.holdType} ne facture aucuns frais mensuels. {brand.openAI} déduit l’utilisation de l’API de votre compte {brand.openAIPlatform} lorsque des requêtes sont effectuées."
     },
+    "model": {
+      "title": "{model.gpt4oTranscribe} par défaut",
+      "body": "Selon {brand.openAI}, ce modèle réduit les erreurs de mots et améliore la reconnaissance des langues et la précision par rapport aux modèles {model.whisper} d’origine."
+    },
     "openAI": {
-      "title": "Conçu autour de {brand.openAI}",
-      "body": "Commencez avec un seul réglage par défaut privilégiant la qualité. Vous n’avez pas à comparer les fournisseurs ni à télécharger de modèle local avant la première dictée."
+      "title": "Aucune seconde passe obligatoire",
+      "body": "Par défaut, la transcription revient sans seconde passe par un autre modèle. Activez la correction uniquement lorsque vous en avez besoin."
     }
   },
   "useCases": {

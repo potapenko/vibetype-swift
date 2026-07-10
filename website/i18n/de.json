@@ -84,9 +84,13 @@
       "title": "Kein Abo, an das du denken musst",
       "body": "{brand.holdType} verlangt keine monatliche Gebühr. {brand.openAI} zieht die API-Nutzung von deinem {brand.openAIPlatform}-Konto ab, sobald Anfragen gestellt werden."
     },
+    "model": {
+      "title": "Standardmäßig {model.gpt4oTranscribe}",
+      "body": "Laut {brand.openAI} bietet das Modell weniger Wortfehler, bessere Spracherkennung und höhere Genauigkeit als die ursprünglichen {model.whisper}-Modelle."
+    },
     "openAI": {
-      "title": "Bewusst für {brand.openAI} entwickelt",
-      "body": "Beginne mit einer einzigen, auf Qualität ausgerichteten Standardeinstellung. Vor dem ersten Diktat musst du weder Anbieter vergleichen noch ein lokales Modell laden."
+      "title": "Kein verpflichtender zweiter Durchlauf",
+      "body": "Standardmäßig kommt das Transkript ohne zweiten Modelldurchlauf zurück. Aktiviere die Korrektur nur, wenn du sie brauchst."
     }
   },
   "useCases": {

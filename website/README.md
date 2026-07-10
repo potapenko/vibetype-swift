@@ -153,7 +153,7 @@ text links. Shadows are reserved for the hero editor and real product windows.
 
 ### Responsive anatomy
 
-- `1021px+`: split hero, four-step horizontal workflow, four-point honesty
+- `1021px+`: split hero, four-step horizontal workflow, five-point honesty
   contract, alternating feature rows, and two-column FAQ.
 - `861–1020px`: narrower split hero and reduced product-window scale.
 - `621–860px`: single-column hero and feature sections, two-step workflow rows,
@@ -182,7 +182,7 @@ result. The usage-cost badge remains visually secondary and must not present
 1. Sticky brand/navigation header with a GitHub Releases CTA.
 2. Split hero with the code-native editor illustration and real indicator art.
 3. Hold → speak → release → inserted workflow rail.
-4. Four-point `What "honest" means here` contract.
+4. Five-point `What "honest" means here` contract.
 5. Real-use-case band.
 6. Translation/vocabulary and Last Result recovery proof.
 7. OpenAI billing, the qualified 100-dictation usage example, and exact
