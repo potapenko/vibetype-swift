@@ -767,9 +767,10 @@ end
             self.assertIn("queue: max", workflow)
             self.assertIn("scripts/release/prepare_pages_artifact.py", workflow)
             self.assertIn("--website-dir website", workflow)
-            self.assertIn("actions/configure-pages@v5", workflow)
-            self.assertIn("actions/upload-pages-artifact@v4", workflow)
-            self.assertIn("actions/deploy-pages@v4", workflow)
+            self.assertIn("actions/checkout@v7", workflow)
+            self.assertIn("actions/configure-pages@v6", workflow)
+            self.assertIn("actions/upload-pages-artifact@v5", workflow)
+            self.assertIn("actions/deploy-pages@v5", workflow)
 
         self.assertIn("Download latest stable appcast", pages_workflow)
         self.assertIn("gh release download", pages_workflow)
@@ -1061,7 +1062,7 @@ end
         self.assertIn("Prepare official Homebrew cask submission bundle", workflow)
         self.assertIn("scripts/release/write_homebrew_cask_submission.py", workflow)
         self.assertIn("Upload official Homebrew cask submission bundle", workflow)
-        self.assertIn("actions/upload-artifact@v4", workflow)
+        self.assertIn("actions/upload-artifact@v7", workflow)
         self.assertIn(
             "holdtype-official-homebrew-cask-${{ steps.release-inputs.outputs.version }}",
             workflow,

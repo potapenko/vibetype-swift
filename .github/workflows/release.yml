@@ -49,7 +49,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Resolve release inputs
         id: release-inputs
@@ -319,16 +319,16 @@ jobs:
             --timeout 60
 
       - name: Configure Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: public
 
       - name: Deploy site and appcast to Pages
         id: deploy-pages
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
       - name: Verify published release
         env:
@@ -371,7 +371,7 @@ jobs:
 
       - name: Upload official Homebrew cask submission bundle
         if: ${{ env.HOMEBREW_MINIMUM_MACOS != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: holdtype-official-homebrew-cask-${{ steps.release-inputs.outputs.version }}
           path: ${{ runner.temp }}/homebrew-official-cask
