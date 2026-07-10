@@ -336,17 +336,20 @@ row.
 The canonical History setting and generation live in the strict app-private
 `HoldType/ios-history-policy.json` record rather than the general settings file.
 Its exact version-1 root fields are `schemaVersion`, `revision`,
-`historyEnabled`, and `policyGeneration`; a missing record means enabled with
-both counters at `1`, and both counters remain in `1...Int64.max`. Clear
-History, disabling History, and re-enabling History
-each commit the next revision and policy generation; overflow fails without
+`historyEnabled`, and `policyGeneration`. A missing record is the enabled `1/1`
+baseline only after the accepted-History coordinator proves that accepted rows,
+outbox entries, and delivery History ownership are empty; otherwise it fails
+closed. Both counters remain in `1...Int64.max`. Clear always commits the next
+revision and generation. Disable and re-enable do so only when they change the
+enabled state; repeating the current state is a no-op. Overflow fails without
 changing policy. Clear or disable commits the new generation before removing
 rows. Every accepted History row is tagged with its generation, and History
 displays or retries only rows and markers matching the current enabled
 generation. Thus a crash after the policy commit may leave physically stale
 bytes, but can neither display nor resurrect them. Reconciliation then clears
 old rows and outbox entries and CASes a stale delivery History state to
-`cancelled` without an upsert.
+`cancelled` without an upsert. The exact contract lives in
+`ios-accepted-history-foundation.md`.
 
 The single current-delivery file is not the long-term owner of an outstanding
 History retry. The version-1 outbox is the strict app-private file
@@ -358,7 +361,7 @@ starts at revision `1`. Each entry contains exactly
 `deliveryID`, `transcriptID`, `acceptedText`, `outputIntent`, `createdAt`,
 `expiresAt`, `policyGeneration`, `transcriptionModel`,
 `transcriptionLanguageCode`, and `durationMilliseconds` under the same value
-rules. It keeps at most 20 unexpired entries and at most 4,194,304 encoded bytes.
+rules. It keeps at most 20 total entries and at most 4,194,304 encoded bytes.
 Exact duplicate transfer is idempotent; same identity with different UTF-8
 payload is a collision. Before adding entry 21, only expired or stale-generation
 entries may be pruned. Otherwise transfer fails closed and never evicts a live
@@ -535,9 +538,10 @@ physical-device gate.
 
 ## Deferred
 
-This checkpoint does not implement the History policy migration/outbox, App
+This checkpoint does not implement the separate History policy, accepted-row,
+and outbox foundation defined by `ios-accepted-history-foundation.md`, the App
 Group production bridge, extension claim ledger, acknowledgement channel, or
-UI. Until the owning checkpoint lands, record operations that require an outbox
-or durable bridge revocation fail closed instead of pretending the dependency
-exists. Their implementations must retain the identities, ordering, failure
-states, size limits, and privacy boundary above.
+UI. Until each owning checkpoint lands, record operations that require it fail
+closed instead of pretending the dependency exists. Their implementations must
+retain the identities, ordering, failure states, size limits, and privacy
+boundary above.

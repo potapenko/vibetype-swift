@@ -15,9 +15,10 @@ three explicit data lifecycles.
   newest entries.
 - Failed history is local, durable, and capped at the five newest recoverable
   attempts.
-- Turning history off immediately clears accepted and failed entries plus
-  failed-attempt retry audio. It does not clear the normal recording cache or an
-  attempt that is currently in flight.
+- In the completed History implementation, turning History off immediately
+  clears accepted and failed entries plus failed-attempt retry audio. It does
+  not clear the normal recording cache or an attempt that is currently in
+  flight. The accepted-only foundation does not expose this UI action early.
 - The canonical History enabled state and policy generation live in the
   dedicated strict app-private `HoldType/ios-history-policy.json` record. Clear,
   disable, and re-enable each advance its generation before cleanup so stale
@@ -84,9 +85,11 @@ three explicit data lifecycles.
   remove an independently retained recording-cache file.
 - Clear History removes accepted rows, failed rows, and retry-only audio. It
   does not remove the API key, settings, usage estimates, or normal recording
-  cache.
+  cache. This action becomes user-visible only after failed History and
+  retry-audio cleanup join the same policy cutover.
 - Turning history off performs the same immediate clear and prevents new
-  accepted/failed history writes until the user enables it again.
+  accepted/failed history writes until the user enables it again. The toggle is
+  not wired by the accepted-only foundation.
 - After relaunch, an unresolved `PendingRecording` journal produces one clear
   recovery surface. The user may Retry, keep/export the audio when allowed, or
   discard that attempt.
@@ -127,7 +130,10 @@ The initializer resolves model and language from one
 Blank model fallback and fixed/custom language normalization remain unchanged.
 The cached-audio URL is retained only when the captured recording-cache policy
 keeps recordings. The History adapter performs a no-op when the captured
-History preference is off.
+History preference is off. This Boolean is macOS/P1 compatibility intent only;
+it is never authoritative iOS policy, generation, delivery-marker, or
+persistence permission. Durable iOS acceptance obtains an opaque capture from
+the accepted-History coordinator.
 
 The request is `Equatable`, `Sendable`, and non-Codable. It has no raw-text
 validation path, stable ID, date, output intent, stage, failure/retry data,
@@ -403,7 +409,7 @@ identity without deleting the only valid artifact.
   policy generation must not resurrect an old row. Before delivery-record
   replacement, explicit clear, or Keep Latest cleanup could lose outstanding
   pending work, it moves to the bounded History outbox defined by
-  `ios-accepted-output-delivery-record.md`; until that durable transfer exists,
+  `ios-accepted-history-foundation.md`; until that durable transfer exists,
   removal fails closed. With Recording Cache off, accepted text is sufficient
   recovery and the app then removes the journal/audio; with cache on, it
   transfers the file to the independent cache, links a successfully written
@@ -476,7 +482,9 @@ identity without deleting the only valid artifact.
 
 - History and Storage & Recovery are app routes, not keyboard-extension UI.
 - The app is the only writer of history, pending journals, and audio files.
-- History enabled state and recording retention policy are versioned settings.
+- History enabled state and generation come only from the dedicated strict
+  History policy record. Recording Cache policy is a separate deferred
+  versioned contract.
 - Relative identifiers are resolved through the current app container; durable
   records do not persist absolute sandbox URLs.
 - The latest accepted result and short-lived keyboard insertion snapshot are

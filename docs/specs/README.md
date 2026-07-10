@@ -22,6 +22,9 @@ autonomous iOS portability goal is also active: the containing app, shared
 portable layers, keyboard bridge, and gated keyboard work follow
 `docs/ios-product-portability-plan.md` and the `ios-*` feature specs. Physical-
 device M0 gates still control claims that cannot be proven in the simulator.
+The current app-private History policy, accepted-row, and retry-outbox contract
+lives in
+[`features/ios-accepted-history-foundation.md`](features/ios-accepted-history-foundation.md).
 
 Early specs were seeded from the repository description and
 `docs/openwhispr_swiftui_codex_tz.md`. The current checkout now contains real
