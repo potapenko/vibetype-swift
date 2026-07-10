@@ -959,6 +959,24 @@ package suites; normal-import iOS coverage verifies the public repository,
 stable path, backup exclusion, and configured Complete protection without a
 live provider. Effective Data Protection remains a signed physical-device gate.
 
+The `PendingRecording` v1 foundation is now complete. `HoldTypePersistence`
+owns one strict 12-member app-private journal plus attempt-scoped protected
+`.m4a`/`.wav` audio, exact CAS transitions, a process-wide operation gate, and
+one live transcription owner per attempt. Provider work is exposed only through
+a fixed one-shot executor after the transcription UUID and protected artifact
+are durably validated. Cancellation retires that authority before recovery is
+written and wins over a non-cooperative late provider result. Journal rename is
+not confirmed until post-rename identity/protection checks and directory sync
+succeed; post-commit failure reports a typed uncertain state without rollback,
+and every same-phase call confirms the visible bytes through another durable
+rewrite even when a different Store actor performs it. Fake-backed race tests,
+live Darwin/AVFoundation and journal smoke tests, strict-concurrency package
+suites, the full macOS suite, and the standard iPhone simulator suite pass
+without a live provider. Effective Data Protection, microphone lifecycle, and
+process-eviction behavior remain signed-device gates. The keyboard target still
+links only `KeyboardViewController.o` and `KeyboardBridge.o` and has no Domain,
+Persistence, OpenAI, or IOSCore symbols.
+
 ### P3 — Native containing-app shell
 
 - implement Voice, Library, History, and Settings navigation;
@@ -1150,16 +1168,22 @@ already decided by their P0 specs.
 
 The provider foundation, general iOS settings v1, credential reconciliation,
 shared protected atomic-file substrate, app-private Library v1, local
-transcription Usage v1, bounded JSON structural validation, and bounded
-multipart startup scavenging are now implemented without moving secrets,
-canonical content, usage state, or scratch paths into App Group or the
-keyboard. The next P2 checkpoint is protected app-private recording
-identity/storage plus the minimal single-record `PendingRecording` journal that
-durably owns the local transcription/usage UUID before provider dispatch.
-Before implementation, freeze its exact Application Support paths, strict v1
-wire fields and size limit, duration/byte-count integrity fields, durable phase
-vocabulary, and discard/crash ordering. Durable History, delivery records,
-relaunch UI, and automatic reconciliation remain separate checkpoints.
+transcription Usage v1, bounded JSON structural validation, bounded multipart
+startup scavenging, protected recording storage, and strict one-record
+`PendingRecording` ownership are now implemented without moving secrets,
+canonical content, usage state, audio, or scratch paths into App Group or the
+keyboard.
+
+The next P2 checkpoint is the mandatory protected app-private accepted-output
+delivery record from `ios-output-actions.md`. Before implementation, freeze its
+exact Application Support path, strict v1 fields and size limit, session and
+transcript identity, output-intent and delivery-state vocabulary, 24-hour cap,
+`historyWritePending` reconciliation marker, CAS/replacement ordering, and
+clear/expiry semantics. It must commit before History or keyboard publication
+and must never contain audio, prompts, credentials, host context, or provider
+payloads. The bounded accepted/failed History repositories and recording-cache
+ownership transfer follow that record; the directional App Group bridge split
+remains later P2/P6 work and does not enter the keyboard early.
 
 The app-private credential marker, settings, Library, and Usage repositories
 now run one strict bounded structural pass before Foundation decoding. It
@@ -1169,10 +1193,10 @@ the source and each repository's redacted size/corruption error contract. The
 App Group bridge and legacy macOS/UserDefaults stores remain outside this
 checkpoint and retain their own bounded contracts.
 
-The completed startup-maintenance checkpoint remains containing-app-only and
-must keep its exact resource bounds and extension isolation as later storage
-work is added. `PendingRecording` and protected source audio use their own
-Application Support namespace; they are never candidates for multipart scratch
+The completed startup-maintenance and PendingRecording checkpoints remain
+containing-app-only and must keep their exact resource bounds and extension
+isolation as later storage work is added. Protected source audio uses its own
+Application Support namespace and is never a candidate for multipart scratch
 maintenance.
 
 These lanes require no live provider or real secret. Simulator and fake-backed

@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import HoldTypeDomain
 import Testing
@@ -298,6 +299,34 @@ struct IOSPendingRecordingJournalTests {
         )
     }
 
+    @Test func repositoryPreservesVisibleCommitUncertaintyAsTypedState() throws {
+        let fileSystem = IOSPendingRecordingJournalFileSystemFake()
+        let repository = FoundationIOSPendingRecordingJournalRepository(
+            fileSystem: fileSystem
+        )
+        let initial = try fixtureRecording()
+        fileSystem.commitNextCreateThenThrow(.commitUncertain)
+        try expectError(.journalCommitUncertain) {
+            try repository.create(initial)
+        }
+        #expect(try repository.load() == initial)
+        let replacement = try fixtureRecording(
+            phase: .awaitingRecovery,
+            updatedAt: "2026-07-10T09:08:09.008Z"
+        )
+        fileSystem.commitNextReplaceThenThrow(.commitUncertain)
+
+        try expectError(.journalCommitUncertain) {
+            try repository.replace(replacement, expected: initial)
+        }
+
+        #expect(try repository.load() == replacement)
+        #expect(
+            IOSPendingRecordingError.journalCommitUncertain.description
+                == "IOSPendingRecordingError(redacted)"
+        )
+    }
+
     @Test func liveFileSystemRoundTripsProtectedBytesAndEnforcesRevision() throws {
         try withTemporaryJournalDirectory { directoryURL in
             let fileSystem = FoundationIOSPendingRecordingJournalFileSystem(
@@ -323,6 +352,63 @@ struct IOSPendingRecordingJournalTests {
             }
             try fileSystem.removeFile(expected: replacementRevision)
             #expect(try fileSystem.readFileIfPresent() == nil)
+        }
+    }
+
+    @Test func postRenameDirectorySyncFailureKeepsNewBytesAndIsUncertain() throws {
+        try withTemporaryJournalDirectory { directoryURL in
+            let reader = FoundationIOSPendingRecordingJournalFileSystem(
+                applicationSupportDirectoryURL: directoryURL
+            )
+            let initial = Data(#"{"value":0}"#.utf8)
+            let replacement = Data(#"{"value":1}"#.utf8)
+            let initialRevision = try reader.createFile(with: initial)
+            let failingWriter = FoundationIOSPendingRecordingJournalFileSystem(
+                applicationSupportDirectoryURL: directoryURL,
+                replaceOperation: { directory, temporary, destination in
+                    let result = temporary.withCString { temporary in
+                        destination.withCString { destination in
+                            Darwin.renameat(
+                                directory,
+                                temporary,
+                                directory,
+                                destination
+                            )
+                        }
+                    }
+                    return result == 0 ? .success(()) : .failure(errno)
+                },
+                directorySynchronizationOperation: { _ in .failure(EIO) }
+            )
+
+            #expect(
+                throws:
+                    IOSPendingRecordingJournalFileSystemError.commitUncertain
+            ) {
+                _ = try failingWriter.replaceFile(
+                    with: replacement,
+                    expected: initialRevision
+                )
+            }
+
+            #expect(try reader.readFileIfPresent()?.data == replacement)
+            #expect(
+                throws: IOSPendingRecordingJournalFileSystemError.staleRevision
+            ) {
+                _ = try reader.replaceFile(
+                    with: initial,
+                    expected: initialRevision
+                )
+            }
+            let journalDirectory = directoryURL.appendingPathComponent(
+                IOSPendingRecordingStorageLocation.rootDirectoryName,
+                isDirectory: true
+            )
+            #expect(
+                try FileManager.default.contentsOfDirectory(
+                    atPath: journalDirectory.path
+                ) == [IOSPendingRecordingStorageLocation.journalFileName]
+            )
         }
     }
 
@@ -479,6 +565,10 @@ private final class IOSPendingRecordingJournalFileSystemFake:
         var data: Data?
         var revision: UInt64
         var readError: IOSPendingRecordingJournalFileSystemError? = nil
+        var nextCreateError: IOSPendingRecordingJournalFileSystemError? = nil
+        var commitBeforeNextCreateError = false
+        var nextReplaceError: IOSPendingRecordingJournalFileSystemError? = nil
+        var commitBeforeNextReplaceError = false
         var staleNextReplace = false
         var staleNextRemove = false
         var removeCallCount = 0
@@ -508,6 +598,24 @@ private final class IOSPendingRecordingJournalFileSystemFake:
         lock.withLock { state.staleNextReplace = true }
     }
 
+    func commitNextCreateThenThrow(
+        _ error: IOSPendingRecordingJournalFileSystemError
+    ) {
+        lock.withLock {
+            state.nextCreateError = error
+            state.commitBeforeNextCreateError = true
+        }
+    }
+
+    func commitNextReplaceThenThrow(
+        _ error: IOSPendingRecordingJournalFileSystemError
+    ) {
+        lock.withLock {
+            state.nextReplaceError = error
+            state.commitBeforeNextReplaceError = true
+        }
+    }
+
     func failNextRemoveAsStale() {
         lock.withLock { state.staleNextRemove = true }
     }
@@ -535,6 +643,15 @@ private final class IOSPendingRecordingJournalFileSystemFake:
                 throw IOSPendingRecordingJournalFileSystemError
                     .destinationConflict
             }
+            if let error = state.nextCreateError {
+                state.nextCreateError = nil
+                if state.commitBeforeNextCreateError {
+                    state.commitBeforeNextCreateError = false
+                    state.revision += 1
+                    state.data = data
+                }
+                throw error
+            }
             state.revision += 1
             state.data = data
             return IOSPendingRecordingJournalFileRevision(
@@ -557,6 +674,15 @@ private final class IOSPendingRecordingJournalFileSystemFake:
                       testingToken: state.revision
                   ) else {
                 throw IOSPendingRecordingJournalFileSystemError.staleRevision
+            }
+            if let error = state.nextReplaceError {
+                state.nextReplaceError = nil
+                if state.commitBeforeNextReplaceError {
+                    state.commitBeforeNextReplaceError = false
+                    state.revision += 1
+                    state.data = data
+                }
+                throw error
             }
             state.revision += 1
             state.data = data

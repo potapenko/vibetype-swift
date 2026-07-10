@@ -229,9 +229,13 @@ Durable phases have these exact versioned values and transitions:
 Normal Done prepares `readyForTranscription`. A valid partial retained after an
 interruption, Quick Session expiry, or Stop Voice Session prepares directly as
 `awaitingRecovery` and never starts provider work automatically. Explicit
-processing cancellation or an eligible pre-delivery failure moves
+processing cancellation or an eligible pre-delivery failure first retires the
+dispatch authorization and cancels a registered provider task, then moves
 `transcribing` or `postProcessing` to `awaitingRecovery`, clears the active
-transcription ID durably, and only then completes cancellation. Explicit Retry
+transcription ID durably, and only then completes cancellation. If the journal
+mutation fails, the old authorization remains retired and cannot start or
+restart provider work; the unresolved live owner continues to block Retry and
+Discard until the local transition is reconciled. Explicit Retry
 moves `awaitingRecovery` to `transcribing` with a fresh ID and current compact
 configuration identifiers. Same-phase calls are idempotent only when all
 identity-bearing inputs match. Other skips, backwards transitions, and a
@@ -265,11 +269,23 @@ intent, and returns only after the new `transcribing` record is durable. This
 UUID is the local usage/replay identity, not an OpenAI idempotency header.
 
 Only that successful commit may create one process-local, one-shot dispatch
-authorization containing the validated runtime audio artifact. Consuming it is
-atomic and succeeds once even under concurrent callers. `load`, observations,
-and a persisted `transcribing` record never expose a provider-capable URL or
-reconstruct dispatch authority. If the process loses the authorization, the
-attempt must use process-loss recovery and explicit Retry with a fresh UUID.
+authorization containing the validated runtime audio artifact. The
+authorization never returns a detached provider-capable dispatch and never
+passes it to an arbitrary closure with a generic result. Instead, one
+concurrent caller may invoke the fixed containing-app transcription-executor
+contract. The handoff supplies its internal recording and audio artifact to
+that registered executor only inside the one cancellable task, and its public
+result is transcript text rather than a provider capability. The task is held
+behind a launch permit until cancellation is registered atomically.
+Cancellation may retire an available or reserved authorization before launch,
+in which case the executor is never invoked. If launch wins, cancellation sees
+and cancels the registered task. A result or error is returned only when that
+task still owns the authorization at completion; cancellation wins every late
+completion race. Re-entry, operation failure, cancellation, and completion
+never make the authorization reusable. `load`, observations, and a persisted
+`transcribing` record never expose a provider-capable URL or reconstruct
+dispatch authority. If the process loses the authorization, the attempt must
+use process-loss recovery and explicit Retry with a fresh UUID.
 
 Preparing a pending attempt follows this order:
 
@@ -300,10 +316,20 @@ through exclusive no-overwrite publication, audio and directory
 synchronization, and journal commit. Descriptor and relative-path identity are
 revalidated before and after every commit point. Journal replacement uses the
 same descriptor-bound protection/backup verification, exact owner/mode/link
-checks, no-follow path checks, and a required directory synchronization. The
-repository never edits or removes the source artifact; any later source cleanup
-must revalidate the originally captured identity and remains outside this
-checkpoint.
+checks, no-follow path checks, and a required directory synchronization. A
+rename is not a confirmed durable commit until every post-rename check and the
+directory synchronization succeed. If any of them fails, the repository
+reports a typed commit-uncertain local error, preserves the visible new journal
+without rollback or cleanup, and never returns a revision or provider dispatch
+authorization. The caller must inspect and reconcile the surviving journal;
+it must not infer that either the old or new bytes are crash-durable and must
+not automatically repeat provider work. Every same-phase idempotent call must
+rewrite and synchronize those same bytes before it reports success or permits
+downstream side effects, including when a different Store actor observed the
+uncertain commit. A later durable transition may supersede the ambiguity only
+after its own confirmed directory synchronization. The repository never edits
+or removes the source artifact; any later source cleanup must revalidate the
+originally captured identity and remains outside this checkpoint.
 
 Journal duration and byte count are consistency fields, not proof that a media
 container is playable. Before audio publication, the protected copy must pass

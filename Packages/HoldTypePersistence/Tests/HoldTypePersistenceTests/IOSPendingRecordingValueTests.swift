@@ -220,7 +220,7 @@ struct IOSPendingRecordingValueTests {
         }
     }
 
-    @Test func dispatchAuthorizationCanBeConsumedExactlyOnceConcurrently() async throws {
+    @Test func dispatchAuthorizationExecutesExactlyOnceConcurrently() async throws {
         let recording = try sampleRecording(phase: .transcribing, transcriptionID: UUID())
         let artifact = AudioRecordingArtifact(
             fileURL: URL(fileURLWithPath: "/protected/secret.m4a"),
@@ -233,11 +233,19 @@ struct IOSPendingRecordingValueTests {
                 audioArtifact: artifact
             )
         )
+        let executor = PendingValueTranscriptionExecutor()
 
         let successfulConsumptionCount = await withTaskGroup(of: Bool.self) { group in
             for _ in 0..<32 {
                 group.addTask {
-                    handoff.consume() != nil
+                    do {
+                        return try await handoff.execute(using: executor)
+                            == "transcript"
+                    } catch IOSPendingRecordingError.dispatchAlreadyCommitted {
+                        return false
+                    } catch {
+                        return false
+                    }
                 }
             }
             var count = 0
@@ -248,9 +256,60 @@ struct IOSPendingRecordingValueTests {
         }
 
         #expect(successfulConsumptionCount == 1)
-        #expect(handoff.consume() == nil)
+        #expect(executor.callCount == 1)
+        await #expect(
+            throws: IOSPendingRecordingError.dispatchAlreadyCommitted
+        ) {
+            _ = try await handoff.execute(using: executor)
+        }
         #expect(!String(describing: handoff).contains("secret.m4a"))
         #expect(!String(reflecting: recording).contains(recording.audioRelativeIdentifier))
+    }
+
+    @Test func retirementBetweenReservationAndActivationPreventsLaunch() async throws {
+        let authorization = IOSPendingTranscriptionAuthorization()
+        let reservation = try #require(authorization.reserve())
+        let cancellationCount = PendingAuthorizationCounter()
+        let cancellation: @Sendable () -> Void = {
+            cancellationCount.increment()
+        }
+
+        authorization.retireAndCancel()
+
+        let didActivate = authorization.activate(
+            reservation,
+            cancellation: cancellation
+        )
+        #expect(!didActivate)
+        do {
+            try await reservation.waitForLaunch()
+            Issue.record("Expected retired reservation to stay closed")
+        } catch {
+            #expect(error is CancellationError)
+        }
+        #expect(cancellationCount.value == 0)
+        #expect(authorization.reserve() == nil)
+    }
+
+    @Test func activatedReservationRegistersExactlyOneCancellation() throws {
+        let authorization = IOSPendingTranscriptionAuthorization()
+        let reservation = try #require(authorization.reserve())
+        let cancellationCount = PendingAuthorizationCounter()
+        let cancellation: @Sendable () -> Void = {
+            cancellationCount.increment()
+        }
+        let didActivate = authorization.activate(
+            reservation,
+            cancellation: cancellation
+        )
+        #expect(didActivate)
+        reservation.launch()
+
+        authorization.retireAndCancel()
+        authorization.retireAndCancel()
+
+        #expect(cancellationCount.value == 1)
+        #expect(authorization.reserve() == nil)
     }
 
     private func sampleRecording(
@@ -288,5 +347,33 @@ struct IOSPendingRecordingValueTests {
             durationMilliseconds: 1_000,
             byteCount: 10
         )
+    }
+}
+
+nonisolated private final class PendingAuthorizationCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValue = 0
+
+    var value: Int { lock.withLock { storedValue } }
+
+    func increment() {
+        lock.withLock { storedValue += 1 }
+    }
+}
+
+nonisolated private final class PendingValueTranscriptionExecutor:
+    IOSPendingTranscriptionExecutor,
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedCallCount = 0
+
+    var callCount: Int { lock.withLock { storedCallCount } }
+
+    func transcribe(
+        recording: IOSPendingRecording,
+        audioArtifact: AudioRecordingArtifact
+    ) async throws -> String {
+        lock.withLock { storedCallCount += 1 }
+        return "transcript"
     }
 }

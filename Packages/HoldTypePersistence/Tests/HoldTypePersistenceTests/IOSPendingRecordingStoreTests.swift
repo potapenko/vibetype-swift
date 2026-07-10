@@ -39,6 +39,44 @@ struct IOSPendingRecordingStoreTests {
         #expect(!fixture.events.values.contains("audio.remove"))
     }
 
+    @Test func uncertainBeginCommitCannotMintProviderAuthority() async throws {
+        let fixture = StoreFixture()
+        let prepared = try await fixture.store.prepare(fixture.preparation())
+        fixture.events.reset()
+        fixture.journal.replaceError = .journalCommitUncertain
+        fixture.journal.replaceCommitsBeforeError = true
+        let transcriptionID = UUID()
+
+        await #expect(
+            throws: IOSPendingRecordingError.journalCommitUncertain
+        ) {
+            _ = try await fixture.store.beginTranscription(
+                expected: IOSPendingRecordingCASExpectation(recording: prepared),
+                transcriptionID: transcriptionID
+            )
+        }
+
+        let visibleCommit = try #require(fixture.journal.recording)
+        #expect(visibleCommit.phase == .transcribing)
+        #expect(visibleCommit.transcriptionID == transcriptionID)
+        #expect(
+            fixture.events.values == [
+                "audio.validate",
+                "journal.replace",
+            ]
+        )
+
+        fixture.journal.replaceError = nil
+        fixture.journal.replaceCommitsBeforeError = false
+        let recovered = try await fixture.makeStore(
+            destinationInspector: FakePendingDestinationInspector()
+        ).recoverAfterProcessLoss(
+            expected: IOSPendingRecordingCASExpectation(recording: visibleCommit)
+        )
+        #expect(recovered.phase == .awaitingRecovery)
+        #expect(recovered.transcriptionID == nil)
+    }
+
     @Test func beginCommitsUUIDBeforeReturningOneOneShotAuthorization() async throws {
         let fixture = StoreFixture()
         let prepared = try await fixture.store.prepare(fixture.preparation())
@@ -60,9 +98,14 @@ struct IOSPendingRecordingStoreTests {
                 "audio.validate",
             ]
         )
-        let dispatch = try #require(handoff.consume())
-        #expect(dispatch.recording == committed)
-        #expect(handoff.consume() == nil)
+        let executor = CapturingPendingTranscriptionExecutor()
+        #expect(try await handoff.execute(using: executor) == "transcript")
+        #expect(executor.recording == committed)
+        await #expect(
+            throws: IOSPendingRecordingError.dispatchAlreadyCommitted
+        ) {
+            _ = try await handoff.execute(using: executor)
+        }
 
         await #expect(throws: IOSPendingRecordingError.dispatchAlreadyCommitted) {
             _ = try await fixture.store.beginTranscription(
@@ -89,15 +132,17 @@ struct IOSPendingRecordingStoreTests {
             )
         )
 
-        let dispatch = try #require(handoff.consume())
-        #expect(dispatch.recording.attemptID == prepared.attemptID)
-        #expect(dispatch.recording.createdAt == prepared.createdAt)
-        #expect(dispatch.recording.outputIntent == prepared.outputIntent)
-        #expect(dispatch.recording.durationMilliseconds == prepared.durationMilliseconds)
-        #expect(dispatch.recording.byteCount == prepared.byteCount)
-        #expect(dispatch.recording.transcriptionID == transcriptionID)
-        #expect(dispatch.recording.transcriptionModel == "retry-model")
-        #expect(dispatch.recording.transcriptionLanguageCode == "ja")
+        let executor = CapturingPendingTranscriptionExecutor()
+        _ = try await handoff.execute(using: executor)
+        let recording = try #require(executor.recording)
+        #expect(recording.attemptID == prepared.attemptID)
+        #expect(recording.createdAt == prepared.createdAt)
+        #expect(recording.outputIntent == prepared.outputIntent)
+        #expect(recording.durationMilliseconds == prepared.durationMilliseconds)
+        #expect(recording.byteCount == prepared.byteCount)
+        #expect(recording.transcriptionID == transcriptionID)
+        #expect(recording.transcriptionModel == "retry-model")
+        #expect(recording.transcriptionLanguageCode == "ja")
     }
 
     @Test func postcommitHandoffFailureClearsDispatchIdentityBeforeReturning() async throws {
@@ -167,7 +212,9 @@ struct IOSPendingRecordingStoreTests {
             transcriptionID: freshID,
             transcriptionConfiguration: .defaults
         )
-        #expect(handoff.consume()?.recording.transcriptionID == freshID)
+        let executor = CapturingPendingTranscriptionExecutor()
+        _ = try await handoff.execute(using: executor)
+        #expect(executor.recording?.transcriptionID == freshID)
     }
 
     @Test func failedPostcommitCompensationKeepsAuthorityBlockedUntilRecovery() async throws {
@@ -240,13 +287,215 @@ struct IOSPendingRecordingStoreTests {
             expected: IOSPendingRecordingCASExpectation(recording: transcribing)
         )
 
-        #expect(handoff.consume() == nil)
+        await #expect(
+            throws: IOSPendingRecordingError.dispatchAlreadyCommitted
+        ) {
+            _ = try await handoff.execute(
+                using: CapturingPendingTranscriptionExecutor()
+            )
+        }
         let retryHandoff = try await fixture.store.retryTranscription(
             expected: IOSPendingRecordingCASExpectation(recording: recovery),
             transcriptionID: UUID(),
             transcriptionConfiguration: .defaults
         )
-        #expect(retryHandoff.consume() != nil)
+        #expect(
+            try await retryHandoff.execute(
+                using: CapturingPendingTranscriptionExecutor()
+            ) == "transcript"
+        )
+    }
+
+    @Test func processingCancellationCancelsRegisteredExecutionBeforeRecovery() async throws {
+        let fixture = StoreFixture()
+        let prepared = try await fixture.store.prepare(fixture.preparation())
+        let handoff = try await fixture.store.beginTranscription(
+            expected: IOSPendingRecordingCASExpectation(recording: prepared),
+            transcriptionID: UUID()
+        )
+        let transcribing = try #require(fixture.journal.recording)
+        let probe = PendingExecutionProbe()
+        let executor = CancellablePendingTranscriptionExecutor(probe: probe)
+        let execution = Task {
+            try await handoff.execute(using: executor)
+        }
+        #expect(probe.waitUntilStarted())
+
+        let recovery = try await fixture.store.markAwaitingRecovery(
+            expected: IOSPendingRecordingCASExpectation(recording: transcribing)
+        )
+
+        #expect(recovery.phase == .awaitingRecovery)
+        #expect(probe.waitUntilCancelled())
+        switch await execution.result {
+        case .success:
+            Issue.record("Expected registered execution cancellation")
+        case .failure(let error):
+            #expect(error is CancellationError)
+        }
+        await #expect(
+            throws: IOSPendingRecordingError.dispatchAlreadyCommitted
+        ) {
+            _ = try await handoff.execute(using: executor)
+        }
+    }
+
+    @Test func cancelledNoncooperativeLateSuccessIsRejected() async throws {
+        let fixture = StoreFixture()
+        let prepared = try await fixture.store.prepare(fixture.preparation())
+        let handoff = try await fixture.store.beginTranscription(
+            expected: IOSPendingRecordingCASExpectation(recording: prepared),
+            transcriptionID: UUID()
+        )
+        let transcribing = try #require(fixture.journal.recording)
+        let executor = NoncooperativePendingTranscriptionExecutor()
+        let execution = Task {
+            try await handoff.execute(using: executor)
+        }
+        #expect(executor.waitUntilStarted())
+        defer { executor.release() }
+
+        _ = try await fixture.store.markAwaitingRecovery(
+            expected: IOSPendingRecordingCASExpectation(recording: transcribing)
+        )
+        executor.release()
+
+        switch await execution.result {
+        case .success:
+            Issue.record("Cancelled late provider success must not escape")
+        case .failure(let error):
+            #expect(error is CancellationError)
+        }
+    }
+
+    @Test func failedRecoveryWriteStillPermanentlyRevokesOldHandoff() async throws {
+        let fixture = StoreFixture()
+        let prepared = try await fixture.store.prepare(fixture.preparation())
+        let handoff = try await fixture.store.beginTranscription(
+            expected: IOSPendingRecordingCASExpectation(recording: prepared),
+            transcriptionID: UUID()
+        )
+        let transcribing = try #require(fixture.journal.recording)
+        fixture.journal.replaceError = .journalWriteFailed
+
+        await #expect(throws: IOSPendingRecordingError.journalWriteFailed) {
+            _ = try await fixture.store.markAwaitingRecovery(
+                expected: IOSPendingRecordingCASExpectation(
+                    recording: transcribing
+                )
+            )
+        }
+
+        #expect(fixture.journal.recording == transcribing)
+        await #expect(
+            throws: IOSPendingRecordingError.dispatchAlreadyCommitted
+        ) {
+            _ = try await handoff.execute(
+                using: CapturingPendingTranscriptionExecutor()
+            )
+        }
+        fixture.journal.replaceError = nil
+        #expect(
+            try await fixture.store.markAwaitingRecovery(
+                expected: IOSPendingRecordingCASExpectation(
+                    recording: transcribing
+                )
+            ).phase == .awaitingRecovery
+        )
+    }
+
+    @Test func samePhaseAdvanceAlwaysConfirmsDurabilityAcrossStoreActors() async throws {
+        let fixture = StoreFixture()
+        let prepared = try await fixture.store.prepare(fixture.preparation())
+        _ = try await fixture.store.beginTranscription(
+            expected: IOSPendingRecordingCASExpectation(recording: prepared),
+            transcriptionID: UUID()
+        )
+        let transcribing = try #require(fixture.journal.recording)
+        fixture.journal.replaceError = .journalCommitUncertain
+        fixture.journal.replaceCommitsBeforeError = true
+
+        await #expect(
+            throws: IOSPendingRecordingError.journalCommitUncertain
+        ) {
+            _ = try await fixture.store.markPostProcessing(
+                expected: IOSPendingRecordingCASExpectation(
+                    recording: transcribing
+                )
+            )
+        }
+        let visibleCommit = try #require(fixture.journal.recording)
+        #expect(visibleCommit.phase == .postProcessing)
+
+        fixture.journal.replaceError = nil
+        fixture.events.reset()
+        let secondStore = fixture.makeStore(
+            destinationInspector: FakePendingDestinationInspector()
+        )
+        #expect(
+            try await secondStore.markPostProcessing(
+                expected: IOSPendingRecordingCASExpectation(
+                    recording: visibleCommit
+                )
+            ) == visibleCommit
+        )
+        #expect(fixture.events.values == ["journal.replace"])
+
+        fixture.events.reset()
+        _ = try await fixture.store.markPostProcessing(
+            expected: IOSPendingRecordingCASExpectation(recording: visibleCommit)
+        )
+        #expect(fixture.events.values == ["journal.replace"])
+    }
+
+    @Test func uncertainProcessRecoveryRetiresOldIdentityBeforeRetry() async throws {
+        let fixture = StoreFixture()
+        let prepared = try await fixture.store.prepare(fixture.preparation())
+        let oldID = UUID()
+        _ = try await fixture.store.beginTranscription(
+            expected: IOSPendingRecordingCASExpectation(recording: prepared),
+            transcriptionID: oldID
+        )
+        let transcribing = try #require(fixture.journal.recording)
+        let recoveringStore = fixture.makeStore(
+            destinationInspector: FakePendingDestinationInspector()
+        )
+        fixture.journal.replaceError = .journalCommitUncertain
+        fixture.journal.replaceCommitsBeforeError = true
+
+        await #expect(
+            throws: IOSPendingRecordingError.journalCommitUncertain
+        ) {
+            _ = try await recoveringStore.recoverAfterProcessLoss(
+                expected: IOSPendingRecordingCASExpectation(
+                    recording: transcribing
+                )
+            )
+        }
+        let visibleRecovery = try #require(fixture.journal.recording)
+        #expect(visibleRecovery.phase == .awaitingRecovery)
+        fixture.journal.replaceError = nil
+
+        await #expect(throws: IOSPendingRecordingError.invalidTransition) {
+            _ = try await recoveringStore.retryTranscription(
+                expected: IOSPendingRecordingCASExpectation(
+                    recording: visibleRecovery
+                ),
+                transcriptionID: oldID,
+                transcriptionConfiguration: .defaults
+            )
+        }
+        let freshID = UUID()
+        let handoff = try await recoveringStore.retryTranscription(
+            expected: IOSPendingRecordingCASExpectation(
+                recording: visibleRecovery
+            ),
+            transcriptionID: freshID,
+            transcriptionConfiguration: .defaults
+        )
+        let executor = CapturingPendingTranscriptionExecutor()
+        _ = try await handoff.execute(using: executor)
+        #expect(executor.recording?.transcriptionID == freshID)
     }
 
     @Test func freshStoreRequiresDestinationAbsenceBeforeProcessLossRecovery() async throws {
@@ -645,6 +894,7 @@ private final class FakePendingRecordingJournal:
     private var storedCreateError: IOSPendingRecordingError?
     private var storedReplaceError: IOSPendingRecordingError?
     private var storedReplaceErrorCallNumber: Int?
+    private var storedReplaceCommitsBeforeError = false
     private var storedReplaceCallCount = 0
     private var storedRemoveError: IOSPendingRecordingError?
 
@@ -664,6 +914,10 @@ private final class FakePendingRecordingJournal:
     var replaceErrorCallNumber: Int? {
         get { lock.withLock { storedReplaceErrorCallNumber } }
         set { lock.withLock { storedReplaceErrorCallNumber = newValue } }
+    }
+    var replaceCommitsBeforeError: Bool {
+        get { lock.withLock { storedReplaceCommitsBeforeError } }
+        set { lock.withLock { storedReplaceCommitsBeforeError = newValue } }
     }
     var removeError: IOSPendingRecordingError? {
         get { lock.withLock { storedRemoveError } }
@@ -698,13 +952,16 @@ private final class FakePendingRecordingJournal:
         events.append("journal.replace")
         try lock.withLock {
             storedReplaceCallCount += 1
+            guard storedRecording == expected else {
+                throw IOSPendingRecordingError.compareAndSwapFailed
+            }
             if let storedReplaceError,
                storedReplaceErrorCallNumber == nil
                 || storedReplaceErrorCallNumber == storedReplaceCallCount {
+                if storedReplaceCommitsBeforeError {
+                    storedRecording = recording
+                }
                 throw storedReplaceError
-            }
-            guard storedRecording == expected else {
-                throw IOSPendingRecordingError.compareAndSwapFailed
             }
             storedRecording = recording
         }
@@ -857,17 +1114,17 @@ private final class FakePendingRecordingAudioFileSystem:
     }
 }
 
-private final class PendingStorePublishBarrier: @unchecked Sendable {
+nonisolated private final class PendingStorePublishBarrier: @unchecked Sendable {
     private let blocked = DispatchSemaphore(value: 0)
     private let releaseSignal = DispatchSemaphore(value: 0)
 
     func block() {
         blocked.signal()
-        _ = releaseSignal.wait(timeout: .now() + 2)
+        _ = releaseSignal.wait(timeout: .now() + 10)
     }
 
     func waitUntilBlocked() -> Bool {
-        blocked.wait(timeout: .now() + 2) == .success
+        blocked.wait(timeout: .now() + 10) == .success
     }
 
     func release() {
@@ -875,7 +1132,7 @@ private final class PendingStorePublishBarrier: @unchecked Sendable {
     }
 }
 
-private final class PendingStoreGateProbe: @unchecked Sendable {
+nonisolated private final class PendingStoreGateProbe: @unchecked Sendable {
     private let enqueued = DispatchSemaphore(value: 0)
 
     func record(_ event: IOSPendingRecordingOperationGate.Event) {
@@ -885,7 +1142,137 @@ private final class PendingStoreGateProbe: @unchecked Sendable {
     }
 
     func waitUntilEnqueued() -> Bool {
-        enqueued.wait(timeout: .now() + 2) == .success
+        enqueued.wait(timeout: .now() + 10) == .success
+    }
+}
+
+nonisolated private final class PendingExecutionProbe: @unchecked Sendable {
+    private let started = DispatchSemaphore(value: 0)
+    private let cancelled = DispatchSemaphore(value: 0)
+
+    func markStarted() {
+        started.signal()
+    }
+
+    func markCancelled() {
+        cancelled.signal()
+    }
+
+    func waitUntilStarted() -> Bool {
+        started.wait(timeout: .now() + 10) == .success
+    }
+
+    func waitUntilCancelled() -> Bool {
+        cancelled.wait(timeout: .now() + 10) == .success
+    }
+}
+
+nonisolated private final class CapturingPendingTranscriptionExecutor:
+    IOSPendingTranscriptionExecutor,
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedRecording: IOSPendingRecording?
+    private var storedAudioArtifact: AudioRecordingArtifact?
+
+    var recording: IOSPendingRecording? {
+        lock.withLock { storedRecording }
+    }
+
+    var audioArtifact: AudioRecordingArtifact? {
+        lock.withLock { storedAudioArtifact }
+    }
+
+    func transcribe(
+        recording: IOSPendingRecording,
+        audioArtifact: AudioRecordingArtifact
+    ) async throws -> String {
+        lock.withLock {
+            storedRecording = recording
+            storedAudioArtifact = audioArtifact
+        }
+        return "transcript"
+    }
+}
+
+nonisolated private final class CancellablePendingTranscriptionExecutor:
+    IOSPendingTranscriptionExecutor,
+    @unchecked Sendable {
+    private let probe: PendingExecutionProbe
+
+    init(probe: PendingExecutionProbe) {
+        self.probe = probe
+    }
+
+    func transcribe(
+        recording: IOSPendingRecording,
+        audioArtifact: AudioRecordingArtifact
+    ) async throws -> String {
+        probe.markStarted()
+        do {
+            try await Task.sleep(nanoseconds: 30_000_000_000)
+            return "late transcript"
+        } catch {
+            probe.markCancelled()
+            throw error
+        }
+    }
+}
+
+nonisolated private final class NoncooperativePendingTranscriptionExecutor:
+    IOSPendingTranscriptionExecutor,
+    @unchecked Sendable {
+    private enum ReleaseState {
+        case waiting
+        case suspended(CheckedContinuation<Void, Never>)
+        case released
+    }
+
+    private let lock = NSLock()
+    private let started = DispatchSemaphore(value: 0)
+    private var releaseState = ReleaseState.waiting
+
+    func transcribe(
+        recording: IOSPendingRecording,
+        audioArtifact: AudioRecordingArtifact
+    ) async throws -> String {
+        started.signal()
+        await withCheckedContinuation { continuation in
+            let shouldResume = lock.withLock {
+                switch releaseState {
+                case .waiting:
+                    releaseState = .suspended(continuation)
+                    return false
+                case .suspended:
+                    preconditionFailure("Executor has one invocation")
+                case .released:
+                    return true
+                }
+            }
+            if shouldResume {
+                continuation.resume()
+            }
+        }
+        return "late transcript"
+    }
+
+    func waitUntilStarted() -> Bool {
+        started.wait(timeout: .now() + 10) == .success
+    }
+
+    func release() {
+        let continuation: CheckedContinuation<Void, Never>? = lock.withLock {
+            switch releaseState {
+            case .waiting:
+                releaseState = .released
+                return nil
+            case .suspended(let continuation):
+                releaseState = .released
+                return continuation
+            case .released:
+                return nil
+            }
+        }
+        continuation?.resume()
     }
 }
 

@@ -242,9 +242,9 @@ extension IOSPendingRecordingObservation: CustomStringConvertible,
     public var customMirror: Mirror { IOSPendingRecordingRedaction.mirror(of: self) }
 }
 
-public struct IOSPendingTranscriptionDispatch: Equatable, Sendable {
-    public let recording: IOSPendingRecording
-    public let audioArtifact: AudioRecordingArtifact
+struct IOSPendingTranscriptionDispatch: Equatable, Sendable {
+    let recording: IOSPendingRecording
+    let audioArtifact: AudioRecordingArtifact
 
     init(
         recording: IOSPendingRecording,
@@ -257,63 +257,237 @@ public struct IOSPendingTranscriptionDispatch: Equatable, Sendable {
 
 extension IOSPendingTranscriptionDispatch: CustomStringConvertible,
     CustomDebugStringConvertible, CustomReflectable {
-    public var description: String { "IOSPendingTranscriptionDispatch(redacted)" }
-    public var debugDescription: String { description }
-    public var customMirror: Mirror { IOSPendingRecordingRedaction.mirror(of: self) }
+    var description: String { "IOSPendingTranscriptionDispatch(redacted)" }
+    var debugDescription: String { description }
+    var customMirror: Mirror { IOSPendingRecordingRedaction.mirror(of: self) }
+}
+
+/// Containing-app provider boundary for one registered pending transcription.
+/// Implementations must issue at most one request and honor task cancellation.
+public protocol IOSPendingTranscriptionExecutor: Sendable {
+    func transcribe(
+        recording: IOSPendingRecording,
+        audioArtifact: AudioRecordingArtifact
+    ) async throws -> String
 }
 
 /// One process-local dispatch authorization. It cannot be reconstructed from disk.
 public final class IOSPendingTranscriptionHandoff: @unchecked Sendable {
-    private let lock = NSLock()
+    private let dispatch: IOSPendingTranscriptionDispatch
     private let authorization: IOSPendingTranscriptionAuthorization
-    private var pendingDispatch: IOSPendingTranscriptionDispatch?
 
     init(
         dispatch: IOSPendingTranscriptionDispatch,
         authorization: IOSPendingTranscriptionAuthorization =
             IOSPendingTranscriptionAuthorization()
     ) {
-        pendingDispatch = dispatch
+        self.dispatch = dispatch
         self.authorization = authorization
     }
 
-    public func consume() -> IOSPendingTranscriptionDispatch? {
-        lock.withLock {
-            defer { pendingDispatch = nil }
-            guard authorization.claim() else {
+    /// Runs one provider operation only after its cancellable task is registered.
+    /// No detached provider-capable dispatch escapes this boundary.
+    public func execute(
+        using executor: any IOSPendingTranscriptionExecutor
+    ) async throws -> String {
+        guard let reservation = authorization.reserve() else {
+            throw IOSPendingRecordingError.dispatchAlreadyCommitted
+        }
+        guard !Task.isCancelled else {
+            authorization.cancel(reservation)
+            throw CancellationError()
+        }
+
+        let task = Task<String, Error> { [dispatch] in
+            try await reservation.waitForLaunch()
+            try Task.checkCancellation()
+            return try await executor.transcribe(
+                recording: dispatch.recording,
+                audioArtifact: dispatch.audioArtifact
+            )
+        }
+        guard authorization.activate(
+            reservation,
+            cancellation: { task.cancel() }
+        ) else {
+            task.cancel()
+            reservation.cancel()
+            _ = await task.result
+            throw IOSPendingRecordingError.dispatchAlreadyCommitted
+        }
+
+        if Task.isCancelled {
+            authorization.cancel(reservation)
+        } else {
+            reservation.launch()
+        }
+
+        return try await withTaskCancellationHandler {
+            let result = await task.result
+            guard authorization.finish(reservation) else {
+                throw CancellationError()
+            }
+            return try result.get()
+        } onCancel: {
+            authorization.cancel(reservation)
+        }
+    }
+}
+
+final class IOSPendingTranscriptionReservation: @unchecked Sendable {
+    private enum PermitState {
+        case pending
+        case waiting(CheckedContinuation<Void, Error>)
+        case launched
+        case cancelled
+    }
+
+    private let lock = NSLock()
+    private var state = PermitState.pending
+
+    func waitForLaunch() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            let immediateResult: Result<Void, Error>? = lock.withLock {
+                switch state {
+                case .pending:
+                    state = .waiting(continuation)
+                    return nil
+                case .waiting:
+                    preconditionFailure("Launch permit has only one waiter")
+                case .launched:
+                    return .success(())
+                case .cancelled:
+                    return .failure(CancellationError())
+                }
+            }
+            if let immediateResult {
+                continuation.resume(with: immediateResult)
+            }
+        }
+    }
+
+    func launch() {
+        let continuation: CheckedContinuation<Void, Error>? = lock.withLock {
+            switch state {
+            case .pending:
+                state = .launched
+                return nil
+            case .waiting(let continuation):
+                state = .launched
+                return continuation
+            case .launched, .cancelled:
                 return nil
             }
-            return pendingDispatch
         }
+        continuation?.resume()
+    }
+
+    func cancel() {
+        let continuation: CheckedContinuation<Void, Error>? = lock.withLock {
+            switch state {
+            case .pending:
+                state = .cancelled
+                return nil
+            case .waiting(let continuation):
+                state = .cancelled
+                return continuation
+            case .launched, .cancelled:
+                return nil
+            }
+        }
+        continuation?.resume(throwing: CancellationError())
     }
 }
 
 final class IOSPendingTranscriptionAuthorization: @unchecked Sendable {
     private enum State {
         case available
-        case claimed
+        case reserved(IOSPendingTranscriptionReservation)
+        case running(
+            IOSPendingTranscriptionReservation,
+            cancellation: @Sendable () -> Void
+        )
         case retired
     }
 
     private let lock = NSLock()
     private var state = State.available
 
-    func claim() -> Bool {
+    func reserve() -> IOSPendingTranscriptionReservation? {
         lock.withLock {
             guard case .available = state else {
+                return nil
+            }
+            let reservation = IOSPendingTranscriptionReservation()
+            state = .reserved(reservation)
+            return reservation
+        }
+    }
+
+    func activate(
+        _ reservation: IOSPendingTranscriptionReservation,
+        cancellation: @escaping @Sendable () -> Void
+    ) -> Bool {
+        lock.withLock {
+            guard case .reserved(let current) = state,
+                  current === reservation else {
                 return false
             }
-            state = .claimed
+            state = .running(reservation, cancellation: cancellation)
             return true
         }
     }
 
-    func retire() {
+    func finish(_ reservation: IOSPendingTranscriptionReservation) -> Bool {
         lock.withLock {
-            if case .available = state {
+            if case .running(let current, _) = state,
+               current === reservation {
                 state = .retired
+                return true
+            }
+            return false
+        }
+    }
+
+    func cancel(_ reservation: IOSPendingTranscriptionReservation) {
+        let cancellation: (@Sendable () -> Void)? = lock.withLock {
+            switch state {
+            case .reserved(let current) where current === reservation:
+                state = .retired
+                return { reservation.cancel() }
+            case .running(let current, let cancel) where current === reservation:
+                state = .retired
+                return {
+                    reservation.cancel()
+                    cancel()
+                }
+            case .available, .reserved, .running, .retired:
+                return nil
             }
         }
+        cancellation?()
+    }
+
+    func retireAndCancel() {
+        let cancellation: (@Sendable () -> Void)? = lock.withLock {
+            switch state {
+            case .available:
+                state = .retired
+                return nil
+            case .reserved(let reservation):
+                state = .retired
+                return { reservation.cancel() }
+            case .running(let reservation, let cancel):
+                state = .retired
+                return {
+                    reservation.cancel()
+                    cancel()
+                }
+            case .retired:
+                return nil
+            }
+        }
+        cancellation?()
     }
 }
 
@@ -347,6 +521,7 @@ public enum IOSPendingRecordingError: Error, Equatable, Sendable {
     case linkedAudioMissing
     case linkedAudioInvalid
     case journalWriteFailed
+    case journalCommitUncertain
     case audioRemoveFailed
     case journalRemoveFailed
     case compareAndSwapFailed

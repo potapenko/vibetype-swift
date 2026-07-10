@@ -465,6 +465,7 @@ private extension IOSPendingRecordingStore {
     ) throws -> IOSPendingRecording {
         let current = try requireCurrent(expected: expected)
         if current.phase == destination {
+            try confirmJournalDurability(current)
             return current
         }
         guard current.phase == source,
@@ -492,7 +493,10 @@ private extension IOSPendingRecordingStore {
     ) throws -> IOSPendingRecording {
         let current = try requireCurrent(expected: expected)
         if current.phase == .awaitingRecovery {
-            retireActiveDispatchIfOwned(attemptID: current.attemptID)
+            try confirmJournalDurability(current)
+            if activeDispatchIdentity?.attemptID == current.attemptID {
+                retireActiveDispatchIfOwned(attemptID: current.attemptID)
+            }
             return current
         }
         guard current.phase == .transcribing || current.phase == .postProcessing,
@@ -511,12 +515,14 @@ private extension IOSPendingRecordingStore {
             transcriptionModel: current.transcriptionModel,
             transcriptionLanguageCode: current.transcriptionLanguageCode
         )
+        // This is the linearization point against a concurrent handoff
+        // execute: no provider operation may start after cancellation begins.
+        activeDispatchAuthorization?.retireAndCancel()
         try journal.replace(updated, expected: current)
         liveOwnerRegistry.retire(
             attemptID: current.attemptID,
             transcriptionID: transcriptionID
         )
-        activeDispatchAuthorization?.retire()
         activeDispatchAuthorization = nil
         activeDispatchIdentity = nil
         return updated
@@ -531,7 +537,7 @@ private extension IOSPendingRecordingStore {
             attemptID: activeDispatchIdentity.attemptID,
             transcriptionID: activeDispatchIdentity.transcriptionID
         )
-        activeDispatchAuthorization?.retire()
+        activeDispatchAuthorization?.retireAndCancel()
         activeDispatchAuthorization = nil
         self.activeDispatchIdentity = nil
     }
@@ -541,6 +547,7 @@ private extension IOSPendingRecordingStore {
     ) async throws -> IOSPendingRecording {
         let current = try requireCurrent(expected: expected)
         if current.phase == .awaitingRecovery {
+            try confirmJournalDurability(current)
             return current
         }
         guard current.phase == .transcribing
@@ -575,11 +582,11 @@ private extension IOSPendingRecordingStore {
             transcriptionModel: current.transcriptionModel,
             transcriptionLanguageCode: current.transcriptionLanguageCode
         )
-        try journal.replace(updated, expected: current)
         liveOwnerRegistry.retire(
             attemptID: current.attemptID,
             transcriptionID: transcriptionID
         )
+        try journal.replace(updated, expected: current)
         return updated
     }
 
@@ -587,6 +594,7 @@ private extension IOSPendingRecordingStore {
         expected: IOSPendingRecordingCASExpectation
     ) async throws -> IOSPendingRecordingDiscardResult {
         guard let current = try journal.load() else {
+            liveOwnerRegistry.clearRetired(attemptID: expected.attemptID)
             return .alreadyAbsent
         }
         try requireExpectation(expected, matches: current)
@@ -694,6 +702,16 @@ private extension IOSPendingRecordingStore {
             return candidate
         }
         return priorDate
+    }
+
+    func confirmJournalDurability(
+        _ recording: IOSPendingRecording
+    ) throws {
+        // Another Store actor may have observed a post-rename failure from the
+        // actor that wrote these bytes. Rewriting every same-phase result makes
+        // durability confirmation process-independent and keeps side effects
+        // behind a successful directory synchronization.
+        try journal.replace(recording, expected: recording)
     }
 }
 

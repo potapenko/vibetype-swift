@@ -87,6 +87,7 @@ enum IOSPendingRecordingJournalFileSystemError: Error, Equatable, Sendable {
     case readFailed
     case writeFailed
     case synchronizationFailed
+    case commitUncertain
     case removeFailed
 }
 
@@ -185,6 +186,8 @@ struct FoundationIOSPendingRecordingJournalRepository:
             throw IOSPendingRecordingError.compareAndSwapFailed
         } catch IOSPendingRecordingJournalFileSystemError.protectedDataUnavailable {
             throw IOSPendingRecordingError.dataProtectionUnavailable
+        } catch IOSPendingRecordingJournalFileSystemError.commitUncertain {
+            throw IOSPendingRecordingError.journalCommitUncertain
         } catch {
             throw IOSPendingRecordingError.journalWriteFailed
         }
@@ -238,6 +241,8 @@ struct FoundationIOSPendingRecordingJournalRepository:
             .journalTooLarge
         case .protectedDataUnavailable:
             .dataProtectionUnavailable
+        case .commitUncertain:
+            .journalCommitUncertain
         default:
             .journalWriteFailed
         }
@@ -578,10 +583,15 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
         _ temporaryName: String,
         _ destinationName: String
     ) -> IOSPendingRecordingPOSIXResult<Void>
+    typealias DirectorySynchronizationOperation = @Sendable (
+        _ directoryDescriptor: Int32
+    ) -> IOSPendingRecordingPOSIXResult<Void>
 
     private let applicationSupportDirectoryURL: URL
     private let adapter: any IOSPendingRecordingPOSIXAdapter
     private let replaceOperation: ReplaceOperation
+    private let directorySynchronizationOperation:
+        DirectorySynchronizationOperation?
 
     init(
         applicationSupportDirectoryURL: URL,
@@ -596,11 +606,15 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
                 temporaryName: temporaryName,
                 destinationName: destinationName
             )
-        }
+        },
+        directorySynchronizationOperation:
+            DirectorySynchronizationOperation? = nil
     ) {
         self.applicationSupportDirectoryURL = applicationSupportDirectoryURL
         self.adapter = adapter
         self.replaceOperation = replaceOperation
+        self.directorySynchronizationOperation =
+            directorySynchronizationOperation
     }
 
     func readFileIfPresent() throws -> IOSPendingRecordingJournalFile? {
@@ -1060,9 +1074,26 @@ private extension FoundationIOSPendingRecordingJournalFileSystem {
         case .success:
             shouldRemoveTemporary = false
         case .failure(EEXIST) where createOnly:
+            if finalPathMayReferenceTemporary(
+                temporary,
+                directory: directory
+            ) != false {
+                throw IOSPendingRecordingJournalFileSystemError.commitUncertain
+            }
             throw IOSPendingRecordingJournalFileSystemError.destinationConflict
         case .failure(ENOENT) where !createOnly:
+            if finalPathMayReferenceTemporary(
+                temporary,
+                directory: directory
+            ) != false {
+                throw IOSPendingRecordingJournalFileSystemError.commitUncertain
+            }
             throw IOSPendingRecordingJournalFileSystemError.staleRevision
+        case .failure where finalPathMayReferenceTemporary(
+            temporary,
+            directory: directory
+        ) != false:
+            throw IOSPendingRecordingJournalFileSystemError.commitUncertain
         case .failure(let code) where isProtectedDataError(code):
             throw IOSPendingRecordingJournalFileSystemError
                 .protectedDataUnavailable
@@ -1070,30 +1101,70 @@ private extension FoundationIOSPendingRecordingJournalFileSystem {
             throw IOSPendingRecordingJournalFileSystemError.writeFailed
         }
 
-        // Rename is the commit point. Post-commit verification and the required
-        // directory sync are attempted, but cannot turn a visible commit into
-        // an ambiguous reported failure.
-        let publishedStatus = (try? status(
-            descriptor: temporary.descriptor,
-            failure: .writeFailed
-        )) ?? prepublishStatus
-        try? validateJournalStatus(
-            publishedStatus,
-            effectiveUserID: directory.effectiveUserID
-        )
-        try? validatePathIdentity(
-            named: IOSPendingRecordingStorageLocation.journalFileName,
-            descriptorStatus: publishedStatus,
-            directory: directory,
-            failure: .writeFailed
-        )
-        try? validateExactConfiguration(descriptor: temporary.descriptor)
-        try? validateDirectoryIdentity(directory)
-        try? synchronizeDirectory(directory.descriptor)
+        // Rename makes the new bytes visible. It is not a confirmed durable
+        // commit until descriptor/path policy and the containing directory are
+        // revalidated and the directory entry is synchronized. Never roll back
+        // or clean the visible journal if one of these post-commit steps fails.
+        var publishedStatus: stat?
+        var postCommitFailed = false
+        do {
+            let status = try status(
+                descriptor: temporary.descriptor,
+                failure: .writeFailed
+            )
+            try validateJournalStatus(
+                status,
+                effectiveUserID: directory.effectiveUserID
+            )
+            guard status.st_size == off_t(data.count),
+                  FileIdentity(status) == temporary.identity else {
+                throw IOSPendingRecordingJournalFileSystemError.writeFailed
+            }
+            try validatePathIdentity(
+                named: IOSPendingRecordingStorageLocation.journalFileName,
+                descriptorStatus: status,
+                directory: directory,
+                failure: .writeFailed
+            )
+            try validateExactConfiguration(descriptor: temporary.descriptor)
+            try validateDirectoryIdentity(directory)
+            publishedStatus = status
+        } catch {
+            postCommitFailed = true
+        }
 
+        // Attempt the durability barrier even when an earlier post-rename
+        // policy check failed; both outcomes remain commit-uncertain.
+        do {
+            try synchronizeDirectory(directory.descriptor)
+        } catch {
+            postCommitFailed = true
+        }
+
+        guard !postCommitFailed, let publishedStatus else {
+            throw IOSPendingRecordingJournalFileSystemError.commitUncertain
+        }
         return IOSPendingRecordingJournalFileRevision(
             snapshot: IOSPendingRecordingJournalFileSnapshot(publishedStatus)
         )
+    }
+
+    func finalPathMayReferenceTemporary(
+        _ temporary: TemporaryFile,
+        directory: DirectoryHandle
+    ) -> Bool? {
+        do {
+            guard let finalStatus = try statusIfPresent(
+                named: IOSPendingRecordingStorageLocation.journalFileName,
+                directory: directory,
+                failure: .writeFailed
+            ) else {
+                return false
+            }
+            return FileIdentity(finalStatus) == temporary.identity
+        } catch {
+            return nil
+        }
     }
 
     func createTemporaryFile(
@@ -1464,7 +1535,11 @@ private extension FoundationIOSPendingRecordingJournalFileSystem {
 
     func synchronizeDirectory(_ descriptor: Int32) throws {
         switch retryInterrupted({
-            adapter.synchronize(fileDescriptor: descriptor)
+            if let directorySynchronizationOperation {
+                directorySynchronizationOperation(descriptor)
+            } else {
+                adapter.synchronize(fileDescriptor: descriptor)
+            }
         }) {
         case .success:
             return

@@ -306,8 +306,9 @@ host app, state, expected result, actual result, and go/no-go decision.
   containing-app-only v1 repository at
   `HoldType/ios-transcription-usage.json`. Its bounded protected state remains
   absent from keyboard and App Group data. Durable pre-provider ownership of
-  the replay UUID still belongs to the PendingRecording journal in P2; the
-  usage repository alone does not satisfy that replay gate. The app-private
+  the replay UUID now belongs to the completed strict `PendingRecording` v1
+  journal and its protected attempt-scoped audio; the usage repository alone
+  does not satisfy that replay gate. The app-private
   credential, settings, Library, and Usage decoders now share bounded strict
   JSON structural validation; that validator and those repositories remain
   unlinked from the keyboard and do not change the bridge wire contract. The
@@ -316,9 +317,12 @@ host app, state, expected result, actual result, and go/no-go decision.
   startup paths. It exposes no scratch identity or result to the extension, and
   the built keyboard still links only its own controller and bridge objects.
   Protected recording identity/storage and the single-record
-  `PendingRecording` journal are the next P2 checkpoint and remain app-private,
-  outside App Group and keyboard linkage. The
-  runtime-only
+  `PendingRecording` journal are complete and remain app-private, outside App
+  Group and keyboard linkage. Their one-shot provider executor, cancellation,
+  commit-uncertainty, and process-loss recovery contracts add no extension
+  dependency. The next P2 storage checkpoint is the app-private accepted-output
+  delivery record; it also remains outside the keyboard until the directional
+  bridge contract is implemented behind the physical M0 gates. The runtime-only
   four-case `VoiceAttemptStage` is portable too, while preflight, outcomes,
   recovery eligibility, and durable resume checkpoints remain separate. The
   containing-app output handoff is now narrowed to accepted text plus the two
