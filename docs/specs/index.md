@@ -21,6 +21,7 @@ matching feature spec, then verify exact source ownership with `rg --files`.
 | Software updates | `features/software-updates.md` | Native macOS app update checks, prompts, release artifacts, appcast behavior |
 | App Store distribution | `features/app-store-distribution.md` | macOS distribution channel decision, App Store viability, direct-download trust |
 | Landing page hosting | `features/landing-page-hosting.md` | DigitalOcean App Platform static site, custom domain, GitHub Pages appcast coexistence |
+| Landing page localization | `features/landing-page-localization.md` | Supported languages, locale routes, switching, detection, RTL, localized metadata |
 | UI functionality coverage | `features/ui-functionality-coverage.md` | Current UI/task coverage inventory, visible-surface task mapping |
 | Platform testing | `features/platform-testing-strategy.md` | Choosing build/test/runtime QA, MCP, Computer Use, or manual evidence |
 | Verification | `features/verification-strategy.md` | Verification baseline, test scope, evidence quality |

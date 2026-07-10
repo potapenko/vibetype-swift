@@ -19,8 +19,8 @@ that already uses GitHub Pages.
 - `https://holdtype.app/` serves the HoldType landing page through DigitalOcean
   App Platform's static-site service, managed HTTPS, and CDN.
 - `www.holdtype.app` redirects to the canonical apex domain.
-- The page remains usable at the DigitalOcean technical hostname and at the
-  custom-domain root without an application build step.
+- The generated pages remain usable at the DigitalOcean technical hostname and
+  at the custom-domain routes without a server-side application runtime.
 - Download links continue to use the stable GitHub latest-release URL.
 - The Homebrew Copy button copies the complete project-tap installation block.
 - The hero may present 100 dictations as about `$0.10` at the current
