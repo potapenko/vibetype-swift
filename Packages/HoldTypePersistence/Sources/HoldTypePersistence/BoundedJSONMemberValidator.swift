@@ -9,7 +9,10 @@ enum BoundedJSONMemberValidationError: Error, Equatable, Sendable {
 
 struct BoundedJSONMemberValidationLimits: Equatable, Sendable {
     static func metadataFile(maximumInputByteCount: Int) -> Self {
-        Self(maximumInputByteCount: maximumInputByteCount)
+        Self(
+            maximumInputByteCount: maximumInputByteCount,
+            maximumDecodedValueStringByteCount: maximumInputByteCount
+        )
     }
 
     let maximumInputByteCount: Int
@@ -19,6 +22,7 @@ struct BoundedJSONMemberValidationLimits: Equatable, Sendable {
     let maximumElementsPerArray: Int
     let maximumTotalValues: Int
     let maximumDecodedKeyByteCount: Int
+    let maximumDecodedValueStringByteCount: Int
     let maximumNumberTokenByteCount: Int
 
     init(
@@ -29,6 +33,7 @@ struct BoundedJSONMemberValidationLimits: Equatable, Sendable {
         maximumElementsPerArray: Int = 65_536,
         maximumTotalValues: Int = 524_288,
         maximumDecodedKeyByteCount: Int = 4_096,
+        maximumDecodedValueStringByteCount: Int = Int.max,
         maximumNumberTokenByteCount: Int = 256
     ) {
         self.maximumInputByteCount = maximumInputByteCount
@@ -38,6 +43,8 @@ struct BoundedJSONMemberValidationLimits: Equatable, Sendable {
         self.maximumElementsPerArray = maximumElementsPerArray
         self.maximumTotalValues = maximumTotalValues
         self.maximumDecodedKeyByteCount = maximumDecodedKeyByteCount
+        self.maximumDecodedValueStringByteCount =
+            maximumDecodedValueStringByteCount
         self.maximumNumberTokenByteCount = maximumNumberTokenByteCount
     }
 }
@@ -61,6 +68,7 @@ enum BoundedJSONMemberValidator {
               limits.maximumElementsPerArray >= 0,
               limits.maximumTotalValues >= 0,
               limits.maximumDecodedKeyByteCount >= 0,
+              limits.maximumDecodedValueStringByteCount >= 0,
               limits.maximumNumberTokenByteCount >= 0,
               limits.maximumNestingDepth <= absoluteMaximumNestingDepth else {
             throw BoundedJSONMemberValidationError.resourceLimitExceeded
@@ -124,7 +132,11 @@ private struct Parser {
             try parseArray(containerDepth: containerDepth + 1)
 
         case Self.quotationMark:
-            _ = try parseString(collectDecodedBytes: false)
+            _ = try parseString(
+                collectDecodedBytes: false,
+                maximumDecodedByteCount:
+                    limits.maximumDecodedValueStringByteCount
+            )
 
         case 0x74:
             try consumeLiteral([0x74, 0x72, 0x75, 0x65])
@@ -158,7 +170,8 @@ private struct Parser {
                 throw BoundedJSONMemberValidationError.malformedJSON
             }
             guard let memberNameBytes = try parseString(
-                collectDecodedBytes: true
+                collectDecodedBytes: true,
+                maximumDecodedByteCount: limits.maximumDecodedKeyByteCount
             ) else {
                 throw BoundedJSONMemberValidationError.malformedJSON
             }
@@ -206,13 +219,15 @@ private struct Parser {
     }
 
     private mutating func parseString(
-        collectDecodedBytes: Bool
+        collectDecodedBytes: Bool,
+        maximumDecodedByteCount: Int
     ) throws -> [UInt8]? {
         try consume(Self.quotationMark)
         var decodedBytes: [UInt8]? = collectDecodedBytes ? [] : nil
+        var decodedByteCount = 0
         if collectDecodedBytes {
             decodedBytes?.reserveCapacity(
-                min(32, limits.maximumDecodedKeyByteCount)
+                min(32, maximumDecodedByteCount)
             )
         }
 
@@ -225,7 +240,9 @@ private struct Parser {
             case Self.reverseSolidus:
                 index += 1
                 try parseEscape(
-                    decodedBytes: &decodedBytes
+                    decodedBytes: &decodedBytes,
+                    decodedByteCount: &decodedByteCount,
+                    maximumDecodedByteCount: maximumDecodedByteCount
                 )
 
             case 0x00...0x1F:
@@ -233,7 +250,12 @@ private struct Parser {
 
             default:
                 let scalarBytes = try consumeUTF8Scalar()
-                try appendDecoded(bytes[scalarBytes], to: &decodedBytes)
+                try appendDecoded(
+                    bytes[scalarBytes],
+                    to: &decodedBytes,
+                    decodedByteCount: &decodedByteCount,
+                    maximumDecodedByteCount: maximumDecodedByteCount
+                )
             }
         }
 
@@ -241,7 +263,9 @@ private struct Parser {
     }
 
     private mutating func parseEscape(
-        decodedBytes: inout [UInt8]?
+        decodedBytes: inout [UInt8]?,
+        decodedByteCount: inout Int,
+        maximumDecodedByteCount: Int
     ) throws {
         guard let escape = currentByte else {
             throw BoundedJSONMemberValidationError.malformedJSON
@@ -250,24 +274,69 @@ private struct Parser {
 
         switch escape {
         case 0x22:
-            try appendDecoded(0x22, to: &decodedBytes)
+            try appendDecoded(
+                0x22,
+                to: &decodedBytes,
+                decodedByteCount: &decodedByteCount,
+                maximumDecodedByteCount: maximumDecodedByteCount
+            )
         case 0x5C:
-            try appendDecoded(0x5C, to: &decodedBytes)
+            try appendDecoded(
+                0x5C,
+                to: &decodedBytes,
+                decodedByteCount: &decodedByteCount,
+                maximumDecodedByteCount: maximumDecodedByteCount
+            )
         case 0x2F:
-            try appendDecoded(0x2F, to: &decodedBytes)
+            try appendDecoded(
+                0x2F,
+                to: &decodedBytes,
+                decodedByteCount: &decodedByteCount,
+                maximumDecodedByteCount: maximumDecodedByteCount
+            )
         case 0x62:
-            try appendDecoded(0x08, to: &decodedBytes)
+            try appendDecoded(
+                0x08,
+                to: &decodedBytes,
+                decodedByteCount: &decodedByteCount,
+                maximumDecodedByteCount: maximumDecodedByteCount
+            )
         case 0x66:
-            try appendDecoded(0x0C, to: &decodedBytes)
+            try appendDecoded(
+                0x0C,
+                to: &decodedBytes,
+                decodedByteCount: &decodedByteCount,
+                maximumDecodedByteCount: maximumDecodedByteCount
+            )
         case 0x6E:
-            try appendDecoded(0x0A, to: &decodedBytes)
+            try appendDecoded(
+                0x0A,
+                to: &decodedBytes,
+                decodedByteCount: &decodedByteCount,
+                maximumDecodedByteCount: maximumDecodedByteCount
+            )
         case 0x72:
-            try appendDecoded(0x0D, to: &decodedBytes)
+            try appendDecoded(
+                0x0D,
+                to: &decodedBytes,
+                decodedByteCount: &decodedByteCount,
+                maximumDecodedByteCount: maximumDecodedByteCount
+            )
         case 0x74:
-            try appendDecoded(0x09, to: &decodedBytes)
+            try appendDecoded(
+                0x09,
+                to: &decodedBytes,
+                decodedByteCount: &decodedByteCount,
+                maximumDecodedByteCount: maximumDecodedByteCount
+            )
         case 0x75:
             let scalar = try parseUnicodeEscape()
-            try appendDecodedUTF8(scalar, to: &decodedBytes)
+            try appendDecodedUTF8(
+                scalar,
+                to: &decodedBytes,
+                decodedByteCount: &decodedByteCount,
+                maximumDecodedByteCount: maximumDecodedByteCount
+            )
         default:
             throw BoundedJSONMemberValidationError.malformedJSON
         }
@@ -467,39 +536,38 @@ private struct Parser {
 
     private func appendDecoded(
         _ byte: UInt8,
-        to decodedBytes: inout [UInt8]?
+        to decodedBytes: inout [UInt8]?,
+        decodedByteCount: inout Int,
+        maximumDecodedByteCount: Int
     ) throws {
-        guard let decodedByteCount = decodedBytes?.count else {
-            return
-        }
-        guard decodedByteCount < limits.maximumDecodedKeyByteCount else {
-            throw BoundedJSONMemberValidationError.resourceLimitExceeded
-        }
+        try registerDecodedBytes(
+            1,
+            decodedByteCount: &decodedByteCount,
+            maximumDecodedByteCount: maximumDecodedByteCount
+        )
         decodedBytes?.append(byte)
     }
 
     private func appendDecoded<Bytes: Collection>(
         _ newBytes: Bytes,
-        to decodedBytes: inout [UInt8]?
+        to decodedBytes: inout [UInt8]?,
+        decodedByteCount: inout Int,
+        maximumDecodedByteCount: Int
     ) throws where Bytes.Element == UInt8 {
-        guard let decodedByteCount = decodedBytes?.count else {
-            return
-        }
-        guard newBytes.count
-                <= limits.maximumDecodedKeyByteCount - decodedByteCount else {
-            throw BoundedJSONMemberValidationError.resourceLimitExceeded
-        }
+        try registerDecodedBytes(
+            newBytes.count,
+            decodedByteCount: &decodedByteCount,
+            maximumDecodedByteCount: maximumDecodedByteCount
+        )
         decodedBytes?.append(contentsOf: newBytes)
     }
 
     private func appendDecodedUTF8(
         _ scalar: UInt32,
-        to decodedBytes: inout [UInt8]?
+        to decodedBytes: inout [UInt8]?,
+        decodedByteCount: inout Int,
+        maximumDecodedByteCount: Int
     ) throws {
-        guard let decodedByteCount = decodedBytes?.count else {
-            return
-        }
-
         let additionalByteCount: Int
         switch scalar {
         case 0...0x7F:
@@ -511,10 +579,13 @@ private struct Parser {
         default:
             additionalByteCount = 4
         }
-        guard additionalByteCount
-                <= limits.maximumDecodedKeyByteCount - decodedByteCount else {
-            throw BoundedJSONMemberValidationError.resourceLimitExceeded
-        }
+        try registerDecodedBytes(
+            additionalByteCount,
+            decodedByteCount: &decodedByteCount,
+            maximumDecodedByteCount: maximumDecodedByteCount
+        )
+
+        guard decodedBytes != nil else { return }
 
         switch scalar {
         case 0...0x7F:
@@ -532,6 +603,18 @@ private struct Parser {
             decodedBytes?.append(UInt8(0x80 | ((scalar >> 6) & 0x3F)))
             decodedBytes?.append(UInt8(0x80 | (scalar & 0x3F)))
         }
+    }
+
+    private func registerDecodedBytes(
+        _ additionalByteCount: Int,
+        decodedByteCount: inout Int,
+        maximumDecodedByteCount: Int
+    ) throws {
+        guard additionalByteCount
+                <= maximumDecodedByteCount - decodedByteCount else {
+            throw BoundedJSONMemberValidationError.resourceLimitExceeded
+        }
+        decodedByteCount += additionalByteCount
     }
 
     private mutating func consume(_ expected: UInt8) throws {

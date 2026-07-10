@@ -65,13 +65,6 @@ public actor IOSAcceptedOutputDeliveryStore {
         try performAccept(preparation)
     }
 
-    /// Vocabulary alias for composition roots that model acceptance as prepare.
-    public func prepare(
-        _ preparation: IOSAcceptedOutputDeliveryPreparation
-    ) throws -> IOSAcceptedOutputDeliveryRecord {
-        try performAccept(preparation)
-    }
-
     public func load() throws -> IOSAcceptedOutputDeliveryObservation? {
         guard let snapshot = try journal.load() else { return nil }
         return observation(for: snapshot.record)
@@ -97,6 +90,7 @@ public actor IOSAcceptedOutputDeliveryStore {
             snapshot.record,
             expected: snapshot
         )
+        try requireActive(confirmed.record)
         confirmedAuthorizationFileRevision = confirmed.fileRevision
         return IOSAcceptedOutputDeliveryAuthorization(snapshot: confirmed)
     }
@@ -195,7 +189,8 @@ public actor IOSAcceptedOutputDeliveryStore {
         }
         try requireBridgeRevoked(snapshot.record)
 
-        switch temporalState(for: snapshot.record) {
+        let currentTemporalState = temporalState(for: snapshot.record)
+        switch currentTemporalState {
         case .expired:
             let confirmed = try confirmIdentical(snapshot)
             try journal.remove(expected: confirmed)
@@ -210,7 +205,7 @@ public actor IOSAcceptedOutputDeliveryStore {
         }
 
         let mutationDate: Date
-        switch temporalState(for: snapshot.record) {
+        switch currentTemporalState {
         case .active:
             mutationDate = try mutationNow(for: snapshot.record)
         case .rollbackAmbiguous:
@@ -287,12 +282,20 @@ private extension IOSAcceptedOutputDeliveryStore {
         )
 
         guard let current = try journal.load() else {
-            let created = try journal.create(newRecord)
-            clearTransientState(for: nil)
-            return created.record
+            do {
+                let created = try journal.create(newRecord)
+                clearTransientState(for: nil)
+                return created.record
+            } catch IOSAcceptedOutputDeliveryError.slotOccupied {
+                return try reconcileAcceptanceConflict(
+                    preparation,
+                    otherwise: .slotOccupied
+                )
+            }
         }
 
-        switch temporalState(for: current.record) {
+        let currentTemporalState = temporalState(for: current.record)
+        switch currentTemporalState {
         case .rollbackAmbiguous:
             throw IOSAcceptedOutputDeliveryError.clockRollbackAmbiguous
         case .active:
@@ -302,24 +305,84 @@ private extension IOSAcceptedOutputDeliveryStore {
         }
 
         if current.record.hasSameAcceptance(as: preparation) {
-            guard temporalState(for: current.record) == .active else {
-                throw IOSAcceptedOutputDeliveryError.expired
-            }
-            return try confirmIdentical(current).record
+            return try reconcileSameAcceptance(
+                preparation,
+                snapshot: current,
+                temporalState: currentTemporalState
+            )
         }
         if current.record.collides(with: preparation) {
             throw IOSAcceptedOutputDeliveryError.identityCollision
         }
 
         try requireBridgeRevoked(current.record)
-        if temporalState(for: current.record) == .active,
+        if currentTemporalState == .active,
            current.record.historyWrite?.state == .pending {
             throw IOSAcceptedOutputDeliveryError.historyTransferRequired
         }
 
-        let replaced = try commit(newRecord, replacing: current)
-        clearTransientState(for: current.record.deliveryID)
-        return replaced.record
+        do {
+            let replaced = try commit(newRecord, replacing: current)
+            clearTransientState(for: current.record.deliveryID)
+            return replaced.record
+        } catch IOSAcceptedOutputDeliveryError.compareAndSwapFailed {
+            return try reconcileAcceptanceConflict(
+                preparation,
+                otherwise: .compareAndSwapFailed
+            )
+        }
+    }
+
+    func reconcileAcceptanceConflict(
+        _ preparation: IOSAcceptedOutputDeliveryPreparation,
+        otherwise error: IOSAcceptedOutputDeliveryError
+    ) throws -> IOSAcceptedOutputDeliveryRecord {
+        guard let current = try journal.load() else { throw error }
+        let currentTemporalState = temporalState(for: current.record)
+        if current.record.hasSameAcceptance(as: preparation) {
+            return try reconcileSameAcceptance(
+                preparation,
+                snapshot: current,
+                temporalState: currentTemporalState
+            )
+        }
+        if current.record.collides(with: preparation) {
+            throw IOSAcceptedOutputDeliveryError.identityCollision
+        }
+        throw error
+    }
+
+    private func reconcileSameAcceptance(
+        _ preparation: IOSAcceptedOutputDeliveryPreparation,
+        snapshot: IOSAcceptedOutputDeliveryJournalSnapshot,
+        temporalState: TemporalState
+    ) throws -> IOSAcceptedOutputDeliveryRecord {
+        switch temporalState {
+        case .active:
+            break
+        case .expired:
+            throw IOSAcceptedOutputDeliveryError.expired
+        case .rollbackAmbiguous:
+            throw IOSAcceptedOutputDeliveryError.clockRollbackAmbiguous
+        }
+
+        if snapshot.record.keepLatestResult,
+           !preparation.keepLatestResult {
+            let replacement = try record(
+                replacing: snapshot.record,
+                revision: try nextRevision(after: snapshot.record.revision),
+                updatedAt: try mutationNow(for: snapshot.record),
+                keepLatestResult: false
+            )
+            let committed = try commit(replacement, replacing: snapshot)
+            pruneMonotonicDeadlines(keeping: committed.record.deliveryID)
+            return committed.record
+        }
+
+        let confirmed = try confirmIdentical(snapshot)
+        pruneMonotonicDeadlines(keeping: confirmed.record.deliveryID)
+        try requireActive(confirmed.record)
+        return confirmed.record
     }
 
     func observation(
@@ -566,9 +629,7 @@ private extension IOSAcceptedOutputDeliveryStore {
     func confirmIdentical(
         _ snapshot: IOSAcceptedOutputDeliveryJournalSnapshot
     ) throws -> IOSAcceptedOutputDeliveryJournalSnapshot {
-        let confirmed = try journal.replace(snapshot.record, expected: snapshot)
-        confirmedAuthorizationFileRevision = confirmed.fileRevision
-        return confirmed
+        try journal.replace(snapshot.record, expected: snapshot)
     }
 
     func requireBridgeRevoked(
@@ -595,5 +656,11 @@ private extension IOSAcceptedOutputDeliveryStore {
             monotonicDeadlines.removeAll()
         }
         confirmedAuthorizationFileRevision = nil
+    }
+
+    func pruneMonotonicDeadlines(keeping deliveryID: UUID) {
+        monotonicDeadlines = monotonicDeadlines.filter {
+            $0.key == deliveryID
+        }
     }
 }

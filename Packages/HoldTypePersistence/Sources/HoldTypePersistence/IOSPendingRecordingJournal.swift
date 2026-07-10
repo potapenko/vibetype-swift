@@ -124,12 +124,21 @@ protocol IOSPendingRecordingJournalFileSystem: Sendable {
     func removeFile(
         expected: IOSPendingRecordingJournalFileRevision
     ) throws
+    func removeOpaqueFile(
+        expected: IOSPendingRecordingJournalFileRevision
+    ) throws
 }
 
 extension IOSPendingRecordingJournalFileSystem {
     func readOpaqueFileRevisionIfPresent() throws
         -> IOSPendingRecordingJournalFileRevision? {
         try readFileIfPresent()?.revision
+    }
+
+    func removeOpaqueFile(
+        expected: IOSPendingRecordingJournalFileRevision
+    ) throws {
+        try removeFile(expected: expected)
     }
 }
 
@@ -618,6 +627,55 @@ private struct IOSPendingRecordingJournalFileSnapshot: Equatable, Sendable {
 struct FoundationIOSPendingRecordingJournalFileSystem:
     IOSPendingRecordingJournalFileSystem,
     Sendable {
+    private final class MaintenanceEnumerationCursor: @unchecked Sendable {
+        private let adapter: any IOSPendingRecordingPOSIXAdapter
+        private let lock = NSLock()
+        private var directoryIdentity: FileIdentity?
+        private var stream: UnsafeMutablePointer<DIR>?
+
+        init(adapter: any IOSPendingRecordingPOSIXAdapter) {
+            self.adapter = adapter
+        }
+
+        deinit {
+            reset()
+        }
+
+        func stream(
+            matching directoryIdentity: FileIdentity,
+            opening: () throws -> UnsafeMutablePointer<DIR>
+        ) throws -> UnsafeMutablePointer<DIR> {
+            lock.lock()
+            defer { lock.unlock() }
+
+            if self.directoryIdentity != directoryIdentity {
+                closeStreamIfPresent()
+            }
+            if let stream {
+                return stream
+            }
+
+            let stream = try opening()
+            self.directoryIdentity = directoryIdentity
+            self.stream = stream
+            return stream
+        }
+
+        func reset() {
+            lock.lock()
+            defer { lock.unlock() }
+            closeStreamIfPresent()
+        }
+
+        private func closeStreamIfPresent() {
+            if let stream {
+                adapter.closeDirectoryStream(stream)
+            }
+            stream = nil
+            directoryIdentity = nil
+        }
+    }
+
     private static let processMutationLock = NSLock()
     private static let transferChunkByteCount = 64 * 1_024
     private static let maximumInterruptedRetryCount = 8
@@ -657,6 +715,7 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
     private let directorySynchronizationOperation:
         DirectorySynchronizationOperation?
     private let monotonicNowNanoseconds: @Sendable () -> UInt64
+    private let maintenanceEnumerationCursor: MaintenanceEnumerationCursor
 
     init(
         applicationSupportDirectoryURL: URL,
@@ -686,6 +745,9 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
         self.directorySynchronizationOperation =
             directorySynchronizationOperation
         self.monotonicNowNanoseconds = monotonicNowNanoseconds
+        maintenanceEnumerationCursor = MaintenanceEnumerationCursor(
+            adapter: adapter
+        )
     }
 
     func readFileIfPresent() throws -> IOSPendingRecordingJournalFile? {
@@ -860,6 +922,19 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
     func removeFile(
         expected: IOSPendingRecordingJournalFileRevision
     ) throws {
+        try removeFile(expected: expected, requiresExactConfiguration: true)
+    }
+
+    func removeOpaqueFile(
+        expected: IOSPendingRecordingJournalFileRevision
+    ) throws {
+        try removeFile(expected: expected, requiresExactConfiguration: false)
+    }
+
+    private func removeFile(
+        expected: IOSPendingRecordingJournalFileRevision,
+        requiresExactConfiguration: Bool
+    ) throws {
         Self.processMutationLock.lock()
         defer { Self.processMutationLock.unlock() }
         guard let directory = try openJournalDirectory(createIfMissing: false) else {
@@ -869,7 +944,11 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
         try validateDirectoryIdentity(directory)
         try lockDirectoryForMutation(directory)
         try validateDirectoryIdentity(directory)
-        try validateCurrentFile(directory: directory, expected: expected)
+        try validateCurrentFile(
+            directory: directory,
+            expected: expected,
+            requiresExactConfiguration: requiresExactConfiguration
+        )
         try validateDirectoryIdentity(directory)
 
         let result = retryInterrupted {
@@ -902,6 +981,7 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
         Self.processMutationLock.lock()
         defer { Self.processMutationLock.unlock() }
         guard let directory = try openJournalDirectory(createIfMissing: false) else {
+            maintenanceEnumerationCursor.reset()
             return .empty
         }
         defer { close(directory) }
@@ -909,8 +989,11 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
         try lockDirectoryForMutation(directory)
         try validateDirectoryIdentity(directory)
 
-        let stream = try openDirectoryStream(directory: directory)
-        defer { adapter.closeDirectoryStream(stream) }
+        let stream = try maintenanceEnumerationCursor.stream(
+            matching: directory.identity
+        ) {
+            try openDirectoryStream(directory: directory)
+        }
         let startedAt = monotonicNowNanoseconds()
         var inspectedEntryCount = 0
         var inspectedByteCount: Int64 = 0
@@ -921,6 +1004,7 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
         do {
             var enumeratedEntryCount = 0
             var candidateNames: [String] = []
+            var reachedEndOfDirectory = false
             while true {
                 guard enumeratedEntryCount
                         < Self.maintenanceMaximumDirectoryEntryCount,
@@ -937,12 +1021,17 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
                 case .success(let value):
                     entry = value
                 case .failure(let code) where isProtectedDataError(code):
+                    maintenanceEnumerationCursor.reset()
                     throw IOSPendingRecordingJournalFileSystemError
                         .protectedDataUnavailable
                 case .failure:
+                    maintenanceEnumerationCursor.reset()
                     throw IOSPendingRecordingJournalFileSystemError.readFailed
                 }
-                guard let entry else { break }
+                guard let entry else {
+                    reachedEndOfDirectory = true
+                    break
+                }
                 enumeratedEntryCount += 1
                 guard case .name(let name) = entry,
                       name != ".",
@@ -951,6 +1040,9 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
                     continue
                 }
                 candidateNames.append(name)
+            }
+            if reachedEndOfDirectory {
+                maintenanceEnumerationCursor.reset()
             }
 
             let candidateCount = min(
@@ -1817,7 +1909,8 @@ private extension FoundationIOSPendingRecordingJournalFileSystem {
 
     func validateCurrentFile(
         directory: DirectoryHandle,
-        expected: IOSPendingRecordingJournalFileRevision
+        expected: IOSPendingRecordingJournalFileRevision,
+        requiresExactConfiguration: Bool = true
     ) throws {
         guard let pathStatus = try statusIfPresent(
             named: configuration.fileName,
@@ -1850,7 +1943,9 @@ private extension FoundationIOSPendingRecordingJournalFileSystem {
                 == expectedSnapshot else {
             throw IOSPendingRecordingJournalFileSystemError.staleRevision
         }
-        try validateExactConfiguration(descriptor: descriptor)
+        if requiresExactConfiguration {
+            try validateExactConfiguration(descriptor: descriptor)
+        }
         try validatePathIdentity(
             named: configuration.fileName,
             descriptorStatus: descriptorStatus,

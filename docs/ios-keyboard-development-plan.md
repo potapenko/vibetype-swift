@@ -206,7 +206,9 @@ users switch back to Apple's keyboard.
   Result or History for Copy; keyboard-level Copy appears only after its
   separate Full Access/`UIPasteboard` physical-device gate;
 - durable extension-local pre-insert claims so missing acknowledgements or
-  process restart cannot replay an insertion;
+  process restart cannot replay an insertion; retain at most 512 active claims
+  for 24 hours, and fail closed on a 513th live claim without evicting an
+  unexpired duplicate barrier;
 - repeated start/stop/process cycles, network changes, device lock, calls, Siri,
   AirPods changes, Low Power Mode, and app switching;
 - TestFlight dogfood, privacy manifests, App Privacy disclosure, and App Review
@@ -320,14 +322,18 @@ host app, state, expected result, actual result, and go/no-go decision.
   `PendingRecording` journal are complete and remain app-private, outside App
   Group and keyboard linkage. Their one-shot provider executor, cancellation,
   commit-uncertainty, and process-loss recovery contracts add no extension
-  dependency. The next P2 storage checkpoint is the app-private accepted-output
-  delivery record; it also remains outside the keyboard until the directional
-  bridge contract is implemented behind the physical M0 gates. The runtime-only
-  four-case `VoiceAttemptStage` is portable too, while preflight, outcomes,
-  recovery eligibility, and durable resume checkpoints remain separate. The
-  containing-app output handoff is now narrowed to accepted text plus the two
-  portable delivery preferences; it is not an App Group record or keyboard
-  insertion command. Optional text correction now receives a runtime-only
+  dependency. The app-private accepted-output delivery foundation is now a
+  completed P2 checkpoint: its strict 24-hour recovery record, identity/state
+  contract, History-write marker, CAS, and uncertainty handling remain outside
+  the keyboard. The next P2 storage checkpoint is the app-private History policy
+  plus accepted-History repository/outbox; bounded failed History and the
+  independent recording cache follow. All remain outside the keyboard until the
+  directional bridge contract is implemented behind the physical M0 gates. The
+  runtime-only four-case `VoiceAttemptStage` is portable too, while preflight,
+  outcomes, recovery eligibility, and durable resume checkpoints remain
+  separate. The containing-app output handoff is now narrowed to accepted text
+  plus the two portable delivery preferences; it is not an App Group record or
+  keyboard insertion command. Optional text correction now receives a runtime-only
   accepted-transcript/configuration request instead of full `AppSettings`; its
   prompt stays containing-app-owned, while emoji and replacement content remain
   local and outside the provider, App Group, and keyboard transport. Translation

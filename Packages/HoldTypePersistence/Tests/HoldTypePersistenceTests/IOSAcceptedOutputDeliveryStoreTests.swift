@@ -81,6 +81,20 @@ struct IOSAcceptedOutputDeliveryStoreTests {
         #expect(removed.acceptedText == nil)
     }
 
+    @Test func clearEvaluatesTemporalStateOnlyOnceBeforeMutation() async throws {
+        let fixture = AcceptedDeliveryStoreFixture()
+        let record = try await fixture.store.accept(fixture.preparation())
+        fixture.clock.resetWallReadCount()
+
+        #expect(
+            try await fixture.store.clear(
+                expected: IOSAcceptedOutputDeliveryExpectation(record: record)
+            ) == .removed
+        )
+
+        #expect(fixture.clock.wallReadCount == 2)
+    }
+
     @Test func historyAuthorizationRewritesBeforeUpsertAndTransition() async throws {
         let fixture = AcceptedDeliveryStoreFixture()
         let history = try fixture.historyWrite()
@@ -102,6 +116,41 @@ struct IOSAcceptedOutputDeliveryStoreTests {
         #expect(committed.historyWrite?.state == .committed)
         #expect(committed.historyWrite?.hasSameMetadata(as: history) == true)
         #expect(committed.updatedAt == fixture.clock.wall)
+    }
+
+    @Test func historyAuthorizationRevalidatesExpiryAfterDurabilityRewrite() async throws {
+        let fixture = AcceptedDeliveryStoreFixture()
+        let accepted = try await fixture.store.accept(
+            fixture.preparation(historyWrite: try fixture.historyWrite())
+        )
+        fixture.clock.enqueueWallReadOverrides([
+            accepted.expiresAt.addingTimeInterval(-0.001),
+            accepted.expiresAt,
+        ])
+
+        await #expect(throws: IOSAcceptedOutputDeliveryError.expired) {
+            try await fixture.store.authorizePendingHistoryWrite(
+                expected: IOSAcceptedOutputDeliveryExpectation(record: accepted)
+            )
+        }
+
+        #expect(fixture.journal.replacementRecords.last == accepted)
+    }
+
+    @Test func acceptanceConfirmationDoesNotMintHistoryAuthority() async throws {
+        let fixture = AcceptedDeliveryStoreFixture()
+        let preparation = fixture.preparation(
+            historyWrite: try fixture.historyWrite()
+        )
+        let accepted = try await fixture.store.accept(preparation)
+        _ = try await fixture.store.accept(preparation)
+        fixture.journal.resetEvents()
+
+        _ = try await fixture.store.authorizePendingHistoryWrite(
+            expected: IOSAcceptedOutputDeliveryExpectation(record: accepted)
+        )
+
+        #expect(fixture.journal.events == ["load", "replace:1"])
     }
 
     @Test func relaunchedProcessConfirmsPriorVisibleCommitBeforeAuthority() async throws {
@@ -236,6 +285,85 @@ struct IOSAcceptedOutputDeliveryStoreTests {
         #expect(!replayed.keepLatestResult)
         #expect(replayed.historyWrite?.state == .committed)
         #expect(replayed.updatedAt == disabled.updatedAt)
+    }
+
+    @Test func duplicateAcceptanceCanOnlyWeakenKeepLatestIntent() async throws {
+        let fixture = AcceptedDeliveryStoreFixture()
+        let original = fixture.preparation(keepLatestResult: true)
+        let accepted = try await fixture.store.accept(original)
+        let revocation = fixture.preparation(
+            deliveryID: original.deliveryID,
+            sessionID: original.sessionID,
+            attemptID: original.attemptID,
+            transcriptID: original.transcriptID,
+            rawAcceptedText: original.acceptedText,
+            keepLatestResult: false
+        )
+
+        let weakened = try await fixture.store.accept(revocation)
+        #expect(weakened.revision == accepted.revision + 1)
+        #expect(!weakened.keepLatestResult)
+
+        let replayedOriginal = try await fixture.store.accept(original)
+        #expect(replayedOriginal.revision == weakened.revision)
+        #expect(!replayedOriginal.keepLatestResult)
+    }
+
+    @Test func pendingHistoryDecisionUsesOneTemporalSnapshot() async throws {
+        let fixture = AcceptedDeliveryStoreFixture()
+        let accepted = try await fixture.store.accept(
+            fixture.preparation(historyWrite: try fixture.historyWrite())
+        )
+        fixture.clock.resetWallReadCount()
+        fixture.clock.enqueueWallReadOverrides([
+            accepted.createdAt.addingTimeInterval(1),
+            accepted.createdAt.addingTimeInterval(1),
+            accepted.createdAt.addingTimeInterval(-1),
+        ])
+
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.historyTransferRequired
+        ) {
+            try await fixture.store.accept(
+                fixture.preparation(rawAcceptedText: "replacement")
+            )
+        }
+
+        #expect(fixture.clock.wallReadCount == 2)
+        #expect(fixture.journal.currentRecord == accepted)
+    }
+
+    @Test func concurrentIdenticalCreateConflictIsReconciled() async throws {
+        let fixture = AcceptedDeliveryStoreFixture()
+        let preparation = fixture.preparation()
+        fixture.journal.failNextCreate(
+            with: .slotOccupied,
+            commitBeforeThrowing: true
+        )
+
+        let accepted = try await fixture.store.accept(preparation)
+
+        #expect(accepted.hasSameAcceptance(as: preparation))
+        #expect(fixture.journal.currentRecord == accepted)
+        #expect(fixture.journal.events == [
+            "load", "create", "load", "replace:1",
+        ])
+    }
+
+    @Test func concurrentIdenticalReplacementConflictIsReconciled() async throws {
+        let fixture = AcceptedDeliveryStoreFixture()
+        _ = try await fixture.store.accept(fixture.preparation())
+        let replacement = fixture.preparation(rawAcceptedText: "new result")
+        fixture.journal.failNextReplace(
+            with: .compareAndSwapFailed,
+            commitBeforeThrowing: true
+        )
+
+        let accepted = try await fixture.store.accept(replacement)
+
+        #expect(accepted.hasSameAcceptance(as: replacement))
+        #expect(fixture.journal.currentRecord == accepted)
+        #expect(fixture.journal.replacementRecords.last == accepted)
     }
 
     @Test func replacementAllowsReusedAttemptWithFreshTranscriptButRejectsFullCollision() async throws {
@@ -462,11 +590,33 @@ struct IOSAcceptedOutputDeliveryStoreTests {
 private final class AcceptedDeliveryTestClock: @unchecked Sendable {
     private let lock = NSLock()
     private var storedWall = Date(timeIntervalSince1970: 1_800_000_000)
+    private var storedWallReadCount = 0
+    private var storedWallReadOverrides: [Date] = []
     private var storedMonotonicNanoseconds: UInt64 = 0
 
     var wall: Date {
-        get { lock.withLock { storedWall } }
+        get {
+            lock.withLock {
+                storedWallReadCount += 1
+                if !storedWallReadOverrides.isEmpty {
+                    return storedWallReadOverrides.removeFirst()
+                }
+                return storedWall
+            }
+        }
         set { lock.withLock { storedWall = newValue } }
+    }
+
+    var wallReadCount: Int {
+        lock.withLock { storedWallReadCount }
+    }
+
+    func resetWallReadCount() {
+        lock.withLock { storedWallReadCount = 0 }
+    }
+
+    func enqueueWallReadOverrides(_ values: [Date]) {
+        lock.withLock { storedWallReadOverrides.append(contentsOf: values) }
     }
 
     var monotonicNanoseconds: UInt64 {
@@ -486,6 +636,7 @@ private final class AcceptedDeliveryFakeJournal:
     private let lock = NSLock()
     private var snapshot: IOSAcceptedOutputDeliveryJournalSnapshot?
     private var nextToken: UInt64 = 1
+    private var createFailure: ReplacementFailure?
     private var replacementFailure: ReplacementFailure?
     private var storedEvents: [String] = []
     private var storedReplacementRecords: [IOSAcceptedOutputDeliveryRecord] = []
@@ -529,6 +680,18 @@ private final class AcceptedDeliveryFakeJournal:
         }
     }
 
+    func failNextCreate(
+        with error: IOSAcceptedOutputDeliveryError,
+        commitBeforeThrowing: Bool
+    ) {
+        lock.withLock {
+            createFailure = ReplacementFailure(
+                error: error,
+                commitBeforeThrowing: commitBeforeThrowing
+            )
+        }
+    }
+
     func install(_ record: IOSAcceptedOutputDeliveryRecord) {
         lock.withLock {
             snapshot = IOSAcceptedOutputDeliveryJournalSnapshot(
@@ -564,6 +727,16 @@ private final class AcceptedDeliveryFakeJournal:
             storedEvents.append("create")
             guard snapshot == nil else {
                 throw IOSAcceptedOutputDeliveryError.slotOccupied
+            }
+            if let failure = createFailure {
+                createFailure = nil
+                if failure.commitBeforeThrowing {
+                    snapshot = IOSAcceptedOutputDeliveryJournalSnapshot(
+                        record: record,
+                        fileRevision: makeRevisionLocked()
+                    )
+                }
+                throw failure.error
             }
             let created = IOSAcceptedOutputDeliveryJournalSnapshot(
                 record: record,

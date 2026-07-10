@@ -535,6 +535,55 @@ struct IOSPendingRecordingJournalTests {
         }
     }
 
+    @Test func opaqueRevisionCanRemoveAFileWithMissingCustomMarker() throws {
+        try withTemporaryJournalDirectory { directoryURL in
+            let marker = IOSStrictProtectedRecordConfiguration.Marker(
+                name: "com.holdtype.tests.opaque-record",
+                value: Array("v1".utf8)
+            )
+            let configuration = IOSStrictProtectedRecordConfiguration(
+                rootDirectoryName:
+                    IOSPendingRecordingStorageLocation.rootDirectoryName,
+                fileName: "opaque-test-record.json",
+                maximumByteCount: 1_024,
+                marker: marker
+            )
+            let fileSystem = FoundationIOSPendingRecordingJournalFileSystem(
+                applicationSupportDirectoryURL: directoryURL,
+                configuration: configuration
+            )
+            _ = try fileSystem.createFile(with: Data("opaque".utf8))
+            let fileURL = directoryURL
+                .appendingPathComponent(
+                    configuration.rootDirectoryName,
+                    isDirectory: true
+                )
+                .appendingPathComponent(configuration.fileName)
+            let rawDescriptor = Darwin.open(fileURL.path, O_RDWR | O_CLOEXEC)
+            let descriptor = try #require(
+                rawDescriptor >= 0 ? rawDescriptor : nil
+            )
+            let removeMarkerResult = marker.name.withCString {
+                Darwin.fremovexattr(descriptor, $0, 0)
+            }
+            Darwin.close(descriptor)
+            #expect(removeMarkerResult == 0)
+
+            #expect(
+                throws: IOSPendingRecordingJournalFileSystemError.invalidFile
+            ) {
+                _ = try fileSystem.readFileIfPresent()
+            }
+            let revision = try #require(
+                try fileSystem.readOpaqueFileRevisionIfPresent()
+            )
+
+            try fileSystem.removeOpaqueFile(expected: revision)
+
+            #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+        }
+    }
+
     @Test func maintenanceRemovesOnlyOldOwnedMarkedOrZeroByteStaging() throws {
         try withTemporaryJournalDirectory { directoryURL in
             let fileName = "ios-accepted-output-delivery.json"
@@ -623,6 +672,74 @@ struct IOSPendingRecordingJournalTests {
                 atPath: rootURL.appendingPathComponent(freshMarkedName).path
             ))
             #expect(FileManager.default.fileExists(atPath: unknownURL.path))
+        }
+    }
+
+    @Test func maintenanceAdvancesPastFirst256StableForeignNames() throws {
+        try withTemporaryJournalDirectory { directoryURL in
+            let fileName = "ios-accepted-output-delivery.json"
+            let marker = IOSStrictProtectedRecordConfiguration.Marker(
+                name: "com.holdtype.tests.delivery-maintenance-window",
+                value: Array("v1".utf8)
+            )
+            let configuration = IOSStrictProtectedRecordConfiguration(
+                rootDirectoryName:
+                    IOSPendingRecordingStorageLocation.rootDirectoryName,
+                fileName: fileName,
+                maximumByteCount: 1_024,
+                marker: marker
+            )
+            let targetName = ".\(fileName)."
+                + "11111111-2222-4333-8444-555555555555.tmp"
+            let oldDate = Date(timeIntervalSince1970: 1_700_000_000)
+            let now = oldDate.addingTimeInterval(24 * 60 * 60 + 1)
+            let targetURL = directoryURL
+                .appendingPathComponent(
+                    configuration.rootDirectoryName,
+                    isDirectory: true
+                )
+                .appendingPathComponent(targetName)
+
+            _ = try FoundationIOSPendingRecordingJournalFileSystem(
+                applicationSupportDirectoryURL: directoryURL,
+                configuration: IOSStrictProtectedRecordConfiguration(
+                    rootDirectoryName: configuration.rootDirectoryName,
+                    fileName: targetName,
+                    maximumByteCount: configuration.maximumByteCount,
+                    marker: marker
+                )
+            ).createFile(with: Data("stale".utf8))
+            try FileManager.default.setAttributes(
+                [.modificationDate: oldDate],
+                ofItemAtPath: targetURL.path
+            )
+
+            let foreignNames = (0..<300).map { "foreign-\($0)" }
+            let adapter = DeterministicMaintenancePOSIXAdapter(
+                directoryEntries: [".", ".."] + foreignNames + [targetName]
+            )
+            let maintenance = FoundationIOSPendingRecordingJournalFileSystem(
+                applicationSupportDirectoryURL: directoryURL,
+                configuration: configuration,
+                adapter: adapter,
+                monotonicNowNanoseconds: { 0 }
+            )
+
+            let firstReport = try maintenance
+                .removeAbandonedTemporaryFiles(now: now)
+
+            #expect(firstReport.reachedLimit)
+            #expect(firstReport.removedFileCount == 0)
+            #expect(FileManager.default.fileExists(atPath: targetURL.path))
+            #expect(adapter.openedDirectoryStreamCount == 1)
+            #expect(adapter.directoryEntryReadCount == 256)
+
+            let secondReport = try maintenance
+                .removeAbandonedTemporaryFiles(now: now)
+
+            #expect(secondReport.removedFileCount == 1)
+            #expect(!FileManager.default.fileExists(atPath: targetURL.path))
+            #expect(adapter.openedDirectoryStreamCount == 1)
         }
     }
 
@@ -832,6 +949,243 @@ private func expectError(
 }
 
 private func requireSendable<Value: Sendable>(_ type: Value.Type) {}
+
+private final class DeterministicMaintenancePOSIXAdapter:
+    IOSPendingRecordingPOSIXAdapter,
+    @unchecked Sendable {
+    private let live = DarwinIOSPendingRecordingPOSIXAdapter()
+    private let directoryEntries: [String]
+    private let lock = NSLock()
+    private var streamIndexes: [Int: Int] = [:]
+    private var openedStreamCount = 0
+    private var entryReadCount = 0
+
+    init(directoryEntries: [String]) {
+        self.directoryEntries = directoryEntries
+    }
+
+    var openedDirectoryStreamCount: Int {
+        lock.withLock { openedStreamCount }
+    }
+
+    var directoryEntryReadCount: Int {
+        lock.withLock { entryReadCount }
+    }
+
+    func effectiveUserID() -> IOSPendingRecordingPOSIXResult<uid_t> {
+        live.effectiveUserID()
+    }
+
+    func openPath(
+        _ path: String,
+        flags: Int32,
+        mode: mode_t?
+    ) -> IOSPendingRecordingPOSIXResult<Int32> {
+        live.openPath(path, flags: flags, mode: mode)
+    }
+
+    func openAt(
+        directoryDescriptor: Int32,
+        name: String,
+        flags: Int32,
+        mode: mode_t?
+    ) -> IOSPendingRecordingPOSIXResult<Int32> {
+        live.openAt(
+            directoryDescriptor: directoryDescriptor,
+            name: name,
+            flags: flags,
+            mode: mode
+        )
+    }
+
+    func makeDirectoryAt(
+        directoryDescriptor: Int32,
+        name: String,
+        mode: mode_t
+    ) -> IOSPendingRecordingPOSIXResult<Void> {
+        live.makeDirectoryAt(
+            directoryDescriptor: directoryDescriptor,
+            name: name,
+            mode: mode
+        )
+    }
+
+    func status(
+        of fileDescriptor: Int32
+    ) -> IOSPendingRecordingPOSIXResult<stat> {
+        live.status(of: fileDescriptor)
+    }
+
+    func statusAtPath(
+        _ path: String
+    ) -> IOSPendingRecordingPOSIXResult<stat> {
+        live.statusAtPath(path)
+    }
+
+    func statusAt(
+        directoryDescriptor: Int32,
+        name: String,
+        flags: Int32
+    ) -> IOSPendingRecordingPOSIXResult<stat> {
+        live.statusAt(
+            directoryDescriptor: directoryDescriptor,
+            name: name,
+            flags: flags
+        )
+    }
+
+    func read(
+        fileDescriptor: Int32,
+        buffer: UnsafeMutableRawPointer,
+        byteCount: Int
+    ) -> IOSPendingRecordingPOSIXResult<Int> {
+        live.read(
+            fileDescriptor: fileDescriptor,
+            buffer: buffer,
+            byteCount: byteCount
+        )
+    }
+
+    func write(
+        fileDescriptor: Int32,
+        buffer: UnsafeRawPointer,
+        byteCount: Int
+    ) -> IOSPendingRecordingPOSIXResult<Int> {
+        live.write(
+            fileDescriptor: fileDescriptor,
+            buffer: buffer,
+            byteCount: byteCount
+        )
+    }
+
+    func synchronize(
+        fileDescriptor: Int32
+    ) -> IOSPendingRecordingPOSIXResult<Void> {
+        live.synchronize(fileDescriptor: fileDescriptor)
+    }
+
+    func changeMode(
+        fileDescriptor: Int32,
+        mode: mode_t
+    ) -> IOSPendingRecordingPOSIXResult<Void> {
+        live.changeMode(fileDescriptor: fileDescriptor, mode: mode)
+    }
+
+    func lock(
+        fileDescriptor: Int32,
+        operation: Int32
+    ) -> IOSPendingRecordingPOSIXResult<Void> {
+        live.lock(fileDescriptor: fileDescriptor, operation: operation)
+    }
+
+    func setExtendedAttribute(
+        fileDescriptor: Int32,
+        name: String,
+        value: [UInt8],
+        flags: Int32
+    ) -> IOSPendingRecordingPOSIXResult<Void> {
+        live.setExtendedAttribute(
+            fileDescriptor: fileDescriptor,
+            name: name,
+            value: value,
+            flags: flags
+        )
+    }
+
+    func extendedAttribute(
+        fileDescriptor: Int32,
+        name: String,
+        maximumByteCount: Int
+    ) -> IOSPendingRecordingPOSIXResult<[UInt8]> {
+        live.extendedAttribute(
+            fileDescriptor: fileDescriptor,
+            name: name,
+            maximumByteCount: maximumByteCount
+        )
+    }
+
+    func setProtectionClass(
+        fileDescriptor: Int32,
+        protectionClass: Int32
+    ) -> IOSPendingRecordingPOSIXResult<Void> {
+        live.setProtectionClass(
+            fileDescriptor: fileDescriptor,
+            protectionClass: protectionClass
+        )
+    }
+
+    func protectionClass(
+        fileDescriptor: Int32
+    ) -> IOSPendingRecordingPOSIXResult<Int32> {
+        live.protectionClass(fileDescriptor: fileDescriptor)
+    }
+
+    func publishExclusively(
+        directoryDescriptor: Int32,
+        temporaryName: String,
+        finalName: String
+    ) -> IOSPendingRecordingPOSIXResult<Void> {
+        live.publishExclusively(
+            directoryDescriptor: directoryDescriptor,
+            temporaryName: temporaryName,
+            finalName: finalName
+        )
+    }
+
+    func unlinkAt(
+        directoryDescriptor: Int32,
+        name: String
+    ) -> IOSPendingRecordingPOSIXResult<Void> {
+        live.unlinkAt(
+            directoryDescriptor: directoryDescriptor,
+            name: name
+        )
+    }
+
+    func openDirectoryStream(
+        fileDescriptor: Int32
+    ) -> IOSPendingRecordingPOSIXResult<UnsafeMutablePointer<DIR>> {
+        live.closeFile(fileDescriptor)
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: 1, alignment: 1)
+        let stream = raw.assumingMemoryBound(to: DIR.self)
+        lock.withLock {
+            openedStreamCount += 1
+            streamIndexes[Int(bitPattern: raw)] = 0
+        }
+        return .success(stream)
+    }
+
+    func nextDirectoryEntry(
+        stream: UnsafeMutablePointer<DIR>
+    ) -> IOSPendingRecordingPOSIXResult<IOSPendingRecordingDirectoryEntry?> {
+        lock.withLock {
+            entryReadCount += 1
+            let key = Int(bitPattern: UnsafeMutableRawPointer(stream))
+            guard let index = streamIndexes[key] else {
+                return .failure(EBADF)
+            }
+            guard index < directoryEntries.count else {
+                return .success(nil)
+            }
+            streamIndexes[key] = index + 1
+            return .success(.name(directoryEntries[index]))
+        }
+    }
+
+    func closeFile(_ fileDescriptor: Int32) {
+        live.closeFile(fileDescriptor)
+    }
+
+    func closeDirectoryStream(_ stream: UnsafeMutablePointer<DIR>) {
+        let raw = UnsafeMutableRawPointer(stream)
+        let shouldDeallocate = lock.withLock {
+            streamIndexes.removeValue(forKey: Int(bitPattern: raw)) != nil
+        }
+        if shouldDeallocate {
+            raw.deallocate()
+        }
+    }
+}
 
 private final class IOSPendingRecordingJournalFileSystemFake:
     IOSPendingRecordingJournalFileSystem,

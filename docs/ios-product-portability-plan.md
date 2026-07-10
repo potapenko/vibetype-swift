@@ -280,7 +280,7 @@ audited macOS baseline, then document every intentional iOS difference:
 | Keyboard preferences | Containing app | App Group immutable snapshot with schema/revision | Expected read-only path without Full Access, contingent on M0B; bundled minimal fallback required |
 | Voice session status and accepted result | Containing app | Short-lived App Group snapshot with TTL | Read and insert |
 | Voice commands, insertion acknowledgements, readiness heartbeat | Keyboard extension | Separate short-lived extension-owned envelopes | App reads after justified Full Access |
-| Pre-insert claim ledger | Keyboard extension | Bounded content-free extension sandbox, 64 IDs/24 hours | Never; acknowledgement only reconciles app recovery |
+| Pre-insert claim ledger | Keyboard extension | Bounded content-free extension sandbox, at most 512 active IDs/24 hours; a 513th live claim fails closed and never evicts an unexpired claim | Never; acknowledgement only reconciles app recovery |
 | Runtime logs | Each executable | Bounded redacted local log | No cross-process content logging |
 
 Do not use one read-modify-write App Group file for both processes. Before the
@@ -977,6 +977,16 @@ process-eviction behavior remain signed-device gates. The keyboard target still
 links only `KeyboardViewController.o` and `KeyboardBridge.o` and has no Domain,
 Persistence, OpenAI, or IOSCore symbols.
 
+The accepted-output foundation is now complete as a P2 checkpoint.
+`HoldTypePersistence` owns the strict app-private
+`HoldType/ios-accepted-output-delivery.json` record, exact version-1 wire and
+identity contracts, 24-hour expiry, History-write reconciliation state,
+revision/file CAS, protected atomic replacement, typed commit uncertainty, and
+fail-closed clear, replacement, and opaque-recovery boundaries. Accepted text,
+History metadata, and the 24-hour recovery owner remain outside App Group and
+the keyboard. Publication generation cannot advance until the later production
+bridge checkpoint owns the matching projection and revocation protocol.
+
 ### P3 — Native containing-app shell
 
 - implement Voice, Library, History, and Settings navigation;
@@ -1062,7 +1072,8 @@ production hardening or full QWERTY.
 - harden extension command envelopes and insertion acknowledgements;
 - add the bounded extension-local pre-insert claim ledger before any
   `insertText` call so missing acknowledgements and process restart cannot
-  replay a transcript;
+  replay a transcript; retain at most 512 active claims for 24 hours, and fail
+  closed on a 513th live claim without evicting an unexpired duplicate barrier;
 - add Normal/Translate action intent before provider work starts;
 - enforce conservative active-extension, non-nil document, session, and
   transcript matching plus idempotent insertion;
@@ -1169,21 +1180,27 @@ already decided by their P0 specs.
 The provider foundation, general iOS settings v1, credential reconciliation,
 shared protected atomic-file substrate, app-private Library v1, local
 transcription Usage v1, bounded JSON structural validation, bounded multipart
-startup scavenging, protected recording storage, and strict one-record
-`PendingRecording` ownership are now implemented without moving secrets,
-canonical content, usage state, audio, or scratch paths into App Group or the
+startup scavenging, protected recording storage, strict one-record
+`PendingRecording` ownership, and the mandatory protected accepted-output
+delivery record are now implemented without moving secrets, canonical content,
+usage state, audio, History metadata, or scratch paths into App Group or the
 keyboard.
 
-The next P2 checkpoint is the mandatory protected app-private accepted-output
-delivery record from `ios-output-actions.md`. Before implementation, freeze its
-exact Application Support path, strict v1 fields and size limit, session and
-transcript identity, output-intent and delivery-state vocabulary, 24-hour cap,
-`historyWritePending` reconciliation marker, CAS/replacement ordering, and
-clear/expiry semantics. It must commit before History or keyboard publication
-and must never contain audio, prompts, credentials, host context, or provider
-payloads. The bounded accepted/failed History repositories and recording-cache
-ownership transfer follow that record; the directional App Group bridge split
-remains later P2/P6 work and does not enter the keyboard early.
+The next P2 checkpoint is the containing-app-only History durability chain:
+the strict app-private `HoldType/ios-history-policy.json` record, the bounded
+accepted-History repository, and the strict
+`HoldType/ios-accepted-history-outbox.json`. Freeze the accepted repository's
+exact path, schema, limits, and migration; preserve policy-generation CAS,
+idempotent `deliveryID` upsert, delivery-marker/outbox transfer, clear/disable
+ordering, and every crash-reconciliation boundary. This checkpoint consumes
+the structured pending History state already owned by the delivery record and
+does not publish History rows or metadata to App Group or the keyboard.
+
+After that accepted-History chain is verified, implement the bounded failed-
+History repository and retry-audio ownership, then the independent recording-
+cache repository, file transfer, retention, and reconciliation flow. The
+directional App Group bridge split remains later P2/P6 work and does not enter
+the keyboard early.
 
 The app-private credential marker, settings, Library, and Usage repositories
 now run one strict bounded structural pass before Foundation decoding. It

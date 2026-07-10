@@ -176,6 +176,8 @@ immutable. `keepLatestResult` captures acceptance-time intent but may move only
 from `true` to `false` when the live setting disables retention; it never moves
 back to true for an existing delivery. That one-way CAS affects cleanup after
 reconciliation without deleting an unresolved or submitted-unverified result.
+An otherwise-identical acceptance replay carrying `false` applies that same
+one-way revocation; a replay carrying `true` never restores a current `false`.
 The captured insertion preference never grants authorization, and live settings
 or runtime gates may always revoke publication. A discarded tombstone has
 `acceptedText: null`, `automaticInsertionPreferenceEnabled: false`, and
@@ -186,11 +188,16 @@ idempotent operation changes no bytes.
 The decoder accepts only UTF-8 JSON without a byte-order mark, duplicate keys,
 unknown keys, missing keys, numeric aliases, non-canonical UUIDs or dates, or
 unsupported enum/schema values. It bounds bytes, members, string lengths, and
-nesting before materializing the value. The version-1 structural preflight
-allows nesting depth `2`, at most 16 root members, five History members, 21 total
-object members, no arrays, at most 22 total values, decoded key length 64 UTF-8
-bytes, and number-token length 20 bytes. Malformed, oversized, and
-future-version source bytes are preserved and block automatic replacement.
+nesting before materializing the value. The initial schema-dispatch safety pass
+allows nesting depth `2`, at most 32 members in one object, 64 total object
+members, no arrays, at most 65 total values, decoded key length 64 UTF-8 bytes,
+decoded value-string length 131,072 UTF-8 bytes, and number-token length 20
+bytes. After `schemaVersion: 1` is confirmed, the exact version-1 shape is 16
+root members, five History members, 21 total object members, and 22 total
+values. This bounded headroom lets an ordinary future schema remain the typed
+unsupported-version case before the version-1 allowlist is applied. Malformed,
+oversized, and future-version source bytes are preserved and block automatic
+replacement.
 
 The public value and errors redact text and metadata from app-owned
 `description`, `debugDescription`, `CustomReflectable`, logs, assertions, and
@@ -258,16 +265,23 @@ advisory file lock alone does not establish the required same-process actor
 semantics. Thus two store actors may both read revision N, but only one can
 publish N+1; the other sees a stale snapshot under the lock. Stale callbacks,
 actors, clear requests, acknowledgements, and retries cannot mutate a newer
-value.
+value. When that conflict reveals the exact same immutable acceptance, one
+bounded reload reconciles it as an idempotent result and performs the required
+identical confirmation; a different value remains a typed slot/CAS conflict or
+identity collision.
 
 The first side-effect authorization in every containing-app process performs an
 identical strict rewrite and successful directory synchronization of the
 currently valid value. This confirms a record that a prior process might have
 made visible immediately before crashing; simple decode after relaunch cannot
-authorize History or bridge work. A corrupt, future, protected-unavailable, or
-uncertain record is never interpreted as missing. Protected-data unavailability
-while locked is a temporary typed outcome and never triggers fallback
-protection, overwrite, or corruption recovery.
+authorize History or bridge work. History authority is returned only after the
+post-rewrite value is revalidated as unexpired. One operation captures one
+temporal-state decision for replacement and clear branching, so a later clock
+sample cannot turn rollback or expiry into destructive eligibility. A corrupt,
+future, protected-unavailable, or uncertain record is never interpreted as
+missing. Protected-data unavailability while locked is a temporary typed
+outcome and never triggers fallback protection, overwrite, or corruption
+recovery.
 
 Malformed or future bytes do not create a permanent local-data denial of
 service. An explicit user-confirmed `Discard unreadable local result` operation
@@ -283,14 +297,18 @@ default so a newer app can recover it.
 Staging maintenance recognizes only
 `.ios-accepted-output-delivery.json.<lowercase UUID>.tmp`. One pass inspects at
 most 256 directory names, 32 exact-name candidates, 4,194,304 candidate logical
-bytes, and 100 milliseconds of monotonic time. A time-derived rotating start
-index prevents a stable directory order from starving later candidates; an
-oversized or unsafe candidate is preserved and skipped rather than ending the
-pass. It may remove only an owner-only, one-link regular file older than 24
-hours whose descriptor/path identity is pinned and which either has the exact
-delivery marker or is still zero bytes. It never follows links, widens the scan,
-or removes an unknown sibling. After the first unlink, every exit attempts the
-directory durability barrier before returning or throwing.
+bytes, and 100 milliseconds of monotonic time. A process-local descriptor-
+relative enumeration cursor is pinned to the directory device/inode and resumes
+the next bounded pass after the prior 256-name window; it resets at end of
+directory, identity change, missing directory, or enumeration error. A rotating
+start index within each candidate window prevents the 32-candidate cap from
+starving a later candidate. An oversized or unsafe candidate is preserved and
+skipped rather than ending the pass. Cleanup may remove only an owner-only,
+one-link regular file older than 24 hours whose descriptor/path identity is
+pinned and which either has the exact delivery marker or is still zero bytes.
+It never follows links, widens one pass, or removes an unknown sibling. After
+the first unlink, every exit attempts the directory durability barrier before
+returning or throwing.
 
 ## Commit, History, And Publication Ordering
 

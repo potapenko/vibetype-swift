@@ -162,6 +162,43 @@ struct BoundedJSONMemberValidatorTests {
         )
     }
 
+    @Test func enforcesDecodedValueStringBytesAtExactRawAndEscapedBoundaries() throws {
+        let rawValue = #""a😀""#
+        try validate(
+            rawValue,
+            limits: limits(maximumDecodedValueStringByteCount: 5)
+        )
+        #expect(throws: BoundedJSONMemberValidationError.resourceLimitExceeded) {
+            try validate(
+                rawValue,
+                limits: limits(maximumDecodedValueStringByteCount: 4)
+            )
+        }
+
+        let escapedValue = #""\u0061\uD83D\uDE00""#
+        try validate(
+            escapedValue,
+            limits: limits(maximumDecodedValueStringByteCount: 5)
+        )
+        #expect(throws: BoundedJSONMemberValidationError.resourceLimitExceeded) {
+            try validate(
+                escapedValue,
+                limits: limits(maximumDecodedValueStringByteCount: 4)
+            )
+        }
+
+        try validate(
+            #"{"four":""}"#,
+            limits: limits(maximumDecodedValueStringByteCount: 0)
+        )
+        #expect(throws: BoundedJSONMemberValidationError.resourceLimitExceeded) {
+            try validate(
+                #"{"four":"\u0061"}"#,
+                limits: limits(maximumDecodedValueStringByteCount: 0)
+            )
+        }
+    }
+
     @Test func truncatedAndDeterministicallyMutatedInputsNeverTrap() {
         let source = Data(
             #"{"outer":[{"é":"\uD83D\uDE00"},-12.5e+2,true,null]}"#.utf8
@@ -301,6 +338,10 @@ struct BoundedJSONMemberValidatorTests {
                 maximumInputByteCount: 1,
                 maximumNestingDepth: 65
             ),
+            BoundedJSONMemberValidationLimits(
+                maximumInputByteCount: 1,
+                maximumDecodedValueStringByteCount: -1
+            ),
         ]
         for limits in invalidLimits {
             #expect(throws: BoundedJSONMemberValidationError.resourceLimitExceeded) {
@@ -398,6 +439,7 @@ struct BoundedJSONMemberValidatorTests {
         maximumElementsPerArray: Int = 65_536,
         maximumTotalValues: Int = 524_288,
         maximumDecodedKeyByteCount: Int = 4_096,
+        maximumDecodedValueStringByteCount: Int = Int.max,
         maximumNumberTokenByteCount: Int = 256
     ) -> BoundedJSONMemberValidationLimits {
         BoundedJSONMemberValidationLimits(
@@ -408,6 +450,8 @@ struct BoundedJSONMemberValidatorTests {
             maximumElementsPerArray: maximumElementsPerArray,
             maximumTotalValues: maximumTotalValues,
             maximumDecodedKeyByteCount: maximumDecodedKeyByteCount,
+            maximumDecodedValueStringByteCount:
+                maximumDecodedValueStringByteCount,
             maximumNumberTokenByteCount: maximumNumberTokenByteCount
         )
     }

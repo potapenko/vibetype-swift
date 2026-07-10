@@ -141,7 +141,18 @@ struct FoundationIOSAcceptedOutputDeliveryJournalRepository:
     func removeOpaque(
         expected: IOSAcceptedOutputDeliveryOpaqueSnapshot
     ) throws {
-        try removeFile(expected: expected.fileRevision)
+        do {
+            try fileSystem.removeOpaqueFile(expected: expected.fileRevision)
+        } catch IOSStrictProtectedRecordFileSystemError.staleRevision,
+                IOSStrictProtectedRecordFileSystemError.missing {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        } catch IOSStrictProtectedRecordFileSystemError.protectedDataUnavailable {
+            throw IOSAcceptedOutputDeliveryError.dataProtectionUnavailable
+        } catch IOSStrictProtectedRecordFileSystemError.synchronizationFailed {
+            throw IOSAcceptedOutputDeliveryError.removalCommitUncertain
+        } catch {
+            throw IOSAcceptedOutputDeliveryError.removeFailed
+        }
     }
 
     func performStagingMaintenance(
@@ -241,11 +252,14 @@ enum IOSAcceptedOutputDeliveryWireCodec {
                     maximumInputByteCount:
                         IOSAcceptedOutputDeliveryJournal.maximumByteCount,
                     maximumNestingDepth: 2,
-                    maximumMembersPerObject: 16,
-                    maximumTotalObjectMembers: 21,
+                    maximumMembersPerObject: 32,
+                    maximumTotalObjectMembers: 64,
                     maximumElementsPerArray: 0,
-                    maximumTotalValues: 22,
+                    maximumTotalValues: 65,
                     maximumDecodedKeyByteCount: 64,
+                    maximumDecodedValueStringByteCount:
+                        IOSAcceptedOutputDeliveryValidation
+                            .maximumAcceptedTextByteCount,
                     maximumNumberTokenByteCount: 20
                 )
             )

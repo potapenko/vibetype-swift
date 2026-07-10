@@ -80,6 +80,24 @@ struct IOSAcceptedOutputDeliveryJournalTests {
         }
     }
 
+    @Test func futureSchemaWithSeventeenthRootFieldRemainsUnsupported() throws {
+        let data = try IOSAcceptedOutputDeliveryWireCodec.encode(journalRecord())
+        var object = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        object["schemaVersion"] = 2
+        object["futureField"] = "future"
+        #expect(object.count == 17)
+
+        #expect(
+            throws: IOSAcceptedOutputDeliveryError.unsupportedSchemaVersion
+        ) {
+            try IOSAcceptedOutputDeliveryWireCodec.decode(
+                JSONSerialization.data(withJSONObject: object)
+            )
+        }
+    }
+
     @Test func duplicateUnknownMissingAndWrongTypedMembersAreRejected() throws {
         let canonical = try IOSAcceptedOutputDeliveryWireCodec.encode(
             journalRecord()
@@ -105,7 +123,7 @@ struct IOSAcceptedOutputDeliveryJournalTests {
             JSONSerialization.jsonObject(with: canonical) as? [String: Any]
         )
         object["unknown"] = true
-        #expect(throws: IOSAcceptedOutputDeliveryError.malformedData) {
+        #expect(throws: IOSAcceptedOutputDeliveryError.invalidRecord) {
             try IOSAcceptedOutputDeliveryWireCodec.decode(
                 JSONSerialization.data(withJSONObject: object)
             )
@@ -228,6 +246,49 @@ struct IOSAcceptedOutputDeliveryJournalTests {
             IOSAcceptedOutputDeliveryWireCodec.encode(record)
         )
         #expect(decoded.acceptedText?.utf8.elementsEqual(payload.utf8) == true)
+    }
+
+    @Test func escapedAcceptedTextLimitIsEnforcedBeforeMaterialization() throws {
+        let canonical = try IOSAcceptedOutputDeliveryWireCodec.encode(
+            journalRecord()
+        )
+        let canonicalString = try #require(
+            String(data: canonical, encoding: .utf8)
+        )
+        let originalMember = #""acceptedText":"accepted""#
+        let escapeUnit = #"\u0061"#
+        let exactEscapedValue = String(
+            repeating: escapeUnit,
+            count: IOSAcceptedOutputDeliveryValidation
+                .maximumAcceptedTextByteCount
+        )
+        let exactData = Data(
+            canonicalString.replacingOccurrences(
+                of: originalMember,
+                with: "\"acceptedText\":\"\(exactEscapedValue)\""
+            ).utf8
+        )
+        #expect(exactData.count < IOSAcceptedOutputDeliveryJournal.maximumByteCount)
+        let exactRecord = try IOSAcceptedOutputDeliveryWireCodec.decode(exactData)
+        #expect(
+            exactRecord.acceptedText?.utf8.count
+                == IOSAcceptedOutputDeliveryValidation
+                    .maximumAcceptedTextByteCount
+        )
+
+        let oversizedData = Data(
+            canonicalString.replacingOccurrences(
+                of: originalMember,
+                with: "\"acceptedText\":\"\(exactEscapedValue)\(escapeUnit)\""
+            ).utf8
+        )
+        #expect(
+            oversizedData.count
+                < IOSAcceptedOutputDeliveryJournal.maximumByteCount
+        )
+        #expect(throws: IOSAcceptedOutputDeliveryError.malformedData) {
+            try IOSAcceptedOutputDeliveryWireCodec.decode(oversizedData)
+        }
     }
 
     @Test func repositoryUsesFileRevisionCASAndTypedUncertainty() throws {
