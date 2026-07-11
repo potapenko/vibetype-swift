@@ -3,7 +3,7 @@
   "meta": {
     "title": "{brand.holdType} — le « clone » le plus honnête de Wispr Flow",
     "description": "{brand.holdType} est le « clone » le plus honnête de Wispr Flow : dictée native pour {brand.macOS} avec votre clé API {brand.openAI}, sans abonnement {brand.holdType} ni réécriture obligatoire.",
-    "socialImageAlt": "Icône de l’application {brand.holdType}"
+    "socialImageAlt": "Aperçu de {brand.holdType} pour les réseaux sociaux avec le texte en anglais « Brand-New, Blazing-Fast, Native Mac Dictation Tool »"
   },
   "common": {
     "skipToContent": "Aller au contenu",

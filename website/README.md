@@ -40,7 +40,9 @@ is stored locally in the browser and can always be changed from the header.
 Edit shared facts and trusted links in `i18n/site.json`, locale metadata in
 `i18n/locales.json`, and copy in the corresponding locale catalog. The builder
 fails on missing or extra keys, placeholder drift, raw catalog HTML, unsafe
-output directories, and unexpected locale routes.
+output directories, unexpected locale routes, or a missing or incorrectly sized
+social-preview image. Every route uses the same English 1200 × 630 launch
+artwork while its Open Graph and X/Twitter alternative text stays localized.
 
 ## Hosting
 
@@ -208,6 +210,7 @@ Original repository assets are not modified.
 | Landing asset | Repository source | Treatment |
 | --- | --- | --- |
 | `app-icon.png` | `docs/readme-assets/app-icon.png` | Copied unchanged |
+| `holdtype-social-preview.png` | Approved English launch creative and canonical HoldType icon | Image-generated for the wide composition and exported as an exact 1200 × 630 PNG |
 | `indicator-listening.png` | `HoldType/Assets.xcassets/ActivityRecordingIndicatorLight.imageset/ActivityRecordingIndicatorLight@2x.png` | Copied unchanged |
 | `indicator-transcribing.png` | `HoldType/Assets.xcassets/ActivityTranscribingIndicatorLight.imageset/ActivityTranscribingIndicatorLight@2x.png` | Copied unchanged |
 | `menu-popover.png` | `docs/readme-assets/menu-popover.png` | Copied unchanged |

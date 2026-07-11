@@ -3,7 +3,7 @@
   "meta": {
     "title": "{brand.holdType} — 가장 솔직한 Wispr Flow ‘클론’",
     "description": "{brand.holdType}은 가장 솔직한 Wispr Flow ‘클론’입니다. 내 {brand.openAI} API 키로 쓰는 네이티브 {brand.macOS} 받아쓰기 앱으로, {brand.holdType} 구독도 강제 재작성도 없습니다.",
-    "socialImageAlt": "{brand.holdType} 앱 아이콘"
+    "socialImageAlt": "영문 문구 ‘Brand-New’, ‘Blazing-Fast’, ‘Native Mac Dictation Tool’이 들어간 {brand.holdType} 소셜 미디어 미리보기 이미지"
   },
   "common": {
     "skipToContent": "본문으로 건너뛰기",

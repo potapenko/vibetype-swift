@@ -9,6 +9,7 @@ that already uses GitHub Pages.
 ## Scope
 
 - the static files under `website/`;
+- the landing page's Open Graph and social-link preview asset;
 - a DigitalOcean App Platform static-site deployment from this repository;
 - GitHub Pages deployment of the existing update metadata;
 - the existing Sparkle `appcast.xml` and versioned release-notes pages;
@@ -57,9 +58,14 @@ that already uses GitHub Pages.
   model over OpenAI's original Whisper models. It must not claim that HoldType
   is the fastest or most accurate dictation product, publish a comparative
   speed multiplier, or attribute an undocumented recognition model to a
-  competitor without a dated, reproducible evidence package.
+  competitor without a dated, reproducible evidence package. The social
+  preview may use the approved non-comparative launch line `BLAZING-FAST`; it
+  must not turn that line into a benchmark, multiplier, or `fastest` claim.
 - The generated pages remain usable at the DigitalOcean technical hostname and
   at the custom-domain routes without a server-side application runtime.
+- Shared links render the approved English HoldType launch creative as a
+  1200 × 630 Open Graph image. Open Graph and X/Twitter point to its canonical
+  HTTPS URL, expose accurate image metadata, and use localized alternative text.
 - Download links continue to use the stable GitHub latest-release URL.
 - The Homebrew Copy button copies the complete project-tap installation block.
 - The hero may present 100 dictations as about `$0.10` at the current
@@ -112,6 +118,9 @@ that already uses GitHub Pages.
 - The production artifact contains every supported locale route plus
   `sitemap.xml`; published HTML contains generated locale identity and no source
   `data-i18n` markers.
+- The production artifact contains `assets/holdtype-social-preview.png` as an
+  exact 1200 × 630 PNG. Every locale emits the same absolute image URL, Open
+  Graph structured image fields, and an X/Twitter large-image card.
 - Pages deployments are serialized so a website publish cannot race a release
   publish and leave a partial artifact live.
 - GitHub Pages must not retain `holdtype.app` as its custom domain after the DNS
@@ -145,6 +154,8 @@ that already uses GitHub Pages.
 - If App Spec synchronization fails, any locale route is missing, the sitemap
   is missing, or the root still contains source localization markers, the
   publish command fails instead of reporting a healthy landing deployment.
+- If the social-preview asset is missing, is not a PNG, or is not exactly
+  1200 × 630, the static-site build fails before publication.
 - If the DigitalOcean technical hostname does not return the expected landing
   marker, custom-domain setup and DNS cutover stop.
 - If the third-party tutorial is removed, blocked, or outdated, the official
@@ -159,6 +170,8 @@ that already uses GitHub Pages.
 
 - The public product root is `https://holdtype.app/`; the App Platform technical
   hostname remains a non-canonical deployment and diagnostic route.
+- The canonical social-preview URL is
+  `https://holdtype.app/assets/holdtype-social-preview.png` for every locale.
 - The existing update-feed route remains
   `https://holdtype.github.io/holdtype-swift/appcast.xml` until a separate
   updater migration changes the shipped `SUFeedURL`.
@@ -176,6 +189,9 @@ that already uses GitHub Pages.
 - Publish-script checks verify bounded App Spec synchronization, all generated
   locale routes, sitemap content, expected-site markers, and the absence of
   embedded credentials.
+- Static-site tests verify the social asset's file type and dimensions, Open
+  Graph structured fields, matching X/Twitter metadata, and localized image
+  descriptions on all ten routes.
 - Artifact tests verify the public-file allowlist, exact appcast copy, and
   reconstruction of every referenced release-notes file.
 - Runtime verification checks the deployed root page, current appcast, current

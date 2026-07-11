@@ -235,7 +235,7 @@ Priority 2:
 
 - a factual comparison page with dated sources;
 - a privacy/data-flow graphic;
-- an Open Graph image and small brand kit;
+- a small brand kit (the 1200 × 630 Open Graph image now ships with the landing);
 - a decision on English-only versus localized landing pages.
 
 ## Claims Policy
@@ -243,6 +243,9 @@ Priority 2:
 Do not publish `3x faster`, `5x faster`, `99% accurate`, `perfect`, `private`,
 or `works in every app` without a documented HoldType-specific method and the
 necessary qualifications.
+
+The launch social preview uses the approved qualitative line `BLAZING-FAST`.
+Do not repurpose it as a comparative benchmark, multiplier, or `fastest` claim.
 
 The landing page may name `gpt-4o-transcribe` once in the honesty contract and
 repeat OpenAI's documented comparison with its original Whisper models. Keep

@@ -16,6 +16,9 @@ from typing import Any, Iterable, Mapping, Sequence
 
 
 CANONICAL_ORIGIN = "https://holdtype.app"
+SOCIAL_PREVIEW_FILENAME = "holdtype-social-preview.png"
+SOCIAL_PREVIEW_DIMENSIONS = (1200, 630)
+SOCIAL_PREVIEW_URL = f"{CANONICAL_ORIGIN}/assets/{SOCIAL_PREVIEW_FILENAME}"
 EXPECTED_LOCALE_ROUTES = {
     "en": "",
     "es": "es",
@@ -89,6 +92,21 @@ def load_json(path: Path) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise SiteBuildError(f"could not read JSON {path}: {error}") from error
+
+
+def read_png_dimensions(path: Path) -> tuple[int, int]:
+    try:
+        with path.open("rb") as image_file:
+            header = image_file.read(24)
+    except OSError as error:
+        raise SiteBuildError(f"could not read PNG {path}: {error}") from error
+    if (
+        len(header) != 24
+        or header[:8] != b"\x89PNG\r\n\x1a\n"
+        or header[12:16] != b"IHDR"
+    ):
+        raise SiteBuildError(f"social preview must be a valid PNG: {path}")
+    return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
 
 
 def is_rich_message(value: Any) -> bool:
@@ -592,7 +610,7 @@ class LocalizedHTMLParser(HTMLParser):
         if "data-site-og-image" in attrs_dict:
             output_attrs = [(name, value) for name, value in output_attrs if name != "data-site-og-image"]
             output_attrs = [
-                (name, f"{CANONICAL_ORIGIN}/assets/app-icon.png" if name == "content" else value)
+                (name, SOCIAL_PREVIEW_URL if name == "content" else value)
                 for name, value in output_attrs
             ]
         if "data-site-og-locale" in attrs_dict or "data-locale-open-graph" in attrs_dict:
@@ -1005,6 +1023,7 @@ def build_site(*, source_dir: Path, output_dir: Path) -> list[Path]:
         source_dir / "styles.css",
         source_dir / "script.js",
         source_dir / "assets",
+        source_dir / "assets" / SOCIAL_PREVIEW_FILENAME,
         source_dir / "i18n" / "site.json",
         source_dir / "i18n" / "locales.json",
     )
@@ -1012,6 +1031,17 @@ def build_site(*, source_dir: Path, output_dir: Path) -> list[Path]:
         if not source.exists():
             raise SiteBuildError(f"required website source not found: {source}")
         reject_symlinks(source)
+
+    social_preview_source = source_dir / "assets" / SOCIAL_PREVIEW_FILENAME
+    social_preview_dimensions = read_png_dimensions(social_preview_source)
+    if social_preview_dimensions != SOCIAL_PREVIEW_DIMENSIONS:
+        expected_width, expected_height = SOCIAL_PREVIEW_DIMENSIONS
+        actual_width, actual_height = social_preview_dimensions
+        raise SiteBuildError(
+            "social preview must be "
+            f"{expected_width}x{expected_height}, got {actual_width}x{actual_height}: "
+            f"{social_preview_source}"
+        )
 
     site = load_json(source_dir / "i18n" / "site.json")
     if not isinstance(site, dict) or not isinstance(site.get("tokens"), dict) or not isinstance(
