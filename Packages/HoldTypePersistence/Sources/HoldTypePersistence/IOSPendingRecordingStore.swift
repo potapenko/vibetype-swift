@@ -1,6 +1,50 @@
 import Foundation
 import HoldTypeDomain
 
+struct IOSPendingRecordingMetadataRetirementAuthorization:
+    Equatable,
+    Sendable {
+    private enum Identity: Equatable, Sendable {
+        case production(UUID)
+        #if DEBUG
+        case testing(UInt64)
+        #endif
+    }
+
+    private let identity: Identity
+
+    /// Production authority is minted only inside the Pending store file.
+    fileprivate init() {
+        identity = .production(UUID())
+    }
+
+    #if DEBUG
+    /// Narrow deterministic seam for journal boundary tests.
+    init(testingToken: UInt64) {
+        identity = .testing(testingToken)
+    }
+    #endif
+}
+
+extension IOSPendingRecordingMetadataRetirementAuthorization:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSPendingRecordingMetadataRetirementAuthorization(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+struct IOSPendingFailedHistoryTransferPreparationMint: Sendable {
+    fileprivate init() {}
+}
+
+struct IOSPendingRecordingMetadataAbsenceReceiptMint: Sendable {
+    fileprivate init() {}
+}
+
 struct IOSPendingRecordingStoreIdentity: Equatable, Sendable {
     private let value = UUID()
 }

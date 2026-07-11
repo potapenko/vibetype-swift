@@ -5,7 +5,9 @@ import HoldTypeDomain
 
 protocol IOSPendingRecordingJournalStoring: Sendable {
     func load() throws -> IOSPendingRecording?
-    func loadMetadataSnapshot() throws
+    func loadMetadataSnapshot(
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
+    ) throws
         -> IOSPendingRecordingJournalMetadataSnapshot?
     func create(_ recording: IOSPendingRecording) throws
     func create(
@@ -28,16 +30,21 @@ protocol IOSPendingRecordingJournalStoring: Sendable {
     ) throws -> Bool
     func removeMetadata(
         expected: IOSPendingRecordingJournalMetadataSnapshot,
-        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence
     func proveMetadataAbsent(
-        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence
 }
 
 extension IOSPendingRecordingJournalStoring {
-    func loadMetadataSnapshot() throws
+    func loadMetadataSnapshot(
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
+    ) throws
         -> IOSPendingRecordingJournalMetadataSnapshot? {
+        _ = authorization
         throw IOSPendingRecordingError.journalUnreadable
     }
 
@@ -68,17 +75,21 @@ extension IOSPendingRecordingJournalStoring {
 
     func removeMetadata(
         expected: IOSPendingRecordingJournalMetadataSnapshot,
-        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence {
         _ = expected
         _ = expectedRepositoryRoot
+        _ = authorization
         throw IOSPendingRecordingError.journalRemoveFailed
     }
 
     func proveMetadataAbsent(
-        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence {
         _ = expectedRepositoryRoot
+        _ = authorization
         throw IOSPendingRecordingError.journalRemoveFailed
     }
 }
@@ -183,6 +194,45 @@ struct IOSPendingRecordingJournalFile: Equatable, Sendable {
     let revision: IOSPendingRecordingJournalFileRevision
 }
 
+/// Opaque identity for the one canonical PendingRecording metadata path and
+/// strict-record policy. It deliberately carries no caller-provided strings.
+struct IOSPendingRecordingJournalCanonicalPathIdentity:
+    Equatable,
+    Sendable,
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    private let value: UInt8
+
+    fileprivate static let pendingRecording = Self(value: 1)
+
+    private init(value: UInt8) {
+        self.value = value
+    }
+
+    var description: String {
+        "IOSPendingRecordingJournalCanonicalPathIdentity(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+struct IOSPendingRecordingJournalMetadataFile:
+    Equatable,
+    Sendable,
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    let file: IOSPendingRecordingJournalFile
+    let pathIdentity: IOSPendingRecordingJournalCanonicalPathIdentity
+
+    var description: String {
+        "IOSPendingRecordingJournalMetadataFile(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 /// Sealed metadata observation used only by the failed-History ownership
 /// transfer. It retains the decoded value and the exact physical file revision.
 struct IOSPendingRecordingJournalMetadataSnapshot:
@@ -252,6 +302,7 @@ enum IOSPendingRecordingJournalMetadataAbsenceEvidence:
         CustomReflectable {
         let repositoryRoot: IOSPersistenceRepositoryRootIdentity
         let journalDirectory: IOSPendingRecordingJournalDirectoryIdentity
+        let pathIdentity: IOSPendingRecordingJournalCanonicalPathIdentity
 
         var description: String {
             "IOSPendingRecordingJournalMetadataAbsenceEvidence.Binding(redacted)"
@@ -261,10 +312,12 @@ enum IOSPendingRecordingJournalMetadataAbsenceEvidence:
 
         fileprivate init(
             repositoryRoot: IOSPersistenceRepositoryRootIdentity,
-            journalDirectory: IOSPendingRecordingJournalDirectoryIdentity
+            journalDirectory: IOSPendingRecordingJournalDirectoryIdentity,
+            pathIdentity: IOSPendingRecordingJournalCanonicalPathIdentity
         ) {
             self.repositoryRoot = repositoryRoot
             self.journalDirectory = journalDirectory
+            self.pathIdentity = pathIdentity
         }
     }
 
@@ -338,10 +391,17 @@ enum IOSPendingRecordingJournalMetadataAbsenceEvidence:
         if case .alreadyAbsent = self { return true }
         return false
     }
+
+    var provesCanonicalPendingRecordingPath: Bool {
+        binding.pathIdentity == .pendingRecording
+    }
 }
 
 protocol IOSPendingRecordingJournalFileSystem: Sendable {
     func readFileIfPresent() throws -> IOSPendingRecordingJournalFile?
+    func readMetadataFileIfPresent(
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
+    ) throws -> IOSPendingRecordingJournalMetadataFile?
     func readOpaqueFileRevisionIfPresent() throws
         -> IOSPendingRecordingJournalFileRevision?
     func createFile(with data: Data) throws -> IOSPendingRecordingJournalFileRevision
@@ -370,14 +430,23 @@ protocol IOSPendingRecordingJournalFileSystem: Sendable {
     ) throws
     func removeMetadataFile(
         expected: IOSPendingRecordingJournalFileRevision,
-        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence
     func proveMetadataFileAbsent(
-        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence
 }
 
 extension IOSPendingRecordingJournalFileSystem {
+    func readMetadataFileIfPresent(
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
+    ) throws -> IOSPendingRecordingJournalMetadataFile? {
+        _ = authorization
+        throw IOSPendingRecordingJournalFileSystemError.invalidLocation
+    }
+
     func createFile(
         with data: Data,
         expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
@@ -416,17 +485,21 @@ extension IOSPendingRecordingJournalFileSystem {
 
     func removeMetadataFile(
         expected: IOSPendingRecordingJournalFileRevision,
-        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence {
         _ = expected
         _ = expectedRepositoryRoot
+        _ = authorization
         throw IOSPendingRecordingJournalFileSystemError.invalidLocation
     }
 
     func proveMetadataFileAbsent(
-        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence {
         _ = expectedRepositoryRoot
+        _ = authorization
         throw IOSPendingRecordingJournalFileSystemError.invalidLocation
     }
 }
@@ -514,9 +587,29 @@ struct FoundationIOSPendingRecordingJournalRepository:
         return try IOSPendingRecordingJournalWireCodec.decode(file.data)
     }
 
-    func loadMetadataSnapshot() throws
+    func loadMetadataSnapshot(
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
+    ) throws
         -> IOSPendingRecordingJournalMetadataSnapshot? {
-        guard let file = try readFile() else { return nil }
+        let metadataFile: IOSPendingRecordingJournalMetadataFile?
+        do {
+            metadataFile = try fileSystem.readMetadataFileIfPresent(
+                authorization: authorization
+            )
+        } catch IOSPendingRecordingJournalFileSystemError.sourceTooLarge {
+            throw IOSPendingRecordingError.journalTooLarge
+        } catch IOSPendingRecordingJournalFileSystemError.protectedDataUnavailable {
+            throw IOSPendingRecordingError.dataProtectionUnavailable
+        } catch IOSPendingRecordingJournalFileSystemError.repositoryIdentityConflict {
+            throw IOSPendingRecordingError.repositoryIdentityConflict
+        } catch {
+            throw IOSPendingRecordingError.journalUnreadable
+        }
+        guard let metadataFile else { return nil }
+        guard metadataFile.pathIdentity == .pendingRecording else {
+            throw IOSPendingRecordingError.journalUnreadable
+        }
+        let file = metadataFile.file
         return IOSPendingRecordingJournalMetadataSnapshot(
             recording: try IOSPendingRecordingJournalWireCodec.decode(file.data),
             fileRevision: file.revision
@@ -631,14 +724,17 @@ struct FoundationIOSPendingRecordingJournalRepository:
 
     func removeMetadata(
         expected: IOSPendingRecordingJournalMetadataSnapshot,
-        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence {
         do {
             let evidence = try fileSystem.removeMetadataFile(
                 expected: expected.fileRevision,
-                expectedRepositoryRoot: expectedRepositoryRoot
+                expectedRepositoryRoot: expectedRepositoryRoot,
+                authorization: authorization
             )
-            guard evidence.provesRemoval(of: expected) else {
+            guard evidence.provesRemoval(of: expected),
+                  evidence.binding.pathIdentity == .pendingRecording else {
                 throw IOSPendingRecordingError.journalCommitUncertain
             }
             return evidence
@@ -652,13 +748,16 @@ struct FoundationIOSPendingRecordingJournalRepository:
     }
 
     func proveMetadataAbsent(
-        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence {
         do {
             let evidence = try fileSystem.proveMetadataFileAbsent(
-                expectedRepositoryRoot: expectedRepositoryRoot
+                expectedRepositoryRoot: expectedRepositoryRoot,
+                authorization: authorization
             )
-            guard evidence.provesPreexistingAbsence else {
+            guard evidence.provesPreexistingAbsence,
+                  evidence.binding.pathIdentity == .pendingRecording else {
                 throw IOSPendingRecordingError.journalCommitUncertain
             }
             return evidence
@@ -1247,6 +1346,19 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
         )
     }
 
+    func readMetadataFileIfPresent(
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
+    ) throws -> IOSPendingRecordingJournalMetadataFile? {
+        _ = authorization
+        try requirePendingRecordingMetadataConfiguration()
+        return try readFileIfPresent().map {
+            IOSPendingRecordingJournalMetadataFile(
+                file: $0,
+                pathIdentity: .pendingRecording
+            )
+        }
+    }
+
     func readOpaqueFileRevisionIfPresent() throws
         -> IOSPendingRecordingJournalFileRevision? {
         guard let directory = try openJournalDirectory(createIfMissing: false) else {
@@ -1406,8 +1518,11 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
 
     func removeMetadataFile(
         expected: IOSPendingRecordingJournalFileRevision,
-        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence {
+        _ = authorization
+        try requirePendingRecordingMetadataConfiguration()
         Self.processMutationLock.lock()
         defer { Self.processMutationLock.unlock() }
         try beforeRepositoryRootOpen()
@@ -1449,8 +1564,11 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
     }
 
     func proveMetadataFileAbsent(
-        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence {
+        _ = authorization
+        try requirePendingRecordingMetadataConfiguration()
         Self.processMutationLock.lock()
         defer { Self.processMutationLock.unlock() }
         try beforeRepositoryRootOpen()
@@ -2202,8 +2320,15 @@ private extension FoundationIOSPendingRecordingJournalFileSystem {
             journalDirectory: IOSPendingRecordingJournalDirectoryIdentity(
                 device: directory.identity.device,
                 inode: directory.identity.inode
-            )
+            ),
+            pathIdentity: .pendingRecording
         )
+    }
+
+    func requirePendingRecordingMetadataConfiguration() throws {
+        guard configuration == .pendingRecording else {
+            throw IOSPendingRecordingJournalFileSystemError.invalidLocation
+        }
     }
 
     func commitTemporaryFile(

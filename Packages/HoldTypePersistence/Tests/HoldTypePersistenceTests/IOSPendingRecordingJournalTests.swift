@@ -358,18 +358,25 @@ struct IOSPendingRecordingJournalTests {
             let recording = try fixtureRecording()
             try repository.create(recording)
             let snapshot = try #require(
-                try repository.loadMetadataSnapshot()
+                try repository.loadMetadataSnapshot(
+                    authorization: journalMetadataAuthorization()
+                )
             )
 
             let removed = try repository.removeMetadata(
                 expected: snapshot,
-                expectedRepositoryRoot: nil
+                expectedRepositoryRoot: nil,
+                authorization: journalMetadataAuthorization()
             )
 
             #expect(snapshot.recording == recording)
             #expect(removed.provesRemoval(of: snapshot))
             #expect(!removed.provesPreexistingAbsence)
-            #expect(try repository.loadMetadataSnapshot() == nil)
+            #expect(
+                try repository.loadMetadataSnapshot(
+                    authorization: journalMetadataAuthorization()
+                ) == nil
+            )
             #expect(
                 snapshot.description
                     == "IOSPendingRecordingJournalMetadataSnapshot(redacted)"
@@ -395,7 +402,8 @@ struct IOSPendingRecordingJournalTests {
             }
 
             let alreadyAbsent = try repository.proveMetadataAbsent(
-                expectedRepositoryRoot: nil
+                expectedRepositoryRoot: nil,
+                authorization: journalMetadataAuthorization()
             )
 
             #expect(alreadyAbsent.provesPreexistingAbsence)
@@ -427,6 +435,13 @@ struct IOSPendingRecordingJournalTests {
                     == removed.binding.description
             )
             #expect(removed.binding.customMirror.children.isEmpty)
+            #expect(
+                removed.binding.pathIdentity.description
+                    == "IOSPendingRecordingJournalCanonicalPathIdentity(redacted)"
+            )
+            #expect(
+                removed.binding.pathIdentity.customMirror.children.isEmpty
+            )
             #expect(
                 removed.binding.journalDirectory.description
                     == "IOSPendingRecordingJournalDirectoryIdentity(redacted)"
@@ -479,7 +494,9 @@ struct IOSPendingRecordingJournalTests {
             let recording = try fixtureRecording()
             try repository.create(recording)
             let snapshot = try #require(
-                try repository.loadMetadataSnapshot()
+                try repository.loadMetadataSnapshot(
+                    authorization: journalMetadataAuthorization()
+                )
             )
             let originalFile = try #require(
                 try fileSystem.readFileIfPresent()
@@ -492,11 +509,16 @@ struct IOSPendingRecordingJournalTests {
             try expectError(.compareAndSwapFailed) {
                 _ = try repository.removeMetadata(
                     expected: snapshot,
-                    expectedRepositoryRoot: nil
+                    expectedRepositoryRoot: nil,
+                    authorization: journalMetadataAuthorization()
                 )
             }
 
-            #expect(try repository.loadMetadataSnapshot()?.recording == recording)
+            #expect(
+                try repository.loadMetadataSnapshot(
+                    authorization: journalMetadataAuthorization()
+                )?.recording == recording
+            )
         }
     }
 
@@ -508,7 +530,9 @@ struct IOSPendingRecordingJournalTests {
             let recording = try fixtureRecording()
             try writer.create(recording)
             let snapshot = try #require(
-                try writer.loadMetadataSnapshot()
+                try writer.loadMetadataSnapshot(
+                    authorization: journalMetadataAuthorization()
+                )
             )
             let journalURL = journalTestFileURL(directoryURL)
             let failingRepository = FoundationIOSPendingRecordingJournalRepository(
@@ -521,7 +545,8 @@ struct IOSPendingRecordingJournalTests {
             try expectError(.journalCommitUncertain) {
                 _ = try failingRepository.removeMetadata(
                     expected: snapshot,
-                    expectedRepositoryRoot: nil
+                    expectedRepositoryRoot: nil,
+                    authorization: journalMetadataAuthorization()
                 )
             }
 
@@ -538,7 +563,9 @@ struct IOSPendingRecordingJournalTests {
             let bytes = try IOSPendingRecordingJournalWireCodec.encode(recording)
             try writer.create(recording)
             let snapshot = try #require(
-                try writer.loadMetadataSnapshot()
+                try writer.loadMetadataSnapshot(
+                    authorization: journalMetadataAuthorization()
+                )
             )
             let journalURL = journalTestFileURL(directoryURL)
             let recreatingRepository =
@@ -559,7 +586,8 @@ struct IOSPendingRecordingJournalTests {
             try expectError(.journalCommitUncertain) {
                 _ = try recreatingRepository.removeMetadata(
                     expected: snapshot,
-                    expectedRepositoryRoot: nil
+                    expectedRepositoryRoot: nil,
+                    authorization: journalMetadataAuthorization()
                 )
             }
 
@@ -575,11 +603,14 @@ struct IOSPendingRecordingJournalTests {
             let recording = try fixtureRecording()
             try writer.create(recording)
             let snapshot = try #require(
-                try writer.loadMetadataSnapshot()
+                try writer.loadMetadataSnapshot(
+                    authorization: journalMetadataAuthorization()
+                )
             )
             _ = try writer.removeMetadata(
                 expected: snapshot,
-                expectedRepositoryRoot: nil
+                expectedRepositoryRoot: nil,
+                authorization: journalMetadataAuthorization()
             )
             let journalURL = journalTestFileURL(directoryURL)
             let corruptBytes = Data("recreated".utf8)
@@ -598,7 +629,8 @@ struct IOSPendingRecordingJournalTests {
 
             try expectError(.compareAndSwapFailed) {
                 _ = try provingRepository.proveMetadataAbsent(
-                    expectedRepositoryRoot: nil
+                    expectedRepositoryRoot: nil,
+                    authorization: journalMetadataAuthorization()
                 )
             }
 
@@ -614,7 +646,9 @@ struct IOSPendingRecordingJournalTests {
             let recording = try fixtureRecording()
             try writer.create(recording)
             let snapshot = try #require(
-                try writer.loadMetadataSnapshot()
+                try writer.loadMetadataSnapshot(
+                    authorization: journalMetadataAuthorization()
+                )
             )
             let protectedRepository =
                 FoundationIOSPendingRecordingJournalRepository(
@@ -630,7 +664,8 @@ struct IOSPendingRecordingJournalTests {
             try expectError(.dataProtectionUnavailable) {
                 _ = try protectedRepository.removeMetadata(
                     expected: snapshot,
-                    expectedRepositoryRoot: nil
+                    expectedRepositoryRoot: nil,
+                    authorization: journalMetadataAuthorization()
                 )
             }
 
@@ -644,22 +679,26 @@ struct IOSPendingRecordingJournalTests {
             try expectError(.repositoryIdentityConflict) {
                 _ = try writer.removeMetadata(
                     expected: snapshot,
-                    expectedRepositoryRoot: wrongRoot
+                    expectedRepositoryRoot: wrongRoot,
+                    authorization: journalMetadataAuthorization()
                 )
             }
 
             _ = try writer.removeMetadata(
                 expected: snapshot,
-                expectedRepositoryRoot: nil
+                expectedRepositoryRoot: nil,
+                authorization: journalMetadataAuthorization()
             )
             try expectError(.dataProtectionUnavailable) {
                 _ = try protectedRepository.proveMetadataAbsent(
-                    expectedRepositoryRoot: nil
+                    expectedRepositoryRoot: nil,
+                    authorization: journalMetadataAuthorization()
                 )
             }
             try expectError(.repositoryIdentityConflict) {
                 _ = try writer.proveMetadataAbsent(
-                    expectedRepositoryRoot: wrongRoot
+                    expectedRepositoryRoot: wrongRoot,
+                    authorization: journalMetadataAuthorization()
                 )
             }
         }
@@ -678,13 +717,72 @@ struct IOSPendingRecordingJournalTests {
 
             try expectError(.compareAndSwapFailed) {
                 _ = try repository.proveMetadataAbsent(
-                    expectedRepositoryRoot: nil
+                    expectedRepositoryRoot: nil,
+                    authorization: journalMetadataAuthorization()
                 )
             }
             try expectError(.journalMalformed) {
-                _ = try repository.loadMetadataSnapshot()
+                _ = try repository.loadMetadataSnapshot(
+                    authorization: journalMetadataAuthorization()
+                )
             }
             #expect(try fileSystem.readFileIfPresent()?.data == corruptBytes)
+        }
+    }
+
+    @Test func metadataAuthorityRejectsForeignStrictRecordConfiguration()
+        throws {
+        try withTemporaryJournalDirectory { directoryURL in
+            let configuration = IOSStrictProtectedRecordConfiguration(
+                rootDirectoryName:
+                    IOSPendingRecordingStorageLocation.rootDirectoryName,
+                fileName: "foreign-record.json",
+                maximumByteCount:
+                    FoundationIOSPendingRecordingJournalRepository
+                        .maximumJournalByteCount,
+                marker: nil
+            )
+            let fileSystem = FoundationIOSPendingRecordingJournalFileSystem(
+                applicationSupportDirectoryURL: directoryURL,
+                configuration: configuration
+            )
+            let bytes = Data("foreign".utf8)
+            let revision = try fileSystem.createFile(with: bytes)
+            let authorization = journalMetadataAuthorization()
+
+            #expect(
+                throws:
+                    IOSPendingRecordingJournalFileSystemError.invalidLocation
+            ) {
+                _ = try fileSystem.readMetadataFileIfPresent(
+                    authorization: authorization
+                )
+            }
+            #expect(
+                throws:
+                    IOSPendingRecordingJournalFileSystemError.invalidLocation
+            ) {
+                _ = try fileSystem.removeMetadataFile(
+                    expected: revision,
+                    expectedRepositoryRoot: nil,
+                    authorization: authorization
+                )
+            }
+            #expect(
+                throws:
+                    IOSPendingRecordingJournalFileSystemError.invalidLocation
+            ) {
+                _ = try fileSystem.proveMetadataFileAbsent(
+                    expectedRepositoryRoot: nil,
+                    authorization: authorization
+                )
+            }
+            #expect(try fileSystem.readFileIfPresent()?.data == bytes)
+            #expect(authorization.customMirror.children.isEmpty)
+            #expect(
+                authorization.description
+                    == "IOSPendingRecordingMetadataRetirementAuthorization(redacted)"
+            )
         }
     }
 
@@ -1196,6 +1294,11 @@ struct IOSPendingRecordingJournalTests {
             }
         }
     }
+}
+
+private func journalMetadataAuthorization()
+    -> IOSPendingRecordingMetadataRetirementAuthorization {
+    IOSPendingRecordingMetadataRetirementAuthorization(testingToken: 1)
 }
 
 private func replaceSucceeded(
