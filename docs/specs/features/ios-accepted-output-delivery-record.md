@@ -31,8 +31,12 @@ Every newly accepted result receives a fresh globally unique `deliveryID`.
 `sessionID`, `attemptID`, and `transcriptID` retain their canonical upstream
 identities. The four IDs are lowercase canonical UUID strings on disk.
 
-`transcriptID` is exactly the transcription ID already committed by
-`PendingRecording`. One `sessionID` may legitimately contain multiple attempts,
+For ordinary `PendingRecording` acceptance, `transcriptID` is exactly the
+transcription ID already committed by `PendingRecording`. Failed-row Retry is
+the sole version-1 exception: its distinct `transcriptionID` remains the
+provider-request and Usage identity, while its separately preallocated
+`transcriptID` is the final accepted-output identity for both Standard and
+Translation Retry. One `sessionID` may legitimately contain multiple attempts,
 and one `attemptID` may legitimately receive a new transcript ID after an
 explicit Retry. `deliveryID` is allocated once for one accepted
 `(attemptID, transcriptID)` result and is then the stable identity used by

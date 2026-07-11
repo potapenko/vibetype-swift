@@ -69,7 +69,12 @@ partial UI early.
   original time, retry count, and known model, language, and duration.
 - Retry is available only when the row still owns valid audio, History remains
   enabled for that row's current generation, no Voice/provider chain is
-  active, and current settings and credentials can run its output intent.
+  active, one audio-cleanup tombstone slot is free, and current settings and
+  credentials can run its output intent.
+- When all five audio-cleanup slots are occupied, Retry remains unavailable
+  until bounded provider-free cleanup retires the canonical head. That local
+  cleanup does not change the failed row, its retry count, or its original
+  failure.
 - Missing or invalid current setup routes to the owning Settings section
   without changing the row or retry count.
 - Retry preserves `.standard` or `.translate`. Translation retries use the
@@ -466,15 +471,34 @@ no live provider owner, so local cutover recovery may cancel the durable retry
 operation and continue.
 
 The failed store owns one canonical retry-owner state for its physical root,
-and every coordinator over that store must reuse it. A live retry registers one
-exact store-minted token under an active root lease; a delayed completion from
-an older lease cannot clear a newer registration for the same durable retry.
-Cutover may prove process loss only by atomically moving that canonical state
-from idle to one exact cancellation reservation. While reserved, no retry may
-become live. The reservation is consumed only by a store-minted completion
-after the exact `retryOperation = null` outcome is durably confirmed; commit
-uncertainty retains the reservation. Foreign owner states are rejected, while
-an inactive exact lease cannot wedge cleanup indefinitely.
+and every coordinator over that store must reuse it. Reservation and durable
+`providerDispatched` publication are minted under an active root lease. After
+that publication is confirmed, the provider executes outside the root gate so
+long network work does not hold filesystem and policy serialization.
+
+The exact live-owner registration is nevertheless stable for the lifetime of
+that process context. Ending the lease that minted it does not make the owner
+stale and is not process-loss evidence. The registration binds the durable
+retry identity, its own monotonic owner epoch, its one-shot provider authority,
+and cancellation. A completion may clear or advance only that exact epoch; a
+delayed completion from an older lease or older Retry cannot clear a newer
+owner, accept its text, or cancel its provider task.
+
+Every conflicting root-gate operation inspects this one canonical registration
+after acquiring its lease and before its first durable boundary. A live owner
+blocks policy mutation, another accepted-output acceptance, failed-row Delete,
+audio ownership changes, and a PendingRecording provider launch. Conversely, a
+failed-row Retry cannot reserve while a PendingRecording provider owner or
+provider-capable handoff is live. The two provider paths remain mutually
+exclusive even though their external requests run outside the root gate.
+
+Relaunch creates a new process context whose retry-owner state is idle. Only
+that new idle context, combined with the exact durable `reserved` or
+`providerDispatched` row, proves process loss. Recovery atomically moves idle
+to one exact cancellation reservation. While reserved, no Retry may become
+live. The reservation is consumed only by a store-minted completion after the
+exact `retryOperation = null` outcome is durably confirmed; commit uncertainty
+retains it. Foreign owner states and stale epochs are rejected.
 
 Every resumed `pendingJournalRetirement` subphase validates the whole current
 failed envelope, including all sibling rows and tombstones, against the already
@@ -505,6 +529,35 @@ language update to the fresh configuration captured for this retry before
 dispatch; Translation-specific current configuration remains transient because
 provider work never resumes automatically after process loss.
 
+The identifiers have two deliberately distinct roles. `transcriptionID` is the
+provider-request and Usage identity. `transcriptID` is the final accepted-output
+identity. They remain distinct for both Standard and Translation Retry. This is
+the sole failed-row Retry exception to the ordinary PendingRecording rule that
+an accepted delivery's transcript ID equals its pending transcription ID.
+
+Before reservation, the coordinator freezes the current valid transcription
+configuration, any required Translation configuration, credentials/setup
+eligibility, and Keep Latest Result preference. It also proves that no Pending
+provider owner is live and that fewer than five audio-cleanup tombstones exist.
+A full tombstone queue, invalid setup, retry-count overflow, stale policy, or
+failed audio validation changes no row field and issues no provider authority.
+
+The durable transitions are ordered:
+
+1. `nil -> reserved` advances the retry count once, stores the fresh model and
+   language, freezes all six operation fields, and updates `updatedAt` to the
+   canonical reservation time;
+2. `reserved -> providerDispatched` commits before the one-shot provider task
+   may launch and preserves the retry count, failure fields, and `updatedAt`;
+3. the provider runs outside the root gate while the stable live-owner
+   registration excludes conflicting work;
+4. provider completion, timeout, or cancellation reacquires the root gate and
+   may mutate only from the exact registered operation and owner epoch;
+5. `providerDispatched -> acceptingOutput` is permitted only after the final
+   requested output validates and the provider completion wins the atomic race
+   with cancellation. It also preserves `updatedAt` until a later failure or
+   cancellation outcome needs a new user-visible failure time.
+
 The retry count advances exactly once when a valid new operation is durably
 reserved. The store then mints one process-local, cancellable provider handoff
 for the exact operation. Re-entry cannot obtain a second handoff. Cancellation
@@ -512,60 +565,146 @@ retires that authority before the row becomes retryable again and wins over a
 late response.
 
 On a recoverable failure, the same root mutation clears `retryOperation`, keeps
-the audio, and records the mapped category and actual failed stage. A setup
-failure before reservation changes nothing. A nonrecoverable or unmappable
-runtime outcome clears the operation and retains the row's previous durable
-category rather than inventing one. Current audio and setup validation still
-govern whether another explicit Retry is available; Delete follows the normal
-local cleanup contract.
+the audio, records the mapped category and actual failed stage, and advances
+`updatedAt` to the canonical completion time. A setup failure before reservation
+changes nothing. Cancellation and a nonrecoverable or unmappable runtime
+outcome clear the operation and preserve both the row's previous durable
+category and previous durable stage rather than inventing either. Same-process
+cancellation may advance `updatedAt`; provider-free process-loss cancellation
+preserves it. Current audio and setup validation still govern whether another
+explicit Retry is available; Delete follows the normal local cleanup contract.
+
+Cancellation and provider completion race only in the stable live-owner state.
+Cancellation first retires the exact provider authority, then reacquires the
+root gate to clear the durable operation. A noncooperative late response from
+that retired epoch has no acceptance or mutation authority. Once
+`acceptingOutput` is durable, provider cancellation is no longer available;
+remaining work is local accepted-output recovery. Every provider and
+Translation boundary has an explicit timeout. Timeout cancels the exact task
+and records `timedOut` at the stage that was active only after that task is no
+longer provider-capable.
 
 On process loss, lifecycle recovery never resumes `reserved` or
-`providerDispatched` work. It cancels the durable operation locally and keeps
-the row available for a new explicit Retry with new identities. For
-`acceptingOutput`, recovery first checks the exact accepted-output delivery
-identity: a matching durable delivery authorizes success cleanup; absence keeps
-the failed row and clears the interrupted operation; unrelated, corrupt, or
-unavailable delivery state fails closed.
+`providerDispatched` work. A new idle process context cancels the durable
+operation locally and keeps the row available for a new explicit Retry with new
+identities. The ended minting lease alone is never sufficient evidence while
+the original stable live-owner registration still exists.
+
+For `acceptingOutput`, recovery classifies the exact accepted-output slot under
+the failed/delivery interlock:
+
+- a byte- and identity-matching retry delivery is durable success proof;
+- a strictly proved missing slot is absence of the retry delivery;
+- a wholly unrelated record that matches none of the retry's preallocated
+  identities is the interlock-frozen predecessor and also proves absence of the
+  retry delivery;
+- any partial identity match, substituted predecessor, corrupt or future
+  value, unavailable protection, foreign root, or uncertain observation fails
+  closed.
+
+Missing or frozen-predecessor proof clears the interrupted operation and keeps
+the failed row and audio. A matching delivery enters only the exact local
+success-recovery path below. A caller-provided delivery ID or unrelated-record
+assertion is never absence proof.
 
 After the requested Transcription or Translation produces accepted text, the
-coordinator sets `acceptingOutput` and commits that text through the existing
-accepted-output/accepted-History coordinator using the preallocated identities,
-the row's output intent, automatic insertion disabled, and the current
-Keep Latest Result preference. Delivery commit is the provider-replay boundary.
-Only a matching durable delivery receipt may atomically move the failed row to
-audio cleanup. Accepted-output uncertainty is resumed or confirmed with the
-same preparation in process; it never triggers a second provider request.
+coordinator reacquires the root gate and sets `acceptingOutput`. That durable
+transition freezes the exact current delivery slot as either missing or one
+fully observed predecessor and activates the delivery interlock before the gate
+is released. The coordinator then commits the text through an exact Retry branch
+of the existing accepted-output/accepted-History coordinator using the
+preallocated identities, the row's output intent, automatic insertion disabled,
+and the frozen Keep Latest Result preference. Generic acceptance is not allowed
+to consume this relation. Delivery commit is the provider-replay boundary.
+Accepted-output uncertainty is resumed or confirmed with the same preparation
+in process; it never triggers a second provider request.
 
-The durable `acceptingOutput` relation protects a matching committed delivery
-until that row-to-tombstone transition finishes. Under the shared root gate,
-delivery replacement, explicit clear, expiry removal, bridge publication, and
-any other mutation that could remove or supersede the matching record must
-first prove from the failed store that no such relation exists, or consume the
-exact delivery receipt while retiring the failed row. Caller assertions and
-process-local reservations are insufficient. If the failed store is corrupt,
-unavailable, foreign, or uncertain, the matching delivery remains protected
-and later accepted output fails closed rather than losing the only durable
-success proof. After process loss, a matching delivery therefore still proves
-success; confirmed absence is safe only because every compatible removal path
-enforces this interlock.
+The failed row remains `acceptingOutput` until the matching delivery's History
+marker is terminal: `committed` after an exact retained-or-not-retained row
+decision, or `cancelled` by exact newer-policy authority. In particular, an
+ordinary `pending` marker may not lose the failed row after process loss. The
+combined durable failed-row/delivery relation is store-minted replay provenance
+for exactly one matching absent-row History decision; it grants no authority
+for an unrelated delivery, row, generation, or caller reconstruction. Existing
+`pendingReplacement` recovery keeps its narrower replacement provenance.
+
+Only a matching durability-confirmed delivery, terminal History marker, and
+the exact failed-row relation may atomically remove the failed row and append
+its pre-authorized audio-cleanup tombstone. The reservation-time free-slot proof
+guarantees capacity. This mutation never unlinks audio. Commit uncertainty
+protects the delivery and resumes only the same row-to-tombstone outcome.
+
+The durable `acceptingOutput` relation protects its frozen slot and any matching
+committed delivery until the row-to-tombstone transition finishes. Delivery
+acceptance/replacement, explicit clear, expiry removal, Keep Latest cleanup,
+History marker mutation, bridge reservation/publication, and any other mutation
+that could change, remove, expose, or supersede that slot must first obtain a
+store-minted failed-relation disposition under an active root lease. Ordinary
+work requires exact relation absence. Only the matching Retry acceptance and
+History-recovery paths may consume the positive relation. Caller assertions,
+process-local delivery reservations, and an ID lookup are insufficient.
+
+If the failed store is corrupt, unavailable, foreign, future, or uncertain,
+the frozen slot and matching delivery remain protected and later accepted
+output fails closed rather than losing the only durable success proof. After
+process loss, a matching delivery therefore still proves success; confirmed
+absence or a wholly unrelated frozen predecessor is safe only because every
+compatible mutation enforces this interlock.
+
+A live external provider owner blocks a Clear, Disable, or state-changing
+Enable before the policy boundary. Once provider work has ended and
+`acceptingOutput` is durable, policy cutover may proceed only through this exact
+delivery relation. It first makes a matching unresolved History marker terminal
+with the committed newer-policy receipt, or clears the operation from exact
+retry-delivery absence. A later bounded pass moves the terminal-success row to
+its tombstone. It never applies generic process-lost cancellation to
+`acceptingOutput`, repeats provider work, or advances policy generation again.
 
 A release that writes `retryOperation` is no-downgrade to a binary that does
 not enforce this delivery protection. Downgrade cannot be used as a cleanup or
 recovery path.
 
-Usage bookkeeping remains independent. A successful audio transcription is
-recorded once under its retry `transcriptionID` even if Translation or later
-accepted-output work fails. Clear History never clears Usage.
+Usage bookkeeping remains independent. After successful audio transcription,
+the coordinator makes one idempotent recording attempt under the retry's
+`transcriptionID`; a duplicate is success. Translation consumes only the
+transient transcription and commits only its final translated text. A Usage
+storage error is non-authoritative: it cannot change the failed row, turn a
+successful provider result into failure, block Translation or accepted output,
+or cause provider replay. C4.4 adds no Usage retry queue. Clear History never
+clears Usage.
+
+### C4.4 Checkpoint Slices
+
+The explicit Retry checkpoint is split without weakening any intermediate
+boundary:
+
+1. **C4.4A — reservation and live ownership:** durable `reserved` and
+   `providerDispatched` mutations, free-tombstone admission, stable root-shared
+   live-owner epochs, Pending-provider exclusion, one-shot dispatch, and exact
+   cancellation;
+2. **C4.4B — provider outcomes:** descriptor-backed Transcription, transient
+   Translation, timeout and error mapping, retry-count idempotency, late-result
+   rejection, and non-authoritative Usage recording;
+3. **C4.4C — accepted-output handoff:** `acceptingOutput`, frozen predecessor,
+   failed/delivery interlock on every delivery mutation, exact Retry acceptance,
+   terminal History provenance, and row-to-tombstone success;
+4. **C4.4D — recovery and integration:** process loss in every durable state,
+   wholly unrelated predecessor versus partial collision, policy-cutover
+   continuation, retained uncertainty, relaunch tests, and full regression
+   evidence.
 
 ## Coordination And Isolation
 
 - Failed transfer, Delete, retention, cleanup, Retry, accepted-output success,
   and policy cutover share one expected production-root operation gate and
-  baseline identity with the existing History coordinator.
+  baseline identity with the existing History coordinator. Provider requests
+  run outside that gate only after their durable dispatch boundary; every
+  surrounding store transition reacquires it.
 - A live pending provider handoff, failed-row retry, accepted-output acceptance,
   outbox worker, policy cutover, or audio-ownership transition excludes
   conflicting work. Same-operation uncertainty may resume only its exact
-  retained phase.
+  retained phase. Root-shared Pending and failed-Retry registrations enforce
+  provider mutual exclusion across the outside-gate interval.
 - Every delivery mutation checks the failed store for the exact
   `acceptingOutput` relation under that lease. Failed-row success cleanup and
   matching delivery proof are one coordinated transaction boundary; neither
@@ -591,8 +730,13 @@ accepted-output work fails. Clear History never clears Usage.
 - No recoverable audio is removed before exact durable cleanup ownership exists.
 - No provider call occurs during load, policy cleanup, transfer reconciliation,
   deletion cleanup, or relaunch recovery.
+- A failed-row provider call begins only after durable `providerDispatched`,
+  runs outside the root gate under one stable process-local owner epoch, and
+  cannot overlap a PendingRecording provider owner.
 - No failed row is added while History is disabled or against an unconfirmed
   policy generation.
+- Retry never reserves without capacity for its success tombstone, and a failed
+  row never leaves `acceptingOutput` before matching History is terminal.
 - A failed-row Retry cannot automatically insert text into an arbitrary field.
 - Clear and Disable cannot restore, replay, or expose old failed work and do not
   remove settings, credentials, Usage, Latest Result, current pending work, or
@@ -626,15 +770,25 @@ accepted-output work fails. Clear History never clears Usage.
 - Test that `pendingJournalRetirement` stays in the failed root until the
   redundant pending journal is durably absent, including cutover and process
   loss, and that no tombstone is expected to recover journal authority.
-- Test Retry setup rejection, reservation, one-shot dispatch, retry-count
-  idempotency, cancellation before and after launch, noncooperative late
-  results, Transcription and Translation success/failure, fresh settings,
-  automatic insertion off, accepted-delivery uncertainty, exact success
-  cleanup, process loss in each durable state, and no automatic provider call.
+- Test Retry setup rejection, tombstone-full rejection, distinct provider/Usage
+  and final-transcript identities, reservation, durable dispatch before launch,
+  retry-count idempotency, and provider execution outside the root gate.
+  Prove that one stable owner survives its minting lease, excludes a Pending
+  provider in both directions, and that only a new idle process context permits
+  process-loss cancellation.
+- Test cancellation before and after launch, cancellation/completion races,
+  stale-owner completion against a newer Retry, noncooperative late results,
+  bounded timeout, Transcription and Translation success/failure, fresh frozen
+  settings, automatic insertion off, preserved category and stage for cancel or
+  unmappable outcomes, non-authoritative Usage failure, and no automatic
+  provider call after process loss.
 - Test that a matching `acceptingOutput` delivery blocks replacement, Clear
-  Latest, expiry, bridge publication, and every other removal path across
-  process loss; exact success cleanup releases the interlock, while failed-store
-  corruption or uncertainty preserves the delivery.
+  Latest, expiry, bridge publication, and every other generic delivery mutation
+  across process loss. Cover a missing slot, a wholly unrelated frozen
+  predecessor, every partial identity collision, and failed-store corruption or
+  uncertainty. Prove that ordinary `pending` gains absent-row replay authority
+  only from the exact durable failed relation, the failed row survives until a
+  terminal History marker, and exact success cleanup releases the interlock.
 - Run strict-concurrency package tests, the full macOS suite, iOS simulator
   build/tests, public symbol-graph review, and keyboard binary linkage checks.
   Signed-device QA owns effective Complete protection while locked and actual
