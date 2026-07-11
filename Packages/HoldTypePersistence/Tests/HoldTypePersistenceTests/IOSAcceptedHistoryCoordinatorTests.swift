@@ -41,6 +41,7 @@ struct IOSAcceptedHistoryCoordinatorTests {
         #expect(first === symlinkAlias)
         #expect(first.policyStore === sameRoot.policyStore)
         #expect(first.acceptedHistoryStore === sameRoot.acceptedHistoryStore)
+        #expect(first.failedHistoryStore === sameRoot.failedHistoryStore)
         #expect(first.outboxStore === sameRoot.outboxStore)
         #expect(first.deliveryStore === sameRoot.deliveryStore)
         #expect(
@@ -58,6 +59,10 @@ struct IOSAcceptedHistoryCoordinatorTests {
         #expect(first.ownerIdentity == sameRoot.ownerIdentity)
         #expect(first !== differentRoot)
         #expect(first.ownerIdentity != differentRoot.ownerIdentity)
+        #expect(
+            first.failedHistoryStore.capabilityOwnerIdentity
+                == first.ownerIdentity
+        )
         let renderedBinding = String(describing: binding)
             + String(reflecting: binding)
             + String(describing: Mirror(reflecting: binding))
@@ -1079,6 +1084,7 @@ struct IOSAcceptedHistoryCoordinatorTests {
         let mixed = IOSAcceptedHistoryCoordinator(
             policyStore: first.policyStore,
             acceptedHistoryStore: first.acceptedHistoryStore,
+            failedHistoryStore: first.failedHistoryStore,
             outboxStore: first.outboxStore,
             deliveryStore: second.deliveryStore,
             operationGate: IOSPersistenceOperationGate(),
@@ -1119,6 +1125,47 @@ struct IOSAcceptedHistoryCoordinatorTests {
         #expect(second.delivery.createCount == 0)
     }
 
+    @Test func foreignFailedHistoryStorePoisonsCoordinatorBeforeAnyStoreIO()
+        async throws {
+        let first = CoordinatorFixture()
+        let second = CoordinatorFixture()
+        let identityState =
+            IOSAcceptedHistoryCoordinatorRepositoryIdentityState()
+        let mixed = IOSAcceptedHistoryCoordinator(
+            policyStore: first.policyStore,
+            acceptedHistoryStore: first.acceptedHistoryStore,
+            failedHistoryStore: second.failedHistoryStore,
+            outboxStore: first.outboxStore,
+            deliveryStore: first.deliveryStore,
+            operationGate: IOSPersistenceOperationGate(),
+            acceptanceState: IOSAcceptedHistoryAcceptanceOperationState(),
+            ownerIdentity: first.ownerIdentity,
+            repositoryIdentityState: identityState
+        )
+        let policyLoads = first.policy.loadCount
+        let acceptedLoads = first.accepted.loadCount
+        let outboxLoads = first.outbox.loadCount
+        let deliveryLoads = first.delivery.loadCount
+        let failedEvents = second.failedHistoryFileSystem.events
+
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.repositoryIdentityConflict
+        ) {
+            _ = try await mixed.capture(
+                transcriptionModel: "model",
+                transcriptionLanguageCode: nil,
+                durationMilliseconds: nil
+            )
+        }
+
+        #expect(identityState.isConflicted)
+        #expect(first.policy.loadCount == policyLoads)
+        #expect(first.accepted.loadCount == acceptedLoads)
+        #expect(first.outbox.loadCount == outboxLoads)
+        #expect(first.delivery.loadCount == deliveryLoads)
+        #expect(second.failedHistoryFileSystem.events == failedEvents)
+    }
+
     @Test func mixedGuardedBaselineEvidenceCannotComposeAuthority()
         async throws {
         let first = CoordinatorFixture()
@@ -1127,6 +1174,8 @@ struct IOSAcceptedHistoryCoordinatorTests {
             .proveGuardedBaseline()
         let outbox = try await second.outboxStore.proveGuardedBaseline()
         let delivery = try await first.deliveryStore.proveGuardedBaseline()
+        let failedHistory = try await first.failedHistoryStore
+            .proveGuardedBaseline()
         let firstAcceptedLoads = first.accepted.loadCount
         let secondOutboxLoads = second.outbox.loadCount
         let firstDeliveryLoads = first.delivery.loadCount
@@ -1135,13 +1184,62 @@ struct IOSAcceptedHistoryCoordinatorTests {
             _ = try IOSHistoryPolicyBaselineAuthorization(
                 acceptedHistory: accepted,
                 outbox: outbox,
-                delivery: delivery
+                delivery: delivery,
+                failedHistory: failedHistory
             )
         }
 
         #expect(first.accepted.loadCount == firstAcceptedLoads)
         #expect(second.outbox.loadCount == secondOutboxLoads)
         #expect(first.delivery.loadCount == firstDeliveryLoads)
+    }
+
+    @Test func guardedBaselineRejectsNonemptyFailedHistoryBeforePolicyCreate()
+        async throws {
+        let fixture = CoordinatorFixture()
+        let envelope = try IOSFailedHistoryEnvelope(
+            revision: 1,
+            entries: [try failedHistoryTestEntry()],
+            audioCleanup: []
+        )
+        fixture.failedHistoryFileSystem.install(
+            try IOSFailedHistoryWireCodec.encode(envelope)
+        )
+
+        await #expect(throws: IOSFailedHistoryError.compareAndSwapFailed) {
+            _ = try await fixture.coordinator().capture(
+                transcriptionModel: "model",
+                transcriptionLanguageCode: nil,
+                durationMilliseconds: nil
+            )
+        }
+        #expect(fixture.policy.createCount == 0)
+        #expect(
+            try IOSFailedHistoryWireCodec.decode(
+                fixture.failedHistoryFileSystem.file!.data
+            ) == envelope
+        )
+    }
+
+    @Test func foreignFailedHistoryBaselineEvidenceCannotComposeAuthority()
+        async throws {
+        let first = CoordinatorFixture()
+        let second = CoordinatorFixture()
+        let accepted = try await first.acceptedHistoryStore
+            .proveGuardedBaseline()
+        let outbox = try await first.outboxStore.proveGuardedBaseline()
+        let delivery = try await first.deliveryStore.proveGuardedBaseline()
+        let failedHistory = try await second.failedHistoryStore
+            .proveGuardedBaseline()
+
+        #expect(throws: IOSHistoryPolicyError.compareAndSwapFailed) {
+            _ = try IOSHistoryPolicyBaselineAuthorization(
+                acceptedHistory: accepted,
+                outbox: outbox,
+                delivery: delivery,
+                failedHistory: failedHistory
+            )
+        }
     }
 
     @Test func mismatchedDeliveryStoreIdentityPoisonsCoordinatorBeforeIO()
@@ -1164,6 +1262,7 @@ struct IOSAcceptedHistoryCoordinatorTests {
         let coordinator = IOSAcceptedHistoryCoordinator(
             policyStore: fixture.policyStore,
             acceptedHistoryStore: fixture.acceptedHistoryStore,
+            failedHistoryStore: fixture.failedHistoryStore,
             outboxStore: fixture.outboxStore,
             deliveryStore: mismatchedDeliveryStore,
             operationGate: IOSPersistenceOperationGate(),
@@ -6664,6 +6763,8 @@ private final class CoordinatorFixture: @unchecked Sendable {
     let clock: CoordinatorClock
     let policyStore: IOSHistoryPolicyStore
     let acceptedHistoryStore: IOSAcceptedHistoryStore
+    let failedHistoryFileSystem = FailedHistoryFakeFileSystem()
+    let failedHistoryStore: IOSFailedHistoryStore
     let outboxStore: IOSAcceptedHistoryOutboxStore
     let deliveryStore: IOSAcceptedOutputDeliveryStore
     let repositoryIdentityState:
@@ -6699,6 +6800,13 @@ private final class CoordinatorFixture: @unchecked Sendable {
             now: { clock.now },
             capabilityOwnerIdentity: ownerIdentity
         )
+        failedHistoryStore = IOSFailedHistoryStore(
+            journal: FoundationIOSFailedHistoryJournalRepository(
+                fileSystem: failedHistoryFileSystem
+            ),
+            capabilityOwnerIdentity: ownerIdentity,
+            now: { clock.now }
+        )
         outboxStore = IOSAcceptedHistoryOutboxStore(
             journal: outbox,
             now: { clock.now },
@@ -6720,6 +6828,7 @@ private final class CoordinatorFixture: @unchecked Sendable {
         IOSAcceptedHistoryCoordinator(
             policyStore: policyStore,
             acceptedHistoryStore: acceptedHistoryStore,
+            failedHistoryStore: failedHistoryStore,
             outboxStore: outboxStore,
             deliveryStore: deliveryStore,
             operationGate: gate,
@@ -6748,6 +6857,13 @@ private final class CoordinatorFixture: @unchecked Sendable {
                 journal: accepted,
                 now: { [clock] in clock.now },
                 capabilityOwnerIdentity: capabilityOwnerIdentity
+            ),
+            failedHistoryStore: IOSFailedHistoryStore(
+                journal: FoundationIOSFailedHistoryJournalRepository(
+                    fileSystem: failedHistoryFileSystem
+                ),
+                capabilityOwnerIdentity: capabilityOwnerIdentity,
+                now: { [clock] in clock.now }
             ),
             outboxStore: IOSAcceptedHistoryOutboxStore(
                 journal: outbox,

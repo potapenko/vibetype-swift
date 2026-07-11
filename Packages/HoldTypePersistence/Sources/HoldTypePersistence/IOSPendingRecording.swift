@@ -540,6 +540,8 @@ extension IOSPendingRecordingError: CustomStringConvertible,
 enum IOSPendingRecordingValidation {
     static let maximumAudioByteCountExclusive: Int64 = 25_000_000
     static let maximumDurationMillisecondsExclusive: Int64 = 300_000
+    static let maximumModelByteCount =
+        IOSAcceptedOutputDeliveryValidation.maximumModelByteCount
 
     static func durationMilliseconds(from duration: TimeInterval) throws -> Int64 {
         guard duration.isFinite,
@@ -569,7 +571,15 @@ enum IOSPendingRecordingValidation {
     }
 
     static func isValidModel(_ value: String) -> Bool {
-        !value.isEmpty && value == value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let normalized = IOSAcceptedOutputDeliveryValidation
+            .normalizedMetadataText(value) else {
+            return false
+        }
+        return value.utf8.count <= maximumModelByteCount
+            && IOSAcceptedOutputDeliveryValidation.bytesEqual(
+                normalized,
+                value
+            )
     }
 
     static func isValidLanguageCode(_ value: String?) -> Bool {

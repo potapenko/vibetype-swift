@@ -168,7 +168,8 @@ Each of at most five failed entries contains exactly:
 
 The optional language and retry operation use explicit JSON `null`. Timestamps
 are canonical integral Unix milliseconds. IDs are lowercase canonical UUIDs.
-Model and language bounds match the protected pending-recording contract.
+Model and language bounds match the protected pending-recording and accepted
+output contracts; the model is at most 256 bytes in UTF-8.
 Duration, byte count, attempt ID, format, and relative identifier must match
 the exact validated protected artifact. An entry never contains an absolute
 URL. `policyGeneration` is positive, `createdAt <= updatedAt`, and retry count
@@ -178,7 +179,8 @@ count overflow fails before mutation rather than wrapping or pruning data.
 `ownershipState` is either:
 
 - `pendingJournalRetirement` — the row is durable and canonical, but the old
-  `PendingRecording` metadata has not yet been proved absent;
+  `PendingRecording` metadata has not yet been proved absent; its retry count
+  is zero and it has no retry operation;
 - `ready` — the failed row is the sole durable metadata owner of its audio.
 
 Rows are presented newest-first by `createdAt`, then canonical `attemptID` for
@@ -196,7 +198,9 @@ Each of at most five `audioCleanup` tombstones contains exactly:
 
 A tombstone contains no failure category, model, language, retry operation, or
 accepted text. It is the sole authority to remove that exact attempt-scoped
-audio after a row becomes unavailable.
+audio after a row becomes unavailable. Tombstones are stored oldest `queuedAt`
+first, then by canonical `attemptID`, so every cleanup pass selects the same
+head.
 
 There is no automatic import from the macOS failure store, legacy absolute
 paths, UserDefaults, external files, or App Group records. Any future migration

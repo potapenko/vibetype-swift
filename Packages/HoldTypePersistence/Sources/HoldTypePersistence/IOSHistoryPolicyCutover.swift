@@ -146,6 +146,7 @@ public extension IOSAcceptedHistoryCoordinator {
         async throws -> IOSHistoryPolicyCleanupDisposition {
         let policyStore = policyStore
         let acceptedHistoryStore = acceptedHistoryStore
+        let failedHistoryStore = failedHistoryStore
         let outboxStore = outboxStore
         let deliveryStore = deliveryStore
         let baselineRecoveryState = baselineRecoveryState
@@ -193,6 +194,7 @@ public extension IOSAcceptedHistoryCoordinator {
                                 retained,
                                 policyStore: policyStore,
                                 acceptedHistoryStore: acceptedHistoryStore,
+                                failedHistoryStore: failedHistoryStore,
                                 outboxStore: outboxStore,
                                 deliveryStore: deliveryStore,
                                 baselineRecoveryState: baselineRecoveryState,
@@ -246,6 +248,7 @@ public extension IOSAcceptedHistoryCoordinator {
                             initial,
                             policyStore: policyStore,
                             acceptedHistoryStore: acceptedHistoryStore,
+                            failedHistoryStore: failedHistoryStore,
                             outboxStore: outboxStore,
                             deliveryStore: deliveryStore,
                             baselineRecoveryState: baselineRecoveryState,
@@ -298,6 +301,7 @@ private extension IOSAcceptedHistoryCoordinator {
     ) async throws -> IOSHistoryPolicyCleanupDisposition {
         let policyStore = policyStore
         let acceptedHistoryStore = acceptedHistoryStore
+        let failedHistoryStore = failedHistoryStore
         let outboxStore = outboxStore
         let deliveryStore = deliveryStore
         let baselineRecoveryState = baselineRecoveryState
@@ -390,6 +394,7 @@ private extension IOSAcceptedHistoryCoordinator {
                     work,
                     policyStore: policyStore,
                     acceptedHistoryStore: acceptedHistoryStore,
+                    failedHistoryStore: failedHistoryStore,
                     outboxStore: outboxStore,
                     deliveryStore: deliveryStore,
                     baselineRecoveryState: baselineRecoveryState,
@@ -434,6 +439,7 @@ private extension IOSAcceptedHistoryCoordinator {
         _ initialWork: IOSHistoryPolicyCutoverWork,
         policyStore: IOSHistoryPolicyStore,
         acceptedHistoryStore: IOSAcceptedHistoryStore,
+        failedHistoryStore: IOSFailedHistoryStore,
         outboxStore: IOSAcceptedHistoryOutboxStore,
         deliveryStore: IOSAcceptedOutputDeliveryStore,
         baselineRecoveryState: IOSAcceptedHistoryBaselineRecoveryState,
@@ -474,6 +480,7 @@ private extension IOSAcceptedHistoryCoordinator {
                     let receipt = try await confirmedPolicyReceipt(
                         policyStore: policyStore,
                         acceptedHistoryStore: acceptedHistoryStore,
+                        failedHistoryStore: failedHistoryStore,
                         outboxStore: outboxStore,
                         deliveryStore: deliveryStore,
                         baselineRecoveryState: baselineRecoveryState
@@ -575,6 +582,7 @@ private extension IOSAcceptedHistoryCoordinator {
     static func confirmedPolicyReceipt(
         policyStore: IOSHistoryPolicyStore,
         acceptedHistoryStore: IOSAcceptedHistoryStore,
+        failedHistoryStore: IOSFailedHistoryStore,
         outboxStore: IOSAcceptedHistoryOutboxStore,
         deliveryStore: IOSAcceptedOutputDeliveryStore,
         baselineRecoveryState: IOSAcceptedHistoryBaselineRecoveryState
@@ -585,6 +593,7 @@ private extension IOSAcceptedHistoryCoordinator {
             receipt = try await establishGuardedBaseline(
                 policyStore: policyStore,
                 acceptedHistoryStore: acceptedHistoryStore,
+                failedHistoryStore: failedHistoryStore,
                 outboxStore: outboxStore,
                 deliveryStore: deliveryStore,
                 isRecovery: true
@@ -597,6 +606,7 @@ private extension IOSAcceptedHistoryCoordinator {
             receipt = try await establishGuardedBaseline(
                 policyStore: policyStore,
                 acceptedHistoryStore: acceptedHistoryStore,
+                failedHistoryStore: failedHistoryStore,
                 outboxStore: outboxStore,
                 deliveryStore: deliveryStore,
                 isRecovery: false

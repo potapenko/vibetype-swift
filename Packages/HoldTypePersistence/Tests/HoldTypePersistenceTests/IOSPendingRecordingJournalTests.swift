@@ -25,6 +25,29 @@ struct IOSPendingRecordingJournalTests {
         requireSendable(FoundationIOSPendingRecordingJournalRepository.self)
     }
 
+    @Test func maximumValidModelFitsTheCompleteJournalWireRecord() throws {
+        let model = String(
+            repeating: "m",
+            count: IOSPendingRecordingValidation.maximumModelByteCount
+        )
+        #expect(
+            IOSPendingRecordingValidation.maximumModelByteCount
+                == IOSAcceptedOutputDeliveryValidation.maximumModelByteCount
+        )
+
+        let recording = try fixtureRecording(transcriptionModel: model)
+        let encoded = try IOSPendingRecordingJournalWireCodec.encode(recording)
+
+        #expect(
+            encoded.count
+                <= FoundationIOSPendingRecordingJournalRepository
+                    .maximumJournalByteCount
+        )
+        #expect(
+            try IOSPendingRecordingJournalWireCodec.decode(encoded) == recording
+        )
+    }
+
     @Test func everyDurablePhaseUsesItsExactVersionedSpelling() throws {
         let transcriptionID = try #require(
             UUID(uuidString: "11111111-2222-4333-8444-555555555555")
@@ -883,6 +906,7 @@ private func fixtureRecording(
     transcriptionID: UUID? = nil,
     outputIntent: DictationOutputIntent = .standard,
     languageCode: String? = nil,
+    transcriptionModel: String = "gpt-4o-mini-transcribe",
     updatedAt: String = "2026-07-10T09:08:08.007Z"
 ) throws -> IOSPendingRecording {
     let attemptID = try #require(
@@ -899,7 +923,7 @@ private func fixtureRecording(
         phase: phase,
         outputIntent: outputIntent,
         transcriptionID: transcriptionID,
-        transcriptionModel: "gpt-4o-mini-transcribe",
+        transcriptionModel: transcriptionModel,
         transcriptionLanguageCode: languageCode,
         durationMilliseconds: 4_321,
         byteCount: 12_345

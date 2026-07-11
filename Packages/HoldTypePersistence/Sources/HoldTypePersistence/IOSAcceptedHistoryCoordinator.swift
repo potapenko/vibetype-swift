@@ -9,12 +9,15 @@ struct IOSHistoryPolicyBaselineAuthorization: Sendable {
     init(
         acceptedHistory: IOSAcceptedHistoryGuardedBaselineEvidence,
         outbox: IOSAcceptedHistoryOutboxGuardedBaselineEvidence,
-        delivery: IOSAcceptedOutputDeliveryGuardedBaselineEvidence
+        delivery: IOSAcceptedOutputDeliveryGuardedBaselineEvidence,
+        failedHistory: IOSFailedHistoryGuardedBaselineEvidence
     ) throws {
         guard acceptedHistory.capabilityOwnerIdentity
                 == outbox.capabilityOwnerIdentity,
               acceptedHistory.capabilityOwnerIdentity
-                == delivery.capabilityOwnerIdentity else {
+                == delivery.capabilityOwnerIdentity,
+              acceptedHistory.capabilityOwnerIdentity
+                == failedHistory.capabilityOwnerIdentity else {
             throw IOSHistoryPolicyError.compareAndSwapFailed
         }
         capabilityOwnerIdentity = acceptedHistory.capabilityOwnerIdentity
@@ -76,6 +79,7 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
     let applicationSupportDirectoryURL: URL
     let policyStore: IOSHistoryPolicyStore
     let acceptedHistoryStore: IOSAcceptedHistoryStore
+    let failedHistoryStore: IOSFailedHistoryStore
     let outboxStore: IOSAcceptedHistoryOutboxStore
     let deliveryStore: IOSAcceptedOutputDeliveryStore
     let baselineRecoveryState: IOSAcceptedHistoryBaselineRecoveryState
@@ -100,6 +104,10 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
             capabilityOwnerIdentity: capabilityOwnerIdentity
         )
         acceptedHistoryStore = IOSAcceptedHistoryStore(
+            applicationSupportDirectoryURL: applicationSupportDirectoryURL,
+            capabilityOwnerIdentity: capabilityOwnerIdentity
+        )
+        failedHistoryStore = IOSFailedHistoryStore(
             applicationSupportDirectoryURL: applicationSupportDirectoryURL,
             capabilityOwnerIdentity: capabilityOwnerIdentity
         )
@@ -581,6 +589,7 @@ public actor IOSAcceptedHistoryCoordinator {
 
     let policyStore: IOSHistoryPolicyStore
     let acceptedHistoryStore: IOSAcceptedHistoryStore
+    let failedHistoryStore: IOSFailedHistoryStore
     let outboxStore: IOSAcceptedHistoryOutboxStore
     let deliveryStore: IOSAcceptedOutputDeliveryStore
     let operationGate: IOSPersistenceOperationGate
@@ -611,6 +620,7 @@ public actor IOSAcceptedHistoryCoordinator {
             )
         policyStore = context.policyStore
         acceptedHistoryStore = context.acceptedHistoryStore
+        failedHistoryStore = context.failedHistoryStore
         outboxStore = context.outboxStore
         deliveryStore = context.deliveryStore
         self.operationGate = operationGate
@@ -636,6 +646,7 @@ public actor IOSAcceptedHistoryCoordinator {
     init(
         policyStore: IOSHistoryPolicyStore,
         acceptedHistoryStore: IOSAcceptedHistoryStore,
+        failedHistoryStore: IOSFailedHistoryStore,
         outboxStore: IOSAcceptedHistoryOutboxStore,
         deliveryStore: IOSAcceptedOutputDeliveryStore
     ) {
@@ -649,6 +660,7 @@ public actor IOSAcceptedHistoryCoordinator {
             deliveryStore.bindOperationGateIdentity(operationGate.identity)
         self.policyStore = policyStore
         self.acceptedHistoryStore = acceptedHistoryStore
+        self.failedHistoryStore = failedHistoryStore
         self.outboxStore = outboxStore
         self.deliveryStore = deliveryStore
         self.operationGate = operationGate
@@ -665,6 +677,8 @@ public actor IOSAcceptedHistoryCoordinator {
             || !deliveryGateBindingAccepted
             || acceptedHistoryStore.capabilityOwnerIdentity
                 != capabilityOwnerIdentity
+            || failedHistoryStore.capabilityOwnerIdentity
+                != capabilityOwnerIdentity
             || outboxStore.capabilityOwnerIdentity != capabilityOwnerIdentity
             || deliveryStore.capabilityOwnerIdentity
                 != capabilityOwnerIdentity
@@ -679,6 +693,7 @@ public actor IOSAcceptedHistoryCoordinator {
     init(
         policyStore: IOSHistoryPolicyStore,
         acceptedHistoryStore: IOSAcceptedHistoryStore,
+        failedHistoryStore: IOSFailedHistoryStore,
         outboxStore: IOSAcceptedHistoryOutboxStore,
         deliveryStore: IOSAcceptedOutputDeliveryStore,
         operationGate: IOSPersistenceOperationGate,
@@ -710,6 +725,7 @@ public actor IOSAcceptedHistoryCoordinator {
             deliveryStore.bindOperationGateIdentity(operationGate.identity)
         self.policyStore = policyStore
         self.acceptedHistoryStore = acceptedHistoryStore
+        self.failedHistoryStore = failedHistoryStore
         self.outboxStore = outboxStore
         self.deliveryStore = deliveryStore
         self.operationGate = operationGate
@@ -725,6 +741,8 @@ public actor IOSAcceptedHistoryCoordinator {
             || !deliveryGateBindingAccepted
             || policyStore.capabilityOwnerIdentity != capabilityOwnerIdentity
             || acceptedHistoryStore.capabilityOwnerIdentity
+                != capabilityOwnerIdentity
+            || failedHistoryStore.capabilityOwnerIdentity
                 != capabilityOwnerIdentity
             || outboxStore.capabilityOwnerIdentity != capabilityOwnerIdentity
             || deliveryStore.capabilityOwnerIdentity
@@ -750,6 +768,7 @@ public actor IOSAcceptedHistoryCoordinator {
         )
         let policyStore = policyStore
         let acceptedHistoryStore = acceptedHistoryStore
+        let failedHistoryStore = failedHistoryStore
         let outboxStore = outboxStore
         let deliveryStore = deliveryStore
         let baselineRecoveryState = baselineRecoveryState
@@ -784,6 +803,7 @@ public actor IOSAcceptedHistoryCoordinator {
                             receipt = try await Self.establishGuardedBaseline(
                                 policyStore: policyStore,
                                 acceptedHistoryStore: acceptedHistoryStore,
+                                failedHistoryStore: failedHistoryStore,
                                 outboxStore: outboxStore,
                                 deliveryStore: deliveryStore,
                                 isRecovery: true
@@ -798,6 +818,7 @@ public actor IOSAcceptedHistoryCoordinator {
                             receipt = try await Self.establishGuardedBaseline(
                                 policyStore: policyStore,
                                 acceptedHistoryStore: acceptedHistoryStore,
+                                failedHistoryStore: failedHistoryStore,
                                 outboxStore: outboxStore,
                                 deliveryStore: deliveryStore,
                                 isRecovery: false
@@ -864,18 +885,22 @@ extension IOSAcceptedHistoryCoordinator {
     static func establishGuardedBaseline(
         policyStore: IOSHistoryPolicyStore,
         acceptedHistoryStore: IOSAcceptedHistoryStore,
+        failedHistoryStore: IOSFailedHistoryStore,
         outboxStore: IOSAcceptedHistoryOutboxStore,
         deliveryStore: IOSAcceptedOutputDeliveryStore,
         isRecovery: Bool
     ) async throws -> IOSHistoryPolicyReceipt {
         let acceptedHistory = try await acceptedHistoryStore
             .proveGuardedBaseline()
+        let failedHistory = try await failedHistoryStore
+            .proveGuardedBaseline()
         let outbox = try await outboxStore.proveGuardedBaseline()
         let delivery = try await deliveryStore.proveGuardedBaseline()
         let authorization = try IOSHistoryPolicyBaselineAuthorization(
             acceptedHistory: acceptedHistory,
             outbox: outbox,
-            delivery: delivery
+            delivery: delivery,
+            failedHistory: failedHistory
         )
 
         do {

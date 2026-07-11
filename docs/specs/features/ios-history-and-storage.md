@@ -236,8 +236,9 @@ the provider multipart scratch namespace.
 The public runtime record is `Equatable`, `Sendable`, and non-Codable. It has
 exactly the attempt ID, relative audio identifier, creation and update dates,
 durable phase, output intent, optional transcription ID, resolved non-empty
-transcription model, optional resolved language code, integer duration in
-milliseconds, and byte count. The strict JSON v1 object contains
+trimmed transcription model of at most 256 bytes in UTF-8 using the accepted
+output metadata character contract, optional resolved language code, integer
+duration in milliseconds, and byte count. The strict JSON v1 object contains
 exactly `schemaVersion`, `attemptID`, `audioRelativeIdentifier`, `createdAt`,
 `updatedAt`, `phase`, `outputIntent`, `transcriptionID`,
 `transcriptionModel`, `transcriptionLanguageCode`, `durationMilliseconds`, and
