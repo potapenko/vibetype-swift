@@ -1,0 +1,100 @@
+{
+  "campaign": "HoldType Facebook square localization set",
+  "canvas": {
+    "width": 1254,
+    "height": 1254,
+    "format": "png"
+  },
+  "copyRules": {
+    "wordmark": "HOLDTYPE",
+    "terminalPeriods": false,
+    "brandTokens": [
+      "HoldType",
+      "OpenAI",
+      "Mac"
+    ]
+  },
+  "locales": {
+    "en": {
+      "file": "holdtype-facebook-square-en.png",
+      "headline": ["BRAND-NEW", "BLAZING-FAST"],
+      "action": "HOLD, SPEAK, RELEASE",
+      "stack": ["NATIVE", "MAC", "DICTATION", "TOOL"],
+      "badge": "FREE APP",
+      "billing": "YOU PAY OPENAI DIRECTLY"
+    },
+    "es": {
+      "file": "holdtype-facebook-square-es.png",
+      "headline": ["TOTALMENTE NUEVA", "ULTRARRÁPIDA"],
+      "action": "MANTÉN PULSADO, HABLA, SUELTA",
+      "stack": ["HERRAMIENTA", "DE DICTADO", "NATIVA", "PARA Mac"],
+      "badge": "APP GRATIS",
+      "billing": "PAGAS DIRECTAMENTE A OpenAI"
+    },
+    "de": {
+      "file": "holdtype-facebook-square-de.png",
+      "headline": ["BRANDNEU", "BLITZSCHNELL"],
+      "action": "GEDRÜCKT HALTEN, SPRECHEN, LOSLASSEN",
+      "stack": ["NATIVES", "DIKTIER-TOOL", "FÜR Mac"],
+      "badge": "KOSTENLOSE APP",
+      "billing": "DU ZAHLST DIREKT AN OpenAI"
+    },
+    "fr": {
+      "file": "holdtype-facebook-square-fr.png",
+      "headline": ["TOUT NOUVEAU", "ULTRA-RAPIDE"],
+      "action": "MAINTENEZ, PARLEZ, RELÂCHEZ",
+      "stack": ["OUTIL", "DE DICTÉE", "NATIF", "POUR Mac"],
+      "badge": "APPLI GRATUITE",
+      "billing": "VOUS PAYEZ DIRECTEMENT OpenAI"
+    },
+    "pt-BR": {
+      "file": "holdtype-facebook-square-pt-br.png",
+      "headline": ["NOVÍSSIMA", "ULTRARRÁPIDA"],
+      "action": "SEGURE, FALE, SOLTE",
+      "stack": ["FERRAMENTA", "DE DITADO", "NATIVA", "PARA Mac"],
+      "badge": "APP GRÁTIS",
+      "billing": "VOCÊ PAGA DIRETO À OpenAI"
+    },
+    "ja": {
+      "file": "holdtype-facebook-square-ja.png",
+      "headline": ["まったく新しい", "驚くほど速い"],
+      "action": "押す、話す、離す",
+      "stack": ["Macネイティブの", "音声入力", "ツール"],
+      "badge": "無料アプリ",
+      "billing": "OpenAIに直接支払い"
+    },
+    "zh-Hans": {
+      "file": "holdtype-facebook-square-zh-hans.png",
+      "headline": ["全新", "极速"],
+      "action": "按住、说话、松开",
+      "stack": ["原生 Mac", "语音输入", "工具"],
+      "badge": "免费应用",
+      "billing": "直接向 OpenAI 付费"
+    },
+    "ko": {
+      "file": "holdtype-facebook-square-ko.png",
+      "headline": ["완전히 새로운", "놀랍도록 빠른"],
+      "action": "누르기, 말하기, 놓기",
+      "stack": ["Mac 네이티브", "음성 입력", "도구"],
+      "badge": "무료 앱",
+      "billing": "OpenAI에 직접 결제"
+    },
+    "ru": {
+      "file": "holdtype-facebook-square-ru.png",
+      "headline": ["СОВЕРШЕННО НОВОЕ", "МОЛНИЕНОСНО БЫСТРОЕ"],
+      "action": "ЗАЖМИТЕ, ГОВОРИТЕ, ОТПУСТИТЕ",
+      "stack": ["НАТИВНОЕ", "ПРИЛОЖЕНИЕ", "ДЛЯ ДИКТОВКИ", "НА Mac"],
+      "badge": "БЕСПЛАТНОЕ ПРИЛОЖЕНИЕ",
+      "billing": "ВЫ ПЛАТИТЕ OpenAI НАПРЯМУЮ"
+    },
+    "ar": {
+      "file": "holdtype-facebook-square-ar.png",
+      "direction": "rtl",
+      "headline": ["جديدة كليًا", "فائقة السرعة"],
+      "action": "اضغط مطولًا، تحدّث، اترك المفتاح",
+      "stack": ["أداة إملاء", "أصلية", "لنظام Mac"],
+      "badge": "تطبيق مجاني",
+      "billing": "تدفع مباشرةً إلى OpenAI"
+    }
+  }
+}
