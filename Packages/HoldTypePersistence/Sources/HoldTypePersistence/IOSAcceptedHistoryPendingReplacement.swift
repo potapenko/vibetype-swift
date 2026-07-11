@@ -86,6 +86,8 @@ extension IOSAcceptedHistoryCoordinator {
         outboxStore: IOSAcceptedHistoryOutboxStore,
         deliveryStore: IOSAcceptedOutputDeliveryStore,
         replacementState: IOSAcceptedHistoryPendingReplacementOperationState,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization,
         ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity
     ) async throws -> IOSAcceptedOutputDeliveryAcceptance {
         var work = initialWork
@@ -132,11 +134,51 @@ extension IOSAcceptedHistoryCoordinator {
                         throw IOSAcceptedOutputDeliveryError.identityCollision
                     }
                     guard record.deliveryState != .discarded,
-                          record.historyWrite?.state.isPendingDecision
-                            == true else {
+                          let marker = record.historyWrite else {
                         work = work.replacingPhase(.acceptingReplacement)
                         await replacementState.store(work)
                         continue
+                    }
+                    guard marker.state.isPendingDecision else {
+                        let authorization = try await deliveryStore
+                            .confirmActiveHistoryRecovery(
+                                expected:
+                                    IOSAcceptedOutputDeliveryExpectation(
+                                        record: record
+                                    )
+                            )
+                        switch try await outboxStore.classifyDeliveryAbsence(
+                            authorization: authorization,
+                            operationLeaseAuthorization:
+                                operationLeaseAuthorization
+                        ) {
+                        case .absent(let absenceAuthorization):
+                            do {
+                                let acceptance = try await deliveryStore
+                                    .acceptForHistoryCoordinator(
+                                        work.preparation,
+                                        outboxAbsenceAuthorization:
+                                            absenceAuthorization,
+                                        operationLeaseAuthorization:
+                                            operationLeaseAuthorization
+                                    )
+                                await replacementState.clear()
+                                return acceptance
+                            } catch IOSAcceptedOutputDeliveryError
+                                .commitUncertain {
+                                await replacementState.clear()
+                                throw IOSAcceptedOutputDeliveryError
+                                    .commitUncertain
+                            }
+                        case .matching:
+                            await replacementState.clear()
+                            throw IOSAcceptedOutputDeliveryError
+                                .historyTransferRequired
+                        case .collision:
+                            await replacementState.clear()
+                            throw IOSAcceptedOutputDeliveryError
+                                .identityCollision
+                        }
                     }
                     do {
                         let authorization = try await deliveryStore

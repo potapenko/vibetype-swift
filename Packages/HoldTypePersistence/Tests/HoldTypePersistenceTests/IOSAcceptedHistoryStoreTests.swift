@@ -6,6 +6,8 @@ import Testing
 
 private let acceptedHistoryCapabilityOwnerIdentity =
     IOSAcceptedHistoryCapabilityOwnerIdentity()
+private let acceptedHistoryDeliveryStoreIdentity =
+    IOSAcceptedOutputDeliveryStoreIdentity()
 
 struct IOSAcceptedHistoryStoreTests {
     @Test func guardedBaselineAcceptsOnlyMissingOrValidEmptyState() async throws {
@@ -1927,6 +1929,8 @@ private func acceptedHistoryDeliveryAuthorization(
     acceptedText: String = "Accepted text",
     createdAt: Date = acceptedHistoryStoreDate(),
     historyState: IOSAcceptedOutputHistoryWriteState = .pending,
+    storeIdentity: IOSAcceptedOutputDeliveryStoreIdentity =
+        acceptedHistoryDeliveryStoreIdentity,
     capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity =
         acceptedHistoryCapabilityOwnerIdentity
 ) throws -> IOSAcceptedOutputDeliveryAuthorization {
@@ -1961,6 +1965,7 @@ private func acceptedHistoryDeliveryAuthorization(
                 testingToken: UInt64(index + 1)
             )
         ),
+        storeIdentity: storeIdentity,
         capabilityOwnerIdentity: capabilityOwnerIdentity
     )
 }
@@ -1976,6 +1981,7 @@ private func acceptedHistoryReauthorizedDelivery(
                 testingToken: fileRevisionToken
             )
         ),
+        storeIdentity: authorization.storeIdentity,
         capabilityOwnerIdentity: authorization.capabilityOwnerIdentity
     )
 }
@@ -2400,11 +2406,15 @@ private final class AcceptedHistoryTestClock: @unchecked Sendable {
 private final class AcceptedHistoryOutboxStoreFixture: @unchecked Sendable {
     let journal = AcceptedHistoryOutboxFakeJournal()
     let capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity
+    let deliveryStoreIdentity: IOSAcceptedOutputDeliveryStoreIdentity
 
     init(
+        deliveryStoreIdentity: IOSAcceptedOutputDeliveryStoreIdentity =
+            acceptedHistoryDeliveryStoreIdentity,
         capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity =
             acceptedHistoryCapabilityOwnerIdentity
     ) {
+        self.deliveryStoreIdentity = deliveryStoreIdentity
         self.capabilityOwnerIdentity = capabilityOwnerIdentity
     }
 
@@ -2413,6 +2423,7 @@ private final class AcceptedHistoryOutboxStoreFixture: @unchecked Sendable {
         now: {
             acceptedHistoryStoreDate().addingTimeInterval(60)
         },
+        deliveryStoreIdentity: deliveryStoreIdentity,
         capabilityOwnerIdentity: capabilityOwnerIdentity
     )
 }

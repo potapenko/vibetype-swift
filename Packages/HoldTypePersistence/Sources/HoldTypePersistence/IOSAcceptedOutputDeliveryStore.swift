@@ -483,8 +483,6 @@ public actor IOSAcceptedOutputDeliveryStore {
         let source: AcceptanceSource
         let intended: IOSAcceptedOutputDeliveryRecord
         let provenance: IOSAcceptedOutputDeliveryAcceptanceProvenance
-        let outboxAbsenceAuthorization:
-            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization?
 
         var intendedWasVisibleInSource: Bool {
             guard case .existing(let source) = source else { return false }
@@ -494,6 +492,10 @@ public actor IOSAcceptedOutputDeliveryStore {
 
     private let journal: any IOSAcceptedOutputDeliveryJournalStoring
     nonisolated let storeIdentity: IOSAcceptedOutputDeliveryStoreIdentity
+    nonisolated let outboxStoreIdentity:
+        IOSAcceptedHistoryOutboxStoreIdentity
+    private nonisolated let operationGateBinding:
+        IOSPersistenceOperationGateBinding
     private let now: @Sendable () -> Date
     private let monotonicNowNanoseconds: @Sendable () -> UInt64
 
@@ -514,8 +516,11 @@ public actor IOSAcceptedOutputDeliveryStore {
         applicationSupportDirectoryURL: URL,
         storeIdentity: IOSAcceptedOutputDeliveryStoreIdentity =
             IOSAcceptedOutputDeliveryStoreIdentity(),
+        outboxStoreIdentity: IOSAcceptedHistoryOutboxStoreIdentity =
+            IOSAcceptedHistoryOutboxStoreIdentity(),
         capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity =
-            IOSAcceptedHistoryCapabilityOwnerIdentity()
+            IOSAcceptedHistoryCapabilityOwnerIdentity(),
+        operationGateIdentity: IOSPersistenceOperationGateIdentity? = nil
     ) {
         journal = FoundationIOSAcceptedOutputDeliveryJournalRepository(
             applicationSupportDirectoryURL: applicationSupportDirectoryURL
@@ -523,7 +528,11 @@ public actor IOSAcceptedOutputDeliveryStore {
         now = { Date() }
         monotonicNowNanoseconds = { DispatchTime.now().uptimeNanoseconds }
         self.storeIdentity = storeIdentity
+        self.outboxStoreIdentity = outboxStoreIdentity
         self.capabilityOwnerIdentity = capabilityOwnerIdentity
+        operationGateBinding = IOSPersistenceOperationGateBinding(
+            identity: operationGateIdentity
+        )
     }
 
     init(
@@ -534,14 +543,27 @@ public actor IOSAcceptedOutputDeliveryStore {
         },
         storeIdentity: IOSAcceptedOutputDeliveryStoreIdentity =
             IOSAcceptedOutputDeliveryStoreIdentity(),
+        outboxStoreIdentity: IOSAcceptedHistoryOutboxStoreIdentity =
+            IOSAcceptedHistoryOutboxStoreIdentity(),
         capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity =
-            IOSAcceptedHistoryCapabilityOwnerIdentity()
+            IOSAcceptedHistoryCapabilityOwnerIdentity(),
+        operationGateIdentity: IOSPersistenceOperationGateIdentity? = nil
     ) {
         self.journal = journal
         self.storeIdentity = storeIdentity
+        self.outboxStoreIdentity = outboxStoreIdentity
         self.now = now
         self.monotonicNowNanoseconds = monotonicNowNanoseconds
         self.capabilityOwnerIdentity = capabilityOwnerIdentity
+        operationGateBinding = IOSPersistenceOperationGateBinding(
+            identity: operationGateIdentity
+        )
+    }
+
+    nonisolated func bindOperationGateIdentity(
+        _ identity: IOSPersistenceOperationGateIdentity
+    ) -> Bool {
+        operationGateBinding.bind(identity)
     }
 
     /// Commits a newly accepted transcript or atomically replaces the previous
@@ -555,27 +577,40 @@ public actor IOSAcceptedOutputDeliveryStore {
     func acceptForHistoryCoordinator(
         _ preparation: IOSAcceptedOutputDeliveryPreparation,
         outboxAbsenceAuthorization:
-            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization? = nil
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization? = nil,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization? = nil
     ) throws -> IOSAcceptedOutputDeliveryAcceptance {
+        if outboxAbsenceAuthorization != nil {
+            guard let operationLeaseAuthorization,
+                  operationGateBinding.proves(
+                      operationLeaseAuthorization
+                  ) else {
+                throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+            }
+        }
         try requirePreparationOwner(preparation)
         if let uncertainAcceptanceIntent {
             try requireNoUncertainHistoryMutationExceptAcceptance()
             guard preparation == uncertainAcceptanceIntent.preparation else {
                 throw IOSAcceptedOutputDeliveryError.commitUncertain
             }
-            if let outboxAbsenceAuthorization,
-               let retained = uncertainAcceptanceIntent
-                .outboxAbsenceAuthorization,
-               outboxAbsenceAuthorization != retained {
-                throw IOSAcceptedOutputDeliveryError.commitUncertain
-            }
-            return try reconcileAcceptance(uncertainAcceptanceIntent)
+            return try reconcileAcceptance(
+                uncertainAcceptanceIntent,
+                outboxAbsenceAuthorization: outboxAbsenceAuthorization,
+                operationLeaseAuthorization: operationLeaseAuthorization
+            )
         }
         try requireNoUncertainHistoryMutation()
         return try performAccept(
             preparation,
-            outboxAbsenceAuthorization: outboxAbsenceAuthorization
+            outboxAbsenceAuthorization: outboxAbsenceAuthorization,
+            operationLeaseAuthorization: operationLeaseAuthorization
         )
+    }
+
+    func hasUncertainAcceptanceForHistoryCoordinator() -> Bool {
+        uncertainAcceptanceIntent != nil
     }
 
     func replacePendingHistory(
@@ -585,7 +620,8 @@ public actor IOSAcceptedOutputDeliveryStore {
     ) throws -> IOSAcceptedOutputDeliveryRecord {
         try requirePreparationOwner(preparation)
         let authorization = reservation.authorization
-        guard authorization.capabilityOwnerIdentity == capabilityOwnerIdentity,
+        guard authorization.storeIdentity == storeIdentity,
+              authorization.capabilityOwnerIdentity == capabilityOwnerIdentity,
               reservation.storeIdentity == storeIdentity,
               pendingHistoryTransferReservation == reservation,
               ownershipProof.capabilityOwnerIdentity
@@ -634,6 +670,28 @@ public actor IOSAcceptedOutputDeliveryStore {
         return observation(for: snapshot.record)
     }
 
+    /// Narrow coordinator read used only to reconcile a retained acceptance
+    /// whose commit result is uncertain. Public callers remain blocked.
+    func loadForHistoryCoordinatorDuringAcceptance()
+        throws -> IOSAcceptedOutputDeliveryObservation? {
+        try requireNoUncertainHistoryMutationExceptAcceptance()
+        let current = try journal.load()
+        if let intent = uncertainAcceptanceIntent {
+            let sourceStillCurrent: Bool = switch (intent.source, current) {
+            case (.missing, .none): true
+            case (.existing(let source), .some(let current)):
+                source == current || source.record == current.record
+            default: false
+            }
+            guard sourceStillCurrent
+                    || current?.record == intent.intended else {
+                throw IOSAcceptedOutputDeliveryError.commitUncertain
+            }
+        }
+        guard let current else { return nil }
+        return observation(for: current.record)
+    }
+
     func proveGuardedBaseline()
         throws -> IOSAcceptedOutputDeliveryGuardedBaselineEvidence {
         try requireNoUncertainHistoryMutation()
@@ -666,7 +724,8 @@ public actor IOSAcceptedOutputDeliveryStore {
         authorization: IOSAcceptedOutputDeliveryAuthorization,
         policyReceipt: IOSHistoryPolicyReceipt
     ) throws -> IOSAcceptedOutputPendingHistoryTransferReservation {
-        guard authorization.capabilityOwnerIdentity == capabilityOwnerIdentity,
+        guard authorization.storeIdentity == storeIdentity,
+              authorization.capabilityOwnerIdentity == capabilityOwnerIdentity,
               policyReceipt.capabilityOwnerIdentity
                 == capabilityOwnerIdentity,
               let marker = authorization.record.historyWrite,
@@ -727,7 +786,8 @@ public actor IOSAcceptedOutputDeliveryStore {
     func reserveBridgePublication(
         authorization: IOSAcceptedOutputDeliveryAuthorization
     ) throws -> IOSAcceptedOutputBridgePublicationReservation {
-        guard authorization.capabilityOwnerIdentity
+        guard authorization.storeIdentity == storeIdentity,
+              authorization.capabilityOwnerIdentity
                 == capabilityOwnerIdentity else {
             throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
         }
@@ -781,6 +841,7 @@ public actor IOSAcceptedOutputDeliveryStore {
         if confirmedAuthorizationFileRevision == snapshot.fileRevision {
             return IOSAcceptedOutputDeliveryAuthorization(
                 snapshot: snapshot,
+                storeIdentity: storeIdentity,
                 capabilityOwnerIdentity: capabilityOwnerIdentity
             )
         }
@@ -796,6 +857,66 @@ public actor IOSAcceptedOutputDeliveryStore {
         confirmedAuthorizationFileRevision = confirmed.fileRevision
         return IOSAcceptedOutputDeliveryAuthorization(
             snapshot: confirmed,
+            storeIdentity: storeIdentity,
+            capabilityOwnerIdentity: capabilityOwnerIdentity
+        )
+    }
+
+    /// Reconfirms only the exact retained source while an acceptance commit is
+    /// uncertain. A visible intended replacement never needs terminal authority.
+    func confirmActiveHistoryRecoveryDuringAcceptance(
+        expected: IOSAcceptedOutputDeliveryExpectation
+    ) throws -> IOSAcceptedOutputDeliveryAuthorization {
+        try requireNoUncertainHistoryMutationExceptAcceptance()
+        let retainedSource: IOSAcceptedOutputDeliveryJournalSnapshot?
+        if let intent = uncertainAcceptanceIntent {
+            guard case .existing(let source) = intent.source,
+                  expected.matches(source.record) else {
+                throw IOSAcceptedOutputDeliveryError.commitUncertain
+            }
+            retainedSource = source
+        } else {
+            retainedSource = nil
+        }
+
+        let snapshot = try requireSnapshot(expected: expected)
+        if let retainedSource,
+           snapshot != retainedSource,
+           snapshot.record != retainedSource.record {
+            throw IOSAcceptedOutputDeliveryError.commitUncertain
+        }
+        try requireActive(snapshot.record)
+        guard snapshot.record.deliveryState != .discarded else {
+            throw IOSAcceptedOutputDeliveryError.invalidTransition
+        }
+        if confirmedAuthorizationFileRevision == snapshot.fileRevision {
+            return IOSAcceptedOutputDeliveryAuthorization(
+                snapshot: snapshot,
+                storeIdentity: storeIdentity,
+                capabilityOwnerIdentity: capabilityOwnerIdentity
+            )
+        }
+
+        let confirmed = try journal.replace(
+            snapshot.record,
+            expected: snapshot
+        )
+        try requireActive(confirmed.record)
+        guard confirmed.record.deliveryState != .discarded else {
+            throw IOSAcceptedOutputDeliveryError.invalidTransition
+        }
+        if let intent = uncertainAcceptanceIntent {
+            uncertainAcceptanceIntent = UncertainAcceptanceIntent(
+                preparation: intent.preparation,
+                source: .existing(confirmed),
+                intended: intent.intended,
+                provenance: intent.provenance
+            )
+        }
+        confirmedAuthorizationFileRevision = confirmed.fileRevision
+        return IOSAcceptedOutputDeliveryAuthorization(
+            snapshot: confirmed,
+            storeIdentity: storeIdentity,
             capabilityOwnerIdentity: capabilityOwnerIdentity
         )
     }
@@ -805,7 +926,9 @@ public actor IOSAcceptedOutputDeliveryStore {
     func confirmMatchingHistoryDelivery(
         membership: IOSAcceptedHistoryOutboxReceipt
     ) throws -> IOSAcceptedOutputHistoryDeliveryDisposition {
-        guard membership.capabilityOwnerIdentity
+        guard membership.deliveryStoreIdentity == storeIdentity,
+              membership.storeIdentity == outboxStoreIdentity,
+              membership.capabilityOwnerIdentity
                 == capabilityOwnerIdentity else {
             throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
         }
@@ -815,6 +938,7 @@ public actor IOSAcceptedOutputDeliveryStore {
         }
         let observed = IOSAcceptedOutputDeliveryAuthorization(
             snapshot: snapshot,
+            storeIdentity: storeIdentity,
             capabilityOwnerIdentity: capabilityOwnerIdentity
         )
         switch membership.deliveryRelation(to: observed) {
@@ -837,6 +961,7 @@ public actor IOSAcceptedOutputDeliveryStore {
             return .confirmed(
                 IOSAcceptedOutputDeliveryAuthorization(
                     snapshot: confirmed,
+                    storeIdentity: storeIdentity,
                     capabilityOwnerIdentity: capabilityOwnerIdentity
                 )
             )
@@ -897,27 +1022,39 @@ public actor IOSAcceptedOutputDeliveryStore {
     public func clear(
         expected: IOSAcceptedOutputDeliveryExpectation
     ) throws -> IOSAcceptedOutputDeliveryRemovalResult {
-        try clear(
+        return try clear(
             expected: expected,
-            outboxAbsenceAuthorization: nil
+            outboxAbsenceAuthorization: nil,
+            operationLeaseAuthorization: nil
         )
     }
 
     func clear(
         expected: IOSAcceptedOutputDeliveryExpectation,
         outboxAbsenceAuthorization:
-            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
     ) throws -> IOSAcceptedOutputDeliveryRemovalResult {
-        try clear(
+        guard operationGateBinding.proves(
+            operationLeaseAuthorization
+        ) else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        return try clear(
             expected: expected,
-            outboxAbsenceAuthorization: Optional(outboxAbsenceAuthorization)
+            outboxAbsenceAuthorization: Optional(outboxAbsenceAuthorization),
+            operationLeaseAuthorization:
+                Optional(operationLeaseAuthorization)
         )
     }
 
     private func clear(
         expected: IOSAcceptedOutputDeliveryExpectation,
         outboxAbsenceAuthorization:
-            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization?
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization?,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization?
     ) throws -> IOSAcceptedOutputDeliveryRemovalResult {
         try requireNoUncertainHistoryMutation()
         guard let snapshot = try journal.load() else { return .alreadyAbsent }
@@ -956,7 +1093,8 @@ public actor IOSAcceptedOutputDeliveryStore {
         if snapshot.record.historyWrite != nil {
             try requireOutboxAbsenceAuthorization(
                 outboxAbsenceAuthorization,
-                for: snapshot
+                for: snapshot,
+                operationLeaseAuthorization: operationLeaseAuthorization
             )
         }
 
@@ -989,7 +1127,8 @@ public actor IOSAcceptedOutputDeliveryStore {
         authorization: IOSAcceptedOutputDeliveryAuthorization,
         ownershipProof: IOSAcceptedOutputHistoryOwnershipProof
     ) throws -> IOSAcceptedOutputDeliveryRemovalResult {
-        guard authorization.capabilityOwnerIdentity == capabilityOwnerIdentity,
+        guard authorization.storeIdentity == storeIdentity,
+              authorization.capabilityOwnerIdentity == capabilityOwnerIdentity,
               ownershipProof.capabilityOwnerIdentity
                 == capabilityOwnerIdentity else {
             throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
@@ -1198,7 +1337,9 @@ private extension IOSAcceptedOutputDeliveryStore {
         _ preparation: IOSAcceptedOutputDeliveryPreparation,
         pendingHistoryReplacement: PendingHistoryReplacementOperation? = nil,
         outboxAbsenceAuthorization:
-            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization? = nil
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization? = nil,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization? = nil
     ) throws -> IOSAcceptedOutputDeliveryAcceptance {
         let timestamp = try IOSAcceptedOutputDeliveryTimestampCodec
             .canonicalDate(from: now())
@@ -1278,8 +1419,6 @@ private extension IOSAcceptedOutputDeliveryStore {
             }
         }
 
-        let confirmedOutboxAbsenceAuthorization:
-            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization?
         if currentTemporalState == .active,
            current.record.historyWrite != nil,
            current.record.historyWrite?.state.isPendingDecision == false {
@@ -1288,11 +1427,9 @@ private extension IOSAcceptedOutputDeliveryStore {
             }
             try requireOutboxAbsenceAuthorization(
                 outboxAbsenceAuthorization,
-                for: current
+                for: current,
+                operationLeaseAuthorization: operationLeaseAuthorization
             )
-            confirmedOutboxAbsenceAuthorization = outboxAbsenceAuthorization
-        } else {
-            confirmedOutboxAbsenceAuthorization = nil
         }
 
         if let pendingHistoryReplacement {
@@ -1325,9 +1462,7 @@ private extension IOSAcceptedOutputDeliveryStore {
                 newRecord,
                 source: .existing(current),
                 preparation: preparation,
-                provenance: .freshCurrentProcess,
-                outboxAbsenceAuthorization:
-                    confirmedOutboxAbsenceAuthorization
+                provenance: .freshCurrentProcess
             )
             clearTransientState(for: current.record.deliveryID)
             return IOSAcceptedOutputDeliveryAcceptance(
@@ -1343,7 +1478,11 @@ private extension IOSAcceptedOutputDeliveryStore {
     }
 
     private func reconcileAcceptance(
-        _ intent: UncertainAcceptanceIntent
+        _ intent: UncertainAcceptanceIntent,
+        outboxAbsenceAuthorization:
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization?,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization?
     ) throws -> IOSAcceptedOutputDeliveryAcceptance {
         let current = try journal.load()
         let sourceStillCurrent: Bool = switch (intent.source, current) {
@@ -1359,6 +1498,17 @@ private extension IOSAcceptedOutputDeliveryStore {
                     intent,
                     current: current
                 )
+                if case .existing(let source) = intent.source,
+                   temporalState(for: source.record) == .active,
+                   source.record.historyWrite != nil,
+                   source.record.historyWrite?.state.isPendingDecision == false {
+                    try requireOutboxAbsenceAuthorization(
+                        outboxAbsenceAuthorization,
+                        for: source,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization
+                    )
+                }
             }
             publicationSource = intent.source
         } else if let current,
@@ -1374,9 +1524,7 @@ private extension IOSAcceptedOutputDeliveryStore {
                 intent.intended,
                 source: publicationSource,
                 preparation: intent.preparation,
-                provenance: intent.provenance,
-                outboxAbsenceAuthorization:
-                    intent.outboxAbsenceAuthorization
+                provenance: intent.provenance
             )
             pruneMonotonicDeadlines(
                 keeping: confirmed.record.deliveryID
@@ -1406,9 +1554,7 @@ private extension IOSAcceptedOutputDeliveryStore {
                 intent.intended,
                 source: .existing(current),
                 preparation: intent.preparation,
-                provenance: intent.provenance,
-                outboxAbsenceAuthorization:
-                    intent.outboxAbsenceAuthorization
+                provenance: intent.provenance
             )
             pruneMonotonicDeadlines(
                 keeping: confirmed.record.deliveryID
@@ -1453,16 +1599,13 @@ private extension IOSAcceptedOutputDeliveryStore {
         _ intended: IOSAcceptedOutputDeliveryRecord,
         source: AcceptanceSource,
         preparation: IOSAcceptedOutputDeliveryPreparation,
-        provenance: IOSAcceptedOutputDeliveryAcceptanceProvenance,
-        outboxAbsenceAuthorization:
-            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization? = nil
+        provenance: IOSAcceptedOutputDeliveryAcceptanceProvenance
     ) throws -> IOSAcceptedOutputDeliveryJournalSnapshot {
         let intent = UncertainAcceptanceIntent(
             preparation: preparation,
             source: source,
             intended: intended,
-            provenance: provenance,
-            outboxAbsenceAuthorization: outboxAbsenceAuthorization
+            provenance: provenance
         )
         do {
             let committed: IOSAcceptedOutputDeliveryJournalSnapshot =
@@ -1853,10 +1996,14 @@ private extension IOSAcceptedOutputDeliveryStore {
     ) throws -> IOSAcceptedOutputDeliveryRecord {
         let ownersMatch: Bool = switch operation {
         case .commit(let authorization, let receipt):
-            authorization.capabilityOwnerIdentity == capabilityOwnerIdentity
+            authorization.storeIdentity == storeIdentity
+                && authorization.capabilityOwnerIdentity
+                    == capabilityOwnerIdentity
                 && receipt.capabilityOwnerIdentity == capabilityOwnerIdentity
         case .cancel(let authorization, let receipt):
-            authorization.capabilityOwnerIdentity == capabilityOwnerIdentity
+            authorization.storeIdentity == storeIdentity
+                && authorization.capabilityOwnerIdentity
+                    == capabilityOwnerIdentity
                 && receipt.capabilityOwnerIdentity == capabilityOwnerIdentity
         }
         guard ownersMatch else {
@@ -2172,19 +2319,32 @@ private extension IOSAcceptedOutputDeliveryStore {
     func requireOutboxAbsenceAuthorization(
         _ authorization:
             IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization?,
-        for snapshot: IOSAcceptedOutputDeliveryJournalSnapshot
+        for snapshot: IOSAcceptedOutputDeliveryJournalSnapshot,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization?
     ) throws {
         guard let authorization else {
             throw IOSAcceptedOutputDeliveryError.historyTransferRequired
         }
+        guard let operationLeaseAuthorization else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        guard operationGateBinding.proves(
+            operationLeaseAuthorization
+        ) else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
         let delivery = IOSAcceptedOutputDeliveryAuthorization(
             snapshot: snapshot,
+            storeIdentity: storeIdentity,
             capabilityOwnerIdentity: capabilityOwnerIdentity
         )
         guard authorization.provesAbsence(
             for: delivery,
             deliveryStoreIdentity: storeIdentity,
-            ownerIdentity: capabilityOwnerIdentity
+            outboxStoreIdentity: outboxStoreIdentity,
+            ownerIdentity: capabilityOwnerIdentity,
+            operationLeaseAuthorization: operationLeaseAuthorization
         ) else {
             throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
         }

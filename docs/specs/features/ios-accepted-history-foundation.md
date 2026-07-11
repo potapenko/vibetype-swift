@@ -6,9 +6,13 @@ Keep accepted iOS History durable without allowing Clear History, disabling
 History, process loss, or an uncertain local commit to resurrect an old row or
 repeat provider work.
 
-This checkpoint owns the app-private History policy, accepted-History
-repository, accepted-History outbox, and their coordination with the existing
-accepted-output delivery record.
+This spec is the target contract for the app-private History policy,
+accepted-History repository, accepted-History outbox, and their coordination
+with the existing accepted-output delivery record. The C2 checkpoint implements
+the contract through strict one-head FIFO recovery and terminal-proof
+protection. Global policy cutover and stale-generation cleanup remain the next
+checkpoint, and the full user-facing controls remain deferred as described
+below.
 
 ## Scope And Deferred Work
 
@@ -465,11 +469,105 @@ and cannot be replaced by a Boolean or caller-side assertion. Exact delivery
 expiry remains the bounded abandonment exception: expired pending work is
 removed without creating or requiring a new outbox entry.
 
-The outbox worker validates policy, makes the row decision, revalidates policy,
-commits a matching pending marker when present, then removes the entry. For stale
-policy it cancels the marker without upsert, then removes; at expiry it removes
-without upsert. Row success plus uncertain outbox removal retries only local
-idempotent work, never provider work.
+One provider-free coordinator call processes at most one store-selected outbox
+head. The head is the first entry in canonical oldest-first order. The store,
+not a caller-supplied index or identifier, selects it. Its observation,
+identical membership-confirmation rewrite, temporal classification, retained
+capabilities, and retirement remain bound to that exact snapshot, capability
+owner, and outbox-store identity. Failure, rollback, uncertainty, or CAS
+supersession never selects a later entry in the same call. A second head always
+requires another call.
+The public result is payload-free and redacted: `noWork`, `retired`, or
+`pendingLocalRecovery`. It does not expose which entry, policy branch, temporal
+branch, or retention decision ran. Operation-gate cancellation/reentrancy and
+repository-identity conflict remain typed throws rather than being collapsed
+into a result case, including when the conflict is found after a head was
+retained. The worker is provider-free, so observing an existing head is not a
+provider-replay boundary that may hide permanent repository poisoning.
+
+After membership confirmation, the outbox store classifies one canonical clock
+sample and issues an opaque temporal receipt. Rollback preserves the head
+without policy, row, delivery, or retirement mutation. Initial expiry retires
+that head without an accepted-row decision. A live classification is not
+permanent insertion authority: the accepted-row store rechecks its own clock,
+and expiry before an absent-row mutation returns the worker to temporal
+classification. Expired retirement consumes the exact expiry receipt; an
+uncertain retry does not resample time in the same process. Process loss
+reconstructs classification from durable state.
+
+A live head confirms current policy. Enabled policy at the entry generation is
+matching; a strictly newer generation is invalidated. Lower generation or an
+equal disabled state fails closed. Matching policy normally permits the
+idempotent row decision, followed by confirmation of the exact same policy
+state. A cutover discovered after the row decision changes to the invalidated
+branch; the stale row may remain physically present but is hidden by generation
+filtering. Invalidated work performs no new row decision.
+
+Before repeating a matching-policy row decision, the coordinator confirms
+whether the current delivery is the exact same immutable accepted payload. An
+exact `committed` marker seals the earlier retained-or-not-retained outcome and
+authorizes head retirement without reinterpreting current capacity. An exact
+`cancelled` marker is accepted only with newer-policy invalidation. Otherwise,
+after row and policy revalidation, an exact active unresolved marker is
+identically rewritten and then committed with the row receipt, or cancelled
+with newer-policy authority. Missing, unrelated, or already-discarded delivery
+requires no marker mutation. Matching expired delivery is left for bounded
+delivery abandonment; a row decision already made while live may still retire
+the outbox head. Matching rollback blocks the head. A partial identity match or
+any immutable payload mismatch is a collision and never degrades to
+"unrelated."
+
+For a non-discarded delivery, the exact delivery relation includes delivery and
+transcript IDs, accepted-text UTF-8 bytes, output intent, creation and expiry
+timestamps, policy generation, model, language, and duration. A discarded
+tombstone intentionally no longer contains text or History metadata, so its
+relation uses only the immutable IDs, intent, and timestamps that the tombstone
+retains; a mismatch in any retained field is still a collision. IDs or caller
+assertions alone are never marker authority. Terminal delivery confirmation
+uses the same mandatory identical physical rewrite as other delivery recovery.
+Every resulting delivery authorization is also bound to the issuing
+delivery-store identity. An authorization from another actor or root cannot
+commit or cancel a marker, prove a terminal relation, retire outbox work, or
+mint absence authority even when its owner and logical bytes happen to match.
+
+Processed, invalidated, and expired retirement remove only the confirmed head
+with revision CAS. Row, policy, marker, and retirement commit uncertainty retain
+their exact capabilities in one root-shared worker phase and retry only that
+phase. A definitive CAS supersession clears the retained phase but ends the
+current call before any new head selection. Process loss may repeat an unsealed
+not-retained capacity decision while its outbox membership still exists; once a
+matching terminal marker or outbox retirement seals that decision, recovery
+must not reinterpret it. No branch repeats provider work.
+
+The worker never starts a head while acceptance or pending replacement retains
+root-scoped work. Conversely, capture, acceptance, delivery recovery, and
+future policy cutover cannot bypass a retained worker phase. This prevents the
+worker from consuming the exact outbox receipt that still owns a C1 replacement
+and prevents another operation from invalidating a retained row, marker, or
+retirement capability.
+
+While any outbox membership still matches an active, non-expired delivery,
+production replacement, Clear Latest, discard, and non-retention removal may
+not erase that delivery's terminal History proof. They require an opaque absence
+capability minted only after an exact missing observation or identical
+outbox-snapshot rewrite. The capability is bound to the exact delivery,
+capability owner, paired delivery and outbox stores, and a currently active
+lease issued by their exact expected production root operation gate. It becomes
+invalid before that lease is released and never survives process loss. A stale
+snapshot or a capability from another root, store pair, gate, or operation is
+not authority. If the delivery mutation is
+commit-uncertain, a later operation confirms an already-visible intended
+delivery without the old capability; if the old terminal source remains
+visible, it must classify outbox absence again under its new lease. All
+production outbox mutations use the same root gate. Production consumes the
+absence capability immediately in that gate operation: neither the capability
+nor its lease may escape to an unstructured task, and no outbox mutation may be
+inserted between classification and delivery mutation. Future sequencing that
+cannot preserve this ordering requires store-enforced capability revocation.
+Otherwise the operation fails closed until the FIFO worker retires the matching
+membership. Exact delivery expiry remains the bounded abandonment exception.
+This guard is required even for an active terminal marker because not-retained
+is otherwise indistinguishable from an absent row after process loss.
 
 ## Clear, Disable, Enable, And Migration
 
@@ -504,6 +602,15 @@ write, transfer, worker and cleanup; stale receipts/two actors/process loss;
 replacement capacity rejection sealed only by the exact terminal marker;
 delivery-store binding, one-outbox lease claiming, consume/release revocation,
 and monotonic transfer expiry; exact bridge authorization and snapshot freeze;
+store-enforced one-head FIFO ordering including equal-time UUID order; no skip
+on rollback, protected-data failure, corruption, CAS supersession, or
+uncertainty; expiry before and after a durable row decision; policy cutover
+before and after that decision; retained and not-retained recovery; crash after
+a terminal marker but before retirement; terminal-delivery removal blocked by
+matching outbox membership; pending, committed, cancelled, discarded, expired,
+unrelated, and collision delivery relations; visible and invisible uncertainty
+at every worker phase; process loss at every durable boundary; and mutual
+exclusion among worker, C1 replacement, and acceptance retained phases;
 corrupt/future preservation; no migration/provider replay; redaction; complete
 strict-concurrency package tests; full macOS and iOS simulator suites; and no
 Persistence/History linkage in the keyboard. Signed-device QA owns effective

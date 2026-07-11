@@ -151,6 +151,50 @@ struct IOSPendingRecordingOperationGateTests {
         #expect(events.releasedIdentifiers == events.grantedIdentifiers)
     }
 
+    @Test func leaseAuthorizationIsOpaqueAndInvalidBeforeRelease() async throws {
+        let probe = GateLeaseAuthorizationProbe()
+        let gate = IOSPersistenceOperationGate { event in
+            guard case .released = event else { return }
+            probe.observeRelease()
+        }
+
+        let retained = try await gate.perform { authorization in
+            probe.store(authorization)
+            #expect(authorization.provesActiveLease())
+            #expect(
+                String(reflecting: authorization)
+                    == "IOSPersistenceOperationLeaseAuthorization(redacted)"
+            )
+            #expect(authorization.customMirror.children.isEmpty)
+            return authorization
+        }
+
+        #expect(!retained.provesActiveLease())
+        #expect(probe.wasInactiveAtRelease)
+    }
+
+    @Test func operationGateBindingAcceptsOnlyItsExactActiveRootLease()
+        async throws {
+        let exactGate = IOSPersistenceOperationGate()
+        let foreignGate = IOSPersistenceOperationGate()
+        let binding = IOSPersistenceOperationGateBinding(
+            identity: exactGate.identity
+        )
+
+        try await exactGate.perform { exactLease in
+            #expect(binding.proves(exactLease))
+            try await foreignGate.perform { foreignLease in
+                #expect(!binding.proves(foreignLease))
+            }
+        }
+
+        #expect(
+            String(reflecting: exactGate.identity)
+                == "IOSPersistenceOperationGateIdentity(redacted)"
+        )
+        #expect(exactGate.identity.customMirror.children.isEmpty)
+    }
+
     @Test func spawnedTaskCannotReenterTheActiveLease() async throws {
         let gate = IOSPersistenceOperationGate()
 
@@ -442,6 +486,29 @@ nonisolated private final class GateEventRecorder: @unchecked Sendable {
                 )
             )
             lock.unlock()
+        }
+    }
+}
+
+nonisolated private final class GateLeaseAuthorizationProbe:
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var authorization: IOSPersistenceOperationLeaseAuthorization?
+    private var storedWasInactiveAtRelease = false
+
+    var wasInactiveAtRelease: Bool {
+        lock.withLock { storedWasInactiveAtRelease }
+    }
+
+    func store(_ authorization: IOSPersistenceOperationLeaseAuthorization) {
+        lock.withLock {
+            self.authorization = authorization
+        }
+    }
+
+    func observeRelease() {
+        lock.withLock {
+            storedWasInactiveAtRelease = authorization?.provesActiveLease() == false
         }
     }
 }

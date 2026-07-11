@@ -382,14 +382,17 @@ public enum IOSAcceptedOutputDeliveryObservation: Equatable, Sendable {
 public struct IOSAcceptedOutputDeliveryAuthorization: Sendable {
     public let record: IOSAcceptedOutputDeliveryRecord
     let snapshot: IOSAcceptedOutputDeliveryJournalSnapshot
+    let storeIdentity: IOSAcceptedOutputDeliveryStoreIdentity
     let capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity
 
     init(
         snapshot: IOSAcceptedOutputDeliveryJournalSnapshot,
+        storeIdentity: IOSAcceptedOutputDeliveryStoreIdentity,
         capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity
     ) {
         record = snapshot.record
         self.snapshot = snapshot
+        self.storeIdentity = storeIdentity
         self.capabilityOwnerIdentity = capabilityOwnerIdentity
     }
 }
@@ -400,6 +403,7 @@ extension IOSAcceptedOutputDeliveryAuthorization: Equatable {
         rhs: IOSAcceptedOutputDeliveryAuthorization
     ) -> Bool {
         lhs.snapshot == rhs.snapshot
+            && lhs.storeIdentity == rhs.storeIdentity
             && lhs.capabilityOwnerIdentity == rhs.capabilityOwnerIdentity
     }
 }

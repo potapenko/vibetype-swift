@@ -987,10 +987,11 @@ History metadata, and the 24-hour recovery owner remain outside App Group and
 the keyboard. Publication generation cannot advance until the later production
 bridge checkpoint owns the matching projection and revocation protocol.
 
-The accepted-History foundation is implemented through the C1 slice: normal
+The accepted-History foundation is implemented through the C2 slice: normal
 acceptance, provider-free relaunch recovery, and exact pending-delivery transfer
-before a new accepted result replaces the delivery slot. One root-scoped
-process capability owner binds the policy, accepted rows, outbox, delivery
+before a new accepted result replaces the delivery slot, followed by strict
+one-head FIFO outbox recovery. One root-scoped process capability owner binds
+the policy, accepted rows, outbox, delivery
 record, coordinator, and every opaque receipt before repository I/O. Normal
 acceptance crosses the provider replay boundary at durable delivery, then
 preserves exact policy, row, marker, and expiry phases through local
@@ -1016,13 +1017,30 @@ reservation; the actual generation `0 -> 1` commit and App Group publication
 remain P6 work and must consume the bridge reservation minted from exact
 owner-bound delivery authorization. Because an older binary cannot parse
 `pendingReplacement` to reach expiry cleanup, a release that writes it is
-no-downgrade until a compatible recovery path exists. Final C1 gate evidence
-and verdict live in
-`docs/qa/runs/ios-accepted-history-transfer-2026-07-11.md`. Policy cutover, the
-FIFO outbox worker, and
-stale-generation cleanup remain the next local durability checkpoint. No
-History record, receipt, text, App Group state, or keyboard dependency is
-introduced by this foundation.
+no-downgrade until a compatible recovery path exists. Historical C1 transfer
+evidence remains in
+`docs/qa/runs/ios-accepted-history-transfer-2026-07-11.md`.
+
+C2 now selects only the canonical oldest outbox head, binds observation,
+membership, temporal state, policy, row decision, delivery relation, and
+retirement to exact owner/store capabilities, and never falls through to a
+later entry after rollback, failure, CAS supersession, or uncertainty. Matching
+live work seals its idempotent retained/not-retained row decision in the exact
+delivery marker, retires from an already-terminal proof, or retires directly
+from the durable row receipt when delivery is missing, unrelated, or discarded.
+Strictly newer policy known before row work avoids a row decision; cutover found
+after row work performs no additional decision. Exact expiry retires from one
+sealed temporal sample. Root-shared worker state resumes only the uncertain
+local phase and excludes acceptance and C1 replacement work. Active
+terminal-History delivery replacement and cleanup also require a capability
+minted from confirmed outbox absence, paired to both stores and valid only for
+an active lease issued by their exact expected production root operation gate;
+exact expiry remains the bounded
+abandonment exception. Final C2 gate evidence and verdict live in
+`docs/qa/runs/ios-accepted-history-outbox-worker-2026-07-11.md`. Global policy
+cutover and stale-generation cleanup remain the next local durability
+checkpoint. No History record, receipt, or text enters App Group or the
+keyboard, and this foundation adds no keyboard dependency.
 
 ### P3 — Native containing-app shell
 
@@ -1223,14 +1241,13 @@ delivery record are now implemented without moving secrets, canonical content,
 usage state, audio, History metadata, or scratch paths into App Group or the
 keyboard.
 
-The next P2 checkpoint finishes the containing-app-only accepted-History
-durability chain: drain one snapshot-bound entry at a time through the FIFO
-worker, then make Clear/Disable/Enable policy cutover the logical success
-boundary followed by conservative stale-generation cleanup. Preserve the
-existing root-scoped capability graph, exact retained phases, provider-free
-recovery and replacement, no-live-entry eviction rule, and every
-crash-reconciliation boundary. This work must not publish History rows or
-metadata to App Group or the keyboard.
+The next P2 checkpoint finishes the remaining containing-app-only
+accepted-History durability chain: make Clear/Disable/Enable policy cutover the
+logical success boundary, then perform conservative stale-generation cleanup
+through the completed one-head FIFO worker. Preserve the existing root-scoped
+capability graph, exact retained phases, provider-free recovery and replacement,
+no-live-entry eviction rule, and every crash-reconciliation boundary. This work
+must not publish History rows or metadata to App Group or the keyboard.
 
 After that accepted-History chain is verified, implement the bounded failed
 History repository and retry-audio ownership, then the independent recording

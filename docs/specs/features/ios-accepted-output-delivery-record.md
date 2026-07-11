@@ -303,8 +303,11 @@ The first side-effect authorization in every containing-app process performs an
 identical strict rewrite and successful directory synchronization of the
 currently valid value. This confirms a record that a prior process might have
 made visible immediately before crashing; simple decode after relaunch cannot
-authorize History or bridge work. History authority is returned only after the
-post-rewrite value is revalidated as unexpired. One operation captures one
+authorize History or bridge work. The resulting authorization is bound to the
+issuing delivery-store identity as well as the capability owner and exact
+physical snapshot; another store actor cannot consume it even if logical bytes
+and owner match. History authority is returned only after the post-rewrite
+value is revalidated as unexpired. One operation captures one
 temporal-state decision for replacement and clear branching, so a later clock
 sample cannot turn rollback or expiry into destructive eligibility. A corrupt,
 future, protected-unavailable, or uncertain record is never interpreted as
@@ -438,6 +441,25 @@ the outbox checkpoint exists and confirms transfer, the operation returns
 bounded exception: after the exact 24-hour deadline, the stale state may be
 abandoned and must never create a later row.
 
+A terminal History marker is also protected while an exact matching outbox
+membership remains. The marker may be the only crash-surviving proof that an
+outbox worker already decided not to retain a row. Replacement, Clear Latest,
+discard, and non-retention removal therefore require a store-minted outbox
+absence capability bound to the exact delivery, capability owner, paired
+delivery/outbox stores, confirmed outbox snapshot, and a currently active lease
+issued by their exact expected production root operation gate, or fail closed
+until the FIFO worker retires that membership. The capability is invalidated
+before lease release and does not survive process loss. Production consumes it
+immediately in that same gate operation; neither capability nor lease may
+escape to an unstructured task, and no outbox mutation may intervene. A caller
+Boolean, ID lookup, stale outbox snapshot, or capability copied from an earlier
+operation is not sufficient. After commit
+uncertainty, an already-visible intended replacement may be confirmed
+identically; an old terminal source still visible requires a fresh absence
+classification under the new lease. Exact expiry remains the bounded
+abandonment exception because an expired outbox head is retired without a new
+row decision.
+
 No History, bridge, cleanup, or output event may use a record whose mandatory
 commit is failed or uncertain.
 
@@ -568,6 +590,13 @@ deterministic coverage for:
 - exact owner-bound bridge authorization, transfer/bridge mutual exclusion, and
   snapshot freeze without claiming that C1 performs generation `0 -> 1` or an
   App Group write;
+- store-selected one-head FIFO recovery, exact temporal/policy/row/marker and
+  retirement capabilities, no skip after failure or uncertainty, and
+  provider-free process-loss reconstruction;
+- terminal-marker retirement without reinterpreting a sealed not-retained row
+  decision, plus terminal replacement/Clear protection through an exact paired
+  outbox-absence capability valid only in a lease issued by the paired stores'
+  expected production root operation gate;
 - atomic replacement keeps old bytes on every pre-rename failure and keeps new
   bytes visible but unauthorized on every post-rename uncertain outcome;
 - first-process authorization performs the identical durability-confirmation
@@ -594,8 +623,6 @@ marker to reach expiry cleanup.
 
 The checkpoint owning each deferred component must add the remaining tests:
 
-- FIFO outbox-worker ordering and every crash point around its row, policy,
-  marker, and outbox-removal commits;
 - policy-cutover cleanup, stale-generation cancellation/removal, and the later
   bounded failed-History, retry-audio, and Recording Cache repositories;
 - bridge expiry clamping, refresh with a stable eligibility epoch, revocation,
@@ -620,9 +647,10 @@ physical-device gate.
 
 The app-private History policy, accepted-row, and outbox foundation defined by
 `ios-accepted-history-foundation.md` now exists through normal acceptance,
-provider-free relaunch recovery, and exact pending-delivery transfer with atomic
-replacement. The FIFO outbox worker, policy-cutover cleanup, bounded failed
-History, retry-audio ownership, and Recording Cache remain separate checkpoints.
+provider-free relaunch recovery, exact pending-delivery transfer with atomic
+replacement, and the strict FIFO outbox worker with terminal-proof protection.
+Policy-cutover cleanup, bounded failed History, retry-audio ownership, and
+Recording Cache remain separate checkpoints.
 The App Group production bridge, extension claim ledger, acknowledgement
 channel, and UI are also deferred. Until each remaining owning checkpoint
 lands, operations that require it fail closed instead of pretending the

@@ -14,6 +14,7 @@ extension IOSAcceptedHistoryOutboxStore {
             now: { delivery.record.createdAt.addingTimeInterval(1) },
             monotonicNowNanoseconds: { 1 },
             storeIdentity: deliveryStoreIdentity,
+            outboxStoreIdentity: storeIdentity,
             capabilityOwnerIdentity: delivery.capabilityOwnerIdentity
         )
         let reservation: IOSAcceptedOutputPendingHistoryTransferReservation

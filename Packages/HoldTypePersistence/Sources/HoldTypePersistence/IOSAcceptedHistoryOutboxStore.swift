@@ -115,6 +115,7 @@ struct IOSAcceptedHistoryOutboxReceipt: Equatable, Sendable {
     fileprivate let entry: IOSAcceptedHistoryOutboxEntry
     fileprivate let snapshot: IOSAcceptedHistoryOutboxJournalSnapshot
     let storeIdentity: IOSAcceptedHistoryOutboxStoreIdentity
+    let deliveryStoreIdentity: IOSAcceptedOutputDeliveryStoreIdentity
     let capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity
 
     func provesMembershipForDeliveryRemoval(
@@ -122,6 +123,7 @@ struct IOSAcceptedHistoryOutboxReceipt: Equatable, Sendable {
     ) -> Bool {
         guard case .delivery(let originatingDelivery) = origin,
               originatingDelivery == delivery,
+              delivery.storeIdentity == deliveryStoreIdentity,
               capabilityOwnerIdentity
                 == delivery.capabilityOwnerIdentity else {
             return false
@@ -158,7 +160,8 @@ struct IOSAcceptedHistoryOutboxReceipt: Equatable, Sendable {
     func deliveryRelation(
         to authorization: IOSAcceptedOutputDeliveryAuthorization
     ) -> IOSAcceptedHistoryOutboxDeliveryRelation {
-        guard let entry = confirmedEntryForAcceptedDecision() else {
+        guard authorization.storeIdentity == deliveryStoreIdentity,
+              let entry = confirmedEntryForAcceptedDecision() else {
             return .collision
         }
         return entry.deliveryRelation(to: authorization)
@@ -169,9 +172,10 @@ struct IOSAcceptedHistoryOutboxReceipt: Equatable, Sendable {
         let originatingEntry: IOSAcceptedHistoryOutboxEntry
         switch origin {
         case .delivery(let delivery):
-            guard let expected = try? IOSAcceptedHistoryOutboxCandidate.entry(
-                from: delivery
-            ) else {
+            guard delivery.storeIdentity == deliveryStoreIdentity,
+                  let expected = try? IOSAcceptedHistoryOutboxCandidate.entry(
+                      from: delivery
+                  ) else {
                 return nil
             }
             originatingEntry = expected
@@ -300,13 +304,17 @@ struct IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization:
         IOSAcceptedOutputDeliveryStoreIdentity
     private let capabilityOwnerIdentity:
         IOSAcceptedHistoryCapabilityOwnerIdentity
+    private let operationLeaseAuthorization:
+        IOSPersistenceOperationLeaseAuthorization
 
     fileprivate init(
         authorization: IOSAcceptedOutputDeliveryAuthorization,
         observedOutboxSnapshot: IOSAcceptedHistoryOutboxJournalSnapshot?,
         outboxStoreIdentity: IOSAcceptedHistoryOutboxStoreIdentity,
         deliveryStoreIdentity: IOSAcceptedOutputDeliveryStoreIdentity,
-        capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity
+        capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
     ) {
         self.authorization = authorization
         self.observedOutboxSnapshot = if let observedOutboxSnapshot {
@@ -317,17 +325,26 @@ struct IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization:
         self.outboxStoreIdentity = outboxStoreIdentity
         pairedDeliveryStoreIdentity = deliveryStoreIdentity
         self.capabilityOwnerIdentity = capabilityOwnerIdentity
+        self.operationLeaseAuthorization = operationLeaseAuthorization
     }
 
     func provesAbsence(
         for authorization: IOSAcceptedOutputDeliveryAuthorization,
         deliveryStoreIdentity: IOSAcceptedOutputDeliveryStoreIdentity,
-        ownerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity
+        outboxStoreIdentity: IOSAcceptedHistoryOutboxStoreIdentity,
+        ownerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
     ) -> Bool {
         self.authorization == authorization
             && pairedDeliveryStoreIdentity == deliveryStoreIdentity
+            && self.outboxStoreIdentity == outboxStoreIdentity
             && capabilityOwnerIdentity == ownerIdentity
             && authorization.capabilityOwnerIdentity == ownerIdentity
+            && authorization.storeIdentity == deliveryStoreIdentity
+            && self.operationLeaseAuthorization.provesSameActiveLease(
+                as: operationLeaseAuthorization
+            )
     }
 }
 
@@ -369,6 +386,8 @@ actor IOSAcceptedHistoryOutboxStore {
     nonisolated let deliveryStoreIdentity:
         IOSAcceptedOutputDeliveryStoreIdentity
     nonisolated let storeIdentity: IOSAcceptedHistoryOutboxStoreIdentity
+    private nonisolated let operationGateBinding:
+        IOSPersistenceOperationGateBinding
     private enum Source: Equatable, Sendable {
         case missing
         case existing(IOSAcceptedHistoryOutboxJournalSnapshot)
@@ -477,16 +496,22 @@ actor IOSAcceptedHistoryOutboxStore {
         applicationSupportDirectoryURL: URL,
         deliveryStoreIdentity: IOSAcceptedOutputDeliveryStoreIdentity =
             IOSAcceptedOutputDeliveryStoreIdentity(),
+        storeIdentity: IOSAcceptedHistoryOutboxStoreIdentity =
+            IOSAcceptedHistoryOutboxStoreIdentity(),
         capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity =
-            IOSAcceptedHistoryCapabilityOwnerIdentity()
+            IOSAcceptedHistoryCapabilityOwnerIdentity(),
+        operationGateIdentity: IOSPersistenceOperationGateIdentity? = nil
     ) {
         journal = FoundationIOSAcceptedHistoryOutboxJournalRepository(
             applicationSupportDirectoryURL: applicationSupportDirectoryURL
         )
         now = { Date() }
         self.deliveryStoreIdentity = deliveryStoreIdentity
-        storeIdentity = IOSAcceptedHistoryOutboxStoreIdentity()
+        self.storeIdentity = storeIdentity
         self.capabilityOwnerIdentity = capabilityOwnerIdentity
+        operationGateBinding = IOSPersistenceOperationGateBinding(
+            identity: operationGateIdentity
+        )
     }
 
     init(
@@ -494,14 +519,26 @@ actor IOSAcceptedHistoryOutboxStore {
         now: @escaping @Sendable () -> Date = { Date() },
         deliveryStoreIdentity: IOSAcceptedOutputDeliveryStoreIdentity =
             IOSAcceptedOutputDeliveryStoreIdentity(),
+        storeIdentity: IOSAcceptedHistoryOutboxStoreIdentity =
+            IOSAcceptedHistoryOutboxStoreIdentity(),
         capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity =
-            IOSAcceptedHistoryCapabilityOwnerIdentity()
+            IOSAcceptedHistoryCapabilityOwnerIdentity(),
+        operationGateIdentity: IOSPersistenceOperationGateIdentity? = nil
     ) {
         self.journal = journal
         self.now = now
         self.deliveryStoreIdentity = deliveryStoreIdentity
-        storeIdentity = IOSAcceptedHistoryOutboxStoreIdentity()
+        self.storeIdentity = storeIdentity
         self.capabilityOwnerIdentity = capabilityOwnerIdentity
+        operationGateBinding = IOSPersistenceOperationGateBinding(
+            identity: operationGateIdentity
+        )
+    }
+
+    nonisolated func bindOperationGateIdentity(
+        _ identity: IOSPersistenceOperationGateIdentity
+    ) -> Bool {
+        operationGateBinding.bind(identity)
     }
 
     func load() throws -> IOSAcceptedHistoryOutboxEnvelope? {
@@ -552,6 +589,7 @@ actor IOSAcceptedHistoryOutboxStore {
         membership: IOSAcceptedHistoryOutboxReceipt
     ) throws -> IOSAcceptedHistoryOutboxTemporalReceipt {
         guard membership.storeIdentity == storeIdentity,
+              membership.deliveryStoreIdentity == deliveryStoreIdentity,
               membership.capabilityOwnerIdentity
                 == capabilityOwnerIdentity else {
             throw IOSAcceptedHistoryOutboxError.compareAndSwapFailed
@@ -579,9 +617,15 @@ actor IOSAcceptedHistoryOutboxStore {
     }
 
     func classifyDeliveryAbsence(
-        authorization: IOSAcceptedOutputDeliveryAuthorization
+        authorization: IOSAcceptedOutputDeliveryAuthorization,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
     ) throws -> IOSAcceptedHistoryOutboxDeliveryAbsenceDisposition {
-        guard authorization.capabilityOwnerIdentity
+        guard operationGateBinding.proves(operationLeaseAuthorization) else {
+            throw IOSAcceptedHistoryOutboxError.compareAndSwapFailed
+        }
+        guard authorization.storeIdentity == deliveryStoreIdentity,
+              authorization.capabilityOwnerIdentity
                 == capabilityOwnerIdentity else {
             throw IOSAcceptedHistoryOutboxError.compareAndSwapFailed
         }
@@ -607,7 +651,8 @@ actor IOSAcceptedHistoryOutboxStore {
             }
             return try publishDeliveryAbsence(
                 authorization: authorization,
-                source: current
+                source: current,
+                operationLeaseAuthorization: operationLeaseAuthorization
             )
         }
 
@@ -615,7 +660,9 @@ actor IOSAcceptedHistoryOutboxStore {
             return .absent(
                 deliveryAbsenceAuthorization(
                     for: authorization,
-                    observedSnapshot: nil
+                    observedSnapshot: nil,
+                    operationLeaseAuthorization:
+                        operationLeaseAuthorization
                 )
             )
         }
@@ -632,18 +679,20 @@ actor IOSAcceptedHistoryOutboxStore {
         }
         return try publishDeliveryAbsence(
             authorization: authorization,
-            source: current
+            source: current,
+            operationLeaseAuthorization: operationLeaseAuthorization
         )
     }
 
     func transfer(
         reservation: IOSAcceptedOutputPendingHistoryTransferReservation
     ) throws -> IOSAcceptedHistoryOutboxReceipt {
-        try requireNoUncertainDeliveryAbsence()
         let delivery = reservation.deliveryAuthorization
-        guard delivery.capabilityOwnerIdentity == capabilityOwnerIdentity else {
+        guard delivery.storeIdentity == deliveryStoreIdentity,
+              delivery.capabilityOwnerIdentity == capabilityOwnerIdentity else {
             throw IOSAcceptedHistoryOutboxError.compareAndSwapFailed
         }
+        try requireNoUncertainDeliveryAbsence()
         let claim = reservation.claimForOutbox(
             authorization: delivery,
             policyGeneration: reservation.confirmedPolicyGeneration,
@@ -739,7 +788,8 @@ actor IOSAcceptedHistoryOutboxStore {
     func confirmMembership(
         delivery: IOSAcceptedOutputDeliveryAuthorization
     ) throws -> IOSAcceptedHistoryOutboxReceipt {
-        guard delivery.capabilityOwnerIdentity == capabilityOwnerIdentity else {
+        guard delivery.storeIdentity == deliveryStoreIdentity,
+              delivery.capabilityOwnerIdentity == capabilityOwnerIdentity else {
             throw IOSAcceptedHistoryOutboxError.compareAndSwapFailed
         }
         try requireNoUncertainDeliveryAbsence()
@@ -834,6 +884,7 @@ actor IOSAcceptedHistoryOutboxStore {
         decision: IOSAcceptedHistoryRowReceipt
     ) throws {
         guard membership.capabilityOwnerIdentity == capabilityOwnerIdentity,
+              membership.deliveryStoreIdentity == deliveryStoreIdentity,
               decision.capabilityOwnerIdentity
                 == capabilityOwnerIdentity else {
             throw IOSAcceptedHistoryOutboxError.compareAndSwapFailed
@@ -848,6 +899,8 @@ actor IOSAcceptedHistoryOutboxStore {
         terminalDelivery: IOSAcceptedOutputDeliveryAuthorization
     ) throws {
         guard membership.capabilityOwnerIdentity == capabilityOwnerIdentity,
+              membership.deliveryStoreIdentity == deliveryStoreIdentity,
+              terminalDelivery.storeIdentity == deliveryStoreIdentity,
               terminalDelivery.capabilityOwnerIdentity
                 == capabilityOwnerIdentity else {
             throw IOSAcceptedHistoryOutboxError.compareAndSwapFailed
@@ -865,6 +918,7 @@ actor IOSAcceptedHistoryOutboxStore {
         policy: IOSHistoryPolicyReceipt
     ) throws {
         guard membership.capabilityOwnerIdentity == capabilityOwnerIdentity,
+              membership.deliveryStoreIdentity == deliveryStoreIdentity,
               policy.capabilityOwnerIdentity == capabilityOwnerIdentity else {
             throw IOSAcceptedHistoryOutboxError.compareAndSwapFailed
         }
@@ -877,7 +931,8 @@ actor IOSAcceptedHistoryOutboxStore {
         membership: IOSAcceptedHistoryOutboxReceipt
     ) throws {
         guard membership.capabilityOwnerIdentity
-                == capabilityOwnerIdentity else {
+                == capabilityOwnerIdentity,
+              membership.deliveryStoreIdentity == deliveryStoreIdentity else {
             throw IOSAcceptedHistoryOutboxError.compareAndSwapFailed
         }
         if let uncertainIntent,
@@ -896,7 +951,9 @@ actor IOSAcceptedHistoryOutboxStore {
     func retireExpired(
         classification: IOSAcceptedHistoryOutboxTemporalReceipt
     ) throws {
-        guard classification.provesClassification(
+        guard classification.membership.deliveryStoreIdentity
+                == deliveryStoreIdentity,
+              classification.provesClassification(
             for: classification.membership,
             storeIdentity: storeIdentity,
             capabilityOwnerIdentity: capabilityOwnerIdentity
@@ -928,21 +985,29 @@ private extension IOSAcceptedHistoryOutboxStore {
 
     private func deliveryAbsenceAuthorization(
         for authorization: IOSAcceptedOutputDeliveryAuthorization,
-        observedSnapshot: IOSAcceptedHistoryOutboxJournalSnapshot?
+        observedSnapshot: IOSAcceptedHistoryOutboxJournalSnapshot?,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
     ) -> IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization {
         IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization(
             authorization: authorization,
             observedOutboxSnapshot: observedSnapshot,
             outboxStoreIdentity: storeIdentity,
             deliveryStoreIdentity: deliveryStoreIdentity,
-            capabilityOwnerIdentity: capabilityOwnerIdentity
+            capabilityOwnerIdentity: capabilityOwnerIdentity,
+            operationLeaseAuthorization: operationLeaseAuthorization
         )
     }
 
     private func publishDeliveryAbsence(
         authorization: IOSAcceptedOutputDeliveryAuthorization,
-        source: IOSAcceptedHistoryOutboxJournalSnapshot
+        source: IOSAcceptedHistoryOutboxJournalSnapshot,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
     ) throws -> IOSAcceptedHistoryOutboxDeliveryAbsenceDisposition {
+        guard operationGateBinding.proves(operationLeaseAuthorization) else {
+            throw IOSAcceptedHistoryOutboxError.compareAndSwapFailed
+        }
         let intent = UncertainDeliveryAbsenceIntent(
             authorization: authorization,
             source: source
@@ -958,7 +1023,9 @@ private extension IOSAcceptedHistoryOutboxStore {
             return .absent(
                 deliveryAbsenceAuthorization(
                     for: authorization,
-                    observedSnapshot: confirmed
+                    observedSnapshot: confirmed,
+                    operationLeaseAuthorization:
+                        operationLeaseAuthorization
                 )
             )
         } catch IOSAcceptedHistoryOutboxError.commitUncertain {
@@ -1011,6 +1078,7 @@ private extension IOSAcceptedHistoryOutboxStore {
         current: IOSAcceptedHistoryOutboxJournalSnapshot
     ) throws -> IOSAcceptedHistoryOutboxEntry {
         guard membership.storeIdentity == storeIdentity,
+              membership.deliveryStoreIdentity == deliveryStoreIdentity,
               membership.capabilityOwnerIdentity
                 == capabilityOwnerIdentity,
               current == membership.snapshot,
@@ -1324,6 +1392,7 @@ private extension IOSAcceptedHistoryOutboxStore {
                 entry: operation.entry,
                 snapshot: snapshot,
                 storeIdentity: storeIdentity,
+                deliveryStoreIdentity: deliveryStoreIdentity,
                 capabilityOwnerIdentity: capabilityOwnerIdentity
             )
         } catch IOSAcceptedHistoryOutboxError.commitUncertain {

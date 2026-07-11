@@ -396,7 +396,7 @@ struct IOSAcceptedOutputDeliveryValueTests {
         }
     }
 
-    @Test func authorizationEqualityIncludesCapabilityOwner() throws {
+    @Test func authorizationEqualityIncludesCapabilityOwnerAndStore() throws {
         let preparation = try makePreparation(
             rawAcceptedText: "AUTHORIZATION-OWNER-SECRET"
         )
@@ -408,22 +408,32 @@ struct IOSAcceptedOutputDeliveryValueTests {
             )
         )
         let owner = IOSAcceptedHistoryCapabilityOwnerIdentity()
+        let storeIdentity = IOSAcceptedOutputDeliveryStoreIdentity()
         let first = IOSAcceptedOutputDeliveryAuthorization(
             snapshot: snapshot,
+            storeIdentity: storeIdentity,
             capabilityOwnerIdentity: owner
         )
         let identical = IOSAcceptedOutputDeliveryAuthorization(
             snapshot: snapshot,
+            storeIdentity: storeIdentity,
             capabilityOwnerIdentity: owner
         )
         let foreign = IOSAcceptedOutputDeliveryAuthorization(
             snapshot: snapshot,
+            storeIdentity: storeIdentity,
             capabilityOwnerIdentity:
                 IOSAcceptedHistoryCapabilityOwnerIdentity()
+        )
+        let foreignStore = IOSAcceptedOutputDeliveryAuthorization(
+            snapshot: snapshot,
+            storeIdentity: IOSAcceptedOutputDeliveryStoreIdentity(),
+            capabilityOwnerIdentity: owner
         )
 
         #expect(first == identical)
         #expect(first != foreign)
+        #expect(first != foreignStore)
         let rendered = String(describing: first)
             + String(reflecting: foreign)
         #expect(rendered.contains("redacted"))

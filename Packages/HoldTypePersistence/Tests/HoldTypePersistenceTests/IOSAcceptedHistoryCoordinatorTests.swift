@@ -43,12 +43,17 @@ struct IOSAcceptedHistoryCoordinatorTests {
         #expect(first.acceptedHistoryStore === sameRoot.acceptedHistoryStore)
         #expect(first.outboxStore === sameRoot.outboxStore)
         #expect(first.deliveryStore === sameRoot.deliveryStore)
+        #expect(
+            first.deliveryStore.outboxStoreIdentity
+                == first.outboxStore.storeIdentity
+        )
         #expect(first.baselineRecoveryState === sameRoot.baselineRecoveryState)
         #expect(first.acceptanceState === sameRoot.acceptanceState)
         #expect(
             first.pendingReplacementState
                 === sameRoot.pendingReplacementState
         )
+        #expect(first.outboxWorkerState === sameRoot.outboxWorkerState)
         #expect(first.ownerIdentity == sameRoot.ownerIdentity)
         #expect(first !== differentRoot)
         #expect(first.ownerIdentity != differentRoot.ownerIdentity)
@@ -3266,6 +3271,1961 @@ struct IOSAcceptedHistoryCoordinatorTests {
     }
 }
 
+@Suite(.serialized)
+struct IOSAcceptedHistoryOutboxWorkerTests {
+    @Test func repositoryConflictAfterHeadObservationStaysTyped()
+        async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let head = try coordinatorOutboxEntry(
+            index: 0,
+            createdAt: fixture.clock.now.addingTimeInterval(-10)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [head]
+            )
+        )
+        let blocker = CoordinatorBoundaryBlocker()
+        fixture.policy.loadBlocker = blocker
+        let coordinator = fixture.coordinator()
+        let recovery = Task {
+            try await coordinator.recoverAcceptedHistoryOutbox()
+        }
+
+        #expect(blocker.waitUntilBlocked())
+        #expect(await fixture.outboxWorkerState.current() != nil)
+        fixture.repositoryIdentityState.markConflicted()
+        blocker.open()
+
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.repositoryIdentityConflict
+        ) {
+            _ = try await recovery.value
+        }
+        let loads = (
+            fixture.policy.loadCount,
+            fixture.accepted.loadCount,
+            fixture.outbox.loadCount,
+            fixture.delivery.loadCount
+        )
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.repositoryIdentityConflict
+        ) {
+            _ = try await coordinator.recoverAcceptedHistoryOutbox()
+        }
+        #expect(fixture.policy.loadCount == loads.0)
+        #expect(fixture.accepted.loadCount == loads.1)
+        #expect(fixture.outbox.loadCount == loads.2)
+        #expect(fixture.delivery.loadCount == loads.3)
+    }
+
+    @Test func cancellationBeforeWorkerLeaseDoesNoRepositoryWork()
+        async throws {
+        let probe = CoordinatorGateProbe()
+        let gate = IOSPersistenceOperationGate { event in probe.record(event) }
+        let fixture = CoordinatorFixture(gate: gate)
+        fixture.policy.install(.baseline)
+        let head = try coordinatorOutboxEntry(
+            index: 1,
+            createdAt: fixture.clock.now.addingTimeInterval(-10)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [head]
+            )
+        )
+        let blocker = CoordinatorAsyncOperationBlocker()
+        let active = Task {
+            try await gate.perform { await blocker.wait() }
+        }
+        await blocker.waitUntilSuspended()
+        let coordinator = fixture.coordinator()
+        let cancelled = Task {
+            try await coordinator.recoverAcceptedHistoryOutbox()
+        }
+        #expect(probe.waitUntilEnqueued())
+        cancelled.cancel()
+        await blocker.open()
+
+        try await active.value
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.cancelledBeforeOperation
+        ) {
+            _ = try await cancelled.value
+        }
+        #expect(fixture.policy.loadCount == 0)
+        #expect(fixture.accepted.loadCount == 0)
+        #expect(fixture.outbox.loadCount == 0)
+        #expect(fixture.delivery.loadCount == 0)
+        #expect(await fixture.outboxWorkerState.current() == nil)
+    }
+
+    @Test func reentrantWorkerCallFailsBeforeRepositoryWork() async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let coordinator = fixture.coordinator()
+
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.reentrantOperation
+        ) {
+            _ = try await fixture.gate.perform {
+                try await coordinator.recoverAcceptedHistoryOutbox()
+            }
+        }
+        #expect(fixture.policy.loadCount == 0)
+        #expect(fixture.accepted.loadCount == 0)
+        #expect(fixture.outbox.loadCount == 0)
+        #expect(fixture.delivery.loadCount == 0)
+        #expect(await fixture.outboxWorkerState.current() == nil)
+    }
+
+    @Test func foreignGatePrebindingPoisonsCoordinatorBeforeRepositoryIO()
+        async throws {
+        for (bindsOutbox, bindsDelivery) in [
+            (true, false),
+            (false, true),
+            (true, true),
+        ] {
+            let fixture = CoordinatorFixture()
+            let foreignGate = IOSPersistenceOperationGate()
+            if bindsOutbox {
+                #expect(
+                    fixture.outboxStore.bindOperationGateIdentity(
+                        foreignGate.identity
+                    )
+                )
+                #expect(
+                    !fixture.outboxStore.bindOperationGateIdentity(
+                        fixture.gate.identity
+                    )
+                )
+            }
+            if bindsDelivery {
+                #expect(
+                    fixture.deliveryStore.bindOperationGateIdentity(
+                        foreignGate.identity
+                    )
+                )
+                #expect(
+                    !fixture.deliveryStore.bindOperationGateIdentity(
+                        fixture.gate.identity
+                    )
+                )
+            }
+
+            let coordinator = fixture.coordinator()
+            await #expect(
+                throws: IOSAcceptedHistoryCoordinatorError
+                    .repositoryIdentityConflict
+            ) {
+                _ = try await coordinator.recoverAcceptedHistoryOutbox()
+            }
+            #expect(fixture.events.events.isEmpty)
+            #expect(fixture.policy.loadCount == 0)
+            #expect(fixture.accepted.loadCount == 0)
+            #expect(fixture.outbox.loadCount == 0)
+            #expect(fixture.delivery.loadCount == 0)
+            #expect(await fixture.outboxWorkerState.current() == nil)
+        }
+    }
+
+    @Test func terminalDeliveryReplacementRequiresExactOutboxAbsence()
+        async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let coordinator = fixture.coordinator()
+        let replacement = try await coordinatorPreparation(
+            using: coordinator,
+            text: "new accepted result"
+        )
+        let prior = try coordinatorOutboxEntry(
+            index: 1,
+            createdAt: fixture.clock.now.addingTimeInterval(-10),
+            acceptedText: "sealed prior result"
+        )
+        fixture.delivery.install(
+            try coordinatorDeliveryRecord(
+                matching: prior,
+                state: .committed
+            )
+        )
+
+        let result = try await coordinator.accept(replacement)
+
+        #expect(result.resolution == .committed)
+        #expect(result.deliveryRecord.deliveryID == replacement.deliveryID)
+        #expect(fixture.delivery.currentRecord?.deliveryID == replacement.deliveryID)
+        #expect(
+            fixture.accepted.currentEnvelope?.entries.first?.deliveryID
+                == replacement.deliveryID
+        )
+        #expect(fixture.outbox.currentEnvelope == nil)
+    }
+
+    @Test func terminalDeliveryWithMatchingOutboxBlocksUntilWorkerRetiresHead()
+        async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let coordinator = fixture.coordinator()
+        let replacement = try await coordinatorPreparation(
+            using: coordinator,
+            text: "new accepted result"
+        )
+        let prior = try coordinatorOutboxEntry(
+            index: 2,
+            createdAt: fixture.clock.now.addingTimeInterval(-10),
+            acceptedText: "sealed prior result"
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [prior]
+            )
+        )
+        fixture.delivery.install(
+            try coordinatorDeliveryRecord(
+                matching: prior,
+                state: .committed
+            )
+        )
+
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.historyTransferRequired
+        ) {
+            _ = try await coordinator.accept(replacement)
+        }
+        #expect(fixture.delivery.currentRecord?.deliveryID == prior.deliveryID)
+        #expect(fixture.outbox.currentEnvelope?.entries == [prior])
+        #expect(await fixture.pendingReplacementState.current() == nil)
+
+        #expect(
+            try await coordinator.recoverAcceptedHistoryOutbox() == .retired
+        )
+        let result = try await coordinator.accept(replacement)
+
+        #expect(result.resolution == .committed)
+        #expect(result.deliveryRecord.deliveryID == replacement.deliveryID)
+        #expect(fixture.outbox.currentEnvelope?.entries.isEmpty == true)
+    }
+
+    @Test func retainedInitialAcceptanceUncertaintyPreventsWorkerLease()
+        async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let coordinator = fixture.coordinator()
+        let preparation = try await coordinatorPreparation(
+            using: coordinator,
+            text: "uncertain accepted result"
+        )
+        let head = try coordinatorOutboxEntry(
+            index: 3,
+            createdAt: fixture.clock.now.addingTimeInterval(-10)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [head]
+            )
+        )
+        fixture.delivery.failNextCreate(
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+
+        await #expect(throws: IOSAcceptedOutputDeliveryError.commitUncertain) {
+            _ = try await coordinator.accept(preparation)
+        }
+        let outboxLoads = fixture.outbox.loadCount
+
+        #expect(
+            try await coordinator.recoverAcceptedHistoryOutbox()
+                == .pendingLocalRecovery
+        )
+        #expect(fixture.outbox.loadCount == outboxLoads)
+        #expect(await fixture.outboxWorkerState.current() == nil)
+
+        let result = try await coordinator.accept(preparation)
+        #expect(result.resolution == .committed)
+        #expect(result.deliveryRecord.deliveryID == preparation.deliveryID)
+        #expect(fixture.outbox.currentEnvelope?.entries == [head])
+    }
+
+    @Test func definitiveRowCASClearsWorkerAndNeverFallsThrough()
+        async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let now = fixture.clock.now
+        let first = try coordinatorOutboxEntry(
+            index: 4,
+            createdAt: now.addingTimeInterval(-20)
+        )
+        let second = try coordinatorOutboxEntry(
+            index: 5,
+            createdAt: now.addingTimeInterval(-10)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [first, second]
+            )
+        )
+        fixture.accepted.install(
+            try IOSAcceptedHistoryEnvelope(revision: 1, entries: [])
+        )
+        fixture.accepted.failReplace(
+            onCall: fixture.accepted.replaceCount + 1,
+            with: .compareAndSwapFailed,
+            commitBeforeThrowing: false
+        )
+        let coordinator = fixture.coordinator()
+
+        #expect(
+            try await coordinator.recoverAcceptedHistoryOutbox()
+                == .pendingLocalRecovery
+        )
+        #expect(await fixture.outboxWorkerState.current() == nil)
+        #expect(fixture.outbox.currentEnvelope?.entries == [first, second])
+        #expect(fixture.accepted.currentEnvelope?.entries.isEmpty == true)
+
+        #expect(
+            try await coordinator.recoverAcceptedHistoryOutbox() == .retired
+        )
+        #expect(fixture.outbox.currentEnvelope?.entries == [second])
+    }
+
+    @Test func definitiveMarkerCASClearsWorkerAndNeverFallsThrough()
+        async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let now = fixture.clock.now
+        let first = try coordinatorOutboxEntry(
+            index: 6,
+            createdAt: now.addingTimeInterval(-20)
+        )
+        let second = try coordinatorOutboxEntry(
+            index: 7,
+            createdAt: now.addingTimeInterval(-10)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [first, second]
+            )
+        )
+        fixture.delivery.install(
+            try coordinatorDeliveryRecord(
+                matching: first,
+                state: .pending
+            )
+        )
+        fixture.delivery.failReplace(
+            onCall: fixture.delivery.replaceCount + 3,
+            with: .compareAndSwapFailed,
+            commitBeforeThrowing: false
+        )
+        let coordinator = fixture.coordinator()
+
+        #expect(
+            try await coordinator.recoverAcceptedHistoryOutbox()
+                == .pendingLocalRecovery
+        )
+        #expect(await fixture.outboxWorkerState.current() == nil)
+        #expect(fixture.outbox.currentEnvelope?.entries == [first, second])
+        #expect(fixture.delivery.currentRecord?.historyWrite?.state == .pending)
+
+        #expect(
+            try await coordinator.recoverAcceptedHistoryOutbox() == .retired
+        )
+        #expect(fixture.outbox.currentEnvelope?.entries == [second])
+        #expect(
+            fixture.delivery.currentRecord?.historyWrite?.state == .committed
+        )
+    }
+
+    @Test func missingAndEmptyOutboxDoNoDownstreamWork() async throws {
+        for installsEmpty in [false, true] {
+            let fixture = CoordinatorFixture()
+            fixture.policy.install(.baseline)
+            if installsEmpty {
+                fixture.outbox.install(
+                    try IOSAcceptedHistoryOutboxEnvelope(
+                        revision: 1,
+                        entries: []
+                    )
+                )
+            }
+
+            let result = try await fixture.coordinator()
+                .recoverAcceptedHistoryOutbox()
+
+            #expect(result == .noWork)
+            #expect(fixture.policy.loadCount == 0)
+            #expect(fixture.accepted.loadCount == 0)
+            #expect(fixture.delivery.loadCount == 0)
+            #expect(fixture.outbox.currentEnvelope?.entries.isEmpty != false)
+        }
+    }
+
+    @Test func nonmatchingPolicyNeverMutatesOrSkipsTheHead() async throws {
+        let scenarios: [(IOSHistoryPolicyState, Int64)] = [
+            (
+                try IOSHistoryPolicyState(
+                    revision: 2,
+                    historyEnabled: false,
+                    policyGeneration: 2
+                ),
+                2
+            ),
+            (
+                try IOSHistoryPolicyState(
+                    revision: 1,
+                    historyEnabled: true,
+                    policyGeneration: 1
+                ),
+                2
+            ),
+            (
+                try IOSHistoryPolicyState(
+                    revision: 1,
+                    historyEnabled: false,
+                    policyGeneration: 1
+                ),
+                2
+            ),
+        ]
+
+        for (policy, entryGeneration) in scenarios {
+            let fixture = CoordinatorFixture()
+            fixture.policy.install(policy)
+            let now = fixture.clock.now
+            let first = try coordinatorOutboxEntry(
+                index: Int(policy.policyGeneration * 10),
+                createdAt: now.addingTimeInterval(-20),
+                generation: entryGeneration
+            )
+            let second = try coordinatorOutboxEntry(
+                index: Int(policy.policyGeneration * 10 + 1),
+                createdAt: now.addingTimeInterval(-10),
+                generation: entryGeneration
+            )
+            fixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [first, second]
+                )
+            )
+
+            #expect(
+                try await fixture.coordinator()
+                    .recoverAcceptedHistoryOutbox()
+                    == .pendingLocalRecovery
+            )
+            #expect(fixture.outbox.currentEnvelope?.entries == [first, second])
+            #expect(fixture.accepted.loadCount == 0)
+            #expect(fixture.delivery.loadCount == 0)
+            #expect(await fixture.outboxWorkerState.current() == nil)
+        }
+    }
+
+    @Test func cancelledMarkerRequiresStrictlyNewerPolicy() async throws {
+        let matching = CoordinatorFixture()
+        matching.policy.install(.baseline)
+        let matchingHead = try coordinatorOutboxEntry(
+            index: 30,
+            createdAt: matching.clock.now.addingTimeInterval(-10)
+        )
+        matching.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [matchingHead]
+            )
+        )
+        matching.delivery.install(
+            try coordinatorDeliveryRecord(
+                matching: matchingHead,
+                state: .cancelled
+            )
+        )
+
+        #expect(
+            try await matching.coordinator().recoverAcceptedHistoryOutbox()
+                == .pendingLocalRecovery
+        )
+        #expect(matching.outbox.currentEnvelope?.entries == [matchingHead])
+        #expect(matching.accepted.loadCount == 0)
+
+        let invalidated = CoordinatorFixture()
+        invalidated.policy.install(
+            try IOSHistoryPolicyState(
+                revision: 2,
+                historyEnabled: false,
+                policyGeneration: 2
+            )
+        )
+        let invalidatedHead = try coordinatorOutboxEntry(
+            index: 31,
+            createdAt: invalidated.clock.now.addingTimeInterval(-10)
+        )
+        invalidated.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [invalidatedHead]
+            )
+        )
+        invalidated.delivery.install(
+            try coordinatorDeliveryRecord(
+                matching: invalidatedHead,
+                state: .cancelled
+            )
+        )
+
+        #expect(
+            try await invalidated.coordinator()
+                .recoverAcceptedHistoryOutbox() == .retired
+        )
+        #expect(invalidated.outbox.currentEnvelope?.entries.isEmpty == true)
+        #expect(invalidated.accepted.loadCount == 0)
+    }
+
+    @Test func retainedCancellationCannotTargetUnrelatedDelivery()
+        async throws {
+        let fixture = CoordinatorFixture()
+        let invalidatedPolicy = try IOSHistoryPolicyState(
+            revision: 2,
+            historyEnabled: false,
+            policyGeneration: 2
+        )
+        fixture.policy.install(invalidatedPolicy)
+        let head = try coordinatorOutboxEntry(
+            index: 32,
+            createdAt: fixture.clock.now.addingTimeInterval(-10)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [head]
+            )
+        )
+        let observation = try #require(
+            try await fixture.outboxStore.observeHead()
+        )
+        let membership = try await fixture.outboxStore.confirmMembership(
+            observation: observation
+        )
+        let policy = try await fixture.policyStore.confirm(
+            expected: IOSHistoryPolicyExpectation(state: invalidatedPolicy)
+        )
+        let unrelatedEntry = try coordinatorOutboxEntry(
+            index: 33,
+            createdAt: head.createdAt
+        )
+        let unrelatedRecord = try coordinatorDeliveryRecord(
+            matching: unrelatedEntry,
+            state: .pending
+        )
+        fixture.delivery.install(unrelatedRecord)
+        let unrelatedAuthorization = try await fixture.deliveryStore
+            .confirmActiveHistoryRecovery(
+                expected: IOSAcceptedOutputDeliveryExpectation(
+                    record: unrelatedRecord
+                )
+            )
+        let deliveryReplaces = fixture.delivery.replaceCount
+        await fixture.outboxWorkerState.store(
+            IOSAcceptedHistoryOutboxWorkerWork(
+                ownerIdentity: fixture.ownerIdentity,
+                phase: .cancellationAuthorized(
+                    membership,
+                    policy,
+                    unrelatedAuthorization
+                )
+            )
+        )
+
+        #expect(
+            try await fixture.coordinator().recoverAcceptedHistoryOutbox()
+                == .pendingLocalRecovery
+        )
+        #expect(await fixture.outboxWorkerState.current() == nil)
+        #expect(fixture.delivery.replaceCount == deliveryReplaces)
+        #expect(
+            fixture.delivery.currentRecord?.historyWrite?.state == .pending
+        )
+        #expect(fixture.outbox.currentEnvelope?.entries == [head])
+    }
+
+    @Test func eachInvocationRetiresOnlyTheCanonicalHead() async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let now = fixture.clock.now
+        let first = try coordinatorOutboxEntry(
+            index: 10,
+            createdAt: now.addingTimeInterval(-20)
+        )
+        let second = try coordinatorOutboxEntry(
+            index: 11,
+            createdAt: now.addingTimeInterval(-10)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [first, second]
+            )
+        )
+        let coordinator = fixture.coordinator()
+
+        #expect(
+            try await coordinator.recoverAcceptedHistoryOutbox() == .retired
+        )
+        #expect(fixture.outbox.currentEnvelope?.entries == [second])
+        #expect(
+            fixture.accepted.currentEnvelope?.entries.map(\.deliveryID)
+                == [first.deliveryID]
+        )
+
+        #expect(
+            try await coordinator.recoverAcceptedHistoryOutbox() == .retired
+        )
+        #expect(fixture.outbox.currentEnvelope?.entries.isEmpty == true)
+        #expect(
+            Set(fixture.accepted.currentEnvelope?.entries.map(\.deliveryID) ?? [])
+                == Set([first.deliveryID, second.deliveryID])
+        )
+    }
+
+    @Test func capacityLossRetiresHeadWithoutChangingAcceptedEnvelope()
+        async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let now = fixture.clock.now
+        let head = try coordinatorOutboxEntry(
+            index: 20,
+            createdAt: now.addingTimeInterval(-1_000)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [head]
+            )
+        )
+        let rows = try (0..<20).map { offset in
+            try coordinatorHistoryEntry(
+                index: 100 + offset,
+                createdAt: now.addingTimeInterval(Double(-offset))
+            )
+        }
+        let accepted = try IOSAcceptedHistoryEnvelope(
+            revision: 7,
+            entries: IOSAcceptedHistoryValidation.sorted(rows)
+        )
+        fixture.accepted.install(accepted)
+
+        #expect(
+            try await fixture.coordinator().recoverAcceptedHistoryOutbox()
+                == .retired
+        )
+        #expect(fixture.accepted.currentEnvelope == accepted)
+        #expect(fixture.outbox.currentEnvelope?.entries.isEmpty == true)
+    }
+
+    @Test func initialInvalidationCancelsExactMarkerWithoutRowWork()
+        async throws {
+        let fixture = CoordinatorFixture()
+        let invalidated = try IOSHistoryPolicyState(
+            revision: 2,
+            historyEnabled: false,
+            policyGeneration: 2
+        )
+        fixture.policy.install(invalidated)
+        let head = try coordinatorOutboxEntry(
+            index: 30,
+            createdAt: fixture.clock.now.addingTimeInterval(-10)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [head]
+            )
+        )
+        fixture.delivery.install(
+            try coordinatorDeliveryRecord(
+                matching: head,
+                state: .pending
+            )
+        )
+
+        #expect(
+            try await fixture.coordinator().recoverAcceptedHistoryOutbox()
+                == .retired
+        )
+        #expect(fixture.accepted.loadCount == 0)
+        #expect(
+            fixture.delivery.currentRecord?.historyWrite?.state == .cancelled
+        )
+        #expect(fixture.outbox.currentEnvelope?.entries.isEmpty == true)
+    }
+
+    @Test func policyCutoverAfterRowDecisionCancelsAndRetires() async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let head = try coordinatorOutboxEntry(
+            index: 40,
+            createdAt: fixture.clock.now.addingTimeInterval(-10)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [head]
+            )
+        )
+        fixture.delivery.install(
+            try coordinatorDeliveryRecord(
+                matching: head,
+                state: .pending
+            )
+        )
+        fixture.policy.raceReplace(
+            onCall: fixture.policy.replaceCount + 2,
+            with: try IOSHistoryPolicyState(
+                revision: 2,
+                historyEnabled: false,
+                policyGeneration: 2
+            )
+        )
+
+        #expect(
+            try await fixture.coordinator().recoverAcceptedHistoryOutbox()
+                == .retired
+        )
+        #expect(
+            fixture.accepted.currentEnvelope?.entries.map(\.deliveryID)
+                == [head.deliveryID]
+        )
+        #expect(
+            fixture.delivery.currentRecord?.historyWrite?.state == .cancelled
+        )
+        #expect(fixture.outbox.currentEnvelope?.entries.isEmpty == true)
+    }
+
+    @Test func temporalExpiryRetiresAndRollbackNeverSkipsHead() async throws {
+        let expiredFixture = CoordinatorFixture()
+        expiredFixture.policy.install(.baseline)
+        let expiredNow = expiredFixture.clock.now
+        let expired = try coordinatorOutboxEntry(
+            index: 50,
+            createdAt: expiredNow.addingTimeInterval(-86_400)
+        )
+        expiredFixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [expired]
+            )
+        )
+        #expect(
+            try await expiredFixture.coordinator()
+                .recoverAcceptedHistoryOutbox() == .retired
+        )
+        #expect(expiredFixture.policy.loadCount == 0)
+        #expect(expiredFixture.accepted.loadCount == 0)
+        #expect(expiredFixture.delivery.loadCount == 0)
+
+        let rollbackFixture = CoordinatorFixture()
+        rollbackFixture.policy.install(.baseline)
+        let rollbackNow = rollbackFixture.clock.now
+        let first = try coordinatorOutboxEntry(
+            index: 51,
+            createdAt: rollbackNow.addingTimeInterval(1)
+        )
+        let second = try coordinatorOutboxEntry(
+            index: 52,
+            createdAt: rollbackNow.addingTimeInterval(2)
+        )
+        rollbackFixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [first, second]
+            )
+        )
+        #expect(
+            try await rollbackFixture.coordinator()
+                .recoverAcceptedHistoryOutbox() == .pendingLocalRecovery
+        )
+        #expect(rollbackFixture.outbox.currentEnvelope?.entries == [first, second])
+        #expect(rollbackFixture.policy.loadCount == 0)
+        #expect(rollbackFixture.accepted.loadCount == 0)
+        #expect(rollbackFixture.delivery.loadCount == 0)
+    }
+
+    @Test func committedTerminalRetiresWithoutReevaluatingAbsentRow()
+        async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let head = try coordinatorOutboxEntry(
+            index: 60,
+            createdAt: fixture.clock.now.addingTimeInterval(-10)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [head]
+            )
+        )
+        fixture.accepted.install(
+            try IOSAcceptedHistoryEnvelope(revision: 9, entries: [])
+        )
+        fixture.delivery.install(
+            try coordinatorDeliveryRecord(
+                matching: head,
+                state: .committed
+            )
+        )
+
+        #expect(
+            try await fixture.relaunchedCoordinator()
+                .recoverAcceptedHistoryOutbox() == .retired
+        )
+        #expect(fixture.accepted.currentEnvelope?.entries.isEmpty == true)
+        #expect(fixture.accepted.loadCount == 0)
+        #expect(fixture.outbox.currentEnvelope?.entries.isEmpty == true)
+    }
+
+    @Test func identityCollisionBlocksHeadAndLaterEntry() async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let now = fixture.clock.now
+        let first = try coordinatorOutboxEntry(
+            index: 70,
+            createdAt: now.addingTimeInterval(-20)
+        )
+        let second = try coordinatorOutboxEntry(
+            index: 71,
+            createdAt: now.addingTimeInterval(-10)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [first, second]
+            )
+        )
+        fixture.delivery.install(
+            try coordinatorDeliveryRecord(
+                matching: first,
+                state: .pending,
+                acceptedText: "different bytes"
+            )
+        )
+
+        #expect(
+            try await fixture.coordinator().recoverAcceptedHistoryOutbox()
+                == .pendingLocalRecovery
+        )
+        #expect(fixture.outbox.currentEnvelope?.entries == [first, second])
+        #expect(fixture.accepted.loadCount == 0)
+    }
+
+    @Test func uncertaintyResumesExactPhaseAcrossSameRootCoordinator()
+        async throws {
+        for commitWasVisible in [false, true] {
+            let fixture = CoordinatorFixture()
+            fixture.policy.install(.baseline)
+            let now = fixture.clock.now
+            let first = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 81 : 80,
+                createdAt: now.addingTimeInterval(-20)
+            )
+            let second = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 83 : 82,
+                createdAt: now.addingTimeInterval(-10)
+            )
+            fixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [first, second]
+                )
+            )
+            fixture.outbox.failReplace(
+                onCall: fixture.outbox.replaceCount + 2,
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+
+            #expect(
+                try await fixture.coordinator()
+                    .recoverAcceptedHistoryOutbox() == .pendingLocalRecovery
+            )
+            #expect(
+                try await fixture.coordinator()
+                    .recoverAcceptedHistoryOutbox() == .retired
+            )
+            #expect(fixture.outbox.currentEnvelope?.entries == [second])
+            #expect(
+                fixture.accepted.currentEnvelope?.entries.filter {
+                    $0.deliveryID == first.deliveryID
+                }.count == 1
+            )
+        }
+    }
+
+    @Test func membershipAndPolicyUncertaintyResumeOnlyTheExactHead()
+        async throws {
+        for commitWasVisible in [false, true] {
+            let membershipFixture = CoordinatorFixture()
+            membershipFixture.policy.install(.baseline)
+            let now = membershipFixture.clock.now
+            let first = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 111 : 110,
+                createdAt: now.addingTimeInterval(-20)
+            )
+            let second = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 113 : 112,
+                createdAt: now.addingTimeInterval(-10)
+            )
+            membershipFixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [first, second]
+                )
+            )
+            membershipFixture.outbox.failReplace(
+                onCall: membershipFixture.outbox.replaceCount + 1,
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+            let membershipCoordinator = membershipFixture.coordinator()
+
+            #expect(
+                try await membershipCoordinator
+                    .recoverAcceptedHistoryOutbox() == .pendingLocalRecovery
+            )
+            #expect(
+                try await membershipCoordinator
+                    .recoverAcceptedHistoryOutbox() == .retired
+            )
+            #expect(membershipFixture.outbox.currentEnvelope?.entries == [second])
+
+            let policyFixture = CoordinatorFixture()
+            policyFixture.policy.install(.baseline)
+            let policyHead = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 121 : 120,
+                createdAt: policyFixture.clock.now.addingTimeInterval(-10)
+            )
+            policyFixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [policyHead]
+                )
+            )
+            policyFixture.policy.failReplace(
+                onCall: policyFixture.policy.replaceCount + 1,
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+            let policyCoordinator = policyFixture.coordinator()
+
+            #expect(
+                try await policyCoordinator.recoverAcceptedHistoryOutbox()
+                    == .pendingLocalRecovery
+            )
+            #expect(policyFixture.accepted.loadCount == 0)
+            #expect(
+                try await policyCoordinator.recoverAcceptedHistoryOutbox()
+                    == .retired
+            )
+            #expect(policyFixture.outbox.currentEnvelope?.entries.isEmpty == true)
+        }
+    }
+
+    @Test func rowAndPolicyRevalidationUncertaintyDoNotRepeatDecisions()
+        async throws {
+        for commitWasVisible in [false, true] {
+            let rowFixture = CoordinatorFixture()
+            rowFixture.policy.install(.baseline)
+            let rowHead = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 131 : 130,
+                createdAt: rowFixture.clock.now.addingTimeInterval(-10)
+            )
+            rowFixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [rowHead]
+                )
+            )
+            rowFixture.accepted.failNextCreate(
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+            let rowCoordinator = rowFixture.coordinator()
+
+            #expect(
+                try await rowCoordinator.recoverAcceptedHistoryOutbox()
+                    == .pendingLocalRecovery
+            )
+            #expect(
+                try await rowCoordinator.recoverAcceptedHistoryOutbox()
+                    == .retired
+            )
+            #expect(
+                rowFixture.accepted.currentEnvelope?.entries.map(\.deliveryID)
+                    == [rowHead.deliveryID]
+            )
+
+            let policyFixture = CoordinatorFixture()
+            policyFixture.policy.install(.baseline)
+            let policyHead = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 141 : 140,
+                createdAt: policyFixture.clock.now.addingTimeInterval(-10)
+            )
+            policyFixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [policyHead]
+                )
+            )
+            policyFixture.policy.failReplace(
+                onCall: policyFixture.policy.replaceCount + 2,
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+            let policyCoordinator = policyFixture.coordinator()
+
+            #expect(
+                try await policyCoordinator.recoverAcceptedHistoryOutbox()
+                    == .pendingLocalRecovery
+            )
+            let acceptedCreates = policyFixture.accepted.createCount
+            #expect(
+                try await policyCoordinator.recoverAcceptedHistoryOutbox()
+                    == .retired
+            )
+            #expect(policyFixture.accepted.createCount == acceptedCreates)
+        }
+    }
+
+    @Test func deliveryAndMarkerUncertaintyResumeWithoutRepeatingTheRow()
+        async throws {
+        for commitWasVisible in [false, true] {
+            let confirmationFixture = CoordinatorFixture()
+            confirmationFixture.policy.install(.baseline)
+            let confirmationHead = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 151 : 150,
+                createdAt: confirmationFixture.clock.now
+                    .addingTimeInterval(-10)
+            )
+            confirmationFixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [confirmationHead]
+                )
+            )
+            confirmationFixture.delivery.install(
+                try coordinatorDeliveryRecord(
+                    matching: confirmationHead,
+                    state: .pending
+                )
+            )
+            confirmationFixture.delivery.failReplace(
+                onCall: confirmationFixture.delivery.replaceCount + 1,
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+            let confirmationCoordinator = confirmationFixture.coordinator()
+
+            #expect(
+                try await confirmationCoordinator
+                    .recoverAcceptedHistoryOutbox() == .pendingLocalRecovery
+            )
+            #expect(confirmationFixture.accepted.loadCount == 0)
+            #expect(
+                try await confirmationCoordinator
+                    .recoverAcceptedHistoryOutbox() == .retired
+            )
+
+            let markerFixture = CoordinatorFixture()
+            markerFixture.policy.install(.baseline)
+            let markerHead = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 161 : 160,
+                createdAt: markerFixture.clock.now.addingTimeInterval(-10)
+            )
+            markerFixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [markerHead]
+                )
+            )
+            markerFixture.delivery.install(
+                try coordinatorDeliveryRecord(
+                    matching: markerHead,
+                    state: .pending
+                )
+            )
+            markerFixture.delivery.failReplace(
+                onCall: markerFixture.delivery.replaceCount + 3,
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+            let markerCoordinator = markerFixture.coordinator()
+
+            #expect(
+                try await markerCoordinator.recoverAcceptedHistoryOutbox()
+                    == .pendingLocalRecovery
+            )
+            let acceptedCreates = markerFixture.accepted.createCount
+            #expect(
+                try await markerCoordinator.recoverAcceptedHistoryOutbox()
+                    == .retired
+            )
+            #expect(markerFixture.accepted.createCount == acceptedCreates)
+            #expect(
+                markerFixture.delivery.currentRecord?.historyWrite?.state
+                    == .committed
+            )
+        }
+    }
+
+    @Test func laterDeliveryConfirmationsResumeExactWorkerPhase()
+        async throws {
+        for commitWasVisible in [false, true] {
+            let postRow = CoordinatorFixture()
+            postRow.policy.install(.baseline)
+            let postRowNow = postRow.clock.now
+            let postRowHead = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 165 : 164,
+                createdAt: postRowNow.addingTimeInterval(-20)
+            )
+            let postRowNext = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 167 : 166,
+                createdAt: postRowNow.addingTimeInterval(-10)
+            )
+            postRow.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [postRowHead, postRowNext]
+                )
+            )
+            postRow.delivery.install(
+                try coordinatorDeliveryRecord(
+                    matching: postRowHead,
+                    state: .pending
+                )
+            )
+            postRow.delivery.failReplace(
+                onCall: postRow.delivery.replaceCount + 2,
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+            let postRowCoordinator = postRow.coordinator()
+
+            #expect(
+                try await postRowCoordinator.recoverAcceptedHistoryOutbox()
+                    == .pendingLocalRecovery
+            )
+            #expect(
+                postRow.accepted.currentEnvelope?.entries.map(\.deliveryID)
+                    == [postRowHead.deliveryID]
+            )
+            #expect(postRow.outbox.currentEnvelope?.entries == [
+                postRowHead,
+                postRowNext,
+            ])
+            let postRowCounts = (
+                postRow.policy.loadCount,
+                postRow.policy.replaceCount,
+                postRow.accepted.loadCount,
+                postRow.accepted.createCount,
+                postRow.accepted.replaceCount
+            )
+
+            #expect(
+                try await postRowCoordinator.recoverAcceptedHistoryOutbox()
+                    == .retired
+            )
+            #expect(postRow.policy.loadCount == postRowCounts.0)
+            #expect(postRow.policy.replaceCount == postRowCounts.1)
+            #expect(postRow.accepted.loadCount == postRowCounts.2)
+            #expect(postRow.accepted.createCount == postRowCounts.3)
+            #expect(postRow.accepted.replaceCount == postRowCounts.4)
+            #expect(postRow.outbox.currentEnvelope?.entries == [postRowNext])
+            #expect(
+                postRow.delivery.currentRecord?.historyWrite?.state
+                    == .committed
+            )
+
+            let invalidation = CoordinatorFixture()
+            invalidation.policy.install(
+                try IOSHistoryPolicyState(
+                    revision: 2,
+                    historyEnabled: true,
+                    policyGeneration: 2
+                )
+            )
+            let invalidationNow = invalidation.clock.now
+            let invalidationHead = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 175 : 174,
+                createdAt: invalidationNow.addingTimeInterval(-20)
+            )
+            let invalidationNext = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 177 : 176,
+                createdAt: invalidationNow.addingTimeInterval(-10)
+            )
+            invalidation.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [invalidationHead, invalidationNext]
+                )
+            )
+            invalidation.delivery.install(
+                try coordinatorDeliveryRecord(
+                    matching: invalidationHead,
+                    state: .pending
+                )
+            )
+            invalidation.delivery.failReplace(
+                onCall: invalidation.delivery.replaceCount + 1,
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+            let invalidationCoordinator = invalidation.coordinator()
+
+            #expect(
+                try await invalidationCoordinator.recoverAcceptedHistoryOutbox()
+                    == .pendingLocalRecovery
+            )
+            #expect(invalidation.accepted.loadCount == 0)
+            #expect(invalidation.outbox.currentEnvelope?.entries == [
+                invalidationHead,
+                invalidationNext,
+            ])
+            let invalidationCounts = (
+                invalidation.policy.loadCount,
+                invalidation.policy.replaceCount,
+                invalidation.accepted.loadCount
+            )
+
+            #expect(
+                try await invalidationCoordinator.recoverAcceptedHistoryOutbox()
+                    == .retired
+            )
+            #expect(invalidation.policy.loadCount == invalidationCounts.0)
+            #expect(invalidation.policy.replaceCount == invalidationCounts.1)
+            #expect(invalidation.accepted.loadCount == invalidationCounts.2)
+            #expect(
+                invalidation.outbox.currentEnvelope?.entries
+                    == [invalidationNext]
+            )
+            #expect(
+                invalidation.delivery.currentRecord?.historyWrite?.state
+                    == .cancelled
+            )
+        }
+    }
+
+    @Test func cancellationUncertaintyResumesWithoutAnyRowDecision()
+        async throws {
+        for commitWasVisible in [false, true] {
+            let fixture = CoordinatorFixture()
+            fixture.policy.install(
+                try IOSHistoryPolicyState(
+                    revision: 2,
+                    historyEnabled: false,
+                    policyGeneration: 2
+                )
+            )
+            let head = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 171 : 170,
+                createdAt: fixture.clock.now.addingTimeInterval(-10)
+            )
+            fixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [head]
+                )
+            )
+            fixture.delivery.install(
+                try coordinatorDeliveryRecord(
+                    matching: head,
+                    state: .pending
+                )
+            )
+            fixture.delivery.failReplace(
+                onCall: fixture.delivery.replaceCount + 2,
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+            let coordinator = fixture.coordinator()
+
+            #expect(
+                try await coordinator.recoverAcceptedHistoryOutbox()
+                    == .pendingLocalRecovery
+            )
+            #expect(fixture.accepted.loadCount == 0)
+            #expect(
+                try await coordinator.recoverAcceptedHistoryOutbox()
+                    == .retired
+            )
+            #expect(fixture.accepted.loadCount == 0)
+            #expect(
+                fixture.delivery.currentRecord?.historyWrite?.state
+                    == .cancelled
+            )
+        }
+    }
+
+    @Test func processLossReconstructsMembershipAndRetirementUncertainty()
+        async throws {
+        for commitWasVisible in [false, true] {
+            let membershipFixture = CoordinatorFixture()
+            membershipFixture.policy.install(.baseline)
+            let membershipHead = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 181 : 180,
+                createdAt: membershipFixture.clock.now.addingTimeInterval(-10)
+            )
+            membershipFixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [membershipHead]
+                )
+            )
+            membershipFixture.outbox.failReplace(
+                onCall: membershipFixture.outbox.replaceCount + 1,
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+
+            #expect(
+                try await membershipFixture.coordinator()
+                    .recoverAcceptedHistoryOutbox() == .pendingLocalRecovery
+            )
+            #expect(
+                try await membershipFixture.relaunchedCoordinator()
+                    .recoverAcceptedHistoryOutbox() == .retired
+            )
+            #expect(
+                membershipFixture.accepted.currentEnvelope?.entries
+                    .map(\.deliveryID) == [membershipHead.deliveryID]
+            )
+            #expect(
+                membershipFixture.outbox.currentEnvelope?.entries.isEmpty
+                    == true
+            )
+
+            let retirementFixture = CoordinatorFixture()
+            retirementFixture.policy.install(.baseline)
+            let retirementHead = try coordinatorOutboxEntry(
+                index: commitWasVisible ? 183 : 182,
+                createdAt: retirementFixture.clock.now.addingTimeInterval(-10)
+            )
+            retirementFixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [retirementHead]
+                )
+            )
+            retirementFixture.outbox.failReplace(
+                onCall: retirementFixture.outbox.replaceCount + 2,
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+
+            #expect(
+                try await retirementFixture.coordinator()
+                    .recoverAcceptedHistoryOutbox() == .pendingLocalRecovery
+            )
+            let relaunchedResolution = try await retirementFixture
+                .relaunchedCoordinator().recoverAcceptedHistoryOutbox()
+            #expect(
+                relaunchedResolution == (commitWasVisible ? .noWork : .retired)
+            )
+            #expect(
+                retirementFixture.accepted.currentEnvelope?.entries
+                    .map(\.deliveryID) == [retirementHead.deliveryID]
+            )
+            #expect(
+                retirementFixture.outbox.currentEnvelope?.entries.isEmpty
+                    == true
+            )
+        }
+    }
+
+    @Test func processLossReplaysNotRetainedAndNewerPolicyTerminalBoundaries()
+        async throws {
+        let capacityFixture = CoordinatorFixture()
+        capacityFixture.policy.install(.baseline)
+        let capacityNow = capacityFixture.clock.now
+        let capacityHead = try coordinatorOutboxEntry(
+            index: 190,
+            createdAt: capacityNow.addingTimeInterval(-1_000)
+        )
+        capacityFixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [capacityHead]
+            )
+        )
+        let retainedRows = try (0..<20).map { offset in
+            try coordinatorHistoryEntry(
+                index: 1_000 + offset,
+                createdAt: capacityNow.addingTimeInterval(Double(-offset))
+            )
+        }
+        let retainedEnvelope = try IOSAcceptedHistoryEnvelope(
+            revision: 7,
+            entries: IOSAcceptedHistoryValidation.sorted(retainedRows)
+        )
+        capacityFixture.accepted.install(retainedEnvelope)
+        capacityFixture.outbox.failReplace(
+            onCall: capacityFixture.outbox.replaceCount + 2,
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+
+        #expect(
+            try await capacityFixture.coordinator()
+                .recoverAcceptedHistoryOutbox() == .pendingLocalRecovery
+        )
+        #expect(capacityFixture.accepted.currentEnvelope == retainedEnvelope)
+        #expect(
+            try await capacityFixture.relaunchedCoordinator()
+                .recoverAcceptedHistoryOutbox() == .retired
+        )
+        #expect(capacityFixture.accepted.currentEnvelope == retainedEnvelope)
+        #expect(capacityFixture.outbox.currentEnvelope?.entries.isEmpty == true)
+
+        for (offset, state) in [
+            IOSAcceptedOutputHistoryWriteState.cancelled,
+            .committed,
+        ].enumerated() {
+            let fixture = CoordinatorFixture()
+            fixture.policy.install(
+                try IOSHistoryPolicyState(
+                    revision: 2,
+                    historyEnabled: true,
+                    policyGeneration: 2
+                )
+            )
+            let head = try coordinatorOutboxEntry(
+                index: 191 + offset,
+                createdAt: fixture.clock.now.addingTimeInterval(-10)
+            )
+            fixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [head]
+                )
+            )
+            fixture.delivery.install(
+                try coordinatorDeliveryRecord(matching: head, state: state)
+            )
+
+            #expect(
+                try await fixture.relaunchedCoordinator()
+                    .recoverAcceptedHistoryOutbox() == .retired
+            )
+            #expect(fixture.accepted.loadCount == 0)
+            #expect(fixture.delivery.currentRecord?.historyWrite?.state == state)
+            #expect(fixture.outbox.currentEnvelope?.entries.isEmpty == true)
+        }
+    }
+
+    @Test func terminalRetirementUncertaintyAndCASNeverSkipTheNextHead()
+        async throws {
+        let cases: [(IOSAcceptedHistoryOutboxError, Bool)] = [
+            (.commitUncertain, false),
+            (.commitUncertain, true),
+            (.compareAndSwapFailed, false),
+        ]
+        for (offset, scenario) in cases.enumerated() {
+            let (error, commitWasVisible) = scenario
+            let fixture = CoordinatorFixture()
+            fixture.policy.install(.baseline)
+            let now = fixture.clock.now
+            let first = try coordinatorOutboxEntry(
+                index: 200 + offset * 2,
+                createdAt: now.addingTimeInterval(-20)
+            )
+            let second = try coordinatorOutboxEntry(
+                index: 201 + offset * 2,
+                createdAt: now.addingTimeInterval(-10)
+            )
+            fixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [first, second]
+                )
+            )
+            fixture.delivery.install(
+                try coordinatorDeliveryRecord(
+                    matching: first,
+                    state: .committed
+                )
+            )
+            fixture.outbox.failReplace(
+                onCall: fixture.outbox.replaceCount + 2,
+                with: error,
+                commitBeforeThrowing: commitWasVisible
+            )
+            let coordinator = fixture.coordinator()
+
+            #expect(
+                try await coordinator.recoverAcceptedHistoryOutbox()
+                    == .pendingLocalRecovery
+            )
+            #expect(fixture.accepted.loadCount == 0)
+            #expect(
+                fixture.outbox.currentEnvelope?.entries
+                    == (commitWasVisible ? [second] : [first, second])
+            )
+            if error == .compareAndSwapFailed {
+                #expect(await fixture.outboxWorkerState.current() == nil)
+            } else {
+                #expect(await fixture.outboxWorkerState.current() != nil)
+            }
+
+            #expect(
+                try await coordinator.recoverAcceptedHistoryOutbox() == .retired
+            )
+            #expect(fixture.outbox.currentEnvelope?.entries == [second])
+            #expect(fixture.accepted.loadCount == 0)
+        }
+    }
+
+    @Test func newerEnabledPolicyInvalidatesBeforeAndAfterRowDecision()
+        async throws {
+        let before = CoordinatorFixture()
+        before.policy.install(
+            try IOSHistoryPolicyState(
+                revision: 2,
+                historyEnabled: true,
+                policyGeneration: 2
+            )
+        )
+        let beforeHead = try coordinatorOutboxEntry(
+            index: 210,
+            createdAt: before.clock.now.addingTimeInterval(-10)
+        )
+        before.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [beforeHead]
+            )
+        )
+        before.delivery.install(
+            try coordinatorDeliveryRecord(matching: beforeHead, state: .pending)
+        )
+
+        #expect(
+            try await before.coordinator().recoverAcceptedHistoryOutbox()
+                == .retired
+        )
+        #expect(before.accepted.loadCount == 0)
+        #expect(before.delivery.currentRecord?.historyWrite?.state == .cancelled)
+        #expect(before.outbox.currentEnvelope?.entries.isEmpty == true)
+
+        let after = CoordinatorFixture()
+        after.policy.install(.baseline)
+        let afterHead = try coordinatorOutboxEntry(
+            index: 211,
+            createdAt: after.clock.now.addingTimeInterval(-10)
+        )
+        after.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [afterHead]
+            )
+        )
+        after.delivery.install(
+            try coordinatorDeliveryRecord(matching: afterHead, state: .pending)
+        )
+        after.policy.raceReplace(
+            onCall: after.policy.replaceCount + 2,
+            with: try IOSHistoryPolicyState(
+                revision: 2,
+                historyEnabled: true,
+                policyGeneration: 2
+            )
+        )
+
+        #expect(
+            try await after.coordinator().recoverAcceptedHistoryOutbox()
+                == .retired
+        )
+        #expect(
+            after.accepted.currentEnvelope?.entries.map(\.deliveryID)
+                == [afterHead.deliveryID]
+        )
+        #expect(after.delivery.currentRecord?.historyWrite?.state == .cancelled)
+        #expect(after.outbox.currentEnvelope?.entries.isEmpty == true)
+    }
+
+    @Test func discardedAndMatchingTemporalDeliveryBranchesAreExact()
+        async throws {
+        let discarded = CoordinatorFixture()
+        discarded.policy.install(.baseline)
+        let discardedHead = try coordinatorOutboxEntry(
+            index: 220,
+            createdAt: discarded.clock.now.addingTimeInterval(-10)
+        )
+        discarded.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [discardedHead]
+            )
+        )
+        discarded.delivery.install(
+            try coordinatorDiscardedDeliveryRecord(matching: discardedHead)
+        )
+
+        #expect(
+            try await discarded.coordinator().recoverAcceptedHistoryOutbox()
+                == .retired
+        )
+        #expect(
+            discarded.accepted.currentEnvelope?.entries.map(\.deliveryID)
+                == [discardedHead.deliveryID]
+        )
+        #expect(discarded.delivery.currentRecord?.deliveryState == .discarded)
+        #expect(discarded.outbox.currentEnvelope?.entries.isEmpty == true)
+
+        let expired = CoordinatorFixture()
+        expired.policy.install(.baseline)
+        let expiredHead = try coordinatorOutboxEntry(
+            index: 221,
+            createdAt: expired.clock.now.addingTimeInterval(-10)
+        )
+        expired.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [expiredHead]
+            )
+        )
+        expired.delivery.install(
+            try coordinatorDeliveryRecord(matching: expiredHead, state: .pending)
+        )
+        let expiryBlocker = CoordinatorBoundaryBlocker()
+        expired.delivery.blockLoad(
+            onCall: expired.delivery.loadCount + 1,
+            with: expiryBlocker
+        )
+        let expiryRecovery = Task {
+            try await expired.coordinator().recoverAcceptedHistoryOutbox()
+        }
+        #expect(expiryBlocker.waitUntilBlocked())
+        expired.clock.advance(seconds: 86_400)
+        expiryBlocker.open()
+
+        #expect(try await expiryRecovery.value == .pendingLocalRecovery)
+        #expect(expired.accepted.loadCount == 0)
+        #expect(expired.outbox.currentEnvelope?.entries == [expiredHead])
+        #expect(
+            try await expired.coordinator().recoverAcceptedHistoryOutbox()
+                == .retired
+        )
+        #expect(expired.accepted.loadCount == 0)
+
+        let expiredAfterRow = CoordinatorFixture()
+        expiredAfterRow.policy.install(.baseline)
+        let expiredAfterRowHead = try coordinatorOutboxEntry(
+            index: 223,
+            createdAt: expiredAfterRow.clock.now.addingTimeInterval(-10)
+        )
+        expiredAfterRow.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [expiredAfterRowHead]
+            )
+        )
+        expiredAfterRow.delivery.install(
+            try coordinatorDeliveryRecord(
+                matching: expiredAfterRowHead,
+                state: .pending
+            )
+        )
+        let postRowExpiryBlocker = CoordinatorBoundaryBlocker()
+        expiredAfterRow.delivery.blockLoad(
+            onCall: expiredAfterRow.delivery.loadCount + 2,
+            with: postRowExpiryBlocker
+        )
+        let postRowExpiryRecovery = Task {
+            try await expiredAfterRow.coordinator()
+                .recoverAcceptedHistoryOutbox()
+        }
+        #expect(postRowExpiryBlocker.waitUntilBlocked())
+        expiredAfterRow.clock.advance(seconds: 86_400)
+        postRowExpiryBlocker.open()
+
+        #expect(try await postRowExpiryRecovery.value == .retired)
+        #expect(
+            expiredAfterRow.accepted.currentEnvelope?.entries.map(\.deliveryID)
+                == [expiredAfterRowHead.deliveryID]
+        )
+        #expect(
+            expiredAfterRow.outbox.currentEnvelope?.entries.isEmpty == true
+        )
+
+        let rollback = CoordinatorFixture()
+        rollback.policy.install(.baseline)
+        let rollbackHead = try coordinatorOutboxEntry(
+            index: 222,
+            createdAt: rollback.clock.now.addingTimeInterval(-10)
+        )
+        rollback.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [rollbackHead]
+            )
+        )
+        rollback.delivery.install(
+            try coordinatorDeliveryRecord(matching: rollbackHead, state: .pending)
+        )
+        let rollbackBlocker = CoordinatorBoundaryBlocker()
+        rollback.delivery.blockLoad(
+            onCall: rollback.delivery.loadCount + 1,
+            with: rollbackBlocker
+        )
+        let rollbackRecovery = Task {
+            try await rollback.coordinator().recoverAcceptedHistoryOutbox()
+        }
+        #expect(rollbackBlocker.waitUntilBlocked())
+        rollback.clock.rollBack(seconds: 20)
+        rollbackBlocker.open()
+
+        #expect(try await rollbackRecovery.value == .pendingLocalRecovery)
+        #expect(rollback.accepted.loadCount == 0)
+        #expect(rollback.outbox.currentEnvelope?.entries == [rollbackHead])
+        #expect(
+            try await rollback.coordinator().recoverAcceptedHistoryOutbox()
+                == .pendingLocalRecovery
+        )
+        #expect(rollback.accepted.loadCount == 0)
+        #expect(rollback.outbox.currentEnvelope?.entries == [rollbackHead])
+    }
+
+    @Test func equalTimeUUIDHeadAndReadFailuresNeverSkip() async throws {
+        let tied = CoordinatorFixture()
+        tied.policy.install(.baseline)
+        let tiedDate = tied.clock.now.addingTimeInterval(-10)
+        let lowerUUID = try coordinatorOutboxEntry(
+            index: 230,
+            createdAt: tiedDate
+        )
+        let higherUUID = try coordinatorOutboxEntry(
+            index: 231,
+            createdAt: tiedDate
+        )
+        tied.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: IOSAcceptedHistoryOutboxValidation.sorted([
+                    higherUUID,
+                    lowerUUID,
+                ])
+            )
+        )
+
+        #expect(
+            try await tied.coordinator().recoverAcceptedHistoryOutbox()
+                == .retired
+        )
+        #expect(tied.outbox.currentEnvelope?.entries == [higherUUID])
+        #expect(
+            tied.accepted.currentEnvelope?.entries.map(\.deliveryID)
+                == [lowerUUID.deliveryID]
+        )
+
+        for (offset, error) in [
+            IOSAcceptedHistoryOutboxError.malformedData,
+            .dataProtectionUnavailable,
+            .sourceTooLarge,
+        ].enumerated() {
+            let fixture = CoordinatorFixture()
+            fixture.policy.install(.baseline)
+            let now = fixture.clock.now
+            let first = try coordinatorOutboxEntry(
+                index: 240 + offset * 2,
+                createdAt: now.addingTimeInterval(-20)
+            )
+            let second = try coordinatorOutboxEntry(
+                index: 241 + offset * 2,
+                createdAt: now.addingTimeInterval(-10)
+            )
+            fixture.outbox.install(
+                try IOSAcceptedHistoryOutboxEnvelope(
+                    revision: 1,
+                    entries: [first, second]
+                )
+            )
+            fixture.outbox.failNextLoad(with: error)
+            let coordinator = fixture.coordinator()
+
+            #expect(
+                try await coordinator.recoverAcceptedHistoryOutbox()
+                    == .pendingLocalRecovery
+            )
+            #expect(fixture.outbox.currentEnvelope?.entries == [first, second])
+            #expect(fixture.policy.loadCount == 0)
+            #expect(fixture.accepted.loadCount == 0)
+            #expect(fixture.delivery.loadCount == 0)
+            #expect(await fixture.outboxWorkerState.current() == nil)
+
+            #expect(
+                try await coordinator.recoverAcceptedHistoryOutbox() == .retired
+            )
+            #expect(fixture.outbox.currentEnvelope?.entries == [second])
+            #expect(
+                fixture.accepted.currentEnvelope?.entries.map(\.deliveryID)
+                    == [first.deliveryID]
+            )
+        }
+    }
+
+    @Test func retainedWorkerPhaseBlocksCaptureAcceptAndDeliveryRecovery()
+        async throws {
+        let fixture = CoordinatorFixture()
+        fixture.policy.install(.baseline)
+        let coordinator = fixture.coordinator()
+        let preparation = try await coordinatorPreparation(using: coordinator)
+        let head = try coordinatorOutboxEntry(
+            index: 90,
+            createdAt: fixture.clock.now.addingTimeInterval(-10)
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [head]
+            )
+        )
+        fixture.outbox.failReplace(
+            onCall: fixture.outbox.replaceCount + 1,
+            with: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+        #expect(
+            try await coordinator.recoverAcceptedHistoryOutbox()
+                == .pendingLocalRecovery
+        )
+        let policyLoads = fixture.policy.loadCount
+        let deliveryLoads = fixture.delivery.loadCount
+
+        await #expect(throws: IOSAcceptedOutputDeliveryError.commitUncertain) {
+            _ = try await coordinator.capture(
+                transcriptionModel: "model",
+                transcriptionLanguageCode: nil,
+                durationMilliseconds: nil
+            )
+        }
+        await #expect(throws: IOSAcceptedOutputDeliveryError.commitUncertain) {
+            _ = try await coordinator.accept(preparation)
+        }
+        #expect(
+            try await coordinator.recoverAcceptedHistory()
+                == .pendingLocalRecovery
+        )
+        #expect(fixture.policy.loadCount == policyLoads)
+        #expect(fixture.delivery.loadCount == deliveryLoads)
+    }
+
+    @Test func retainedAcceptanceAndReplacementPreventWorkerObservation()
+        async throws {
+        let acceptanceFixture = CoordinatorFixture()
+        acceptanceFixture.policy.install(.baseline)
+        let acceptanceCoordinator = acceptanceFixture.coordinator()
+        let preparation = try await coordinatorPreparation(
+            using: acceptanceCoordinator
+        )
+        let accepted = try await acceptanceFixture.deliveryStore.accept(
+            preparation
+        )
+        await acceptanceFixture.acceptanceState.store(
+            .fresh(preparation, .deliveryAccepted(accepted))
+        )
+        let acceptanceHead = try coordinatorOutboxEntry(
+            index: 91,
+            createdAt: acceptanceFixture.clock.now.addingTimeInterval(-10)
+        )
+        acceptanceFixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [acceptanceHead]
+            )
+        )
+        let acceptanceOutboxLoads = acceptanceFixture.outbox.loadCount
+
+        #expect(
+            try await acceptanceCoordinator.recoverAcceptedHistoryOutbox()
+                == .pendingLocalRecovery
+        )
+        #expect(acceptanceFixture.outbox.loadCount == acceptanceOutboxLoads)
+        #expect(await acceptanceFixture.outboxWorkerState.current() == nil)
+
+        let replacementFixture = CoordinatorFixture()
+        replacementFixture.policy.install(.baseline)
+        let replacementCoordinator = replacementFixture.coordinator()
+        let replacementPreparation = try await coordinatorPreparation(
+            using: replacementCoordinator
+        )
+        await replacementFixture.pendingReplacementState.store(
+            IOSAcceptedHistoryPendingReplacementWork(
+                ownerIdentity: replacementFixture.ownerIdentity,
+                preparation: replacementPreparation,
+                phase: .observingCurrentDelivery
+            )
+        )
+        let replacementHead = try coordinatorOutboxEntry(
+            index: 92,
+            createdAt: replacementFixture.clock.now.addingTimeInterval(-10)
+        )
+        replacementFixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [replacementHead]
+            )
+        )
+        let replacementOutboxLoads = replacementFixture.outbox.loadCount
+
+        #expect(
+            try await replacementCoordinator.recoverAcceptedHistoryOutbox()
+                == .pendingLocalRecovery
+        )
+        #expect(replacementFixture.outbox.loadCount == replacementOutboxLoads)
+        #expect(await replacementFixture.outboxWorkerState.current() == nil)
+    }
+
+    @Test func workerValuesAndResultAreRedacted() async throws {
+        let fixture = CoordinatorFixture()
+        let entry = try coordinatorOutboxEntry(
+            index: 100,
+            createdAt: fixture.clock.now
+        )
+        fixture.outbox.install(
+            try IOSAcceptedHistoryOutboxEnvelope(
+                revision: 1,
+                entries: [entry]
+            )
+        )
+        let observation = try #require(
+            try await fixture.outboxStore.observeHead()
+        )
+        let work = IOSAcceptedHistoryOutboxWorkerWork(
+            ownerIdentity: fixture.ownerIdentity,
+            phase: .headObserved(observation)
+        )
+
+        #expect(
+            String(describing: work)
+                == "IOSAcceptedHistoryOutboxWorkerWork(redacted)"
+        )
+        #expect(work.customMirror.children.isEmpty)
+        #expect(!String(reflecting: work).contains(entry.acceptedText))
+        #expect(
+            String(describing:
+                IOSAcceptedHistoryOutboxRecoveryResolution.retired)
+                == "IOSAcceptedHistoryOutboxRecoveryResolution(redacted)"
+        )
+    }
+}
+
 private func coordinatorPreparation(
     using coordinator: IOSAcceptedHistoryCoordinator,
     text: String = "accepted text"
@@ -3323,6 +5283,7 @@ private final class CoordinatorFixture: @unchecked Sendable {
     let acceptanceState = IOSAcceptedHistoryAcceptanceOperationState()
     let pendingReplacementState =
         IOSAcceptedHistoryPendingReplacementOperationState()
+    let outboxWorkerState = IOSAcceptedHistoryOutboxWorkerOperationState()
     let ownerIdentity = IOSAcceptedHistoryCoordinatorOwnerIdentity()
     let clock: CoordinatorClock
     let policyStore: IOSHistoryPolicyStore
@@ -3344,6 +5305,7 @@ private final class CoordinatorFixture: @unchecked Sendable {
     ) {
         let clock = CoordinatorClock()
         let deliveryStoreIdentity = IOSAcceptedOutputDeliveryStoreIdentity()
+        let outboxStoreIdentity = IOSAcceptedHistoryOutboxStoreIdentity()
         self.gate = gate
         self.clock = clock
         self.repositoryIdentityState = repositoryIdentityState
@@ -3365,6 +5327,7 @@ private final class CoordinatorFixture: @unchecked Sendable {
             journal: outbox,
             now: { clock.now },
             deliveryStoreIdentity: deliveryStoreIdentity,
+            storeIdentity: outboxStoreIdentity,
             capabilityOwnerIdentity: ownerIdentity
         )
         deliveryStore = IOSAcceptedOutputDeliveryStore(
@@ -3372,6 +5335,7 @@ private final class CoordinatorFixture: @unchecked Sendable {
             now: { clock.now },
             monotonicNowNanoseconds: { clock.uptimeNanoseconds },
             storeIdentity: deliveryStoreIdentity,
+            outboxStoreIdentity: outboxStoreIdentity,
             capabilityOwnerIdentity: ownerIdentity
         )
     }
@@ -3386,6 +5350,7 @@ private final class CoordinatorFixture: @unchecked Sendable {
             baselineRecoveryState: recoveryState,
             acceptanceState: acceptanceState,
             pendingReplacementState: pendingReplacementState,
+            outboxWorkerState: outboxWorkerState,
             ownerIdentity: ownerIdentity,
             repositoryIdentityState: repositoryIdentityState,
             repositoryRegistration: repositoryRegistration
@@ -3396,6 +5361,7 @@ private final class CoordinatorFixture: @unchecked Sendable {
         let capabilityOwnerIdentity =
             IOSAcceptedHistoryCapabilityOwnerIdentity()
         let deliveryStoreIdentity = IOSAcceptedOutputDeliveryStoreIdentity()
+        let outboxStoreIdentity = IOSAcceptedHistoryOutboxStoreIdentity()
         return IOSAcceptedHistoryCoordinator(
             policyStore: IOSHistoryPolicyStore(
                 journal: policy,
@@ -3410,6 +5376,7 @@ private final class CoordinatorFixture: @unchecked Sendable {
                 journal: outbox,
                 now: { [clock] in clock.now },
                 deliveryStoreIdentity: deliveryStoreIdentity,
+                storeIdentity: outboxStoreIdentity,
                 capabilityOwnerIdentity: capabilityOwnerIdentity
             ),
             deliveryStore: IOSAcceptedOutputDeliveryStore(
@@ -3419,12 +5386,15 @@ private final class CoordinatorFixture: @unchecked Sendable {
                     clock.uptimeNanoseconds
                 },
                 storeIdentity: deliveryStoreIdentity,
+                outboxStoreIdentity: outboxStoreIdentity,
                 capabilityOwnerIdentity: capabilityOwnerIdentity
             ),
             operationGate: gate,
             acceptanceState: IOSAcceptedHistoryAcceptanceOperationState(),
             pendingReplacementState:
                 IOSAcceptedHistoryPendingReplacementOperationState(),
+            outboxWorkerState:
+                IOSAcceptedHistoryOutboxWorkerOperationState(),
             ownerIdentity: capabilityOwnerIdentity,
             repositoryIdentityState: repositoryIdentityState,
             repositoryRegistration: repositoryRegistration
@@ -4167,6 +6137,39 @@ private final class CoordinatorBoundaryBlocker: @unchecked Sendable {
     }
 }
 
+private actor CoordinatorAsyncOperationBlocker {
+    private var blockingContinuation: CheckedContinuation<Void, Never>?
+    private var observerContinuations: [CheckedContinuation<Void, Never>] = []
+    private var isOpen = false
+    private var isSuspended = false
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuation in
+            blockingContinuation = continuation
+            isSuspended = true
+            let observers = observerContinuations
+            observerContinuations.removeAll()
+            for observer in observers {
+                observer.resume()
+            }
+        }
+    }
+
+    func waitUntilSuspended() async {
+        guard !isSuspended else { return }
+        await withCheckedContinuation { continuation in
+            observerContinuations.append(continuation)
+        }
+    }
+
+    func open() {
+        isOpen = true
+        blockingContinuation?.resume()
+        blockingContinuation = nil
+    }
+}
+
 private final class CoordinatorGateProbe: @unchecked Sendable {
     private let lock = NSLock()
     private let enqueued = DispatchSemaphore(value: 0)
@@ -4209,6 +6212,26 @@ private func coordinatorHistoryEntry() throws -> IOSAcceptedHistoryEntry {
     )
 }
 
+private func coordinatorHistoryEntry(
+    index: Int,
+    createdAt: Date,
+    generation: Int64 = 1,
+    acceptedText: String = "accepted"
+) throws -> IOSAcceptedHistoryEntry {
+    try IOSAcceptedHistoryEntry(
+        deliveryID: coordinatorUUID(prefix: 0, index: index),
+        transcriptID: coordinatorUUID(prefix: 3, index: index),
+        acceptedText: acceptedText,
+        outputIntent: .standard,
+        createdAt: createdAt,
+        policyGeneration: generation,
+        transcriptionModel: "model",
+        transcriptionLanguageCode: "en",
+        durationMilliseconds: 1_250,
+        cachedAudioRelativeIdentifier: nil
+    )
+}
+
 private func coordinatorOutboxEntry() throws -> IOSAcceptedHistoryOutboxEntry {
     try IOSAcceptedHistoryOutboxEntry(
         deliveryID: UUID(),
@@ -4221,6 +6244,26 @@ private func coordinatorOutboxEntry() throws -> IOSAcceptedHistoryOutboxEntry {
         transcriptionModel: "model",
         transcriptionLanguageCode: nil,
         durationMilliseconds: nil
+    )
+}
+
+private func coordinatorOutboxEntry(
+    index: Int,
+    createdAt: Date,
+    generation: Int64 = 1,
+    acceptedText: String = "accepted"
+) throws -> IOSAcceptedHistoryOutboxEntry {
+    try IOSAcceptedHistoryOutboxEntry(
+        deliveryID: coordinatorUUID(prefix: 0, index: index),
+        transcriptID: coordinatorUUID(prefix: 3, index: index),
+        acceptedText: acceptedText,
+        outputIntent: .standard,
+        createdAt: createdAt,
+        expiresAt: createdAt.addingTimeInterval(86_400),
+        policyGeneration: generation,
+        transcriptionModel: "model",
+        transcriptionLanguageCode: "en",
+        durationMilliseconds: 1_250
     )
 }
 
@@ -4245,6 +6288,73 @@ private func coordinatorDeliveryRecord(
         publicationGeneration: 0,
         historyWrite: historyWrite
     )
+}
+
+private func coordinatorDeliveryRecord(
+    matching entry: IOSAcceptedHistoryOutboxEntry,
+    state: IOSAcceptedOutputHistoryWriteState,
+    acceptedText: String? = nil
+) throws -> IOSAcceptedOutputDeliveryRecord {
+    let marker = try IOSAcceptedOutputHistoryWrite(
+        state: state,
+        policyGeneration: entry.policyGeneration,
+        transcriptionModel: entry.transcriptionModel,
+        transcriptionLanguageCode: entry.transcriptionLanguageCode,
+        durationMilliseconds: entry.durationMilliseconds
+    )
+    return try IOSAcceptedOutputDeliveryRecord(
+        revision: 1,
+        deliveryID: entry.deliveryID,
+        sessionID: coordinatorUUID(prefix: 1, index: 10_000),
+        attemptID: coordinatorUUID(prefix: 2, index: 10_000),
+        transcriptID: entry.transcriptID,
+        acceptedText: acceptedText ?? entry.acceptedText,
+        outputIntent: entry.outputIntent,
+        createdAt: entry.createdAt,
+        updatedAt: entry.createdAt,
+        expiresAt: entry.expiresAt,
+        deliveryState: .pending,
+        automaticInsertionPreferenceEnabled: true,
+        keepLatestResult: true,
+        publicationGeneration: 0,
+        historyWrite: marker
+    )
+}
+
+private func coordinatorDiscardedDeliveryRecord(
+    matching entry: IOSAcceptedHistoryOutboxEntry
+) throws -> IOSAcceptedOutputDeliveryRecord {
+    let active = try coordinatorDeliveryRecord(
+        matching: entry,
+        state: .pending
+    )
+    return try IOSAcceptedOutputDeliveryRecord(
+        revision: active.revision + 1,
+        deliveryID: active.deliveryID,
+        sessionID: active.sessionID,
+        attemptID: active.attemptID,
+        transcriptID: active.transcriptID,
+        acceptedText: nil,
+        outputIntent: active.outputIntent,
+        createdAt: active.createdAt,
+        updatedAt: active.updatedAt,
+        expiresAt: active.expiresAt,
+        deliveryState: .discarded,
+        automaticInsertionPreferenceEnabled: false,
+        keepLatestResult: active.keepLatestResult,
+        publicationGeneration: active.publicationGeneration,
+        historyWrite: nil
+    )
+}
+
+private func coordinatorUUID(prefix: Int, index: Int) -> UUID {
+    UUID(
+        uuidString: String(
+            format: "%08x-0000-4000-8000-%012x",
+            prefix,
+            index
+        )
+    )!
 }
 
 private func coordinatorDate() -> Date {

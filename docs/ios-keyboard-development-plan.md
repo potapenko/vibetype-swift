@@ -326,10 +326,11 @@ host app, state, expected result, actual result, and go/no-go decision.
   completed P2 checkpoint: its strict 24-hour recovery record, identity/state
   contract, History-write marker, CAS, and uncertainty handling remain outside
   the keyboard. The accepted-History policy/repository/outbox foundation is
-  implemented through the C1 slice: normal acceptance, provider-free relaunch
+  implemented through the C2 slice: normal acceptance, provider-free relaunch
   recovery, and reservation-guarded exact outbox transfer before atomic
-  pending-delivery replacement. Its store-bound monotonic lease is claimable by
-  only the paired outbox and is consumed or released by the replacement path.
+  pending-delivery replacement, followed by strict one-head FIFO outbox
+  recovery. Its store-bound monotonic transfer lease is claimable only by the
+  paired outbox and is consumed or released by the replacement path.
   A replacement-only capacity rejection preserves the exact accepted-row
   envelope through an identical rewrite and becomes durable only when the exact
   terminal delivery marker seals it. The store-minted replay marker preserves
@@ -340,10 +341,19 @@ host app, state, expected result, actual result, and go/no-go decision.
   for the actual generation `0 -> 1` commit and App Group publication. Because
   an older binary cannot parse `pendingReplacement` to reach expiry cleanup,
   any release that writes it is no-downgrade until a compatible recovery path
-  exists. Final C1 gate evidence and verdict live in
-  `docs/qa/runs/ios-accepted-history-transfer-2026-07-11.md`. The FIFO outbox
-  worker and cutover cleanup finish
-  that P2 chain next. Bounded failed History and the independent recording cache
+  exists. Historical C1 transfer evidence remains in
+  `docs/qa/runs/ios-accepted-history-transfer-2026-07-11.md`. C2 processes only
+  the canonical outbox head, seals every temporal/policy/row/marker/retirement
+  phase to exact root capabilities, and never skips after failure, rollback,
+  CAS supersession, or uncertainty. Its worker state is shared per root and
+  mutually excludes acceptance and pending replacement. Active
+  terminal-History delivery replacement and cleanup additionally require exact
+  outbox absence from the paired store in an active lease issued by their exact
+  expected production root operation gate; exact expiry is the bounded
+  abandonment exception. Final C2 evidence lives in
+  `docs/qa/runs/ios-accepted-history-outbox-worker-2026-07-11.md`. Global policy
+  cutover and stale-generation cleanup finish that P2 chain next. Bounded
+  failed History and the independent recording cache
   follow. All remain outside the keyboard until the directional bridge contract
   is implemented behind the physical M0 gates. The
   runtime-only four-case `VoiceAttemptStage` is portable too, while preflight,

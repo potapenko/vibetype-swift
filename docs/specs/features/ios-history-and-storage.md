@@ -415,7 +415,15 @@ identity without deleting the only valid artifact.
   replacement, explicit clear, or Keep Latest cleanup could lose outstanding
   pending work, it moves to the bounded History outbox defined by
   `ios-accepted-history-foundation.md`; until that durable transfer exists,
-  removal fails closed. With Recording Cache off, accepted text is sufficient
+  removal fails closed. An active, non-expired terminal History marker remains
+  protected as well while an exact matching outbox membership exists, because
+  it can be the only durable proof of a not-retained row decision. Terminal
+  replacement or cleanup therefore requires FIFO retirement or the exact
+  outbox absence capability bound to the paired stores' expected production
+  root gate and its active lease; exact delivery expiry is the bounded
+  abandonment exception, and uncertainty keeps the local result
+  recoverable. With
+  Recording Cache off, accepted text is sufficient
   recovery and the app then removes the journal/audio; with cache on, it
   transfers the file to the independent cache, links a successfully written
   accepted row by relative identifier when useful, applies retention, and then

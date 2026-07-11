@@ -1,5 +1,127 @@
 import Foundation
 
+/// Opaque identity for one exact persistence-operation gate.
+struct IOSPersistenceOperationGateIdentity: Equatable, Sendable {
+    private let value = UUID()
+
+    fileprivate init() {}
+}
+
+extension IOSPersistenceOperationGateIdentity:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSPersistenceOperationGateIdentity(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+/// One-time binding between a persistence store and its root operation gate.
+final class IOSPersistenceOperationGateBinding: @unchecked Sendable {
+    private let lock = NSLock()
+    private var identity: IOSPersistenceOperationGateIdentity?
+
+    init(identity: IOSPersistenceOperationGateIdentity? = nil) {
+        self.identity = identity
+    }
+
+    func bind(_ identity: IOSPersistenceOperationGateIdentity) -> Bool {
+        lock.withLock {
+            if let current = self.identity {
+                return current == identity
+            }
+            self.identity = identity
+            return true
+        }
+    }
+
+    func proves(
+        _ authorization: IOSPersistenceOperationLeaseAuthorization
+    ) -> Bool {
+        lock.withLock {
+            guard let identity else { return false }
+            return authorization.provesActiveLease(for: identity)
+        }
+    }
+}
+
+/// Opaque proof that work is still running under one exact persistence-gate lease.
+struct IOSPersistenceOperationLeaseAuthorization: Equatable, Sendable {
+    private final class State: @unchecked Sendable {
+        private let lock = NSLock()
+        private var isActive = true
+
+        func invalidate() {
+            lock.withLock {
+                isActive = false
+            }
+        }
+
+        func active() -> Bool {
+            lock.withLock { isActive }
+        }
+    }
+
+    private let gateIdentity: IOSPersistenceOperationGateIdentity
+    private let gateIdentifier: ObjectIdentifier
+    private let leaseIdentifier: UUID
+    private let state: State
+
+    fileprivate init(
+        gateIdentity: IOSPersistenceOperationGateIdentity,
+        gateIdentifier: ObjectIdentifier,
+        leaseIdentifier: UUID
+    ) {
+        self.gateIdentity = gateIdentity
+        self.gateIdentifier = gateIdentifier
+        self.leaseIdentifier = leaseIdentifier
+        state = State()
+    }
+
+    static func == (
+        lhs: IOSPersistenceOperationLeaseAuthorization,
+        rhs: IOSPersistenceOperationLeaseAuthorization
+    ) -> Bool {
+        lhs.gateIdentifier == rhs.gateIdentifier
+            && lhs.gateIdentity == rhs.gateIdentity
+            && lhs.leaseIdentifier == rhs.leaseIdentifier
+            && lhs.state === rhs.state
+    }
+
+    func provesSameActiveLease(
+        as other: IOSPersistenceOperationLeaseAuthorization
+    ) -> Bool {
+        self == other && state.active()
+    }
+
+    func provesActiveLease() -> Bool {
+        state.active()
+    }
+
+    func provesActiveLease(
+        for gateIdentity: IOSPersistenceOperationGateIdentity
+    ) -> Bool {
+        self.gateIdentity == gateIdentity && state.active()
+    }
+
+    fileprivate func invalidate() {
+        state.invalidate()
+    }
+}
+
+extension IOSPersistenceOperationLeaseAuthorization:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSPersistenceOperationLeaseAuthorization(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 /// Serializes a persistence coordinator's whole transactions across suspension points.
 actor IOSPersistenceOperationGate {
     enum AcquisitionError: Error, Equatable, Sendable {
@@ -96,15 +218,27 @@ actor IOSPersistenceOperationGate {
     }
 
     private let eventSink: @Sendable (Event) -> Void
+    nonisolated let identity: IOSPersistenceOperationGateIdentity
     private var activeLease: Lease?
     private var waiters: [Waiter] = []
 
     init(eventSink: @escaping @Sendable (Event) -> Void = { _ in }) {
+        identity = IOSPersistenceOperationGateIdentity()
         self.eventSink = eventSink
     }
 
     func perform<Value: Sendable>(
         _ operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        try await perform { _ in
+            try await operation()
+        }
+    }
+
+    func perform<Value: Sendable>(
+        _ operation: @escaping @Sendable (
+            IOSPersistenceOperationLeaseAuthorization
+        ) async throws -> Value
     ) async throws -> Value {
         let gateIdentifier = ObjectIdentifier(self)
         let inheritedContexts = Self.activeLeaseContexts
@@ -122,15 +256,21 @@ actor IOSPersistenceOperationGate {
             gateIdentifier: gateIdentifier,
             leaseIdentifier: lease.identifier
         )
+        let operationAuthorization = IOSPersistenceOperationLeaseAuthorization(
+            gateIdentity: identity,
+            gateIdentifier: gateIdentifier,
+            leaseIdentifier: lease.identifier
+        )
         // This unstructured task preserves ambient context without inheriting caller cancellation.
         let operationTask = Task {
             try await Self.$activeLeaseContexts.withValue(
                 inheritedContexts + [operationContext]
             ) {
-                try await operation()
+                try await operation(operationAuthorization)
             }
         }
         let result = await operationTask.result
+        operationAuthorization.invalidate()
         release(lease)
         return try result.get()
     }

@@ -90,9 +90,13 @@ behavior remain platform-owned.
 - Share exposes only the selected accepted text or an explicitly selected
   app-owned recording. Cancelling Share does not delete or consume the result.
 - The Latest Result card on Voice provides `Clear Latest Result` for a terminal
-  result. It immediately removes only the app-private latest record after
-  confirmation and leaves any durable History row, recording cache, usage, and
-  API key unchanged.
+  result. After confirmation, the app first revokes any bridge projection and
+  proves that no matching accepted-History outbox membership still needs the
+  terminal marker. It then removes only the app-private latest record and
+  leaves any durable History row, recording cache, usage, and API key
+  unchanged. If that local reconciliation is uncertain, the result remains
+  recoverable and the action reports a retryable local error instead of
+  claiming that it was cleared.
 - While keyboard delivery is still pending, that action is labelled `Cancel
   Delivery and Clear Latest`. Confirmation first makes the app-owned bridge
   result ineligible and schedules its physical cleanup, then clears the latest
@@ -121,11 +125,14 @@ behavior remain platform-owned.
   24 hours, until a newer result replaces it, or until the user explicitly
   clears it. Expiry is enforced at read time and followed by physical deletion
   at the first app maintenance opportunity.
-- Turning `Keep latest result` off immediately clears any already-terminal
-  latest result and prevents future post-session retention, except that a
-  `submittedUnverified` result remains recoverable until explicit clear,
-  replacement, or the 24-hour cap because automatic replay is forbidden and
-  insertion success is unknown. A result whose delivery decision is still
+- Turning `Keep latest result` off applies the preference immediately and
+  prevents future post-session retention. Cleanup of an already-terminal
+  latest result follows the same bridge-revocation and accepted-History outbox
+  guard as explicit Clear Latest; until it succeeds, the result remains a
+  recoverable local cleanup item rather than being reported as retained by
+  preference. A `submittedUnverified` result remains recoverable until explicit
+  clear, replacement, or the 24-hour cap because automatic replay is forbidden
+  and insertion success is unknown. A result whose delivery decision is still
   pending remains only until insertion is reconciled, the user explicitly
   dismisses/discards it, or the 24-hour safety cap expires.
 - The protected pending/latest delivery record is the mandatory pre-handoff
