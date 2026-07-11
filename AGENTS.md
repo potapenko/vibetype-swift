@@ -93,6 +93,28 @@ If a direct chat task later needs follow-up work, report the follow-up in the
 chat. Create backlog files for that follow-up only when the user asks for
 durable backlog tracking or the active automation/runbook requires it.
 
+## Landing And Marketing Fast Lane
+
+Landing-page and marketing work is a narrow, low-context workflow. This applies
+to copy, static HTML/CSS, social metadata, images, campaign assets, and asset
+organization under `website/`, `marketing/`, and `docs/marketing/`.
+
+- Read only this `AGENTS.md` plus the exact landing or marketing files needed
+  for the request. Do not load Swift architecture, app feature specs, package
+  sources, app tests, backlog bodies, or unrelated repository history.
+- Do not run Xcode builds, Swift or package tests, the full website test suite,
+  browser QA, app runtime checks, deployment dry-runs, or repeated preflight
+  checks unless the user explicitly requests that exact verification.
+- Do not create or update product feature specs for copy-only, image-only,
+  static-layout, metadata, or marketing-asset changes.
+- Use only a quick check of the edited artifact itself when useful, such as
+  confirming image dimensions, inspecting the resulting metadata, or running
+  `git diff --check`.
+- When the user says to publish, make the requested change, create the scoped
+  checkpoint commit on `master`, and push it without adding repeated dry-run or
+  monitoring loops. If a safe direct `master` push is impossible, follow the
+  Master-Only Git Policy and ask the user instead of creating a workaround.
+
 ## Backlog Development
 
 `BACKLOG_DEVELOPMENT.md` is the root development workflow for this repository.
