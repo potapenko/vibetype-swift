@@ -15,6 +15,24 @@ enum IOSAcceptedOutputDeliveryAcceptanceProvenance: Equatable, Sendable {
     case preexisting
 }
 
+enum IOSAcceptedOutputHistoryDeliveryDisposition: Equatable, Sendable {
+    case absentOrUnrelated
+    case confirmed(IOSAcceptedOutputDeliveryAuthorization)
+    case expired
+    case clockRollbackAmbiguous
+}
+
+extension IOSAcceptedOutputHistoryDeliveryDisposition:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSAcceptedOutputHistoryDeliveryDisposition(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 struct IOSAcceptedOutputDeliveryStoreIdentity: Equatable, Sendable {
     private let value = UUID()
 }
@@ -465,6 +483,8 @@ public actor IOSAcceptedOutputDeliveryStore {
         let source: AcceptanceSource
         let intended: IOSAcceptedOutputDeliveryRecord
         let provenance: IOSAcceptedOutputDeliveryAcceptanceProvenance
+        let outboxAbsenceAuthorization:
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization?
 
         var intendedWasVisibleInSource: Bool {
             guard case .existing(let source) = source else { return false }
@@ -533,7 +553,9 @@ public actor IOSAcceptedOutputDeliveryStore {
     }
 
     func acceptForHistoryCoordinator(
-        _ preparation: IOSAcceptedOutputDeliveryPreparation
+        _ preparation: IOSAcceptedOutputDeliveryPreparation,
+        outboxAbsenceAuthorization:
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization? = nil
     ) throws -> IOSAcceptedOutputDeliveryAcceptance {
         try requirePreparationOwner(preparation)
         if let uncertainAcceptanceIntent {
@@ -541,10 +563,19 @@ public actor IOSAcceptedOutputDeliveryStore {
             guard preparation == uncertainAcceptanceIntent.preparation else {
                 throw IOSAcceptedOutputDeliveryError.commitUncertain
             }
+            if let outboxAbsenceAuthorization,
+               let retained = uncertainAcceptanceIntent
+                .outboxAbsenceAuthorization,
+               outboxAbsenceAuthorization != retained {
+                throw IOSAcceptedOutputDeliveryError.commitUncertain
+            }
             return try reconcileAcceptance(uncertainAcceptanceIntent)
         }
         try requireNoUncertainHistoryMutation()
-        return try performAccept(preparation)
+        return try performAccept(
+            preparation,
+            outboxAbsenceAuthorization: outboxAbsenceAuthorization
+        )
     }
 
     func replacePendingHistory(
@@ -769,6 +800,49 @@ public actor IOSAcceptedOutputDeliveryStore {
         )
     }
 
+    /// Confirms the exact delivery relation for a durable outbox membership.
+    /// Only an identical physical rewrite can mint terminal-marker authority.
+    func confirmMatchingHistoryDelivery(
+        membership: IOSAcceptedHistoryOutboxReceipt
+    ) throws -> IOSAcceptedOutputHistoryDeliveryDisposition {
+        guard membership.capabilityOwnerIdentity
+                == capabilityOwnerIdentity else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        try requireNoUncertainHistoryMutation()
+        guard let snapshot = try journal.load() else {
+            return .absentOrUnrelated
+        }
+        let observed = IOSAcceptedOutputDeliveryAuthorization(
+            snapshot: snapshot,
+            capabilityOwnerIdentity: capabilityOwnerIdentity
+        )
+        switch membership.deliveryRelation(to: observed) {
+        case .unrelated, .discarded:
+            return .absentOrUnrelated
+        case .collision:
+            throw IOSAcceptedOutputDeliveryError.identityCollision
+        case .pending, .committed, .cancelled:
+            break
+        }
+
+        switch temporalState(for: snapshot.record) {
+        case .expired:
+            return .expired
+        case .rollbackAmbiguous:
+            return .clockRollbackAmbiguous
+        case .active:
+            let confirmed = try confirmIdentical(snapshot)
+            confirmedAuthorizationFileRevision = confirmed.fileRevision
+            return .confirmed(
+                IOSAcceptedOutputDeliveryAuthorization(
+                    snapshot: confirmed,
+                    capabilityOwnerIdentity: capabilityOwnerIdentity
+                )
+            )
+        }
+    }
+
     /// Records the exact durable History decision for this delivery.
     func commitHistoryWrite(
         authorization: IOSAcceptedOutputDeliveryAuthorization,
@@ -823,6 +897,28 @@ public actor IOSAcceptedOutputDeliveryStore {
     public func clear(
         expected: IOSAcceptedOutputDeliveryExpectation
     ) throws -> IOSAcceptedOutputDeliveryRemovalResult {
+        try clear(
+            expected: expected,
+            outboxAbsenceAuthorization: nil
+        )
+    }
+
+    func clear(
+        expected: IOSAcceptedOutputDeliveryExpectation,
+        outboxAbsenceAuthorization:
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization
+    ) throws -> IOSAcceptedOutputDeliveryRemovalResult {
+        try clear(
+            expected: expected,
+            outboxAbsenceAuthorization: Optional(outboxAbsenceAuthorization)
+        )
+    }
+
+    private func clear(
+        expected: IOSAcceptedOutputDeliveryExpectation,
+        outboxAbsenceAuthorization:
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization?
+    ) throws -> IOSAcceptedOutputDeliveryRemovalResult {
         try requireNoUncertainHistoryMutation()
         guard let snapshot = try journal.load() else { return .alreadyAbsent }
 
@@ -856,6 +952,12 @@ public actor IOSAcceptedOutputDeliveryStore {
 
         if snapshot.record.historyWrite?.state.isPendingDecision == true {
             throw IOSAcceptedOutputDeliveryError.historyTransferRequired
+        }
+        if snapshot.record.historyWrite != nil {
+            try requireOutboxAbsenceAuthorization(
+                outboxAbsenceAuthorization,
+                for: snapshot
+            )
         }
 
         let mutationDate: Date
@@ -1094,7 +1196,9 @@ private extension IOSAcceptedOutputDeliveryStore {
 
     private func performAccept(
         _ preparation: IOSAcceptedOutputDeliveryPreparation,
-        pendingHistoryReplacement: PendingHistoryReplacementOperation? = nil
+        pendingHistoryReplacement: PendingHistoryReplacementOperation? = nil,
+        outboxAbsenceAuthorization:
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization? = nil
     ) throws -> IOSAcceptedOutputDeliveryAcceptance {
         let timestamp = try IOSAcceptedOutputDeliveryTimestampCodec
             .canonicalDate(from: now())
@@ -1174,6 +1278,23 @@ private extension IOSAcceptedOutputDeliveryStore {
             }
         }
 
+        let confirmedOutboxAbsenceAuthorization:
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization?
+        if currentTemporalState == .active,
+           current.record.historyWrite != nil,
+           current.record.historyWrite?.state.isPendingDecision == false {
+            guard let outboxAbsenceAuthorization else {
+                throw IOSAcceptedOutputDeliveryError.historyTransferRequired
+            }
+            try requireOutboxAbsenceAuthorization(
+                outboxAbsenceAuthorization,
+                for: current
+            )
+            confirmedOutboxAbsenceAuthorization = outboxAbsenceAuthorization
+        } else {
+            confirmedOutboxAbsenceAuthorization = nil
+        }
+
         if let pendingHistoryReplacement {
             let intent = UncertainPendingHistoryReplacement(
                 operation: pendingHistoryReplacement,
@@ -1204,7 +1325,9 @@ private extension IOSAcceptedOutputDeliveryStore {
                 newRecord,
                 source: .existing(current),
                 preparation: preparation,
-                provenance: .freshCurrentProcess
+                provenance: .freshCurrentProcess,
+                outboxAbsenceAuthorization:
+                    confirmedOutboxAbsenceAuthorization
             )
             clearTransientState(for: current.record.deliveryID)
             return IOSAcceptedOutputDeliveryAcceptance(
@@ -1251,7 +1374,9 @@ private extension IOSAcceptedOutputDeliveryStore {
                 intent.intended,
                 source: publicationSource,
                 preparation: intent.preparation,
-                provenance: intent.provenance
+                provenance: intent.provenance,
+                outboxAbsenceAuthorization:
+                    intent.outboxAbsenceAuthorization
             )
             pruneMonotonicDeadlines(
                 keeping: confirmed.record.deliveryID
@@ -1281,7 +1406,9 @@ private extension IOSAcceptedOutputDeliveryStore {
                 intent.intended,
                 source: .existing(current),
                 preparation: intent.preparation,
-                provenance: intent.provenance
+                provenance: intent.provenance,
+                outboxAbsenceAuthorization:
+                    intent.outboxAbsenceAuthorization
             )
             pruneMonotonicDeadlines(
                 keeping: confirmed.record.deliveryID
@@ -1326,13 +1453,16 @@ private extension IOSAcceptedOutputDeliveryStore {
         _ intended: IOSAcceptedOutputDeliveryRecord,
         source: AcceptanceSource,
         preparation: IOSAcceptedOutputDeliveryPreparation,
-        provenance: IOSAcceptedOutputDeliveryAcceptanceProvenance
+        provenance: IOSAcceptedOutputDeliveryAcceptanceProvenance,
+        outboxAbsenceAuthorization:
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization? = nil
     ) throws -> IOSAcceptedOutputDeliveryJournalSnapshot {
         let intent = UncertainAcceptanceIntent(
             preparation: preparation,
             source: source,
             intended: intended,
-            provenance: provenance
+            provenance: provenance,
+            outboxAbsenceAuthorization: outboxAbsenceAuthorization
         )
         do {
             let committed: IOSAcceptedOutputDeliveryJournalSnapshot =
@@ -2036,6 +2166,27 @@ private extension IOSAcceptedOutputDeliveryStore {
     ) throws {
         guard record.publicationGeneration == 0 else {
             throw IOSAcceptedOutputDeliveryError.bridgeRevocationRequired
+        }
+    }
+
+    func requireOutboxAbsenceAuthorization(
+        _ authorization:
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization?,
+        for snapshot: IOSAcceptedOutputDeliveryJournalSnapshot
+    ) throws {
+        guard let authorization else {
+            throw IOSAcceptedOutputDeliveryError.historyTransferRequired
+        }
+        let delivery = IOSAcceptedOutputDeliveryAuthorization(
+            snapshot: snapshot,
+            capabilityOwnerIdentity: capabilityOwnerIdentity
+        )
+        guard authorization.provesAbsence(
+            for: delivery,
+            deliveryStoreIdentity: storeIdentity,
+            ownerIdentity: capabilityOwnerIdentity
+        ) else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
         }
     }
 

@@ -533,7 +533,17 @@ struct IOSAcceptedOutputDeliveryStoreTests {
         let replacement = fixture.preparation(
             rawAcceptedText: "after transition winner"
         )
-        let accepted = try await fixture.store.accept(replacement)
+        let terminalAuthorization = try await fixture.store
+            .confirmActiveHistoryRecovery(
+                expected: IOSAcceptedOutputDeliveryExpectation(record: winner)
+            )
+        let absence = try await fixture.outboxAbsenceAuthorization(
+            for: terminalAuthorization
+        )
+        let accepted = try await fixture.store.acceptForHistoryCoordinator(
+            replacement,
+            outboxAbsenceAuthorization: absence
+        ).record
         #expect(accepted.hasSameAcceptance(as: replacement))
     }
 
@@ -2255,29 +2265,45 @@ struct IOSAcceptedOutputDeliveryStoreTests {
         )
     }
 
-    @Test func terminalHistoryStatesAllowOrdinaryReplacementWithoutProof() async throws {
+    @Test func terminalHistoryStatesRequireAbsenceForOrdinaryReplacement()
+        async throws {
         let committedFixture = AcceptedDeliveryStoreFixture()
         let (_, committedAuthorization) = try await committedFixture
             .acceptAndAuthorize()
         let committedReceipt = try await committedFixture.retainedRowReceipt(
             for: committedAuthorization
         )
-        _ = try await committedFixture.store.commitHistoryWrite(
+        let committed = try await committedFixture.store.commitHistoryWrite(
             authorization: committedAuthorization,
             rowReceipt: committedReceipt
         )
         let afterCommit = committedFixture.preparation(
             rawAcceptedText: "after commit"
         )
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.historyTransferRequired
+        ) {
+            _ = try await committedFixture.store.accept(afterCommit)
+        }
+        let confirmedCommit = try await committedFixture.store
+            .confirmActiveHistoryRecovery(
+                expected: IOSAcceptedOutputDeliveryExpectation(
+                    record: committed
+                )
+            )
+        let committedAbsence = try await committedFixture
+            .outboxAbsenceAuthorization(for: confirmedCommit)
         #expect(
-            try await committedFixture.store.accept(afterCommit)
-                .hasSameAcceptance(as: afterCommit)
+            try await committedFixture.store.acceptForHistoryCoordinator(
+                afterCommit,
+                outboxAbsenceAuthorization: committedAbsence
+            ).record.hasSameAcceptance(as: afterCommit)
         )
 
         let cancelledFixture = AcceptedDeliveryStoreFixture()
         let (_, cancelledAuthorization) = try await cancelledFixture
             .acceptAndAuthorize()
-        _ = try await cancelledFixture.store.cancelHistoryWrite(
+        let cancelled = try await cancelledFixture.store.cancelHistoryWrite(
             authorization: cancelledAuthorization,
             policyInvalidationReceipt: try await cancelledFixture.policyReceipt(
                 generation: 2
@@ -2286,9 +2312,24 @@ struct IOSAcceptedOutputDeliveryStoreTests {
         let afterCancel = cancelledFixture.preparation(
             rawAcceptedText: "after cancel"
         )
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.historyTransferRequired
+        ) {
+            _ = try await cancelledFixture.store.accept(afterCancel)
+        }
+        let confirmedCancel = try await cancelledFixture.store
+            .confirmActiveHistoryRecovery(
+                expected: IOSAcceptedOutputDeliveryExpectation(
+                    record: cancelled
+                )
+            )
+        let cancelledAbsence = try await cancelledFixture
+            .outboxAbsenceAuthorization(for: confirmedCancel)
         #expect(
-            try await cancelledFixture.store.accept(afterCancel)
-                .hasSameAcceptance(as: afterCancel)
+            try await cancelledFixture.store.acceptForHistoryCoordinator(
+                afterCancel,
+                outboxAbsenceAuthorization: cancelledAbsence
+            ).record.hasSameAcceptance(as: afterCancel)
         )
     }
 
@@ -2870,6 +2911,409 @@ struct IOSAcceptedOutputDeliveryStoreTests {
         #expect(report.reachedLimit)
     }
 
+    @Test func terminalHistoryReplacementRequiresExactOutboxAbsence()
+        async throws {
+        let fixture = AcceptedDeliveryStoreFixture()
+        let terminal = try await fixture.terminalHistory(state: .committed)
+        let replacement = fixture.preparation(
+            rawAcceptedText: "replacement after terminal history"
+        )
+
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.historyTransferRequired
+        ) {
+            _ = try await fixture.store.acceptForHistoryCoordinator(
+                replacement
+            )
+        }
+
+        let foreign = AcceptedDeliveryStoreFixture(
+            capabilityOwnerIdentity: fixture.capabilityOwnerIdentity
+        )
+        let foreignTerminal = try await foreign.terminalHistory(
+            state: .committed
+        )
+        let foreignAbsence = try await foreign.outboxAbsenceAuthorization(
+            for: foreignTerminal.authorization
+        )
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        ) {
+            _ = try await fixture.store.acceptForHistoryCoordinator(
+                replacement,
+                outboxAbsenceAuthorization: foreignAbsence
+            )
+        }
+
+        let exactAbsence = try await fixture.outboxAbsenceAuthorization(
+            for: terminal.authorization
+        )
+        let accepted = try await fixture.store.acceptForHistoryCoordinator(
+            replacement,
+            outboxAbsenceAuthorization: exactAbsence
+        )
+        #expect(accepted.record.hasSameAcceptance(as: replacement))
+        #expect(accepted.record.historyWrite == nil)
+    }
+
+    @Test func terminalHistoryReplacementRejectsForeignAndStaleAbsence()
+        async throws {
+        let stale = AcceptedDeliveryStoreFixture()
+        let staleTerminal = try await stale.terminalHistory(state: .cancelled)
+        let staleAbsence = try await stale.outboxAbsenceAuthorization(
+            for: staleTerminal.authorization
+        )
+        let weakened = try await stale.store.disableKeepLatestResult(
+            expected: IOSAcceptedOutputDeliveryExpectation(
+                record: staleTerminal.record
+            )
+        )
+        #expect(!weakened.keepLatestResult)
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        ) {
+            _ = try await stale.store.acceptForHistoryCoordinator(
+                stale.preparation(rawAcceptedText: "stale capability"),
+                outboxAbsenceAuthorization: staleAbsence
+            )
+        }
+
+        let target = AcceptedDeliveryStoreFixture()
+        _ = try await target.terminalHistory(state: .committed)
+        let foreignOwner = AcceptedDeliveryStoreFixture()
+        let foreignTerminal = try await foreignOwner.terminalHistory(
+            state: .committed
+        )
+        let foreignAbsence = try await foreignOwner.outboxAbsenceAuthorization(
+            for: foreignTerminal.authorization
+        )
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        ) {
+            _ = try await target.store.acceptForHistoryCoordinator(
+                target.preparation(rawAcceptedText: "foreign capability"),
+                outboxAbsenceAuthorization: foreignAbsence
+            )
+        }
+    }
+
+    @Test func terminalHistoryReplacementUncertaintyResumesRetainedAbsence()
+        async throws {
+        for commitWasVisible in [true, false] {
+            let fixture = AcceptedDeliveryStoreFixture()
+            let terminal = try await fixture.terminalHistory(state: .committed)
+            let exactAbsence = try await fixture.outboxAbsenceAuthorization(
+                for: terminal.authorization
+            )
+            let replacement = fixture.preparation(
+                rawAcceptedText: commitWasVisible
+                    ? "visible terminal replacement"
+                    : "invisible terminal replacement"
+            )
+            fixture.journal.failNextReplace(
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+
+            await #expect(
+                throws: IOSAcceptedOutputDeliveryError.commitUncertain
+            ) {
+                _ = try await fixture.store.acceptForHistoryCoordinator(
+                    replacement,
+                    outboxAbsenceAuthorization: exactAbsence
+                )
+            }
+            let eventCount = fixture.journal.events.count
+            let foreign = AcceptedDeliveryStoreFixture(
+                capabilityOwnerIdentity: fixture.capabilityOwnerIdentity
+            )
+            let foreignTerminal = try await foreign.terminalHistory(
+                state: .committed
+            )
+            let foreignAbsence = try await foreign.outboxAbsenceAuthorization(
+                for: foreignTerminal.authorization
+            )
+            await #expect(
+                throws: IOSAcceptedOutputDeliveryError.commitUncertain
+            ) {
+                _ = try await fixture.store.acceptForHistoryCoordinator(
+                    replacement,
+                    outboxAbsenceAuthorization: foreignAbsence
+                )
+            }
+            #expect(fixture.journal.events.count == eventCount)
+
+            let confirmed = try await fixture.store
+                .acceptForHistoryCoordinator(
+                    replacement
+                )
+            #expect(confirmed.record.hasSameAcceptance(as: replacement))
+        }
+    }
+
+    @Test func terminalHistoryClearRequiresExactAbsenceExceptAtExpiry()
+        async throws {
+        let fixture = AcceptedDeliveryStoreFixture()
+        let terminal = try await fixture.terminalHistory(state: .committed)
+        let expectation = IOSAcceptedOutputDeliveryExpectation(
+            record: terminal.record
+        )
+        let absence = try await fixture.outboxAbsenceAuthorization(
+            for: terminal.authorization
+        )
+
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.historyTransferRequired
+        ) {
+            _ = try await fixture.store.clear(expected: expectation)
+        }
+        #expect(
+            try await fixture.store.clear(
+                expected: expectation,
+                outboxAbsenceAuthorization: absence
+            ) == .removed
+        )
+        #expect(fixture.journal.currentRecord == nil)
+
+        let rollback = AcceptedDeliveryStoreFixture()
+        let rollbackTerminal = try await rollback.terminalHistory(
+            state: .cancelled
+        )
+        rollback.clock.wall = rollbackTerminal.record.createdAt
+            .addingTimeInterval(-1)
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.historyTransferRequired
+        ) {
+            _ = try await rollback.store.clear(
+                expected: IOSAcceptedOutputDeliveryExpectation(
+                    record: rollbackTerminal.record
+                )
+            )
+        }
+
+        let expired = AcceptedDeliveryStoreFixture()
+        let expiredTerminal = try await expired.terminalHistory(
+            state: .committed
+        )
+        expired.clock.wall = expiredTerminal.record.expiresAt
+        #expect(
+            try await expired.store.clear(
+                expected: IOSAcceptedOutputDeliveryExpectation(
+                    record: expiredTerminal.record
+                )
+            ) == .removed
+        )
+    }
+
+    @Test func historyNilReplacementRemainsIndependentOfOutboxAbsence()
+        async throws {
+        let fixture = AcceptedDeliveryStoreFixture()
+        _ = try await fixture.store.accept(
+            fixture.preparation(rawAcceptedText: "first", historyWrite: nil)
+        )
+        let replacement = fixture.preparation(
+            rawAcceptedText: "second",
+            historyWrite: nil
+        )
+
+        let accepted = try await fixture.store.acceptForHistoryCoordinator(
+            replacement
+        )
+
+        #expect(accepted.record.hasSameAcceptance(as: replacement))
+    }
+
+    @Test func matchingHistoryDeliveryConfirmsPendingAndTerminalRelations()
+        async throws {
+        let pendingFixture = AcceptedDeliveryStoreFixture()
+        let (_, pendingAuthorization) = try await pendingFixture
+            .acceptAndAuthorize()
+        let pendingMembership = try await pendingFixture.outboxReceipt(
+            for: pendingAuthorization
+        )
+        pendingFixture.journal.resetEvents()
+
+        let pendingDisposition = try await pendingFixture.store
+            .confirmMatchingHistoryDelivery(membership: pendingMembership)
+        guard case .confirmed(let confirmedPending) = pendingDisposition else {
+            Issue.record("Expected a confirmed pending delivery")
+            return
+        }
+        #expect(confirmedPending.record == pendingAuthorization.record)
+        #expect(pendingFixture.journal.events == ["load", "replace:1"])
+        #expect(
+            String(describing: pendingDisposition)
+                == "IOSAcceptedOutputHistoryDeliveryDisposition(redacted)"
+        )
+        #expect(pendingDisposition.customMirror.children.isEmpty)
+
+        for state in [
+            IOSAcceptedOutputHistoryWriteState.committed,
+            .cancelled,
+        ] {
+            let fixture = AcceptedDeliveryStoreFixture()
+            let terminal = try await fixture.terminalHistory(state: state)
+            fixture.journal.resetEvents()
+
+            let disposition = try await fixture.store
+                .confirmMatchingHistoryDelivery(
+                    membership: terminal.membership
+                )
+            guard case .confirmed(let authorization) = disposition else {
+                Issue.record("Expected a confirmed terminal delivery")
+                continue
+            }
+            #expect(authorization.record == terminal.record)
+            #expect(fixture.journal.events == [
+                "load", "replace:\(terminal.record.revision)",
+            ])
+        }
+    }
+
+    @Test func matchingHistoryDeliveryClassifiesTemporalAbsenceAndCollision()
+        async throws {
+        let expired = AcceptedDeliveryStoreFixture()
+        let (expiredRecord, expiredAuthorization) = try await expired
+            .acceptAndAuthorize()
+        let expiredMembership = try await expired.outboxReceipt(
+            for: expiredAuthorization
+        )
+        expired.clock.wall = expiredRecord.expiresAt
+        expired.journal.resetEvents()
+        #expect(
+            try await expired.store.confirmMatchingHistoryDelivery(
+                membership: expiredMembership
+            ) == .expired
+        )
+        #expect(expired.journal.events == ["load"])
+
+        let rollback = AcceptedDeliveryStoreFixture()
+        let (rollbackRecord, rollbackAuthorization) = try await rollback
+            .acceptAndAuthorize()
+        let rollbackMembership = try await rollback.outboxReceipt(
+            for: rollbackAuthorization
+        )
+        rollback.clock.wall = rollbackRecord.createdAt.addingTimeInterval(-1)
+        rollback.journal.resetEvents()
+        #expect(
+            try await rollback.store.confirmMatchingHistoryDelivery(
+                membership: rollbackMembership
+            ) == .clockRollbackAmbiguous
+        )
+        #expect(rollback.journal.events == ["load"])
+
+        let unrelated = AcceptedDeliveryStoreFixture()
+        let (_, unrelatedAuthorization) = try await unrelated
+            .acceptAndAuthorize()
+        let unrelatedMembership = try await unrelated.outboxReceipt(
+            for: unrelatedAuthorization
+        )
+        unrelated.journal.install(
+            try unrelated.record(
+                preparation: unrelated.preparation(historyWrite: nil)
+            )
+        )
+        unrelated.journal.resetEvents()
+        #expect(
+            try await unrelated.store.confirmMatchingHistoryDelivery(
+                membership: unrelatedMembership
+            ) == .absentOrUnrelated
+        )
+        #expect(unrelated.journal.events == ["load"])
+
+        let discarded = AcceptedDeliveryStoreFixture()
+        let (discardedRecord, discardedAuthorization) = try await discarded
+            .acceptAndAuthorize()
+        let discardedMembership = try await discarded.outboxReceipt(
+            for: discardedAuthorization
+        )
+        discarded.journal.install(
+            try discarded.discardedRecord(from: discardedRecord)
+        )
+        discarded.journal.resetEvents()
+        #expect(
+            try await discarded.store.confirmMatchingHistoryDelivery(
+                membership: discardedMembership
+            ) == .absentOrUnrelated
+        )
+        #expect(discarded.journal.events == ["load"])
+
+        let collision = AcceptedDeliveryStoreFixture()
+        let (collisionRecord, collisionAuthorization) = try await collision
+            .acceptAndAuthorize()
+        let collisionMembership = try await collision.outboxReceipt(
+            for: collisionAuthorization
+        )
+        collision.journal.install(
+            try collision.record(
+                replacing: collisionRecord,
+                acceptedText: "different bytes"
+            )
+        )
+        collision.journal.resetEvents()
+        await #expect(throws: IOSAcceptedOutputDeliveryError.identityCollision) {
+            _ = try await collision.store.confirmMatchingHistoryDelivery(
+                membership: collisionMembership
+            )
+        }
+        #expect(collision.journal.events == ["load"])
+    }
+
+    @Test func matchingHistoryDeliveryRejectsForeignOwnerBeforeJournalIO()
+        async throws {
+        let target = AcceptedDeliveryStoreFixture()
+        _ = try await target.store.accept(
+            target.preparation(historyWrite: try target.historyWrite())
+        )
+        let foreign = AcceptedDeliveryStoreFixture()
+        let (_, foreignAuthorization) = try await foreign.acceptAndAuthorize()
+        let foreignMembership = try await foreign.outboxReceipt(
+            for: foreignAuthorization
+        )
+        target.journal.resetEvents()
+        target.clock.resetWallReadCount()
+
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        ) {
+            _ = try await target.store.confirmMatchingHistoryDelivery(
+                membership: foreignMembership
+            )
+        }
+        #expect(target.journal.events.isEmpty)
+        #expect(target.clock.wallReadCount == 0)
+    }
+
+    @Test func matchingHistoryDeliveryUncertaintyRequiresExactConfirmationRetry()
+        async throws {
+        for commitWasVisible in [true, false] {
+            let fixture = AcceptedDeliveryStoreFixture()
+            let (_, authorization) = try await fixture.acceptAndAuthorize()
+            let membership = try await fixture.outboxReceipt(
+                for: authorization
+            )
+            fixture.journal.failNextReplace(
+                with: .commitUncertain,
+                commitBeforeThrowing: commitWasVisible
+            )
+
+            await #expect(
+                throws: IOSAcceptedOutputDeliveryError.commitUncertain
+            ) {
+                _ = try await fixture.store.confirmMatchingHistoryDelivery(
+                    membership: membership
+                )
+            }
+            let confirmed = try await fixture.store
+                .confirmMatchingHistoryDelivery(membership: membership)
+            guard case .confirmed(let retriedAuthorization) = confirmed else {
+                Issue.record("Expected exact matching retry to confirm")
+                continue
+            }
+            #expect(retriedAuthorization.record == authorization.record)
+        }
+    }
+
     @Test func removalUncertaintyDoesNotAuthorizeAnyFurtherAction() async throws {
         let fixture = AcceptedDeliveryStoreFixture()
         let accepted = try await fixture.store.accept(fixture.preparation())
@@ -3312,6 +3756,25 @@ private final class AcceptedDeliveryStoreFixture: @unchecked Sendable {
         )
     }
 
+    func outboxAbsenceAuthorization(
+        for authorization: IOSAcceptedOutputDeliveryAuthorization
+    ) async throws -> IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization {
+        let outbox = IOSAcceptedHistoryOutboxStore(
+            journal: AcceptedDeliveryOutboxFakeJournal(),
+            now: { [clock] in clock.wall },
+            deliveryStoreIdentity: store.storeIdentity,
+            capabilityOwnerIdentity: capabilityOwnerIdentity
+        )
+        let disposition = try await outbox.classifyDeliveryAbsence(
+            authorization: authorization
+        )
+        guard case .absent(let absence) = disposition else {
+            Issue.record("Expected an empty outbox absence authorization")
+            throw IOSAcceptedHistoryOutboxError.compareAndSwapFailed
+        }
+        return absence
+    }
+
     func rowReceipt(
         for outbox: IOSAcceptedHistoryOutboxReceipt,
         policyGeneration: Int64 = 1
@@ -3340,6 +3803,41 @@ private final class AcceptedDeliveryStoreFixture: @unchecked Sendable {
             expected: IOSAcceptedOutputDeliveryExpectation(record: accepted)
         )
         return (accepted, authorization)
+    }
+
+    func terminalHistory(
+        state: IOSAcceptedOutputHistoryWriteState
+    ) async throws -> (
+        record: IOSAcceptedOutputDeliveryRecord,
+        authorization: IOSAcceptedOutputDeliveryAuthorization,
+        membership: IOSAcceptedHistoryOutboxReceipt
+    ) {
+        let (_, pendingAuthorization) = try await acceptAndAuthorize()
+        let membership = try await outboxReceipt(for: pendingAuthorization)
+        let terminal: IOSAcceptedOutputDeliveryRecord
+        switch state {
+        case .committed:
+            terminal = try await store.commitHistoryWrite(
+                authorization: pendingAuthorization,
+                rowReceipt: try await retainedRowReceipt(
+                    for: pendingAuthorization
+                )
+            )
+        case .cancelled:
+            terminal = try await store.cancelHistoryWrite(
+                authorization: pendingAuthorization,
+                policyInvalidationReceipt: try await policyReceipt(
+                    generation: 2
+                )
+            )
+        case .pending, .pendingReplacement:
+            Issue.record("terminalHistory requires a terminal marker state")
+            throw IOSAcceptedOutputDeliveryError.invalidTransition
+        }
+        let authorization = try await store.confirmActiveHistoryRecovery(
+            expected: IOSAcceptedOutputDeliveryExpectation(record: terminal)
+        )
+        return (terminal, authorization, membership)
     }
 
     func preparation(
@@ -3385,6 +3883,52 @@ private final class AcceptedDeliveryStoreFixture: @unchecked Sendable {
             keepLatestResult: preparation.keepLatestResult,
             publicationGeneration: publicationGeneration,
             historyWrite: preparation.historyWrite
+        )
+    }
+
+    func record(
+        replacing old: IOSAcceptedOutputDeliveryRecord,
+        acceptedText: String
+    ) throws -> IOSAcceptedOutputDeliveryRecord {
+        try IOSAcceptedOutputDeliveryRecord(
+            revision: old.revision,
+            deliveryID: old.deliveryID,
+            sessionID: old.sessionID,
+            attemptID: old.attemptID,
+            transcriptID: old.transcriptID,
+            acceptedText: acceptedText,
+            outputIntent: old.outputIntent,
+            createdAt: old.createdAt,
+            updatedAt: old.updatedAt,
+            expiresAt: old.expiresAt,
+            deliveryState: old.deliveryState,
+            automaticInsertionPreferenceEnabled:
+                old.automaticInsertionPreferenceEnabled,
+            keepLatestResult: old.keepLatestResult,
+            publicationGeneration: old.publicationGeneration,
+            historyWrite: old.historyWrite
+        )
+    }
+
+    func discardedRecord(
+        from old: IOSAcceptedOutputDeliveryRecord
+    ) throws -> IOSAcceptedOutputDeliveryRecord {
+        try IOSAcceptedOutputDeliveryRecord(
+            revision: old.revision + 1,
+            deliveryID: old.deliveryID,
+            sessionID: old.sessionID,
+            attemptID: old.attemptID,
+            transcriptID: old.transcriptID,
+            acceptedText: nil,
+            outputIntent: old.outputIntent,
+            createdAt: old.createdAt,
+            updatedAt: old.updatedAt,
+            expiresAt: old.expiresAt,
+            deliveryState: .discarded,
+            automaticInsertionPreferenceEnabled: false,
+            keepLatestResult: old.keepLatestResult,
+            publicationGeneration: old.publicationGeneration,
+            historyWrite: nil
         )
     }
 }
