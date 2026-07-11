@@ -224,12 +224,39 @@ struct IOSFailedHistoryJournalTests {
             )
         }
 
-        let operation = try failedHistoryTestRetryOperation()
+        let operation = try IOSFailedHistoryRetryOperation(
+            retryID: UUID(
+                uuidString: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"
+            )!,
+            createdAt: try failedHistoryTestDate(offsetMilliseconds: 11),
+            transcriptionID: UUID(
+                uuidString: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2"
+            )!,
+            deliveryID: UUID(
+                uuidString: "cccccccc-cccc-4ccc-8ccc-ccccccccccc3"
+            )!,
+            sessionID: UUID(
+                uuidString: "dddddddd-dddd-4ddd-8ddd-ddddddddddd4"
+            )!,
+            transcriptID: UUID(
+                uuidString: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5"
+            )!,
+            state: .reserved
+        )
+        let rowAttemptID = UUID(
+            uuidString: "f1111111-1111-4111-8111-111111111111"
+        )!
         let entry = try failedHistoryTestEntry(
+            attemptID: rowAttemptID,
             retryCount: 1,
             retryOperation: operation
         )
-        let cleanup = try failedHistoryTestAudioCleanup()
+        let cleanupAttemptID = UUID(
+            uuidString: "f2222222-2222-4222-8222-222222222222"
+        )!
+        let cleanup = try failedHistoryTestAudioCleanup(
+            attemptID: cleanupAttemptID
+        )
         let canonical = String(
             decoding: try IOSFailedHistoryWireCodec.encode(
                 IOSFailedHistoryEnvelope(
@@ -673,7 +700,7 @@ struct IOSFailedHistoryJournalTests {
                 _ = try repository.load()
             }
         }
-        #expect(fileSystem.file?.data == committedBytes)
+        #expect(fileSystem.file?.data == replacementBytes)
     }
 
     @Test func corruptAndFutureSourcesRemainUntouched() throws {

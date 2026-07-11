@@ -1074,6 +1074,14 @@ Implementation proceeds as separate checkpointable steps:
 5. C4.5 integrates provider-free lifecycle recovery, public redacted app
    boundaries, full regression evidence, and the final C4 QA record.
 
+C4.1 is complete. The strict app-private failed root now has bounded values,
+deterministic row and tombstone order, a protected 1-MiB journal, physical CAS,
+root-shared guarded-baseline evidence, and no public or keyboard surface. Its
+final gate is recorded in
+`docs/qa/runs/ios-failed-history-foundation-2026-07-11.md`. C4.2 is the next
+checkpoint and owns PendingRecording transfer plus exact audio inventory,
+retention, Delete, and tombstone cleanup.
+
 No History toggle, Clear History action, first-use disclosure, Recording Cache,
 App Group publication, or keyboard dependency is exposed by C4.0 alone.
 The C4.0 contract review is recorded in
@@ -1291,13 +1299,14 @@ or advances its generation. This checkpoint does not mutate Latest Result,
 bridge publication, provider work, or keyboard/App Group state. Its final gate
 record is `docs/qa/runs/ios-history-policy-cutover-2026-07-11.md`.
 
-The C4.0 contract for bounded failed History and retry audio is now frozen. The
-next P2 checkpoints implement C4.1 through C4.5 under the same History
-generation and cleanup path, then add the independent recording-cache
-repository, file transfer, retention, and reconciliation flow. The directional
-App Group bridge split remains later P2/P6 work and does not enter the keyboard
-early. Until failed rows and retry-only audio join the same policy generation
-and cleanup path, the shipping app does not expose a partial History toggle,
+The C4.0 contract for bounded failed History and retry audio is frozen, and the
+C4.1 strict values/journal/store foundation is complete. The next P2 checkpoint
+is C4.2 sealed PendingRecording ownership transfer, protected-audio inventory,
+retention, Delete, and tombstone cleanup; C4.3 through C4.5 then join policy
+cutover, explicit Retry, provider-free recovery, and the public redacted app
+boundary. The independent recording-cache and directional App Group bridge
+flows remain later work and do not enter the keyboard early. Until the full C4
+chain is complete, the shipping app does not expose a partial History toggle,
 Clear History action, or disclosure that promises those controls.
 
 The app-private credential marker, settings, Library, and Usage repositories

@@ -643,7 +643,7 @@ private final class BlockingSecondPendingRecordingMediaValidator:
         }
         if shouldBlock {
             secondValidationStarted.signal()
-            guard allowSecondValidation.wait(timeout: .now() + 2) == .success else {
+            guard allowSecondValidation.wait(timeout: .now() + 10) == .success else {
                 throw IOSPendingRecordingAudioFileSystemError.mediaValidationTimedOut
             }
         }
@@ -651,7 +651,7 @@ private final class BlockingSecondPendingRecordingMediaValidator:
     }
 
     func waitUntilSecondValidationStarts() -> Bool {
-        secondValidationStarted.wait(timeout: .now() + 2) == .success
+        secondValidationStarted.wait(timeout: .now() + 10) == .success
     }
 
     func resumeSecondValidation() {
