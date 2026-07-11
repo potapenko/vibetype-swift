@@ -73,6 +73,14 @@ struct IOSProtectedAudioNamespaceInventoryMint: Sendable {
     fileprivate init() {}
 }
 
+struct IOSFailedHistoryValidatedRowAudioMint: Sendable {
+    fileprivate init() {}
+}
+
+struct IOSPendingRecordingHeldAudioLeaseMint: Sendable {
+    fileprivate init() {}
+}
+
 struct IOSPendingRecordingStoreIdentity: Equatable, Sendable {
     private let value = UUID()
 }
@@ -1058,9 +1066,226 @@ public actor IOSPendingRecordingStore {
         }
         return .absenceConfirmed(receipt)
     }
+
+    func acquireValidatedFailedHistoryRowAudio(
+        using authorization:
+            IOSFailedHistoryRowAudioValidationAuthorization,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSFailedHistoryValidatedRowAudio {
+        try requireFailedHistoryRowAudioValidationAuthority(
+            authorization,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+
+        let journalAuthorization =
+            IOSPendingRecordingMetadataRetirementAuthorization()
+        let pendingSource = try performRepositoryBoundary { _ in
+            try journal.loadMetadataSnapshot(
+                authorization: journalAuthorization
+            )
+        }
+        try requirePendingSource(
+            pendingSource,
+            for: authorization,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        let heldPendingAudioLease:
+            (any IOSPendingRecordingPublishedAudioLease)?
+        switch authorization.purpose {
+        case .delete:
+            heldPendingAudioLease = nil
+        case .retention(let preparation):
+            guard let audioLease = preparation
+                .audioLeaseForNamespaceValidation(
+                    mint: IOSPendingRecordingHeldAudioLeaseMint(),
+                    operationLeaseAuthorization:
+                        operationLeaseAuthorization
+                ) else {
+                throw IOSPendingRecordingError.localRecoveryPending
+            }
+            heldPendingAudioLease = audioLease
+        }
+        guard let inventory = IOSProtectedAudioNamespaceInventory(
+            mint: IOSProtectedAudioNamespaceInventoryMint(),
+            failedInventory: authorization.failedInventory,
+            pendingSource: pendingSource
+        ) else {
+            throw IOSPendingRecordingError.localRecoveryPending
+        }
+        try requireProtectedAudioNamespaceInventoryAuthority(
+            inventory,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        do {
+            try await audioFileSystem.validateProtectedAudioNamespace(
+                inventory,
+                holding: heldPendingAudioLease.map { [$0] } ?? []
+            )
+        } catch {
+            throw mapAudioError(error, operation: .inspect)
+        }
+        try requireHeldPendingAudioLease(
+            heldPendingAudioLease,
+            for: authorization,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        try requireFailedHistoryRowAudioValidationAuthority(
+            authorization,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        let postInventoryPendingSource = try performRepositoryBoundary { _ in
+            try journal.loadMetadataSnapshot(
+                authorization: journalAuthorization
+            )
+        }
+        guard postInventoryPendingSource == pendingSource else {
+            throw IOSPendingRecordingError.localRecoveryPending
+        }
+
+        let audioLease: any IOSPendingRecordingPublishedAudioLease
+        do {
+            audioLease = try await performRepositoryBoundary { _ in
+                try await audioFileSystem.acquireValidatedPublishedAudio(
+                    relativeIdentifier:
+                        authorization.candidate.audioRelativeIdentifier,
+                    attemptID: authorization.candidate.attemptID,
+                    durationMilliseconds:
+                        authorization.candidate.durationMilliseconds,
+                    byteCount: authorization.candidate.byteCount
+                )
+            }
+        } catch IOSPendingRecordingError.repositoryIdentityConflict {
+            throw IOSPendingRecordingError.repositoryIdentityConflict
+        } catch {
+            throw mapAudioError(error, operation: .validate)
+        }
+        var shouldReleaseAudio = true
+        defer {
+            if shouldReleaseAudio { audioLease.release() }
+        }
+
+        do {
+            try await audioFileSystem.validateProtectedAudioNamespace(
+                inventory,
+                holding: (heldPendingAudioLease.map { [$0] } ?? [])
+                    + [audioLease]
+            )
+        } catch {
+            throw mapAudioError(error, operation: .inspect)
+        }
+        try requireHeldPendingAudioLease(
+            heldPendingAudioLease,
+            for: authorization,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+
+        try requireFailedHistoryRowAudioValidationAuthority(
+            authorization,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        let finalPendingSource = try performRepositoryBoundary { _ in
+            try journal.loadMetadataSnapshot(
+                authorization: journalAuthorization
+            )
+        }
+        guard finalPendingSource == pendingSource,
+              let validated = IOSFailedHistoryValidatedRowAudio(
+                  mint: IOSFailedHistoryValidatedRowAudioMint(),
+                  authorization: authorization,
+                  audioLease: audioLease
+              ) else {
+            throw IOSPendingRecordingError.localRecoveryPending
+        }
+        shouldReleaseAudio = false
+        return validated
+    }
 }
 
 private extension IOSPendingRecordingStore {
+    func requireHeldPendingAudioLease(
+        _ heldAudioLease:
+            (any IOSPendingRecordingPublishedAudioLease)?,
+        for authorization:
+            IOSFailedHistoryRowAudioValidationAuthorization,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) throws {
+        switch authorization.purpose {
+        case .delete:
+            guard heldAudioLease == nil else {
+                throw IOSPendingRecordingError.localRecoveryPending
+            }
+        case .retention(let preparation):
+            guard let heldAudioLease,
+                  let currentAudioLease = preparation
+                    .audioLeaseForNamespaceValidation(
+                        mint: IOSPendingRecordingHeldAudioLeaseMint(),
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization
+                    ),
+                  ObjectIdentifier(heldAudioLease)
+                    == ObjectIdentifier(currentAudioLease) else {
+                throw IOSPendingRecordingError.localRecoveryPending
+            }
+        }
+    }
+
+    func requireFailedHistoryRowAudioValidationAuthority(
+        _ authorization:
+            IOSFailedHistoryRowAudioValidationAuthorization,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) throws {
+        try requireProtectedAudioInventoryAuthority(
+            authorization.failedInventory,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        guard operationGateBinding.proves(operationLeaseAuthorization),
+              authorization.failedStoreIdentity
+                == expectedFailedStoreIdentity,
+              authorization.expectedPendingStoreIdentity == storeIdentity,
+              authorization.ownerIdentity == capabilityOwnerIdentity,
+              authorization.repositoryBinding
+                == authorization.failedInventory.repositoryBinding,
+              authorization.failedSource
+                == authorization.failedInventory.failedSource,
+              authorization.operationLeaseAuthorization
+                .provesSameActiveLease(
+                    as: operationLeaseAuthorization
+                ) else {
+            throw IOSPendingRecordingError.localRecoveryPending
+        }
+    }
+
+    func requirePendingSource(
+        _ pendingSource:
+            IOSPendingRecordingJournalMetadataSnapshot?,
+        for authorization:
+            IOSFailedHistoryRowAudioValidationAuthorization,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) throws {
+        switch authorization.purpose {
+        case .delete:
+            return
+        case .retention(let preparation):
+            guard preparation.pendingSnapshot == pendingSource,
+                  preparation.pendingStoreIdentity == storeIdentity,
+                  preparation.failedStoreIdentity
+                    == expectedFailedStoreIdentity,
+                  preparation.ownerIdentity == capabilityOwnerIdentity,
+                  preparation.repositoryBinding
+                    == authorization.repositoryBinding,
+                  preparation.operationLeaseAuthorization
+                    .provesSameActiveLease(
+                        as: operationLeaseAuthorization
+                    ) else {
+                throw IOSPendingRecordingError.localRecoveryPending
+            }
+        }
+    }
+
     func requireMetadataRetirementAuthority(
         _ authority:
             IOSFailedHistoryPendingMetadataRetirementAuthority,

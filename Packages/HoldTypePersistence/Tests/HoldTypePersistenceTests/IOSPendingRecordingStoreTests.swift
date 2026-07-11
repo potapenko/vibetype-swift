@@ -377,6 +377,253 @@ struct IOSPendingRecordingStoreTests {
         #expect(journal.recording == nil)
     }
 
+    @Test func failedRowAudioValidationSupportsDeleteWithNilOrUnrelatedPending()
+        async throws {
+        let setup = try PendingRowAudioValidationSetup()
+        defer { setup.removeFiles() }
+        let candidate = try failedHistoryTestEntry(index: 201)
+
+        try await setup.context.operationGate.perform { lease in
+            _ = try await setup.context.failedHistoryStore
+                .mutateExactForTesting(
+                    IOSFailedHistoryEnvelope(
+                        revision: 1,
+                        entries: [candidate],
+                        audioCleanup: []
+                    ),
+                    operationLeaseAuthorization: lease
+                )
+            let authorization = try await setup.context.failedHistoryStore
+                .prepareDelete(
+                    attemptID: candidate.attemptID,
+                    operationLeaseAuthorization: lease
+                )
+
+            for pending in [
+                Optional<IOSPendingRecording>.none,
+                try pendingRowAudioTestRecording(index: 202),
+            ] {
+                let journal = FakePendingRecordingJournal(
+                    events: PendingStoreEventLog()
+                )
+                journal.recording = pending
+                let audio = FakePendingRecordingAudioFileSystem(
+                    events: PendingStoreEventLog()
+                )
+                let store = setup.makePendingStore(
+                    journal: journal,
+                    audio: audio
+                )
+                let validated = try await store
+                    .acquireValidatedFailedHistoryRowAudio(
+                        using: authorization,
+                        operationLeaseAuthorization: lease
+                    )
+
+                #expect(validated.authorization == authorization)
+                #expect(audio.leaseReleaseCount == 0)
+                validated.release()
+                #expect(audio.leaseReleaseCount == 1)
+            }
+        }
+    }
+
+    @Test func failedRowAudioValidationRejectsForeignAndStaleAuthority()
+        async throws {
+        let setup = try PendingRowAudioValidationSetup()
+        defer { setup.removeFiles() }
+        let candidate = try failedHistoryTestEntry(index: 211)
+        let events = PendingStoreEventLog()
+        let journal = FakePendingRecordingJournal(events: events)
+        let audio = FakePendingRecordingAudioFileSystem(events: events)
+        let store = setup.makePendingStore(journal: journal, audio: audio)
+
+        let retained = try await setup.context.operationGate.perform { lease in
+            _ = try await setup.context.failedHistoryStore
+                .mutateExactForTesting(
+                    IOSFailedHistoryEnvelope(
+                        revision: 1,
+                        entries: [candidate],
+                        audioCleanup: []
+                    ),
+                    operationLeaseAuthorization: lease
+                )
+            let authorization = try await setup.context.failedHistoryStore
+                .prepareDelete(
+                    attemptID: candidate.attemptID,
+                    operationLeaseAuthorization: lease
+                )
+            let foreign = setup.makePendingStore(
+                journal: journal,
+                audio: audio,
+                storeIdentity: IOSPendingRecordingStoreIdentity()
+            )
+            await #expect(
+                throws: IOSPendingRecordingError.localRecoveryPending
+            ) {
+                _ = try await foreign.acquireValidatedFailedHistoryRowAudio(
+                    using: authorization,
+                    operationLeaseAuthorization: lease
+                )
+            }
+            #expect(audio.leaseReleaseCount == 0)
+            return authorization
+        }
+
+        _ = try await setup.context.operationGate.perform { freshLease in
+            await #expect(
+                throws: IOSPendingRecordingError.localRecoveryPending
+            ) {
+                _ = try await store.acquireValidatedFailedHistoryRowAudio(
+                    using: retained,
+                    operationLeaseAuthorization: freshLease
+                )
+            }
+        }
+        #expect(audio.leaseReleaseCount == 0)
+    }
+
+    @Test func failedRowAudioValidationReleasesLeaseWhenPendingSourceChanges()
+        async throws {
+        let setup = try PendingRowAudioValidationSetup()
+        defer { setup.removeFiles() }
+        let candidate = try failedHistoryTestEntry(index: 221)
+        let journal = FakePendingRecordingJournal(
+            events: PendingStoreEventLog()
+        )
+        journal.recording = try pendingRowAudioTestRecording(index: 222)
+        let audio = FakePendingRecordingAudioFileSystem(
+            events: PendingStoreEventLog()
+        )
+        let store = setup.makePendingStore(journal: journal, audio: audio)
+
+        try await setup.context.operationGate.perform { lease in
+            _ = try await setup.context.failedHistoryStore
+                .mutateExactForTesting(
+                    IOSFailedHistoryEnvelope(
+                        revision: 1,
+                        entries: [candidate],
+                        audioCleanup: []
+                    ),
+                    operationLeaseAuthorization: lease
+                )
+            let authorization = try await setup.context.failedHistoryStore
+                .prepareDelete(
+                    attemptID: candidate.attemptID,
+                    operationLeaseAuthorization: lease
+                )
+            audio.onNextValidatedAudioAcquire {
+                journal.recording = try? pendingRowAudioTestRecording(
+                    index: 223
+                )
+            }
+
+            await #expect(
+                throws: IOSPendingRecordingError.localRecoveryPending
+            ) {
+                _ = try await store.acquireValidatedFailedHistoryRowAudio(
+                    using: authorization,
+                    operationLeaseAuthorization: lease
+                )
+            }
+            #expect(audio.leaseReleaseCount == 1)
+        }
+    }
+
+    @Test func failedRowAudioValidationSupportsRetentionCurrentPendingSource()
+        async throws {
+        let setup = try PendingRowAudioValidationSetup()
+        defer { setup.removeFiles() }
+        let entries = try (231...235).map {
+            try failedHistoryTestEntry(index: $0)
+        }
+        let sortedEntries = IOSFailedHistoryValidation.sortedEntries(entries)
+        let pending = try pendingRowAudioTestRecording(
+            index: 236,
+            phase: .awaitingRecovery
+        )
+        let pendingSnapshot = IOSPendingRecordingJournalMetadataSnapshot(
+            testingRecording: pending,
+            testingRevision: 2
+        )
+        let events = PendingStoreEventLog()
+        let journal = FakePendingRecordingJournal(events: events)
+        journal.recording = pending
+        let audio = FakePendingRecordingAudioFileSystem(events: events)
+        let store = setup.makePendingStore(journal: journal, audio: audio)
+        let policyReceipt = try await pendingRowAudioPolicyReceipt(
+            ownerIdentity: setup.context.ownerIdentity
+        )
+
+        try await setup.context.operationGate.perform { lease in
+            _ = try await setup.context.failedHistoryStore
+                .mutateExactForTesting(
+                    IOSFailedHistoryEnvelope(
+                        revision: 1,
+                        entries: sortedEntries,
+                        audioCleanup: []
+                    ),
+                    operationLeaseAuthorization: lease
+                )
+            let intendedRow = try failedRow(matching: pending)
+            let preparationAudio = FakePendingRecordingAudioLease(
+                relativeIdentifier: pending.audioRelativeIdentifier,
+                artifact: AudioRecordingArtifact(
+                    fileURL: URL(fileURLWithPath: "/protected/pending.m4a"),
+                    duration: TimeInterval(pending.durationMilliseconds) / 1_000,
+                    byteCount: pending.byteCount
+                ),
+                durationMilliseconds: pending.durationMilliseconds,
+                events: PendingStoreEventLog(),
+                onRelease: {}
+            )
+            let preparation = try #require(
+                IOSPendingFailedHistoryTransferPreparation(
+                    mint: IOSPendingFailedHistoryTransferPreparationMint(
+                        testingToken: ()
+                    ),
+                    pendingSnapshot: pendingSnapshot,
+                    intendedRow: intendedRow,
+                    audioLease: preparationAudio,
+                    pendingStoreIdentity:
+                        setup.context.pendingRecordingStoreIdentity,
+                    failedStoreIdentity:
+                        setup.context.failedHistoryStore.storeIdentity,
+                    ownerIdentity: setup.context.ownerIdentity,
+                    repositoryBinding: setup.context.repositoryBinding,
+                    operationLeaseAuthorization: lease,
+                    policyReceipt: policyReceipt
+                )
+            )
+            defer { preparation.releaseAudioLease() }
+            let authorization = try #require(
+                try await setup.context.failedHistoryStore.prepareRetention(
+                    for: preparation
+                )
+            )
+            let validated = try await store
+                .acquireValidatedFailedHistoryRowAudio(
+                    using: authorization,
+                    operationLeaseAuthorization: lease
+                )
+
+            #expect(authorization.candidate == sortedEntries.last)
+            #expect(
+                authorization.purpose == .retention(preparation)
+            )
+            validated.release()
+            #expect(audio.leaseReleaseCount == 1)
+            #expect(
+                events.values == [
+                    "audio.inventory.validate",
+                    "audio.validate",
+                    "audio.inventory.validate",
+                    "audio.lease.release",
+                ]
+            )
+        }
+    }
+
     @Test func journalFailurePreservesPublishedAudioAndReleasesItsCreatorLock() async {
         let fixture = StoreFixture()
         fixture.journal.createError = .journalWriteFailed
@@ -1454,6 +1701,158 @@ struct IOSPendingRecordingStoreTests {
     }
 }
 
+private final class PendingRowAudioValidationSetup: @unchecked Sendable {
+    let parent: URL
+    let context: IOSAcceptedHistoryCoordinatorProcessContext
+
+    init() throws {
+        parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "pending-row-audio-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        let root = parent.appendingPathComponent(
+            "ApplicationSupport",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        context = IOSAcceptedHistoryCoordinatorProcessContextRegistry()
+            .context(for: root)
+    }
+
+    func makePendingStore(
+        journal: FakePendingRecordingJournal,
+        audio: FakePendingRecordingAudioFileSystem,
+        storeIdentity: IOSPendingRecordingStoreIdentity? = nil
+    ) -> IOSPendingRecordingStore {
+        IOSPendingRecordingStore(
+            journal: journal,
+            audioFileSystem: audio,
+            operationGate: context.operationGate,
+            liveOwnerRegistry: context.pendingRecordingLiveOwnerRegistry,
+            capabilityOwnerIdentity: context.ownerIdentity,
+            storeIdentity:
+                storeIdentity ?? context.pendingRecordingStoreIdentity,
+            repositoryGuard: context.repositoryGuard,
+            failedHistoryMutationInterlock:
+                context.failedHistoryMutationInterlock,
+            failedOwnershipInspector: context.failedHistoryStore,
+            now: { Date(timeIntervalSince1970: 1_752_150_896.789) }
+        )
+    }
+
+    func removeFiles() {
+        try? FileManager.default.removeItem(at: parent)
+    }
+}
+
+private func pendingRowAudioTestRecording(
+    index: Int,
+    phase: IOSPendingRecordingPhase = .readyForTranscription
+) throws -> IOSPendingRecording {
+    let attemptID = failedHistoryTestUUID(namespace: 0x71, index: index)
+    return try IOSPendingRecording(
+        attemptID: attemptID,
+        audioRelativeIdentifier:
+            IOSPendingRecordingStorageLocation.relativeAudioIdentifier(
+                for: attemptID,
+                format: .m4a
+            ),
+        createdAt: try failedHistoryTestDate(
+            offsetMilliseconds: Int64(index * 10)
+        ),
+        updatedAt: try failedHistoryTestDate(
+            offsetMilliseconds: Int64(index * 10 + 2)
+        ),
+        phase: phase,
+        outputIntent: .standard,
+        transcriptionID: nil,
+        transcriptionModel: "gpt-4o-mini-transcribe",
+        transcriptionLanguageCode: "en",
+        durationMilliseconds: 1_250,
+        byteCount: 4_096
+    )
+}
+
+private func failedRow(
+    matching pending: IOSPendingRecording
+) throws -> IOSFailedHistoryEntry {
+    try IOSFailedHistoryEntry(
+        attemptID: pending.attemptID,
+        createdAt: pending.createdAt,
+        updatedAt: pending.updatedAt,
+        policyGeneration: 1,
+        failureCategory: .networkFailure,
+        pipelineStage: .transcription,
+        retryCount: 0,
+        outputIntent: pending.outputIntent,
+        transcriptionModel: pending.transcriptionModel,
+        transcriptionLanguageCode: pending.transcriptionLanguageCode,
+        durationMilliseconds: pending.durationMilliseconds,
+        byteCount: pending.byteCount,
+        audioRelativeIdentifier: pending.audioRelativeIdentifier,
+        ownershipState: .pendingJournalRetirement,
+        retryOperation: nil
+    )
+}
+
+private func pendingRowAudioPolicyReceipt(
+    ownerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity
+) async throws -> IOSHistoryPolicyReceipt {
+    let state = try IOSHistoryPolicyState(
+        revision: 1,
+        historyEnabled: true,
+        policyGeneration: 1
+    )
+    let store = IOSHistoryPolicyStore(
+        journal: PendingRowAudioPolicyJournal(state: state),
+        capabilityOwnerIdentity: ownerIdentity
+    )
+    return try await store.confirm(
+        expected: IOSHistoryPolicyExpectation(state: state)
+    )
+}
+
+private struct PendingRowAudioPolicyJournal:
+    IOSHistoryPolicyJournalStoring {
+    let state: IOSHistoryPolicyState
+
+    func load() throws -> IOSHistoryPolicyJournalSnapshot? {
+        IOSHistoryPolicyJournalSnapshot(
+            state: state,
+            fileRevision: IOSStrictProtectedRecordFileRevision(
+                testingToken: 1
+            )
+        )
+    }
+
+    func replace(
+        _ state: IOSHistoryPolicyState,
+        expected: IOSHistoryPolicyJournalSnapshot
+    ) throws -> IOSHistoryPolicyJournalSnapshot {
+        guard expected.state == self.state,
+              state == self.state else {
+            throw IOSHistoryPolicyError.compareAndSwapFailed
+        }
+        return IOSHistoryPolicyJournalSnapshot(
+            state: state,
+            fileRevision: IOSStrictProtectedRecordFileRevision(
+                testingToken: 2
+            )
+        )
+    }
+
+    func performStagingMaintenance(
+        now: Date
+    ) throws -> IOSStrictProtectedRecordMaintenanceReport {
+        _ = now
+        return .empty
+    }
+}
+
 private final class StoreFixture: @unchecked Sendable {
     let events = PendingStoreEventLog()
     let journal: FakePendingRecordingJournal
@@ -1706,6 +2105,8 @@ private final class FakePendingRecordingAudioFileSystem:
     private var storedPublishBarrier: PendingStorePublishBarrier?
     private var storedReadBarrier: PendingLeaseReadBarrier?
     private var storedLeaseReadError: IOSPendingRecordingAudioFileSystemError?
+    private var storedOnNextValidatedAudioAcquire:
+        (@Sendable () -> Void)?
 
     var published: Bool { lock.withLock { storedPublished } }
     var publishCallCount: Int { lock.withLock { storedPublishCallCount } }
@@ -1737,6 +2138,14 @@ private final class FakePendingRecordingAudioFileSystem:
 
     func blockNextLeaseRead(with barrier: PendingLeaseReadBarrier) {
         lock.withLock { storedReadBarrier = barrier }
+    }
+
+    func onNextValidatedAudioAcquire(
+        _ operation: @escaping @Sendable () -> Void
+    ) {
+        lock.withLock {
+            storedOnNextValidatedAudioAcquire = operation
+        }
     }
 
     init(events: PendingStoreEventLog) {
@@ -1870,6 +2279,11 @@ private final class FakePendingRecordingAudioFileSystem:
             durationMilliseconds: durationMilliseconds,
             byteCount: byteCount
         )
+        let onAcquire = lock.withLock {
+            defer { storedOnNextValidatedAudioAcquire = nil }
+            return storedOnNextValidatedAudioAcquire
+        }
+        onAcquire?()
         let readBarrier = lock.withLock { () -> PendingLeaseReadBarrier? in
             defer { storedReadBarrier = nil }
             return storedReadBarrier

@@ -367,6 +367,31 @@ final class IOSPendingFailedHistoryTransferPreparation: @unchecked Sendable {
         }
     }
 
+    func audioLeaseForNamespaceValidation(
+        mint: IOSPendingRecordingHeldAudioLeaseMint,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) -> (any IOSPendingRecordingPublishedAudioLease)? {
+        _ = mint
+        let recording = pendingSnapshot.recording
+        return releaseLock.withLock {
+            guard !didReleaseAudioLease,
+                  currentOperationLeaseAuthorization
+                    .provesSameActiveLease(
+                        as: operationLeaseAuthorization
+                    ),
+                  audioLease.relativeIdentifier
+                    == recording.audioRelativeIdentifier,
+                  audioLease.durationMilliseconds
+                    == recording.durationMilliseconds,
+                  audioLease.audioArtifact.byteCount
+                    == recording.byteCount else {
+                return nil
+            }
+            return audioLease
+        }
+    }
+
     func refresh(
         mint: IOSPendingFailedHistoryTransferPreparationMint,
         repositoryBinding: IOSAcceptedHistoryCoordinatorRepositoryBinding,
@@ -1440,14 +1465,58 @@ extension IOSAcceptedHistoryCoordinator {
                 do {
                     let authority: IOSFailedHistoryPendingMetadataRetirementAuthority
                     if failedStore.mutationInterlock.isBlocked {
-                        authority = try await failedStore
-                            .reconcilePendingJournalRetirementCommit(
-                                operationLeaseAuthorization:
-                                    operationLeaseAuthorization
-                            )
+                        do {
+                            authority = try await failedStore
+                                .reconcilePendingJournalRetirementCommit(
+                                    operationLeaseAuthorization:
+                                        operationLeaseAuthorization
+                                )
+                        } catch IOSFailedHistoryError.commitUncertain {
+                            let retainedAuthorization = try await failedStore
+                                .refreshRetainedRetentionValidationAuthorization(
+                                    for: preparation,
+                                    operationLeaseAuthorization:
+                                        operationLeaseAuthorization
+                                )
+                            let validatedEviction:
+                                IOSFailedHistoryValidatedRowAudio?
+                            if let retainedAuthorization {
+                                validatedEviction = try await pendingStore
+                                    .acquireValidatedFailedHistoryRowAudio(
+                                        using: retainedAuthorization,
+                                        operationLeaseAuthorization:
+                                            operationLeaseAuthorization
+                                    )
+                            } else {
+                                validatedEviction = nil
+                            }
+                            defer { validatedEviction?.release() }
+                            authority = try await failedStore
+                                .reconcilePendingJournalRetirementCommit(
+                                    validatedEviction: validatedEviction,
+                                    operationLeaseAuthorization:
+                                        operationLeaseAuthorization
+                                )
+                        }
                     } else {
-                        authority = try await failedStore
-                            .commitPendingJournalRetirement(preparation)
+                        if let retentionAuthorization = try await failedStore
+                            .prepareRetention(for: preparation) {
+                            let validatedEviction = try await pendingStore
+                                .acquireValidatedFailedHistoryRowAudio(
+                                    using: retentionAuthorization,
+                                    operationLeaseAuthorization:
+                                        operationLeaseAuthorization
+                                )
+                            defer { validatedEviction.release() }
+                            authority = try await failedStore
+                                .commitPendingJournalRetirement(
+                                    preparation,
+                                    validatedEviction: validatedEviction
+                                )
+                        } else {
+                            authority = try await failedStore
+                                .commitPendingJournalRetirement(preparation)
+                        }
                     }
                     guard await transferState.recordRowCommitted(
                         authority,

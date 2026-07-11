@@ -1121,8 +1121,21 @@ Pending/PJR ownership-transfer alias once, and fails closed on partial aliases,
 duplicates, missing, unknown, staging, overflow, stale-lease, or foreign-root
 state. New Pending publication performs its pre- and post-inventory scans in
 one descriptor-held operation; release builds expose no inventory-less publish
-entry point. C4.2C-2 is next: deterministic sixth-row retention and individual
-Delete. C4.2C-3 then completes exact tombstone cleanup and final C4.2 QA.
+entry point.
+
+C4.2C-2 is complete. A sixth eligible failure now selects only the canonical
+absolute oldest row, `entries.last`, and one exact failed-root CAS both moves
+that row to a cleanup tombstone and admits the new pending-retirement row.
+Unsafe oldest rows and a full tombstone queue fail closed without skipping or
+eviction. Individual Delete similarly commits only the selected ready row to
+one exact tombstone. Before either boundary, the Pending store validates the
+full Failed/Pending namespace and holds the candidate descriptor; retention
+also carries the already-held Pending descriptor through both namespace scans.
+Source-visible uncertainty requires fresh exact descriptor proof, while an
+exact visible outcome is confirmed without reopening the tombstoned file.
+Neither path unlinks audio, and coordinator tests preserve every inode and byte
+count across fresh, source-visible, and outcome-visible paths. C4.2C-3 is next:
+exact one-tombstone audio cleanup, tombstone retirement, and final C4.2 QA.
 
 No History toggle, Clear History action, first-use disclosure, Recording Cache,
 App Group publication, or keyboard dependency is exposed by C4.0 alone.
@@ -1344,10 +1357,10 @@ record is `docs/qa/runs/ios-history-policy-cutover-2026-07-11.md`.
 The C4.0 contract for bounded failed History and retry audio is frozen; C4.1
 strict values/journal/store, C4.2A physical-root gate/capability foundations,
 C4.2B row-first PendingRecording ownership transfer with provider-free
-relaunch reconciliation, and C4.2C-1 sealed protected-audio inventory are
-complete. The next P2 checkpoint is C4.2C-2: deterministic sixth-row retention
-and individual Delete, followed by exact tombstone cleanup in C4.2C-3. C4.3
-through C4.5 then join policy
+relaunch reconciliation, C4.2C-1 sealed protected-audio inventory, and C4.2C-2
+deterministic sixth-row retention plus individual Delete are complete. The next
+P2 checkpoint is C4.2C-3: exact one-tombstone audio cleanup and tombstone
+retirement. C4.3 through C4.5 then join policy
 cutover, explicit Retry, provider-free recovery, and the public redacted app
 boundary. The independent recording-cache and directional App Group bridge
 flows remain later work and do not enter the keyboard early. Until the full C4

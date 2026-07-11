@@ -1,4 +1,5 @@
 import Foundation
+import HoldTypeDomain
 import Testing
 @testable import HoldTypePersistence
 
