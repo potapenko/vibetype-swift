@@ -321,6 +321,39 @@ struct IOSFailedHistoryValueTests {
         }
     }
 
+    @Test func envelopeAllowsOnePendingJournalRetirementEntry() throws {
+        let ready = try failedHistoryTestEntry(index: 1)
+        let pending = try failedHistoryTestEntry(
+            index: 2,
+            ownershipState: .pendingJournalRetirement
+        )
+
+        _ = try IOSFailedHistoryEnvelope(
+            revision: 1,
+            entries: [pending, ready],
+            audioCleanup: []
+        )
+    }
+
+    @Test func envelopeRejectsMultiplePendingJournalRetirementEntries() throws {
+        let older = try failedHistoryTestEntry(
+            index: 1,
+            ownershipState: .pendingJournalRetirement
+        )
+        let newer = try failedHistoryTestEntry(
+            index: 2,
+            ownershipState: .pendingJournalRetirement
+        )
+
+        #expect(throws: IOSFailedHistoryError.invalidRecord) {
+            _ = try IOSFailedHistoryEnvelope(
+                revision: 1,
+                entries: [newer, older],
+                audioCleanup: []
+            )
+        }
+    }
+
     @Test func entryEqualityUsesExactModelBytes() throws {
         let composed = "é"
         let decomposed = "e\u{301}"

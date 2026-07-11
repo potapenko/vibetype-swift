@@ -264,6 +264,9 @@ struct IOSFailedHistoryEnvelope: Equatable, Sendable {
                   == IOSFailedHistoryValidation.sortedAudioCleanup(audioCleanup),
               Set(allAttemptIDs).count == allAttemptIDs.count,
               Set(allAudioIdentifiers).count == allAudioIdentifiers.count,
+              entries.lazy.filter({
+                  $0.ownershipState == .pendingJournalRetirement
+              }).count <= 1,
               entries.lazy.filter({ $0.retryOperation != nil }).count <= 1 else {
             throw IOSFailedHistoryError.invalidRecord
         }
