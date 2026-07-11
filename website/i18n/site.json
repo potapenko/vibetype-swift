@@ -55,6 +55,11 @@
       "translate": false,
       "direction": "ltr"
     },
+    "brand.patreon": {
+      "value": "Patreon",
+      "translate": false,
+      "direction": "ltr"
+    },
     "brand.githubReleases": {
       "value": "GitHub Releases",
       "translate": false,
@@ -218,6 +223,9 @@
     },
     "sourceRepository": {
       "href": "https://github.com/holdtype/holdtype-swift"
+    },
+    "patreon": {
+      "href": "https://www.patreon.com/c/playphraseme"
     },
     "homebrewTap": {
       "href": "https://github.com/holdtype/homebrew-tap"

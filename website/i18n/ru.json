@@ -311,6 +311,7 @@
   },
   "footer": {
     "description": "Нативная диктовка для {brand.macOS}. Исходный код доступен по лицензии {license.fsl11} с последующим переходом на {license.mit}.",
+    "patreonLink": "Поддержать {brand.holdType} на {brand.patreon}",
     "sourceLink": "Посмотреть исходный код на {brand.github}"
   },
   "lightbox": {

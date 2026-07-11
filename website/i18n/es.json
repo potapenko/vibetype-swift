@@ -311,6 +311,7 @@
   },
   "footer": {
     "description": "Entrada de voz nativa para {brand.macOS}. Código fuente disponible bajo {license.fsl11}, con una futura licencia {license.mit}.",
+    "patreonLink": "Apoya a {brand.holdType} en {brand.patreon}",
     "sourceLink": "Ver el código fuente en {brand.github}"
   },
   "lightbox": {

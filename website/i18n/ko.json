@@ -311,6 +311,7 @@
   },
   "footer": {
     "description": "네이티브 {brand.macOS} 음성 입력. {license.fsl11}에 따라 소스 코드를 공개하며 향후 {license.mit} 라이선스로 전환됩니다.",
+    "patreonLink": "{brand.patreon}에서 {brand.holdType} 후원하기",
     "sourceLink": "{brand.github}에서 소스 보기"
   },
   "lightbox": {

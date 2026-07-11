@@ -27,6 +27,7 @@ class PageProbe(HTMLParser):
         self.html_attributes: dict[str, str | None] = {}
         self.links: list[dict[str, str | None]] = []
         self.language_links: list[dict[str, str | None]] = []
+        self.header_social_links: list[dict[str, str | None]] = []
         self.lightbox_links: list[dict[str, str | None]] = []
         self.lightbox_link_image_count = 0
         self.metadata: list[dict[str, str | None]] = []
@@ -50,6 +51,8 @@ class PageProbe(HTMLParser):
             self.metadata.append(attributes)
         elif tag == "a" and "data-locale-link" in attributes:
             self.language_links.append(attributes)
+        elif tag == "a" and "header-social-link" in (attributes.get("class") or "").split():
+            self.header_social_links.append(attributes)
         elif tag == "a" and "data-lightbox-link" in attributes:
             self.lightbox_links.append(attributes)
             self.in_lightbox_link = True
@@ -151,6 +154,16 @@ class BuildSiteTests(unittest.TestCase):
                 self.assertEqual(
                     {link["hreflang"] for link in probe.language_links},
                     set(expected_locales),
+                )
+                self.assertEqual(
+                    [link["href"] for link in probe.header_social_links],
+                    [
+                        "https://www.patreon.com/c/playphraseme",
+                        "https://github.com/holdtype/holdtype-swift",
+                    ],
+                )
+                self.assertTrue(
+                    all(link.get("aria-label") for link in probe.header_social_links)
                 )
                 self.assertEqual(len(probe.lightbox_links), 2)
                 self.assertEqual(probe.lightbox_link_image_count, 2)

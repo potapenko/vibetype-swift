@@ -311,6 +311,7 @@
   },
   "footer": {
     "description": "ネイティブな {brand.macOS} 音声入力。{license.fsl11} のもとでソースを公開し、将来は {license.mit} へ移行します。",
+    "patreonLink": "{brand.patreon} で {brand.holdType} を支援",
     "sourceLink": "{brand.github} でソースを見る"
   },
   "lightbox": {

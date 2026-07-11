@@ -311,6 +311,7 @@
   },
   "footer": {
     "description": "Saisie vocale native pour {brand.macOS}. Code source disponible sous {license.fsl11}, avec un passage futur à la licence {license.mit}.",
+    "patreonLink": "Soutenir {brand.holdType} sur {brand.patreon}",
     "sourceLink": "Voir le code source sur {brand.github}"
   },
   "lightbox": {

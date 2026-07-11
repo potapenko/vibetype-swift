@@ -311,6 +311,7 @@
   },
   "footer": {
     "description": "原生 {brand.macOS} 语音输入。源代码依据 {license.fsl11} 提供，并设有未来的 {license.mit} 许可。",
+    "patreonLink": "在 {brand.patreon} 上支持 {brand.holdType}",
     "sourceLink": "在 {brand.github} 上查看源代码"
   },
   "lightbox": {

@@ -311,6 +311,7 @@
   },
   "footer": {
     "description": "Native Spracheingabe für {brand.macOS}. Quellcode unter {license.fsl11} mit einer künftigen {license.mit}-Lizenz verfügbar.",
+    "patreonLink": "Unterstütze {brand.holdType} auf {brand.patreon}",
     "sourceLink": "Quellcode auf {brand.github} ansehen"
   },
   "lightbox": {

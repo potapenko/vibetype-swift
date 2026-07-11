@@ -227,6 +227,31 @@ h3 {
   color: var(--text);
 }
 
+.site-nav a.header-social-link {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+.site-nav a.header-social-link:hover {
+  background: var(--surface-soft);
+}
+
+.header-social-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: currentColor;
+}
+
+.header-social-text {
+  display: none;
+}
+
 .mobile-download {
   display: none;
 }
@@ -1848,6 +1873,18 @@ body.has-image-lightbox {
 
   .js .site-nav a:last-child {
     border-bottom: 0;
+  }
+
+  .js .site-nav .header-social-link {
+    width: 100%;
+    height: auto;
+    justify-content: flex-start;
+    gap: 10px;
+    border-radius: 0;
+  }
+
+  .js .site-nav .header-social-text {
+    display: inline;
   }
 
   .js .site-nav .mobile-download {

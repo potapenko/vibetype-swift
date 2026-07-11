@@ -27,6 +27,11 @@ that already uses GitHub Pages.
 - The hero presents one action: the free macOS download. Source inspection
   remains available in the footer, and the hero does not repeat product claims
   as a separate row of proof chips.
+- The primary navigation includes adjacent compact Patreon and GitHub links,
+  with Patreon positioned to the left of GitHub. Both use the same neutral icon
+  treatment, have localized accessible names, and show localized text in the
+  expanded mobile navigation. Patreon opens the creator support page at
+  `https://www.patreon.com/c/playphraseme`.
 - The landing page must turn `honest` into a visible product contract rather
   than leaving it as praise. The contract covers the billing source, the
   default transcription model, optional rewrite pass, explicit Mac-to-OpenAI

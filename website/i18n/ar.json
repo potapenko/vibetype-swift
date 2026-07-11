@@ -311,6 +311,7 @@
   },
   "footer": {
     "description": "إدخال صوتي أصلي لنظام {brand.macOS}. الشيفرة المصدرية متاحة بموجب {license.fsl11}، على أن تنتقل مستقبلًا إلى ترخيص {license.mit}.",
+    "patreonLink": "ادعم {brand.holdType} على {brand.patreon}",
     "sourceLink": "عرض الشيفرة المصدرية على {brand.github}"
   },
   "lightbox": {
