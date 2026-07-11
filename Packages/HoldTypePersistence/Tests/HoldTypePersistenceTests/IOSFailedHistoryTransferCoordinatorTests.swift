@@ -77,15 +77,6 @@ struct IOSFailedHistoryTransferCoordinatorTests {
             try await coordinator.recoverAcceptedHistoryOutbox()
                 == .pendingLocalRecovery
         )
-        #expect(
-            try await coordinator.recoverHistoryPolicyCleanup()
-                == .pendingLocalRecovery
-        )
-        await #expect(
-            throws: IOSAcceptedHistoryCoordinatorError.localRecoveryPending
-        ) {
-            _ = try await coordinator.setHistoryEnabled(false)
-        }
 
         let relaunchedRegistry =
             IOSAcceptedHistoryCoordinatorProcessContextRegistry()
@@ -109,6 +100,304 @@ struct IOSFailedHistoryTransferCoordinatorTests {
         #expect(recoveredEnvelope.entries.first?.ownershipState == .ready)
         #expect(try fixture.rawPendingRecording() == nil)
         #expect(try fixture.audioIdentity(for: recording) == audioIdentityBefore)
+    }
+
+    @Test func policyCutoverCommitsBeforePJRAndRelaunchNeverAdvancesAgain()
+        async throws {
+        let fixture = try FailedTransferCoordinatorFixture()
+        let coordinator = fixture.makeCoordinator()
+        try await fixture.establishEnabledPolicy(using: coordinator)
+        let recording = try await fixture.prepareAwaitingRecoveryRecording()
+        let audioIdentityBefore = try fixture.audioIdentity(for: recording)
+        try await fixture.stagePendingJournalRetirement(for: recording)
+
+        #expect(
+            try await coordinator.setHistoryEnabled(false)
+                == .pendingLocalRecovery
+        )
+        let committedPolicy = try #require(
+            try await fixture.context.policyStore.load()
+        )
+        #expect(committedPolicy.revision == 2)
+        #expect(committedPolicy.policyGeneration == 2)
+        #expect(committedPolicy.historyEnabled == false)
+        let reconciled = try #require(
+            try await fixture.context.failedHistoryStore.load()
+        )
+        #expect(reconciled.entries.count == 1)
+        #expect(reconciled.entries.first?.ownershipState == .ready)
+        #expect(reconciled.entries.first?.policyGeneration == 1)
+        #expect(reconciled.audioCleanup.isEmpty)
+        #expect(try fixture.rawPendingRecording() == nil)
+        #expect(try fixture.audioIdentity(for: recording) == audioIdentityBefore)
+
+        let relaunchedRegistry =
+            IOSAcceptedHistoryCoordinatorProcessContextRegistry()
+        let relaunchedContext = relaunchedRegistry.context(
+            for: fixture.applicationSupportDirectoryURL
+        )
+        let relaunched = fixture.makeCoordinator(
+            context: relaunchedContext,
+            registry: relaunchedRegistry
+        )
+
+        #expect(
+            try await relaunched.recoverHistoryPolicyCleanup()
+                == .pendingLocalRecovery
+        )
+        let tombstoned = try #require(
+            try await relaunchedContext.failedHistoryStore.load()
+        )
+        #expect(tombstoned.entries.isEmpty)
+        #expect(tombstoned.audioCleanup.count == 1)
+        #expect(tombstoned.audioCleanup.first?.attemptID == recording.attemptID)
+        #expect(fixture.audioExists(for: recording))
+        #expect(
+            try await relaunchedContext.policyStore.load() == committedPolicy
+        )
+
+        #expect(
+            try await relaunched.recoverHistoryPolicyCleanup()
+                == .pendingLocalRecovery
+        )
+        let cleaned = try #require(
+            try await relaunchedContext.failedHistoryStore.load()
+        )
+        #expect(cleaned.entries.isEmpty)
+        #expect(cleaned.audioCleanup.isEmpty)
+        #expect(!fixture.audioExists(for: recording))
+        #expect(
+            try await relaunchedContext.policyStore.load() == committedPolicy
+        )
+
+        #expect(
+            try await relaunched.recoverHistoryPolicyCleanup() == .complete
+        )
+        #expect(
+            try await relaunchedContext.policyStore.load() == committedPolicy
+        )
+    }
+
+    @Test func policyCutoverRelaunchesWithDurablePJRAndKeepsGeneration()
+        async throws {
+        let fixture = try FailedTransferCoordinatorFixture()
+        let coordinator = fixture.makeCoordinator()
+        try await fixture.establishEnabledPolicy(using: coordinator)
+        let recording = try await fixture.prepareAwaitingRecoveryRecording()
+        let audioIdentityBefore = try fixture.audioIdentity(for: recording)
+        try await fixture.stagePendingJournalRetirement(for: recording)
+
+        let cutoverWithoutPendingStore = fixture.makeCoordinator(
+            includePendingRecordingStore: false
+        )
+        #expect(
+            try await cutoverWithoutPendingStore.setHistoryEnabled(false)
+                == .pendingLocalRecovery
+        )
+        let committedPolicy = try #require(
+            try await fixture.context.policyStore.load()
+        )
+        #expect(committedPolicy.revision == 2)
+        #expect(committedPolicy.policyGeneration == 2)
+        #expect(committedPolicy.historyEnabled == false)
+        let stillPending = try #require(
+            try await fixture.context.failedHistoryStore.load()
+        )
+        #expect(stillPending.entries.count == 1)
+        #expect(
+            stillPending.entries.first?.ownershipState
+                == .pendingJournalRetirement
+        )
+        #expect(try fixture.rawPendingRecording() == recording)
+        #expect(try fixture.audioIdentity(for: recording) == audioIdentityBefore)
+
+        let relaunchedRegistry =
+            IOSAcceptedHistoryCoordinatorProcessContextRegistry()
+        let relaunchedContext = relaunchedRegistry.context(
+            for: fixture.applicationSupportDirectoryURL
+        )
+        let relaunched = fixture.makeCoordinator(
+            context: relaunchedContext,
+            registry: relaunchedRegistry
+        )
+
+        #expect(
+            try await relaunched.recoverHistoryPolicyCleanup()
+                == .pendingLocalRecovery
+        )
+        let reconciled = try #require(
+            try await relaunchedContext.failedHistoryStore.load()
+        )
+        #expect(reconciled.entries.count == 1)
+        #expect(reconciled.entries.first?.ownershipState == .ready)
+        #expect(reconciled.entries.first?.policyGeneration == 1)
+        #expect(reconciled.audioCleanup.isEmpty)
+        #expect(try fixture.rawPendingRecording() == nil)
+        #expect(try fixture.audioIdentity(for: recording) == audioIdentityBefore)
+        #expect(
+            try await relaunchedContext.policyStore.load() == committedPolicy
+        )
+    }
+
+    @Test func retainedPJRFailsClosedWhenSiblingGenerationIsFuture()
+        async throws {
+        let fixture = try FailedTransferCoordinatorFixture(
+            controllableFailedHistory: true
+        )
+        let coordinator = fixture.makeCoordinator()
+        try await fixture.establishEnabledPolicy(using: coordinator)
+        let recording = try await fixture.prepareAwaitingRecoveryRecording()
+        let audioIdentityBefore = try fixture.audioIdentity(for: recording)
+        try await fixture.stagePendingJournalRetirement(for: recording)
+
+        #expect(
+            try await fixture.makeCoordinator(
+                includePendingRecordingStore: false
+            ).setHistoryEnabled(false) == .pendingLocalRecovery
+        )
+        let committedPolicy = try #require(
+            try await fixture.context.policyStore.load()
+        )
+        #expect(committedPolicy.policyGeneration == 2)
+
+        let staged = try #require(
+            try fixture.rawControllableFailedHistory()
+        )
+        let pendingRow = try #require(staged.entries.first)
+        #expect(pendingRow.ownershipState == .pendingJournalRetirement)
+        let futureSibling = try failedHistoryTestEntry(
+            index: 521,
+            policyGeneration: 3
+        )
+        let futureSource = try IOSFailedHistoryEnvelope(
+            revision: staged.revision + 1,
+            entries: IOSFailedHistoryValidation.sortedEntries([
+                pendingRow,
+                futureSibling,
+            ]),
+            audioCleanup: staged.audioCleanup
+        )
+        let failedFileSystem = try #require(
+            fixture.failedHistoryFileSystem
+        )
+        failedFileSystem.install(
+            try IOSFailedHistoryWireCodec.encode(futureSource)
+        )
+
+        let policyReceipt = try await fixture.context.policyStore.confirm(
+            expected: IOSHistoryPolicyExpectation(state: committedPolicy)
+        )
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+        ) {
+            try await fixture.context.operationGate.perform { lease in
+                _ = try await IOSAcceptedHistoryCoordinator
+                    .resumeFailedHistoryPendingJournalRetirementForPolicyCutover(
+                        pendingStore: fixture.pendingRecordingStore,
+                        failedStore: fixture.failedHistoryStore,
+                        transferState:
+                            fixture.context.failedHistoryTransferState,
+                        policyReceipt: policyReceipt,
+                        repositoryBinding: fixture.context.repositoryBinding,
+                        operationLeaseAuthorization: lease
+                    )
+            }
+        }
+        let failedBytesBefore = failedFileSystem.file?.data
+        let pendingBefore = try fixture.rawPendingRecording()
+
+        #expect(
+            try await fixture.makeCoordinator()
+                .recoverHistoryPolicyCleanup() == .pendingLocalRecovery
+        )
+        #expect(failedFileSystem.file?.data == failedBytesBefore)
+        #expect(try fixture.rawPendingRecording() == pendingBefore)
+        #expect(try fixture.audioIdentity(for: recording) == audioIdentityBefore)
+        #expect(
+            try await fixture.context.policyStore.load() == committedPolicy
+        )
+    }
+
+    @Test func retainedReadyCommitRejectsFutureSiblingBeforeFurtherEffect()
+        async throws {
+        let fixture = try FailedTransferCoordinatorFixture(
+            controllableFailedHistory: true
+        )
+        let coordinator = fixture.makeCoordinator()
+        try await fixture.establishEnabledPolicy(using: coordinator)
+        let recording = try await fixture.prepareAwaitingRecoveryRecording()
+        let audioIdentityBefore = try fixture.audioIdentity(for: recording)
+        try await fixture.stagePendingJournalRetirement(for: recording)
+
+        #expect(
+            try await fixture.makeCoordinator(
+                includePendingRecordingStore: false
+            ).setHistoryEnabled(false) == .pendingLocalRecovery
+        )
+        let committedPolicy = try #require(
+            try await fixture.context.policyStore.load()
+        )
+        #expect(committedPolicy.policyGeneration == 2)
+        let failedFileSystem = try #require(
+            fixture.failedHistoryFileSystem
+        )
+        failedFileSystem.replaceFailure = .init(
+            error: .writeFailed,
+            commitBeforeThrowing: false
+        )
+
+        #expect(
+            try await fixture.makeCoordinator()
+                .recoverHistoryPolicyCleanup() == .pendingLocalRecovery
+        )
+        guard case .committingReady = await fixture.context
+            .failedHistoryTransferState.current() else {
+            Issue.record("expected retained committingReady transfer phase")
+            return
+        }
+        #expect(try fixture.rawPendingRecording() == nil)
+        #expect(!fixture.context.failedHistoryMutationInterlock.isBlocked)
+        let retainedPJR = try #require(
+            try fixture.rawControllableFailedHistory()
+        )
+        let pendingRow = try #require(retainedPJR.entries.first)
+        #expect(pendingRow.ownershipState == .pendingJournalRetirement)
+
+        let futureSibling = try failedHistoryTestEntry(
+            index: 522,
+            policyGeneration: 3
+        )
+        let futureSource = try IOSFailedHistoryEnvelope(
+            revision: retainedPJR.revision + 1,
+            entries: IOSFailedHistoryValidation.sortedEntries([
+                pendingRow,
+                futureSibling,
+            ]),
+            audioCleanup: retainedPJR.audioCleanup
+        )
+        failedFileSystem.install(
+            try IOSFailedHistoryWireCodec.encode(futureSource)
+        )
+        failedFileSystem.resetEvents()
+        let failedBytesBefore = failedFileSystem.file?.data
+        let pendingBefore = try fixture.rawPendingRecording()
+
+        #expect(
+            try await fixture.makeCoordinator()
+                .recoverHistoryPolicyCleanup() == .pendingLocalRecovery
+        )
+        #expect(failedFileSystem.file?.data == failedBytesBefore)
+        #expect(!failedFileSystem.events.contains("replace"))
+        #expect(try fixture.rawPendingRecording() == pendingBefore)
+        #expect(try fixture.audioIdentity(for: recording) == audioIdentityBefore)
+        #expect(
+            try await fixture.context.policyStore.load() == committedPolicy
+        )
+        guard case .committingReady = await fixture.context
+            .failedHistoryTransferState.current() else {
+            Issue.record("future sibling must preserve retained transfer phase")
+            return
+        }
     }
 
     @Test func readyTerminalRequiresPendingAbsenceAndPreservesRecreatedConflict()
@@ -533,6 +822,7 @@ private final class FailedTransferCoordinatorFixture: @unchecked Sendable {
                 operationGateIdentity: context.operationGate.identity,
                 expectedPendingStoreIdentity:
                     context.pendingRecordingStoreIdentity,
+                retryLiveOwnerState: context.failedHistoryRetryState,
                 repositoryGuard: context.repositoryGuard,
                 mutationInterlock: context.failedHistoryMutationInterlock
             )
@@ -566,7 +856,8 @@ private final class FailedTransferCoordinatorFixture: @unchecked Sendable {
 
     func makeCoordinator(
         context: IOSAcceptedHistoryCoordinatorProcessContext? = nil,
-        registry: IOSAcceptedHistoryCoordinatorProcessContextRegistry? = nil
+        registry: IOSAcceptedHistoryCoordinatorProcessContextRegistry? = nil,
+        includePendingRecordingStore: Bool = true
     ) -> IOSAcceptedHistoryCoordinator {
         let context = context ?? self.context
         let registry = registry ?? self.registry
@@ -580,7 +871,8 @@ private final class FailedTransferCoordinatorFixture: @unchecked Sendable {
             policyStore: context.policyStore,
             acceptedHistoryStore: context.acceptedHistoryStore,
             failedHistoryStore: failedHistoryStore,
-            pendingRecordingStore: pendingRecordingStore,
+            pendingRecordingStore:
+                includePendingRecordingStore ? pendingRecordingStore : nil,
             outboxStore: context.outboxStore,
             deliveryStore: context.deliveryStore,
             operationGate: context.operationGate,
@@ -592,6 +884,7 @@ private final class FailedTransferCoordinatorFixture: @unchecked Sendable {
             failedHistoryTransferState: context.failedHistoryTransferState,
             failedHistoryAudioCleanupState:
                 context.failedHistoryAudioCleanupState,
+            failedHistoryRetryState: context.failedHistoryRetryState,
             ownerIdentity: context.ownerIdentity,
             repositoryIdentityState: context.repositoryIdentityState,
             repositoryRegistration:

@@ -1169,7 +1169,174 @@ actor IOSFailedHistoryTransferOperationState {
     }
 }
 
+private extension IOSFailedHistoryTransferSemanticPhase {
+    var pendingMetadataRetirementAuthority:
+        IOSFailedHistoryPendingMetadataRetirementAuthority? {
+        switch self {
+        case .committingRow:
+            nil
+        case .observingPendingMetadata(let authority):
+            authority
+        case .removingPendingMetadata(let authorization):
+            authorization.authority
+        case .committingReady(let receipt):
+            receipt.authority
+        }
+    }
+}
+
+private extension IOSFailedHistoryPendingMetadataRetirementAuthority {
+    func isValidForPolicyCutover(
+        policyReceipt: IOSHistoryPolicyReceipt,
+        repositoryBinding: IOSAcceptedHistoryCoordinatorRepositoryBinding,
+        pendingStore: IOSPendingRecordingStore,
+        failedStore: IOSFailedHistoryStore
+    ) -> Bool {
+        failedStoreIdentity == failedStore.storeIdentity
+            && expectedPendingStoreIdentity == pendingStore.storeIdentity
+            && ownerIdentity == policyReceipt.capabilityOwnerIdentity
+            && pendingStore.capabilityOwnerIdentity
+                == policyReceipt.capabilityOwnerIdentity
+            && failedStore.capabilityOwnerIdentity
+                == policyReceipt.capabilityOwnerIdentity
+            && self.repositoryBinding == repositoryBinding
+            && repositoryBinding.physicalRootIdentity != nil
+            && failedSource.envelope.isValidForPolicyCutover(
+                policyReceipt
+            )
+    }
+}
+
+private extension IOSFailedHistoryTransferRecoveryInspection {
+    func isValidForPolicyCutover(
+        policyReceipt: IOSHistoryPolicyReceipt,
+        repositoryBinding: IOSAcceptedHistoryCoordinatorRepositoryBinding,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization,
+        pendingStore: IOSPendingRecordingStore,
+        failedStore: IOSFailedHistoryStore
+    ) -> Bool {
+        failedStoreIdentity == failedStore.storeIdentity
+            && expectedPendingStoreIdentity == pendingStore.storeIdentity
+            && ownerIdentity == policyReceipt.capabilityOwnerIdentity
+            && pendingStore.capabilityOwnerIdentity
+                == policyReceipt.capabilityOwnerIdentity
+            && failedStore.capabilityOwnerIdentity
+                == policyReceipt.capabilityOwnerIdentity
+            && self.repositoryBinding == repositoryBinding
+            && repositoryBinding.physicalRootIdentity != nil
+            && self.operationLeaseAuthorization.provesSameActiveLease(
+                as: operationLeaseAuthorization
+            )
+            && failedSource?.envelope.isValidForPolicyCutover(
+                policyReceipt
+            ) != false
+    }
+}
+
+private extension IOSFailedHistoryEnvelope {
+    func isValidForPolicyCutover(
+        _ policyReceipt: IOSHistoryPolicyReceipt
+    ) -> Bool {
+        entries.allSatisfy {
+            $0.policyGeneration
+                <= policyReceipt.state.policyGeneration
+        } && audioCleanup.allSatisfy {
+            $0.policyGeneration
+                <= policyReceipt.state.policyGeneration
+        }
+    }
+}
+
 extension IOSAcceptedHistoryCoordinator {
+    /// Resumes only a row-first transfer that has already crossed into durable
+    /// Pending-journal retirement. The caller already owns the root gate lease;
+    /// this helper never re-enters the public recovery API or dispatches work.
+    static func resumeFailedHistoryPendingJournalRetirementForPolicyCutover(
+        pendingStore: IOSPendingRecordingStore,
+        failedStore: IOSFailedHistoryStore,
+        transferState: IOSFailedHistoryTransferOperationState,
+        policyReceipt: IOSHistoryPolicyReceipt,
+        repositoryBinding: IOSAcceptedHistoryCoordinatorRepositoryBinding,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSFailedHistoryTransferResult {
+        guard operationLeaseAuthorization.provesActiveLease(),
+              repositoryBinding.physicalRootIdentity != nil,
+              policyReceipt.capabilityOwnerIdentity
+                == pendingStore.capabilityOwnerIdentity,
+              policyReceipt.capabilityOwnerIdentity
+                == failedStore.capabilityOwnerIdentity else {
+            throw IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+        }
+
+        if let retainedPhase = await transferState.current() {
+            guard let authority = retainedPhase
+                .pendingMetadataRetirementAuthority,
+                  authority.isValidForPolicyCutover(
+                    policyReceipt: policyReceipt,
+                    repositoryBinding: repositoryBinding,
+                    pendingStore: pendingStore,
+                    failedStore: failedStore
+                  ) else {
+                // A pre-row transfer is live work, not policy-cutover recovery.
+                throw IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+            }
+            return try await resumeFailedHistoryTransfer(
+                pendingStore: pendingStore,
+                failedStore: failedStore,
+                transferState: transferState,
+                operationLeaseAuthorization: operationLeaseAuthorization,
+                completionResult: .reconciled,
+                policyCutoverReceipt: policyReceipt,
+                policyCutoverRepositoryBinding: repositoryBinding
+            )
+        }
+
+        switch try await failedStore.inspectTransferRecovery(
+            operationLeaseAuthorization: operationLeaseAuthorization
+        ) {
+        case .retirePendingMetadata(let authority):
+            guard authority.isValidForPolicyCutover(
+                policyReceipt: policyReceipt,
+                repositoryBinding: repositoryBinding,
+                pendingStore: pendingStore,
+                failedStore: failedStore
+            ), await transferState.beginReconciliation(
+                authority,
+                authorization:
+                    IOSFailedHistoryTransferStateMutationAuthorization()
+            ) else {
+                throw IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+            }
+            return try await resumeFailedHistoryTransfer(
+                pendingStore: pendingStore,
+                failedStore: failedStore,
+                transferState: transferState,
+                operationLeaseAuthorization: operationLeaseAuthorization,
+                completionResult: .reconciled,
+                policyCutoverReceipt: policyReceipt,
+                policyCutoverRepositoryBinding: repositoryBinding
+            )
+
+        case .verifyTerminal(let inspection):
+            guard inspection.isValidForPolicyCutover(
+                policyReceipt: policyReceipt,
+                repositoryBinding: repositoryBinding,
+                operationLeaseAuthorization: operationLeaseAuthorization,
+                pendingStore: pendingStore,
+                failedStore: failedStore
+            ) else {
+                throw IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+            }
+            try await pendingStore.verifyTransferRecoveryTerminal(
+                using: inspection,
+                operationLeaseAuthorization: operationLeaseAuthorization
+            )
+            return .noWork
+        }
+    }
+
     func transferPendingRecordingFailure(
         expected: IOSPendingRecordingCASExpectation,
         failure: IOSFailedHistoryTransferFailure
@@ -1447,14 +1614,43 @@ extension IOSAcceptedHistoryCoordinator {
         transferState: IOSFailedHistoryTransferOperationState,
         operationLeaseAuthorization:
             IOSPersistenceOperationLeaseAuthorization,
-        completionResult: IOSFailedHistoryTransferResult
+        completionResult: IOSFailedHistoryTransferResult,
+        policyCutoverReceipt: IOSHistoryPolicyReceipt? = nil,
+        policyCutoverRepositoryBinding:
+            IOSAcceptedHistoryCoordinatorRepositoryBinding? = nil
     ) async throws -> IOSFailedHistoryTransferResult {
         let stateAuthorization =
             IOSFailedHistoryTransferStateMutationAuthorization()
 
+        guard (policyCutoverReceipt == nil)
+                == (policyCutoverRepositoryBinding == nil) else {
+            throw IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+        }
+
+        func requirePolicyCutoverAuthority(
+            _ authority:
+                IOSFailedHistoryPendingMetadataRetirementAuthority
+        ) throws {
+            guard let policyCutoverReceipt else { return }
+            guard let policyCutoverRepositoryBinding,
+                  authority.isValidForPolicyCutover(
+                    policyReceipt: policyCutoverReceipt,
+                    repositoryBinding: policyCutoverRepositoryBinding,
+                    pendingStore: pendingStore,
+                    failedStore: failedStore
+                  ) else {
+                throw IOSAcceptedHistoryCoordinatorError
+                    .localRecoveryPending
+            }
+        }
+
         while let phase = await transferState.current() {
             switch phase {
             case .committingRow(let preparation):
+                guard policyCutoverReceipt == nil else {
+                    throw IOSAcceptedHistoryCoordinatorError
+                        .localRecoveryPending
+                }
                 if !preparation.operationLeaseAuthorization
                     .provesSameActiveLease(
                         as: operationLeaseAuthorization
@@ -1570,6 +1766,7 @@ extension IOSAcceptedHistoryCoordinator {
                     }
                     authority = refreshed
                 }
+                try requirePolicyCutoverAuthority(authority)
                 switch try await pendingStore.preparePendingMetadataRetirement(
                     using: authority,
                     operationLeaseAuthorization:
@@ -1599,6 +1796,9 @@ extension IOSAcceptedHistoryCoordinator {
                     .provesSameActiveLease(
                         as: operationLeaseAuthorization
                     ) {
+                    try requirePolicyCutoverAuthority(
+                        retainedRemoval.authority
+                    )
                     let receipt = try await pendingStore.retirePendingMetadata(
                         using: retainedRemoval,
                         operationLeaseAuthorization:
@@ -1620,6 +1820,7 @@ extension IOSAcceptedHistoryCoordinator {
                         throw IOSAcceptedHistoryCoordinatorError
                             .localRecoveryPending
                     }
+                    try requirePolicyCutoverAuthority(refreshedAuthority)
                     switch try await pendingStore
                         .reconcilePendingMetadataRemoval(
                             retainedRemoval,
@@ -1654,6 +1855,9 @@ extension IOSAcceptedHistoryCoordinator {
                     .provesSameActiveLease(
                         as: operationLeaseAuthorization
                     ) {
+                    try requirePolicyCutoverAuthority(
+                        retainedReceipt.authority
+                    )
                     receipt = retainedReceipt
                 } else {
                     let refreshedAuthority:
@@ -1675,6 +1879,7 @@ extension IOSAcceptedHistoryCoordinator {
                         }
                         refreshedAuthority = authority
                     }
+                    try requirePolicyCutoverAuthority(refreshedAuthority)
                     guard case .absenceConfirmed(let refreshedReceipt) =
                         try await pendingStore.preparePendingMetadataRetirement(
                             using: refreshedAuthority,
@@ -1689,6 +1894,7 @@ extension IOSAcceptedHistoryCoordinator {
                     }
                     receipt = refreshedReceipt
                 }
+                try requirePolicyCutoverAuthority(receipt.authority)
                 try await failedStore.commitReady(using: receipt)
                 guard await transferState.clearCompleted(
                     receipt,

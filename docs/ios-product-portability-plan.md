@@ -1149,7 +1149,19 @@ journal commit followed by transient completion-read failure completes without
 a second filesystem call or false uncertainty reconciliation. Final C4.2
 evidence lives in
 `docs/qa/runs/ios-failed-history-retention-delete-cleanup-2026-07-11.md`.
-C4.3 policy-cutover integration is next.
+
+C4.3 is complete. Confirmed Clear, Disable, Enable, and no-op policy receipts
+now reconcile failed History before entering the existing C3 accepted-row,
+outbox, and standalone-delivery order, without another generation change.
+Each call performs at most one provider-free failed-domain action: exact PJR
+retirement, process-lost Retry cancellation, one existing tombstone cleanup,
+or one canonical-oldest row invalidation. Current rows survive no-op cutover;
+future state and `acceptingOutput` fail closed. Retry-owner absence is an
+atomic, root-shared reservation completed only after the exact durable
+`retryOperation = null` outcome, and retained PJR phases revalidate every row
+and tombstone before further effects. Final evidence lives in
+`docs/qa/runs/ios-failed-history-policy-cutover-2026-07-11.md`. C4.4 explicit
+Retry and its exact accepted-output handoff are next.
 
 No History toggle, Clear History action, first-use disclosure, Recording Cache,
 App Group publication, or keyboard dependency is exposed by C4.0 alone.
@@ -1376,13 +1388,18 @@ deterministic sixth-row retention plus individual Delete, and C4.2C-3 exact
 one-tombstone cleanup plus retirement are complete. The final C4.2 gate record
 is
 `docs/qa/runs/ios-failed-history-retention-delete-cleanup-2026-07-11.md`.
-The next P2 checkpoint is C4.3: join failed rows and retry-audio ownership to
-the completed C3 policy cutover without another generation change. C4.4 and
-C4.5 then add explicit Retry, provider-free recovery, and the public redacted
-app boundary. The independent recording-cache and directional App Group bridge
-flows remain later work and do not enter the keyboard early. Until the full C4
-chain is complete, the shipping app does not expose a partial History toggle,
-Clear History action, or disclosure that promises those controls.
+C4.3 policy-cutover integration is also complete: failed PJR, retry ownership,
+row invalidation, and one-head audio cleanup now run before the existing C3
+cleanup under the same confirmed policy receipt and generation. The final C4.3
+gate record is
+`docs/qa/runs/ios-failed-history-policy-cutover-2026-07-11.md`. The next P2
+checkpoint is C4.4: one explicit durable Retry and its exact accepted-output
+success handoff. C4.5 then adds provider-free lifecycle recovery and the public
+redacted app boundary. The independent recording-cache and directional App
+Group bridge flows remain later work and do not enter the keyboard early. Until
+the full C4 chain is complete, the shipping app does not expose a partial
+History toggle, Clear History action, or disclosure that promises those
+controls.
 
 The app-private credential marker, settings, Library, and Usage repositories
 now run one strict bounded structural pass before Foundation decoding. It

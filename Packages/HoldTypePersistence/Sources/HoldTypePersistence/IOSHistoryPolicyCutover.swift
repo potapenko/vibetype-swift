@@ -35,6 +35,28 @@ extension IOSHistoryPolicyCutoverCommand:
 enum IOSHistoryPolicyCutoverPhase: Equatable, Sendable {
     case establishingPolicy
     case policyCaptured(IOSHistoryPolicyReceipt)
+    case reconcilingFailedHistory(IOSHistoryPolicyReceipt)
+    case recoveringFailedTransfer(IOSHistoryPolicyReceipt)
+    case inspectingProcessLostFailedRetry(
+        IOSHistoryPolicyReceipt,
+        IOSFailedHistoryRetryRecoveryInspection
+    )
+    case cancellingProcessLostFailedRetry(
+        IOSHistoryPolicyReceipt,
+        IOSFailedHistoryPolicyRetryCancellationAuthorization
+    )
+    case completingProcessLostFailedRetry(
+        IOSHistoryPolicyReceipt,
+        IOSFailedHistoryRetryCancellationCompletionAuthorization
+    )
+    case invalidatingFailedRow(
+        IOSHistoryPolicyReceipt,
+        IOSFailedHistoryRowAudioValidationAuthorization
+    )
+    case recoveringFailedAudio(
+        IOSHistoryPolicyReceipt,
+        IOSFailedHistoryAudioCleanupAuthorization
+    )
     case pruningAcceptedRows(IOSHistoryPolicyReceipt)
     case recoveringOutbox(IOSHistoryPolicyReceipt)
     case inspectingStandaloneDelivery(IOSHistoryPolicyReceipt)
@@ -51,11 +73,32 @@ enum IOSHistoryPolicyCutoverPhase: Equatable, Sendable {
         switch self {
         case .establishingPolicy, .policyCaptured:
             false
-        case .pruningAcceptedRows, .recoveringOutbox,
+        case .reconcilingFailedHistory, .recoveringFailedTransfer,
+             .inspectingProcessLostFailedRetry,
+             .cancellingProcessLostFailedRetry,
+             .completingProcessLostFailedRetry,
+             .invalidatingFailedRow, .recoveringFailedAudio,
+             .pruningAcceptedRows, .recoveringOutbox,
              .inspectingStandaloneDelivery,
              .awaitingExpiredDeliveryAbandonment,
              .cancellingStandaloneDelivery:
             true
+        }
+    }
+
+    var isFailedHistoryReconciliation: Bool {
+        switch self {
+        case .reconcilingFailedHistory, .recoveringFailedTransfer,
+             .inspectingProcessLostFailedRetry,
+             .cancellingProcessLostFailedRetry,
+             .completingProcessLostFailedRetry,
+             .invalidatingFailedRow, .recoveringFailedAudio:
+            true
+        case .establishingPolicy, .policyCaptured, .pruningAcceptedRows,
+             .recoveringOutbox, .inspectingStandaloneDelivery,
+             .awaitingExpiredDeliveryAbandonment,
+             .cancellingStandaloneDelivery:
+            false
         }
     }
 
@@ -147,6 +190,7 @@ public extension IOSAcceptedHistoryCoordinator {
         let policyStore = policyStore
         let acceptedHistoryStore = acceptedHistoryStore
         let failedHistoryStore = failedHistoryStore
+        let pendingRecordingStore = pendingRecordingStore
         let outboxStore = outboxStore
         let deliveryStore = deliveryStore
         let baselineRecoveryState = baselineRecoveryState
@@ -155,6 +199,8 @@ public extension IOSAcceptedHistoryCoordinator {
         let workerState = outboxWorkerState
         let cutoverState = policyCutoverState
         let failedHistoryTransferState = failedHistoryTransferState
+        let failedHistoryAudioCleanupState = failedHistoryAudioCleanupState
+        let failedHistoryRetryState = failedHistoryRetryState
         let failedHistoryMutationInterlock =
             failedHistoryMutationInterlock
         let ownerIdentity = ownerIdentity
@@ -164,13 +210,25 @@ public extension IOSAcceptedHistoryCoordinator {
         do {
             return try await operationGate.perform {
                 operationLeaseAuthorization in
-                guard !failedHistoryMutationInterlock.isBlocked else {
-                    return .pendingLocalRecovery
-                }
-                guard await failedHistoryTransferState.current() == nil else {
-                    return .pendingLocalRecovery
-                }
                 let retainedAtEntry = await cutoverState.current()
+                let mayResumeFailedHistory = retainedAtEntry?.ownerIdentity
+                    == ownerIdentity
+                    && retainedAtEntry?.phase.isFailedHistoryReconciliation
+                        == true
+                guard await failedHistoryRetryState.hasLiveOwner() == false else {
+                    return .pendingLocalRecovery
+                }
+                let hasFailedTransferState = await failedHistoryTransferState
+                    .current() != nil
+                let hasFailedAudioCleanupState = await
+                    failedHistoryAudioCleanupState.current() != nil
+                if failedHistoryMutationInterlock.isBlocked
+                    || hasFailedTransferState
+                    || hasFailedAudioCleanupState {
+                    guard mayResumeFailedHistory else {
+                        return .pendingLocalRecovery
+                    }
+                }
                 let repositoryBinding = repositoryRegistration?.revalidate()
                 if repositoryIdentityState.isConflicted {
                     if retainedAtEntry?.ownerIdentity == ownerIdentity,
@@ -184,13 +242,6 @@ public extension IOSAcceptedHistoryCoordinator {
                     }
                     throw IOSAcceptedHistoryCoordinatorError
                         .repositoryIdentityConflict
-                }
-                guard try await failedHistoryStore
-                    .hasPendingJournalRetirement(
-                        operationLeaseAuthorization:
-                            operationLeaseAuthorization
-                    ) == false else {
-                    return .pendingLocalRecovery
                 }
                 let hasAcceptanceWork = await acceptanceState.current() != nil
                 let hasPendingReplacementWork = await pendingReplacementState
@@ -212,15 +263,25 @@ public extension IOSAcceptedHistoryCoordinator {
                                 policyStore: policyStore,
                                 acceptedHistoryStore: acceptedHistoryStore,
                                 failedHistoryStore: failedHistoryStore,
+                                pendingRecordingStore: pendingRecordingStore,
                                 outboxStore: outboxStore,
                                 deliveryStore: deliveryStore,
                                 baselineRecoveryState: baselineRecoveryState,
                                 workerState: workerState,
+                                failedHistoryTransferState:
+                                    failedHistoryTransferState,
+                                failedHistoryAudioCleanupState:
+                                    failedHistoryAudioCleanupState,
+                                failedHistoryRetryState: failedHistoryRetryState,
+                                failedHistoryMutationInterlock:
+                                    failedHistoryMutationInterlock,
                                 cutoverState: cutoverState,
                                 ownerIdentity: ownerIdentity,
                                 repositoryBinding: repositoryBinding,
                                 repositoryRegistration: repositoryRegistration,
-                                repositoryIdentityState: repositoryIdentityState
+                                repositoryIdentityState: repositoryIdentityState,
+                                operationLeaseAuthorization:
+                                    operationLeaseAuthorization
                             )
                         } catch {
                             disposition = .pendingLocalRecovery
@@ -266,15 +327,25 @@ public extension IOSAcceptedHistoryCoordinator {
                             policyStore: policyStore,
                             acceptedHistoryStore: acceptedHistoryStore,
                             failedHistoryStore: failedHistoryStore,
+                            pendingRecordingStore: pendingRecordingStore,
                             outboxStore: outboxStore,
                             deliveryStore: deliveryStore,
                             baselineRecoveryState: baselineRecoveryState,
                             workerState: workerState,
+                            failedHistoryTransferState:
+                                failedHistoryTransferState,
+                            failedHistoryAudioCleanupState:
+                                failedHistoryAudioCleanupState,
+                            failedHistoryRetryState: failedHistoryRetryState,
+                            failedHistoryMutationInterlock:
+                                failedHistoryMutationInterlock,
                             cutoverState: cutoverState,
                             ownerIdentity: ownerIdentity,
                             repositoryBinding: repositoryBinding,
                             repositoryRegistration: repositoryRegistration,
-                            repositoryIdentityState: repositoryIdentityState
+                            repositoryIdentityState: repositoryIdentityState,
+                            operationLeaseAuthorization:
+                                operationLeaseAuthorization
                         )
                     } catch {
                         disposition = .pendingLocalRecovery
@@ -319,6 +390,7 @@ private extension IOSAcceptedHistoryCoordinator {
         let policyStore = policyStore
         let acceptedHistoryStore = acceptedHistoryStore
         let failedHistoryStore = failedHistoryStore
+        let pendingRecordingStore = pendingRecordingStore
         let outboxStore = outboxStore
         let deliveryStore = deliveryStore
         let baselineRecoveryState = baselineRecoveryState
@@ -327,6 +399,8 @@ private extension IOSAcceptedHistoryCoordinator {
         let workerState = outboxWorkerState
         let cutoverState = policyCutoverState
         let failedHistoryTransferState = failedHistoryTransferState
+        let failedHistoryAudioCleanupState = failedHistoryAudioCleanupState
+        let failedHistoryRetryState = failedHistoryRetryState
         let failedHistoryMutationInterlock =
             failedHistoryMutationInterlock
         let ownerIdentity = ownerIdentity
@@ -337,7 +411,12 @@ private extension IOSAcceptedHistoryCoordinator {
             return try await operationGate.perform {
                 operationLeaseAuthorization in
                 let retainedAtEntry = await cutoverState.current()
-                if await failedHistoryTransferState.current() != nil {
+                let mayResumeFailedHistory = retainedAtEntry?.ownerIdentity
+                    == ownerIdentity
+                    && retainedAtEntry?.command == command
+                    && retainedAtEntry?.phase.isFailedHistoryReconciliation
+                        == true
+                if await failedHistoryRetryState.hasLiveOwner() {
                     if retainedAtEntry?.ownerIdentity == ownerIdentity,
                        retainedAtEntry?.command == command,
                        retainedAtEntry?.phase.crossedLogicalBoundary == true {
@@ -346,7 +425,14 @@ private extension IOSAcceptedHistoryCoordinator {
                     throw IOSAcceptedHistoryCoordinatorError
                         .localRecoveryPending
                 }
-                if failedHistoryMutationInterlock.isBlocked {
+                let hasFailedTransferState = await failedHistoryTransferState
+                    .current() != nil
+                let hasFailedAudioCleanupState = await
+                    failedHistoryAudioCleanupState.current() != nil
+                if (hasFailedTransferState
+                    || hasFailedAudioCleanupState
+                    || failedHistoryMutationInterlock.isBlocked)
+                    && !mayResumeFailedHistory {
                     if retainedAtEntry?.ownerIdentity == ownerIdentity,
                        retainedAtEntry?.command == command,
                        retainedAtEntry?.phase.crossedLogicalBoundary == true {
@@ -368,20 +454,6 @@ private extension IOSAcceptedHistoryCoordinator {
                     }
                     throw IOSAcceptedHistoryCoordinatorError
                         .repositoryIdentityConflict
-                }
-
-                if try await failedHistoryStore
-                    .hasPendingJournalRetirement(
-                        operationLeaseAuthorization:
-                            operationLeaseAuthorization
-                    ) {
-                    if retainedAtEntry?.ownerIdentity == ownerIdentity,
-                       retainedAtEntry?.command == command,
-                       retainedAtEntry?.phase.crossedLogicalBoundary == true {
-                        return .pendingLocalRecovery
-                    }
-                    throw IOSAcceptedHistoryCoordinatorError
-                        .localRecoveryPending
                 }
 
                 do {
@@ -411,7 +483,14 @@ private extension IOSAcceptedHistoryCoordinator {
                             if hasWorkerWork {
                                 return .pendingLocalRecovery
                             }
-                        case .pruningAcceptedRows,
+                        case .reconcilingFailedHistory,
+                             .recoveringFailedTransfer,
+                             .inspectingProcessLostFailedRetry,
+                             .cancellingProcessLostFailedRetry,
+                             .completingProcessLostFailedRetry,
+                             .invalidatingFailedRow,
+                             .recoveringFailedAudio,
+                             .pruningAcceptedRows,
                              .inspectingStandaloneDelivery,
                              .awaitingExpiredDeliveryAbandonment:
                             if hasWorkerWork || hasDeliveryWork {
@@ -449,15 +528,24 @@ private extension IOSAcceptedHistoryCoordinator {
                     policyStore: policyStore,
                     acceptedHistoryStore: acceptedHistoryStore,
                     failedHistoryStore: failedHistoryStore,
+                    pendingRecordingStore: pendingRecordingStore,
                     outboxStore: outboxStore,
                     deliveryStore: deliveryStore,
                     baselineRecoveryState: baselineRecoveryState,
                     workerState: workerState,
+                    failedHistoryTransferState: failedHistoryTransferState,
+                    failedHistoryAudioCleanupState:
+                        failedHistoryAudioCleanupState,
+                    failedHistoryRetryState: failedHistoryRetryState,
+                    failedHistoryMutationInterlock:
+                        failedHistoryMutationInterlock,
                     cutoverState: cutoverState,
                     ownerIdentity: ownerIdentity,
                     repositoryBinding: repositoryBinding,
                     repositoryRegistration: repositoryRegistration,
-                    repositoryIdentityState: repositoryIdentityState
+                    repositoryIdentityState: repositoryIdentityState,
+                    operationLeaseAuthorization:
+                        operationLeaseAuthorization
                 )
                 do {
                     try Self.requireStablePolicyRepository(
@@ -525,17 +613,25 @@ private extension IOSAcceptedHistoryCoordinator {
         policyStore: IOSHistoryPolicyStore,
         acceptedHistoryStore: IOSAcceptedHistoryStore,
         failedHistoryStore: IOSFailedHistoryStore,
+        pendingRecordingStore: IOSPendingRecordingStore?,
         outboxStore: IOSAcceptedHistoryOutboxStore,
         deliveryStore: IOSAcceptedOutputDeliveryStore,
         baselineRecoveryState: IOSAcceptedHistoryBaselineRecoveryState,
         workerState: IOSAcceptedHistoryOutboxWorkerOperationState,
+        failedHistoryTransferState: IOSFailedHistoryTransferOperationState,
+        failedHistoryAudioCleanupState:
+            IOSFailedHistoryAudioCleanupOperationState,
+        failedHistoryRetryState: IOSFailedHistoryRetryLiveOwnerState,
+        failedHistoryMutationInterlock: IOSFailedHistoryMutationInterlock,
         cutoverState: IOSHistoryPolicyCutoverOperationState,
         ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity,
         repositoryBinding: IOSAcceptedHistoryCoordinatorRepositoryBinding?,
         repositoryRegistration:
             IOSAcceptedHistoryCoordinatorRepositoryRegistration?,
         repositoryIdentityState:
-            IOSAcceptedHistoryCoordinatorRepositoryIdentityState
+            IOSAcceptedHistoryCoordinatorRepositoryIdentityState,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
     ) async throws -> IOSHistoryPolicyCleanupDisposition {
         var work = initialWork
 
@@ -584,7 +680,7 @@ private extension IOSAcceptedHistoryCoordinator {
                     }
                     if work.command == nil {
                         work = work.replacingPhase(
-                            .pruningAcceptedRows(receipt)
+                            .reconcilingFailedHistory(receipt)
                         )
                     } else {
                         work = work.replacingPhase(.policyCaptured(receipt))
@@ -621,7 +717,7 @@ private extension IOSAcceptedHistoryCoordinator {
                         receipt: receipt
                     )
                     work = work.replacingPhase(
-                        .pruningAcceptedRows(committed)
+                        .reconcilingFailedHistory(committed)
                     )
                     await cutoverState.store(work)
                     do {
@@ -642,7 +738,14 @@ private extension IOSAcceptedHistoryCoordinator {
                     throw IOSHistoryPolicyError.revisionOverflow
                 }
 
-            case .pruningAcceptedRows,
+            case .reconcilingFailedHistory,
+                 .recoveringFailedTransfer,
+                 .inspectingProcessLostFailedRetry,
+                 .cancellingProcessLostFailedRetry,
+                 .completingProcessLostFailedRetry,
+                 .invalidatingFailedRow,
+                 .recoveringFailedAudio,
+                 .pruningAcceptedRows,
                  .recoveringOutbox,
                  .inspectingStandaloneDelivery,
                  .awaitingExpiredDeliveryAbandonment,
@@ -651,14 +754,24 @@ private extension IOSAcceptedHistoryCoordinator {
                     work,
                     policyStore: policyStore,
                     acceptedHistoryStore: acceptedHistoryStore,
+                    failedHistoryStore: failedHistoryStore,
+                    pendingRecordingStore: pendingRecordingStore,
                     outboxStore: outboxStore,
                     deliveryStore: deliveryStore,
                     workerState: workerState,
+                    failedHistoryTransferState: failedHistoryTransferState,
+                    failedHistoryAudioCleanupState:
+                        failedHistoryAudioCleanupState,
+                    failedHistoryRetryState: failedHistoryRetryState,
+                    failedHistoryMutationInterlock:
+                        failedHistoryMutationInterlock,
                     cutoverState: cutoverState,
                     ownerIdentity: ownerIdentity,
                     repositoryBinding: repositoryBinding,
                     repositoryRegistration: repositoryRegistration,
-                    repositoryIdentityState: repositoryIdentityState
+                    repositoryIdentityState: repositoryIdentityState,
+                    operationLeaseAuthorization:
+                        operationLeaseAuthorization
                 )
             }
         }
@@ -721,16 +834,25 @@ private extension IOSAcceptedHistoryCoordinator {
         _ initialWork: IOSHistoryPolicyCutoverWork,
         policyStore: IOSHistoryPolicyStore,
         acceptedHistoryStore: IOSAcceptedHistoryStore,
+        failedHistoryStore: IOSFailedHistoryStore,
+        pendingRecordingStore: IOSPendingRecordingStore?,
         outboxStore: IOSAcceptedHistoryOutboxStore,
         deliveryStore: IOSAcceptedOutputDeliveryStore,
         workerState: IOSAcceptedHistoryOutboxWorkerOperationState,
+        failedHistoryTransferState: IOSFailedHistoryTransferOperationState,
+        failedHistoryAudioCleanupState:
+            IOSFailedHistoryAudioCleanupOperationState,
+        failedHistoryRetryState: IOSFailedHistoryRetryLiveOwnerState,
+        failedHistoryMutationInterlock: IOSFailedHistoryMutationInterlock,
         cutoverState: IOSHistoryPolicyCutoverOperationState,
         ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity,
         repositoryBinding: IOSAcceptedHistoryCoordinatorRepositoryBinding?,
         repositoryRegistration:
             IOSAcceptedHistoryCoordinatorRepositoryRegistration?,
         repositoryIdentityState:
-            IOSAcceptedHistoryCoordinatorRepositoryIdentityState
+            IOSAcceptedHistoryCoordinatorRepositoryIdentityState,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
     ) async -> IOSHistoryPolicyCleanupDisposition {
         var work = initialWork
 
@@ -756,6 +878,299 @@ private extension IOSAcceptedHistoryCoordinator {
             }
 
             switch work.phase {
+            case .reconcilingFailedHistory(let receipt):
+                guard await failedHistoryRetryState.hasLiveOwner() == false,
+                      await failedHistoryTransferState.current() == nil,
+                      await failedHistoryAudioCleanupState.current() == nil else {
+                    return .pendingLocalRecovery
+                }
+                do {
+                    switch try await failedHistoryStore
+                        .preparePolicyCutoverDirective(
+                            using: receipt,
+                            operationLeaseAuthorization:
+                                operationLeaseAuthorization
+                        ) {
+                    case .retirePendingMetadata:
+                        work = work.replacingPhase(
+                            .recoveringFailedTransfer(receipt)
+                        )
+                        await cutoverState.store(work)
+
+                    case .inspectProcessLostRetry(let inspection):
+                        work = work.replacingPhase(
+                            .inspectingProcessLostFailedRetry(
+                                receipt,
+                                inspection
+                            )
+                        )
+                        await cutoverState.store(work)
+
+                    case .completeProcessLostRetryCancellation(
+                        let completion
+                    ):
+                        work = work.replacingPhase(
+                            .completingProcessLostFailedRetry(
+                                receipt,
+                                completion
+                            )
+                        )
+                        await cutoverState.store(work)
+
+                    case .recoverAudioCleanup(let authorization):
+                        guard await failedHistoryAudioCleanupState.begin(
+                                authorization,
+                                stateAuthorization:
+                                    IOSFailedHistoryAudioCleanupStateMutationAuthorization()
+                              ) else {
+                            try? await failedHistoryStore
+                                .abandonPreparedAudioCleanup(
+                                    using: authorization,
+                                    operationLeaseAuthorization:
+                                        operationLeaseAuthorization
+                                )
+                            return .pendingLocalRecovery
+                        }
+                        work = work.replacingPhase(
+                            .recoveringFailedAudio(receipt, authorization)
+                        )
+                        await cutoverState.store(work)
+
+                    case .invalidateReadyRow(let authorization):
+                        work = work.replacingPhase(
+                            .invalidatingFailedRow(receipt, authorization)
+                        )
+                        await cutoverState.store(work)
+
+                    case .retainedMutationConfirmed:
+                        return .pendingLocalRecovery
+
+                    case .blockedAcceptingOutput:
+                        return .pendingLocalRecovery
+
+                    case .complete:
+                        work = work.replacingPhase(
+                            .pruningAcceptedRows(receipt)
+                        )
+                        await cutoverState.store(work)
+                    }
+                } catch {
+                    return .pendingLocalRecovery
+                }
+
+            case .recoveringFailedTransfer(let receipt):
+                guard let pendingRecordingStore,
+                      let repositoryBinding,
+                      await failedHistoryAudioCleanupState.current() == nil,
+                      await failedHistoryRetryState.hasLiveOwner() == false else {
+                    return .pendingLocalRecovery
+                }
+                do {
+                    _ = try await resumeFailedHistoryPendingJournalRetirementForPolicyCutover(
+                        pendingStore: pendingRecordingStore,
+                        failedStore: failedHistoryStore,
+                        transferState: failedHistoryTransferState,
+                        policyReceipt: receipt,
+                        repositoryBinding: repositoryBinding,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization
+                    )
+                    work = work.replacingPhase(
+                        .reconcilingFailedHistory(receipt)
+                    )
+                    await cutoverState.store(work)
+                    return .pendingLocalRecovery
+                } catch {
+                    return .pendingLocalRecovery
+                }
+
+            case .inspectingProcessLostFailedRetry(
+                let receipt,
+                let inspection
+            ):
+                guard inspection.operationLeaseAuthorization
+                    .provesSameActiveLease(
+                        as: operationLeaseAuthorization
+                    ) else {
+                    work = work.replacingPhase(
+                        .reconcilingFailedHistory(receipt)
+                    )
+                    await cutoverState.store(work)
+                    return .pendingLocalRecovery
+                }
+                guard await failedHistoryTransferState.current() == nil,
+                      await failedHistoryAudioCleanupState.current() == nil,
+                      let reservation = await failedHistoryRetryState
+                        .reserveProcessLostCancellation(
+                            of: inspection,
+                            operationLeaseAuthorization:
+                                operationLeaseAuthorization
+                        ), reservation.stateIdentity
+                            == failedHistoryRetryState.identity else {
+                    return .pendingLocalRecovery
+                }
+                do {
+                    switch try await failedHistoryStore
+                        .preparePolicyRetryCancellation(
+                            inspection: inspection,
+                            reservation: reservation,
+                            using: receipt,
+                            operationLeaseAuthorization:
+                                operationLeaseAuthorization
+                        ) {
+                    case .commit(let authorization):
+                        work = work.replacingPhase(
+                            .cancellingProcessLostFailedRetry(
+                                receipt,
+                                authorization
+                            )
+                        )
+                        await cutoverState.store(work)
+
+                    case .completed(let completion):
+                        work = work.replacingPhase(
+                            .completingProcessLostFailedRetry(
+                                receipt,
+                                completion
+                            )
+                        )
+                        await cutoverState.store(work)
+                    }
+                } catch {
+                    return .pendingLocalRecovery
+                }
+
+            case .cancellingProcessLostFailedRetry(
+                let receipt,
+                let authorization
+            ):
+                guard authorization.operationLeaseAuthorization
+                    .provesSameActiveLease(
+                        as: operationLeaseAuthorization
+                    ) else {
+                    work = work.replacingPhase(
+                        .reconcilingFailedHistory(receipt)
+                    )
+                    await cutoverState.store(work)
+                    return .pendingLocalRecovery
+                }
+                do {
+                    let completion = try await failedHistoryStore
+                        .commitPolicyRetryCancellation(using: authorization)
+                    work = work.replacingPhase(
+                        .completingProcessLostFailedRetry(
+                            receipt,
+                            completion
+                        )
+                    )
+                    await cutoverState.store(work)
+                } catch {
+                    return .pendingLocalRecovery
+                }
+
+            case .completingProcessLostFailedRetry(
+                let receipt,
+                let retainedCompletion
+            ):
+                do {
+                    let completion:
+                        IOSFailedHistoryRetryCancellationCompletionAuthorization
+                    if retainedCompletion.operationLeaseAuthorization
+                        .provesSameActiveLease(
+                            as: operationLeaseAuthorization
+                        ) {
+                        completion = retainedCompletion
+                    } else {
+                        completion = try await failedHistoryStore
+                            .refreshPolicyRetryCancellationCompletion(
+                                retainedCompletion,
+                                operationLeaseAuthorization:
+                                    operationLeaseAuthorization
+                            )
+                        work = work.replacingPhase(
+                            .completingProcessLostFailedRetry(
+                                receipt,
+                                completion
+                            )
+                        )
+                        await cutoverState.store(work)
+                    }
+                    guard await failedHistoryRetryState
+                        .consumeCancellationReservation(
+                            using: completion
+                        ) else {
+                        return .pendingLocalRecovery
+                    }
+                    work = work.replacingPhase(
+                        .reconcilingFailedHistory(receipt)
+                    )
+                    await cutoverState.store(work)
+                    return .pendingLocalRecovery
+                } catch {
+                    return .pendingLocalRecovery
+                }
+
+            case .invalidatingFailedRow(let receipt, let authorization):
+                guard let pendingRecordingStore else {
+                    return .pendingLocalRecovery
+                }
+                guard authorization.operationLeaseAuthorization
+                    .provesSameActiveLease(
+                        as: operationLeaseAuthorization
+                    ) else {
+                    work = work.replacingPhase(
+                        .reconcilingFailedHistory(receipt)
+                    )
+                    await cutoverState.store(work)
+                    return .pendingLocalRecovery
+                }
+                do {
+                    let validatedAudio = try await pendingRecordingStore
+                        .acquireValidatedFailedHistoryRowAudio(
+                            using: authorization,
+                            operationLeaseAuthorization:
+                                operationLeaseAuthorization
+                        )
+                    defer { validatedAudio.release() }
+                    try await failedHistoryStore.commitPolicyInvalidation(
+                        using: validatedAudio
+                    )
+                    work = work.replacingPhase(
+                        .reconcilingFailedHistory(receipt)
+                    )
+                    await cutoverState.store(work)
+                    return .pendingLocalRecovery
+                } catch {
+                    return .pendingLocalRecovery
+                }
+
+            case .recoveringFailedAudio(let receipt, let authorization):
+                guard let pendingRecordingStore,
+                      await failedHistoryTransferState.current() == nil,
+                      await failedHistoryRetryState.hasLiveOwner() == false,
+                      await failedHistoryAudioCleanupState.retainsCleanup(
+                        matching: authorization
+                      ) else {
+                    return .pendingLocalRecovery
+                }
+                do {
+                    _ = try await resumeFailedHistoryAudioCleanup(
+                        pendingStore: pendingRecordingStore,
+                        failedStore: failedHistoryStore,
+                        cleanupState: failedHistoryAudioCleanupState,
+                        mutationInterlock: failedHistoryMutationInterlock,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization
+                    )
+                    work = work.replacingPhase(
+                        .reconcilingFailedHistory(receipt)
+                    )
+                    await cutoverState.store(work)
+                    return .pendingLocalRecovery
+                } catch {
+                    return .pendingLocalRecovery
+                }
+
             case .pruningAcceptedRows(let receipt):
                 if await deliveryStore
                     .hasRetainedHistoryWorkForPolicyCutover() {
@@ -964,6 +1379,21 @@ private extension IOSAcceptedHistoryCoordinator {
             return true
         case .policyCaptured(let receipt):
             return work.command != nil && valid(receipt)
+        case .reconcilingFailedHistory(let receipt),
+             .recoveringFailedTransfer(let receipt):
+            return valid(receipt)
+        case .inspectingProcessLostFailedRetry(let receipt, _),
+             .cancellingProcessLostFailedRetry(let receipt, _),
+             .completingProcessLostFailedRetry(let receipt, _):
+            return valid(receipt)
+        case .invalidatingFailedRow(let receipt, let authorization):
+            return valid(receipt)
+                && authorization.ownerIdentity == ownerIdentity
+                && authorization.purpose == .policyCutover(receipt)
+        case .recoveringFailedAudio(let receipt, let authorization):
+            return valid(receipt)
+                && authorization.ownerIdentity == ownerIdentity
+                && authorization.purpose == .nextHead
         case .pruningAcceptedRows(let receipt),
              .recoveringOutbox(let receipt),
              .inspectingStandaloneDelivery(let receipt):

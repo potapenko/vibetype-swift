@@ -1198,7 +1198,7 @@ public actor IOSPendingRecordingStore {
         let heldPendingAudioLease:
             (any IOSPendingRecordingPublishedAudioLease)?
         switch authorization.purpose {
-        case .delete:
+        case .delete, .policyCutover:
             heldPendingAudioLease = nil
         case .retention(let preparation):
             guard let audioLease = preparation
@@ -1429,7 +1429,7 @@ private extension IOSPendingRecordingStore {
             IOSPersistenceOperationLeaseAuthorization
     ) throws {
         switch authorization.purpose {
-        case .delete:
+        case .delete, .policyCutover:
             guard heldAudioLease == nil else {
                 throw IOSPendingRecordingError.localRecoveryPending
             }
@@ -1484,7 +1484,7 @@ private extension IOSPendingRecordingStore {
             IOSPersistenceOperationLeaseAuthorization
     ) throws {
         switch authorization.purpose {
-        case .delete:
+        case .delete, .policyCutover:
             return
         case .retention(let preparation):
             guard preparation.pendingSnapshot == pendingSource,

@@ -288,6 +288,541 @@ struct IOSFailedHistoryAudioCleanupCoordinatorTests {
         #expect(fixture.audioFileSystem.genericRemoveCallCount == 0)
         #expect(fixture.audioFileSystem.publishCallCount == 0)
     }
+
+    @Test func policyNoOpPreservesCurrentRowThenDisableCleansWithoutNPlusTwo()
+        async throws {
+        let fixture = try AudioCleanupCoordinatorFixture()
+        #expect(
+            try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                == .complete
+        )
+        let current = try failedHistoryTestEntry(index: 461)
+        try fixture.install(
+            IOSFailedHistoryEnvelope(
+                revision: 1,
+                entries: [current],
+                audioCleanup: []
+            )
+        )
+
+        #expect(
+            try await fixture.coordinator.setHistoryEnabled(true) == .complete
+        )
+        #expect(try fixture.envelope()?.entries == [current])
+        #expect(try await fixture.filteredEntries() == [current])
+
+        #expect(
+            try await fixture.coordinator.setHistoryEnabled(false)
+                == .pendingLocalRecovery
+        )
+        let tombstoned = try #require(try fixture.envelope())
+        #expect(tombstoned.revision == 2)
+        #expect(tombstoned.entries.isEmpty)
+        #expect(tombstoned.audioCleanup.count == 1)
+        #expect(try await fixture.filteredEntries().isEmpty)
+        let disabled = try #require(try await fixture.context.policyStore.load())
+        #expect(disabled.revision == 2)
+        #expect(disabled.policyGeneration == 2)
+        #expect(disabled.historyEnabled == false)
+
+        #expect(
+            try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                == .pendingLocalRecovery
+        )
+        let cleaned = try #require(try fixture.envelope())
+        #expect(cleaned.revision == 3)
+        #expect(cleaned.entries.isEmpty)
+        #expect(cleaned.audioCleanup.isEmpty)
+        #expect(
+            try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                == .complete
+        )
+        #expect(try await fixture.context.policyStore.load() == disabled)
+    }
+
+    @Test func policyCutoverCleansExistingHeadBeforeInvalidatingOldestRow()
+        async throws {
+        let fixture = try AudioCleanupCoordinatorFixture()
+        #expect(
+            try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                == .complete
+        )
+        let stale = try failedHistoryTestEntry(index: 471)
+        let existingHead = try failedHistoryTestAudioCleanup(index: 472)
+        try fixture.install(
+            IOSFailedHistoryEnvelope(
+                revision: 4,
+                entries: [stale],
+                audioCleanup: [existingHead]
+            )
+        )
+
+        #expect(
+            try await fixture.coordinator.setHistoryEnabled(false)
+                == .pendingLocalRecovery
+        )
+        let afterHead = try #require(try fixture.envelope())
+        #expect(afterHead.revision == 5)
+        #expect(afterHead.entries == [stale])
+        #expect(afterHead.audioCleanup.isEmpty)
+        #expect(fixture.audioFileSystem.cleanedTombstones == [existingHead])
+
+        #expect(
+            try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                == .pendingLocalRecovery
+        )
+        let invalidated = try #require(try fixture.envelope())
+        let staleTombstone = try #require(invalidated.audioCleanup.first)
+        #expect(invalidated.revision == 6)
+        #expect(invalidated.entries.isEmpty)
+        #expect(staleTombstone.attemptID == stale.attemptID)
+        #expect(fixture.audioFileSystem.cleanedTombstones == [existingHead])
+
+        #expect(
+            try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                == .pendingLocalRecovery
+        )
+        #expect(try fixture.envelope()?.revision == 7)
+        #expect(try fixture.envelope()?.audioCleanup.isEmpty == true)
+        #expect(
+            fixture.audioFileSystem.cleanedTombstones
+                == [existingHead, staleTombstone]
+        )
+    }
+
+    @Test func processLostRetryCancelsLocallyButAcceptingOutputFailsClosed()
+        async throws {
+        let cancellable = try AudioCleanupCoordinatorFixture()
+        #expect(
+            try await cancellable.coordinator.recoverHistoryPolicyCleanup()
+                == .complete
+        )
+        let retry = try failedHistoryTestRetryOperation(index: 481)
+        let retryingRow = try failedHistoryTestEntry(
+            index: 481,
+            retryCount: 1,
+            retryOperation: retry
+        )
+        try cancellable.install(
+            IOSFailedHistoryEnvelope(
+                revision: 8,
+                entries: [retryingRow],
+                audioCleanup: []
+            )
+        )
+
+        #expect(
+            try await cancellable.coordinator.setHistoryEnabled(false)
+                == .pendingLocalRecovery
+        )
+        let cancelled = try #require(try cancellable.envelope())
+        let cancelledRow = try #require(cancelled.entries.first)
+        #expect(cancelled.revision == 9)
+        #expect(cancelled.entries.count == 1)
+        #expect(cancelledRow.retryOperation == nil)
+        #expect(cancelledRow.retryCount == retryingRow.retryCount)
+        #expect(cancelledRow.updatedAt == retryingRow.updatedAt)
+        #expect(cancelled.audioCleanup.isEmpty)
+        #expect(cancellable.audioFileSystem.cleanupCallCount == 0)
+        #expect(cancellable.audioFileSystem.publishCallCount == 0)
+
+        let blocked = try AudioCleanupCoordinatorFixture()
+        #expect(
+            try await blocked.coordinator.recoverHistoryPolicyCleanup()
+                == .complete
+        )
+        let accepting = try failedHistoryTestRetryOperation(
+            index: 482,
+            state: .acceptingOutput
+        )
+        let acceptingRow = try failedHistoryTestEntry(
+            index: 482,
+            retryCount: 1,
+            retryOperation: accepting
+        )
+        try blocked.install(
+            IOSFailedHistoryEnvelope(
+                revision: 10,
+                entries: [acceptingRow],
+                audioCleanup: []
+            )
+        )
+
+        #expect(
+            try await blocked.coordinator.setHistoryEnabled(false)
+                == .pendingLocalRecovery
+        )
+        let retainedBytes = blocked.failedFileSystem.file?.data
+        let disabled = try #require(try await blocked.context.policyStore.load())
+        #expect(disabled.policyGeneration == 2)
+        #expect(
+            try await blocked.coordinator.recoverHistoryPolicyCleanup()
+                == .pendingLocalRecovery
+        )
+        #expect(blocked.failedFileSystem.file?.data == retainedBytes)
+        #expect(try blocked.envelope()?.entries == [acceptingRow])
+        #expect(try await blocked.context.policyStore.load() == disabled)
+        #expect(blocked.audioFileSystem.cleanupCallCount == 0)
+        #expect(blocked.audioFileSystem.publishCallCount == 0)
+    }
+
+    @Test func policyRetryCancellationReconcilesSourceAndOutcomeWithoutNewGeneration()
+        async throws {
+        for outcomeVisible in [false, true] {
+            let fixture = try AudioCleanupCoordinatorFixture()
+            #expect(
+                try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                    == .complete
+            )
+            let retry = try failedHistoryTestRetryOperation(
+                index: outcomeVisible ? 492 : 491,
+                state: .reserved
+            )
+            let row = try failedHistoryTestEntry(
+                index: outcomeVisible ? 492 : 491,
+                retryCount: 1,
+                retryOperation: retry
+            )
+            try fixture.install(
+                IOSFailedHistoryEnvelope(
+                    revision: 30,
+                    entries: [row],
+                    audioCleanup: []
+                )
+            )
+            fixture.failedFileSystem.replaceFailure = .init(
+                error: .commitUncertain,
+                commitBeforeThrowing: outcomeVisible
+            )
+
+            #expect(
+                try await fixture.coordinator.setHistoryEnabled(false)
+                    == .pendingLocalRecovery
+            )
+            let committedPolicy = try #require(
+                try await fixture.context.policyStore.load()
+            )
+            #expect(committedPolicy.revision == 2)
+            #expect(committedPolicy.policyGeneration == 2)
+            #expect(committedPolicy.historyEnabled == false)
+            #expect(fixture.mutationInterlock.isBlocked)
+
+            for _ in 0..<3 where fixture.mutationInterlock.isBlocked {
+                #expect(
+                    try await fixture.coordinator
+                        .recoverHistoryPolicyCleanup()
+                        == .pendingLocalRecovery
+                )
+                #expect(
+                    try await fixture.context.policyStore.load()
+                        == committedPolicy
+                )
+            }
+
+            let recovered = try #require(try fixture.envelope())
+            let retained = try #require(recovered.entries.first)
+            #expect(recovered.revision == 31)
+            #expect(recovered.entries.count == 1)
+            #expect(retained.attemptID == row.attemptID)
+            #expect(retained.retryOperation == nil)
+            #expect(retained.retryCount == row.retryCount)
+            #expect(retained.updatedAt == row.updatedAt)
+            #expect(recovered.audioCleanup.isEmpty)
+            #expect(!fixture.mutationInterlock.isBlocked)
+            #expect(
+                try await fixture.context.policyStore.load() == committedPolicy
+            )
+            #expect(fixture.audioFileSystem.cleanupCallCount == 0)
+            #expect(fixture.audioFileSystem.publishCallCount == 0)
+        }
+    }
+
+    @Test func failedCleanupFinishesBeforeAcceptedC3Handoff()
+        async throws {
+        let fixture = try AudioCleanupCoordinatorFixture()
+        #expect(
+            try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                == .complete
+        )
+        let preparation = try await failedPolicyAcceptedPreparation(
+            using: fixture.coordinator
+        )
+        #expect(
+            try await fixture.coordinator.accept(preparation).resolution
+                == .committed
+        )
+        let acceptedBefore = try #require(
+            try await fixture.context.acceptedHistoryStore.load()
+        )
+        #expect(acceptedBefore.entries.count == 1)
+
+        let stale = try failedHistoryTestEntry(index: 501)
+        try fixture.install(
+            IOSFailedHistoryEnvelope(
+                revision: 1,
+                entries: [stale],
+                audioCleanup: []
+            )
+        )
+
+        #expect(
+            try await fixture.coordinator.setHistoryEnabled(false)
+                == .pendingLocalRecovery
+        )
+        let committedPolicy = try #require(
+            try await fixture.context.policyStore.load()
+        )
+        let invalidated = try #require(try fixture.envelope())
+        #expect(invalidated.revision == 2)
+        #expect(invalidated.entries.isEmpty)
+        #expect(invalidated.audioCleanup.count == 1)
+        #expect(
+            try await fixture.context.acceptedHistoryStore.load()
+                == acceptedBefore
+        )
+        #expect(fixture.audioFileSystem.cleanupCallCount == 0)
+
+        #expect(
+            try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                == .pendingLocalRecovery
+        )
+        let failedComplete = try #require(try fixture.envelope())
+        #expect(failedComplete.revision == 3)
+        #expect(failedComplete.entries.isEmpty)
+        #expect(failedComplete.audioCleanup.isEmpty)
+        #expect(
+            try await fixture.context.acceptedHistoryStore.load()
+                == acceptedBefore
+        )
+        #expect(fixture.audioFileSystem.cleanupCallCount == 1)
+        #expect(
+            try await fixture.context.policyStore.load() == committedPolicy
+        )
+
+        #expect(
+            try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                == .complete
+        )
+        let acceptedAfter = try #require(
+            try await fixture.context.acceptedHistoryStore.load()
+        )
+        #expect(acceptedAfter.entries.isEmpty)
+        #expect(
+            try await fixture.context.policyStore.load() == committedPolicy
+        )
+    }
+
+    @Test func providerDispatchedCancellationPrecedesQueuedTombstoneCleanup()
+        async throws {
+        let fixture = try AudioCleanupCoordinatorFixture()
+        #expect(
+            try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                == .complete
+        )
+        let retry = try failedHistoryTestRetryOperation(
+            index: 511,
+            state: .providerDispatched
+        )
+        let retryingRow = try failedHistoryTestEntry(
+            index: 511,
+            retryCount: 1,
+            retryOperation: retry
+        )
+        let existingHead = try failedHistoryTestAudioCleanup(index: 512)
+        try fixture.install(
+            IOSFailedHistoryEnvelope(
+                revision: 40,
+                entries: [retryingRow],
+                audioCleanup: [existingHead]
+            )
+        )
+
+        #expect(
+            try await fixture.coordinator.setHistoryEnabled(false)
+                == .pendingLocalRecovery
+        )
+        let committedPolicy = try #require(
+            try await fixture.context.policyStore.load()
+        )
+        let cancelled = try #require(try fixture.envelope())
+        let retained = try #require(cancelled.entries.first)
+        #expect(cancelled.revision == 41)
+        #expect(retained.attemptID == retryingRow.attemptID)
+        #expect(retained.retryOperation == nil)
+        #expect(cancelled.audioCleanup == [existingHead])
+        #expect(fixture.audioFileSystem.cleanupCallCount == 0)
+        #expect(fixture.audioFileSystem.publishCallCount == 0)
+
+        #expect(
+            try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                == .pendingLocalRecovery
+        )
+        let afterHead = try #require(try fixture.envelope())
+        #expect(afterHead.revision == 42)
+        #expect(afterHead.entries == [retained])
+        #expect(afterHead.audioCleanup.isEmpty)
+        #expect(fixture.audioFileSystem.cleanedTombstones == [existingHead])
+        #expect(
+            try await fixture.context.policyStore.load() == committedPolicy
+        )
+        #expect(fixture.audioFileSystem.publishCallCount == 0)
+    }
+
+    @Test func currentRetryLiveOwnerExpiresAndDoesNotWedgePolicyCutover()
+        async throws {
+        let fixture = try AudioCleanupCoordinatorFixture()
+        #expect(
+            try await fixture.coordinator.recoverHistoryPolicyCleanup()
+                == .complete
+        )
+        let retry = try failedHistoryTestRetryOperation(
+            index: 531,
+            state: .reserved
+        )
+        let currentRow = try failedHistoryTestEntry(
+            index: 531,
+            policyGeneration: 1,
+            retryCount: 1,
+            retryOperation: retry
+        )
+        try fixture.install(
+            IOSFailedHistoryEnvelope(
+                revision: 50,
+                entries: [currentRow],
+                audioCleanup: []
+            )
+        )
+        let retryState = fixture.context.failedHistoryRetryState
+        let currentPolicy = try #require(
+            try await fixture.context.policyStore.load()
+        )
+        #expect(currentPolicy.policyGeneration == currentRow.policyGeneration)
+        let inspectionPolicy = try await failedPolicyReceipt(
+            ownerIdentity: fixture.context.ownerIdentity,
+            generation: currentPolicy.policyGeneration + 1
+        )
+        let token = try await fixture.context.operationGate.perform { lease in
+            let directive = try await fixture.failedHistoryStore
+                .preparePolicyCutoverDirective(
+                    using: inspectionPolicy,
+                    operationLeaseAuthorization: lease
+                )
+            guard case .inspectProcessLostRetry(let inspection) = directive
+            else {
+                Issue.record("Store must mint the exact Retry owner token")
+                throw IOSFailedHistoryError.invalidTransition
+            }
+            let token = inspection.liveOwnerToken
+            #expect(
+                token.row.policyGeneration == currentPolicy.policyGeneration
+            )
+            #expect(await retryState.retainLiveOwner(token))
+            #expect(await retryState.hasLiveOwner())
+            return token
+        }
+        #expect(!token.operationLeaseAuthorization.provesActiveLease())
+
+        #expect(
+            try await fixture.coordinator.setHistoryEnabled(false)
+                == .pendingLocalRecovery
+        )
+        let committedPolicy = try #require(
+            try await fixture.context.policyStore.load()
+        )
+        #expect(committedPolicy.revision == 2)
+        #expect(committedPolicy.policyGeneration == 2)
+        #expect(committedPolicy.historyEnabled == false)
+        let cancelled = try #require(try fixture.envelope())
+        let retained = try #require(cancelled.entries.first)
+        #expect(cancelled.revision == 51)
+        #expect(retained.retryOperation == nil)
+        #expect(retained.retryCount == currentRow.retryCount)
+        #expect(await retryState.hasLiveOwner() == false)
+        #expect(await retryState.hasCancellationReservation() == false)
+        #expect(fixture.audioFileSystem.cleanupCallCount == 0)
+        #expect(fixture.audioFileSystem.publishCallCount == 0)
+    }
+}
+
+private func failedPolicyAcceptedPreparation(
+    using coordinator: IOSAcceptedHistoryCoordinator
+) async throws -> IOSAcceptedOutputDeliveryPreparation {
+    let capture = try await coordinator.capture(
+        transcriptionModel: "whisper-1",
+        transcriptionLanguageCode: "en",
+        durationMilliseconds: 1_250
+    )
+    return try IOSAcceptedOutputDeliveryPreparation(
+        deliveryID: UUID(),
+        sessionID: UUID(),
+        attemptID: UUID(),
+        transcriptID: UUID(),
+        rawAcceptedText: "accepted before failed cleanup",
+        outputIntent: .standard,
+        automaticInsertionPreferenceEnabled: true,
+        keepLatestResult: true,
+        historyCapture: capture
+    )
+}
+
+private func failedPolicyReceipt(
+    ownerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity,
+    generation: Int64
+) async throws -> IOSHistoryPolicyReceipt {
+    let state = try IOSHistoryPolicyState(
+        revision: generation,
+        historyEnabled: true,
+        policyGeneration: generation
+    )
+    let store = IOSHistoryPolicyStore(
+        journal: AudioCleanupPolicyJournal(state: state),
+        capabilityOwnerIdentity: ownerIdentity
+    )
+    return try await store.confirm(
+        expected: IOSHistoryPolicyExpectation(state: state)
+    )
+}
+
+private final class AudioCleanupPolicyJournal:
+    IOSHistoryPolicyJournalStoring,
+    @unchecked Sendable {
+    private var snapshot: IOSHistoryPolicyJournalSnapshot
+    private var nextToken: UInt64 = 2
+
+    init(state: IOSHistoryPolicyState) {
+        snapshot = IOSHistoryPolicyJournalSnapshot(
+            state: state,
+            fileRevision: IOSStrictProtectedRecordFileRevision(
+                testingToken: 1
+            )
+        )
+    }
+
+    func load() throws -> IOSHistoryPolicyJournalSnapshot? { snapshot }
+
+    func replace(
+        _ state: IOSHistoryPolicyState,
+        expected: IOSHistoryPolicyJournalSnapshot
+    ) throws -> IOSHistoryPolicyJournalSnapshot {
+        guard snapshot == expected else {
+            throw IOSHistoryPolicyError.compareAndSwapFailed
+        }
+        snapshot = IOSHistoryPolicyJournalSnapshot(
+            state: state,
+            fileRevision: IOSStrictProtectedRecordFileRevision(
+                testingToken: nextToken
+            )
+        )
+        nextToken += 1
+        return snapshot
+    }
+
+    func performStagingMaintenance(
+        now: Date
+    ) throws -> IOSStrictProtectedRecordMaintenanceReport {
+        _ = now
+        return .empty
+    }
 }
 
 private final class AudioCleanupCoordinatorTestRoot: @unchecked Sendable {
@@ -363,6 +898,7 @@ private final class AudioCleanupCoordinatorFixture: @unchecked Sendable {
             operationGateIdentity: context.operationGate.identity,
             expectedPendingStoreIdentity:
                 context.pendingRecordingStoreIdentity,
+            retryLiveOwnerState: context.failedHistoryRetryState,
             repositoryGuard: context.repositoryGuard,
             mutationInterlock: context.failedHistoryMutationInterlock,
             now: { now }
@@ -405,6 +941,7 @@ private final class AudioCleanupCoordinatorFixture: @unchecked Sendable {
             failedHistoryTransferState: context.failedHistoryTransferState,
             failedHistoryAudioCleanupState:
                 context.failedHistoryAudioCleanupState,
+            failedHistoryRetryState: context.failedHistoryRetryState,
             ownerIdentity: context.ownerIdentity,
             repositoryIdentityState: context.repositoryIdentityState,
             repositoryRegistration:
@@ -426,6 +963,21 @@ private final class AudioCleanupCoordinatorFixture: @unchecked Sendable {
     func envelope() throws -> IOSFailedHistoryEnvelope? {
         guard let data = failedFileSystem.file?.data else { return nil }
         return try IOSFailedHistoryWireCodec.decode(data)
+    }
+
+    func filteredEntries() async throws -> [IOSFailedHistoryEntry] {
+        let context = context
+        let failedHistoryStore = failedHistoryStore
+        return try await context.operationGate.perform { lease in
+            let state = try #require(try await context.policyStore.load())
+            let receipt = try await context.policyStore.confirm(
+                expected: IOSHistoryPolicyExpectation(state: state)
+            )
+            return try await failedHistoryStore.loadPolicyFilteredEntries(
+                using: receipt,
+                operationLeaseAuthorization: lease
+            )
+        }
     }
 }
 

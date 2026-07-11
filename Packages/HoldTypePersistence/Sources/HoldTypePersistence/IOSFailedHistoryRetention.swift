@@ -3,6 +3,7 @@ import Foundation
 enum IOSFailedHistoryRowAudioValidationPurpose: Equatable, Sendable {
     case delete
     case retention(IOSPendingFailedHistoryTransferPreparation)
+    case policyCutover(IOSHistoryPolicyReceipt)
 }
 
 struct IOSFailedHistoryRowAudioValidationAuthorization: Equatable, Sendable {

@@ -424,6 +424,37 @@ must:
   journal retirement, stale retry operation, or associated audio tombstone
   remains.
 
+The coordinator order is fixed. After the confirmed policy boundary it first
+finishes failed-History work, then resumes the existing C3 order of accepted-row
+pruning, one canonical outbox head, and standalone delivery inspection. Within
+the failed domain it:
+
+1. resumes only an exact retained failed mutation, transfer, or audio-cleanup
+   phase owned by this cutover;
+2. reconciles the one `pendingJournalRetirement` row through exact Pending
+   metadata absence and advances it to `ready`;
+3. locally cancels one invalidated process-lost `reserved` or
+   `providerDispatched` retry operation;
+4. cleans and retires one already queued canonical audio tombstone head; or,
+   when no tombstone is queued, moves the absolute canonical oldest
+   invalidated `ready` row into one exact tombstone.
+
+Each policy-cleanup call completes at most one of steps 2 through 4 and then
+returns `pendingLocalRecovery`; a later call continues under the already
+committed policy. This keeps filesystem work to one canonical head per pass and
+prevents a failed cleanup from being skipped by a later row. The canonical
+oldest invalidated row is the last matching row in the stable failed-row order.
+Current-generation rows survive a confirmed toggle no-op unchanged. A future
+row or tombstone generation is preserved and fails closed rather than being
+reinterpreted as stale work.
+
+An invalidated `acceptingOutput` retry operation is not generic stale work.
+Until the explicit-Retry checkpoint can compare its exact accepted-delivery
+identity, policy cleanup preserves the row and delivery relation and returns
+`pendingLocalRecovery`. That checkpoint must apply the exact-delivery branch
+defined below; C4.3 never clears `acceptingOutput` merely because process-local
+provider ownership is absent.
+
 The policy commit stays the logical-success boundary. A failed-root or audio
 cleanup error cannot roll back Clear or a toggle. Corrupt, future, unavailable,
 rollback-ambiguous, or foreign-root state remains preserved and pending.
@@ -433,6 +464,25 @@ row has a live retry or playback owner. Root-gate serialization is still
 required: UI gating alone is not storage authority. After process loss there is
 no live provider owner, so local cutover recovery may cancel the durable retry
 operation and continue.
+
+The failed store owns one canonical retry-owner state for its physical root,
+and every coordinator over that store must reuse it. A live retry registers one
+exact store-minted token under an active root lease; a delayed completion from
+an older lease cannot clear a newer registration for the same durable retry.
+Cutover may prove process loss only by atomically moving that canonical state
+from idle to one exact cancellation reservation. While reserved, no retry may
+become live. The reservation is consumed only by a store-minted completion
+after the exact `retryOperation = null` outcome is durably confirmed; commit
+uncertainty retains the reservation. Foreign owner states are rejected, while
+an inactive exact lease cannot wedge cleanup indefinitely.
+
+Every resumed `pendingJournalRetirement` subphase validates the whole current
+failed envelope, including all sibling rows and tombstones, against the already
+committed policy generation. This validation is repeated for each freshly
+inspected or refreshed authority immediately before Pending metadata or failed
+root effects. A future-generation sibling therefore preserves failed bytes,
+Pending state, audio, and policy rather than letting an older retained transfer
+continue through it.
 
 ## Explicit Retry State Machine
 

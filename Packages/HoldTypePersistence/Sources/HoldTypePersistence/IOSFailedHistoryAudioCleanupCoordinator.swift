@@ -42,6 +42,23 @@ actor IOSFailedHistoryAudioCleanupOperationState {
 
     func current() -> IOSFailedHistoryAudioCleanupSemanticPhase? { phase }
 
+    /// Compares the cleanup's stable Store/root identity rather than its lease,
+    /// so policy cutover can recognize the same retained operation after refresh.
+    func retainsCleanup(
+        matching authorization: IOSFailedHistoryAudioCleanupAuthorization
+    ) -> Bool {
+        switch phase {
+        case .removing(let retained):
+            retained.identifiesSameCleanup(as: authorization)
+        case .retiring(let receipt):
+            receipt.authorization.identifiesSameCleanup(as: authorization)
+        case .completed(let completion):
+            completion.identifiesSameCleanup(as: authorization)
+        case nil:
+            false
+        }
+    }
+
     func begin(
         _ authorization: IOSFailedHistoryAudioCleanupAuthorization,
         stateAuthorization:

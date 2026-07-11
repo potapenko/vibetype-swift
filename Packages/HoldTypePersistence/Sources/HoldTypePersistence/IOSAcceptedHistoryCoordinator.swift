@@ -103,6 +103,7 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
         IOSFailedHistoryTransferOperationState
     let failedHistoryAudioCleanupState:
         IOSFailedHistoryAudioCleanupOperationState
+    let failedHistoryRetryState: IOSFailedHistoryRetryLiveOwnerState
     let ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity
     let repositoryIdentityState:
         IOSAcceptedHistoryCoordinatorRepositoryIdentityState
@@ -122,6 +123,8 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
             AudioToolboxMediaValidationWorkerGate()
         let failedHistoryMutationInterlock =
             IOSFailedHistoryMutationInterlock()
+        let failedHistoryRetryState =
+            IOSFailedHistoryRetryLiveOwnerState()
         let deliveryStoreIdentity = IOSAcceptedOutputDeliveryStoreIdentity()
         let outboxStoreIdentity = IOSAcceptedHistoryOutboxStoreIdentity()
         let repositoryIdentityState =
@@ -151,6 +154,7 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
             applicationSupportDirectoryURL: applicationSupportDirectoryURL,
             capabilityOwnerIdentity: capabilityOwnerIdentity,
             expectedPendingStoreIdentity: pendingRecordingStoreIdentity,
+            retryLiveOwnerState: failedHistoryRetryState,
             repositoryGuard: repositoryGuard,
             mutationInterlock: failedHistoryMutationInterlock
         )
@@ -198,6 +202,7 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
             IOSFailedHistoryTransferOperationState()
         failedHistoryAudioCleanupState =
             IOSFailedHistoryAudioCleanupOperationState()
+        self.failedHistoryRetryState = failedHistoryRetryState
         self.repositoryIdentityState = repositoryIdentityState
 
         let pendingGateBindingAccepted =
@@ -212,6 +217,10 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
             failedHistoryStore.bindOperationGateIdentity(
                 operationGate.identity
             )
+        let failedRetryStateBindingAccepted =
+            failedHistoryStore.bindRetryLiveOwnerStateIdentity(
+                failedHistoryRetryState.identity
+            )
         let outboxGateBindingAccepted =
             outboxStore.bindOperationGateIdentity(operationGate.identity)
         let deliveryGateBindingAccepted =
@@ -219,6 +228,7 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
         if !pendingGateBindingAccepted
             || !pendingFailedBindingAccepted
             || !failedGateBindingAccepted
+            || !failedRetryStateBindingAccepted
             || !outboxGateBindingAccepted
             || !deliveryGateBindingAccepted {
             repositoryIdentityState.markConflicted()
@@ -821,6 +831,7 @@ public actor IOSAcceptedHistoryCoordinator {
         IOSFailedHistoryTransferOperationState
     let failedHistoryAudioCleanupState:
         IOSFailedHistoryAudioCleanupOperationState
+    let failedHistoryRetryState: IOSFailedHistoryRetryLiveOwnerState
     let failedHistoryMutationInterlock: IOSFailedHistoryMutationInterlock
     let ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity
     let repositoryIdentityState:
@@ -849,6 +860,7 @@ public actor IOSAcceptedHistoryCoordinator {
         failedHistoryTransferState = context.failedHistoryTransferState
         failedHistoryAudioCleanupState =
             context.failedHistoryAudioCleanupState
+        failedHistoryRetryState = context.failedHistoryRetryState
         failedHistoryMutationInterlock =
             context.failedHistoryMutationInterlock
         ownerIdentity = context.ownerIdentity
@@ -874,6 +886,8 @@ public actor IOSAcceptedHistoryCoordinator {
         let identityState =
             IOSAcceptedHistoryCoordinatorRepositoryIdentityState()
         let operationGate = IOSPersistenceOperationGate()
+        let failedHistoryRetryState =
+            failedHistoryStore.retryLiveOwnerState
         let pendingGateBindingAccepted = pendingRecordingStore?
             .bindOperationGateIdentity(operationGate.identity) ?? true
         let pendingFailedBindingAccepted = pendingRecordingStore.map {
@@ -884,6 +898,10 @@ public actor IOSAcceptedHistoryCoordinator {
         let failedGateBindingAccepted =
             failedHistoryStore.bindOperationGateIdentity(
                 operationGate.identity
+            )
+        let failedRetryStateBindingAccepted =
+            failedHistoryStore.bindRetryLiveOwnerStateIdentity(
+                failedHistoryRetryState.identity
             )
         let outboxGateBindingAccepted =
             outboxStore.bindOperationGateIdentity(operationGate.identity)
@@ -906,6 +924,7 @@ public actor IOSAcceptedHistoryCoordinator {
             IOSFailedHistoryTransferOperationState()
         failedHistoryAudioCleanupState =
             IOSFailedHistoryAudioCleanupOperationState()
+        self.failedHistoryRetryState = failedHistoryRetryState
         failedHistoryMutationInterlock =
             failedHistoryStore.mutationInterlock
         ownerIdentity = capabilityOwnerIdentity
@@ -914,6 +933,7 @@ public actor IOSAcceptedHistoryCoordinator {
         if !pendingGateBindingAccepted
             || !pendingFailedBindingAccepted
             || !failedGateBindingAccepted
+            || !failedRetryStateBindingAccepted
             || !outboxGateBindingAccepted
             || !deliveryGateBindingAccepted
             || (pendingRecordingStore.map {
@@ -969,6 +989,8 @@ public actor IOSAcceptedHistoryCoordinator {
         failedHistoryAudioCleanupState:
             IOSFailedHistoryAudioCleanupOperationState =
                 IOSFailedHistoryAudioCleanupOperationState(),
+        failedHistoryRetryState:
+            IOSFailedHistoryRetryLiveOwnerState? = nil,
         ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity? = nil,
         repositoryIdentityState:
             IOSAcceptedHistoryCoordinatorRepositoryIdentityState =
@@ -978,6 +1000,8 @@ public actor IOSAcceptedHistoryCoordinator {
     ) {
         let capabilityOwnerIdentity = ownerIdentity
             ?? policyStore.capabilityOwnerIdentity
+        let failedHistoryRetryState = failedHistoryRetryState
+            ?? failedHistoryStore.retryLiveOwnerState
         let pendingGateBindingAccepted = pendingRecordingStore?
             .bindOperationGateIdentity(operationGate.identity) ?? true
         let pendingFailedBindingAccepted = pendingRecordingStore.map {
@@ -988,6 +1012,10 @@ public actor IOSAcceptedHistoryCoordinator {
         let failedGateBindingAccepted =
             failedHistoryStore.bindOperationGateIdentity(
                 operationGate.identity
+            )
+        let failedRetryStateBindingAccepted =
+            failedHistoryStore.bindRetryLiveOwnerStateIdentity(
+                failedHistoryRetryState.identity
             )
         let outboxGateBindingAccepted =
             outboxStore.bindOperationGateIdentity(operationGate.identity)
@@ -1008,6 +1036,7 @@ public actor IOSAcceptedHistoryCoordinator {
         self.failedHistoryTransferState = failedHistoryTransferState
         self.failedHistoryAudioCleanupState =
             failedHistoryAudioCleanupState
+        self.failedHistoryRetryState = failedHistoryRetryState
         self.failedHistoryMutationInterlock =
             failedHistoryStore.mutationInterlock
         self.ownerIdentity = capabilityOwnerIdentity
@@ -1016,6 +1045,7 @@ public actor IOSAcceptedHistoryCoordinator {
         if !pendingGateBindingAccepted
             || !pendingFailedBindingAccepted
             || !failedGateBindingAccepted
+            || !failedRetryStateBindingAccepted
             || !outboxGateBindingAccepted
             || !deliveryGateBindingAccepted
             || (pendingRecordingStore.map {
