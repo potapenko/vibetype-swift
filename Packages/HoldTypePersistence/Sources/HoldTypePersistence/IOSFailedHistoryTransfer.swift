@@ -815,28 +815,6 @@ protocol IOSPendingRecordingFailedOwnershipInspecting: Sendable {
     ) async throws -> IOSFailedHistoryPendingOwnershipAbsenceProof
 }
 
-extension IOSPendingRecordingFailedOwnershipInspecting {
-    func sealProtectedAudioInventory(
-        expectedPendingStoreIdentity: IOSPendingRecordingStoreIdentity,
-        operationLeaseAuthorization:
-            IOSPersistenceOperationLeaseAuthorization
-    ) async throws -> IOSFailedHistoryProtectedAudioInventory {
-        _ = expectedPendingStoreIdentity
-        _ = operationLeaseAuthorization
-        throw IOSFailedHistoryError.compareAndSwapFailed
-    }
-
-    func revalidateProtectedAudioInventory(
-        _ inventory: IOSFailedHistoryProtectedAudioInventory,
-        operationLeaseAuthorization:
-            IOSPersistenceOperationLeaseAuthorization
-    ) async throws {
-        _ = inventory
-        _ = operationLeaseAuthorization
-        throw IOSFailedHistoryError.compareAndSwapFailed
-    }
-}
-
 struct IOSFailedHistoryTransferRecoveryInspection: Equatable, Sendable {
     let failedSource: IOSFailedHistoryJournalSnapshot?
     let failedStoreIdentity: IOSFailedHistoryStoreIdentity

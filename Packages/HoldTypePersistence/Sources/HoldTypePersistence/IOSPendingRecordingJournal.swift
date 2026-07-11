@@ -257,6 +257,18 @@ struct IOSPendingRecordingJournalMetadataSnapshot:
         self.recording = recording
         self.fileRevision = fileRevision
     }
+
+    #if DEBUG
+    init(
+        testingRecording: IOSPendingRecording,
+        testingRevision: UInt64
+    ) {
+        recording = testingRecording
+        fileRevision = IOSPendingRecordingJournalFileRevision(
+            testingToken: testingRevision
+        )
+    }
+    #endif
 }
 
 struct IOSPendingRecordingJournalDirectoryIdentity:

@@ -43,16 +43,17 @@ struct IOSFailedHistoryStoreTests {
     @Test func protectedAudioInventorySealsCanonicalRowsAndTombstones()
         async throws {
         let registry = IOSAcceptedHistoryCoordinatorProcessContextRegistry()
-        let root = FileManager.default.temporaryDirectory
+        let parent = FileManager.default.temporaryDirectory
             .appendingPathComponent(
                 "failed-audio-inventory-\(UUID().uuidString)",
                 isDirectory: true
             )
+        let root = parent.appendingPathComponent("root", isDirectory: true)
         try FileManager.default.createDirectory(
             at: root,
-            withIntermediateDirectories: false
+            withIntermediateDirectories: true
         )
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: parent) }
         let context = registry.context(for: root)
         let row = try failedHistoryTestEntry(
             index: 30,
@@ -116,16 +117,17 @@ struct IOSFailedHistoryStoreTests {
     @Test func protectedAudioInventoryRejectsForeignStaleAndChangedState()
         async throws {
         let registry = IOSAcceptedHistoryCoordinatorProcessContextRegistry()
-        let root = FileManager.default.temporaryDirectory
+        let parent = FileManager.default.temporaryDirectory
             .appendingPathComponent(
                 "failed-audio-inventory-revalidation-\(UUID().uuidString)",
                 isDirectory: true
             )
+        let root = parent.appendingPathComponent("root", isDirectory: true)
         try FileManager.default.createDirectory(
             at: root,
-            withIntermediateDirectories: false
+            withIntermediateDirectories: true
         )
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: parent) }
         let context = registry.context(for: root)
 
         let inventory = try await context.operationGate.perform { lease in

@@ -38,12 +38,15 @@ protocol IOSPendingRecordingPublishedAudioLease: AnyObject, Sendable {
 }
 
 protocol IOSPendingRecordingAudioFileSystem: Sendable {
+    #if DEBUG
     func requireEmptyNamespace() async throws
+    #endif
 
     func validateProtectedAudioNamespace(
-        _ inventory: IOSFailedHistoryProtectedAudioInventory
+        _ inventory: IOSProtectedAudioNamespaceInventory
     ) async throws
 
+    #if DEBUG
     func publishProtectedCopy(
         from source: AudioRecordingArtifact,
         attemptID: UUID,
@@ -57,12 +60,13 @@ protocol IOSPendingRecordingAudioFileSystem: Sendable {
         durationMilliseconds: Int64,
         expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
     ) async throws -> any IOSPendingRecordingPublishedAudioLease
+    #endif
     func publishProtectedCopy(
         from source: AudioRecordingArtifact,
         attemptID: UUID,
         format: IOSPendingRecordingAudioFormat,
         durationMilliseconds: Int64,
-        inventory: IOSFailedHistoryProtectedAudioInventory
+        inventory: IOSProtectedAudioNamespaceInventory
     ) async throws -> any IOSPendingRecordingPublishedAudioLease
 
     func validatePublishedAudio(
@@ -92,13 +96,7 @@ protocol IOSPendingRecordingAudioFileSystem: Sendable {
 }
 
 extension IOSPendingRecordingAudioFileSystem {
-    func validateProtectedAudioNamespace(
-        _ inventory: IOSFailedHistoryProtectedAudioInventory
-    ) async throws {
-        _ = inventory
-        throw IOSPendingRecordingAudioFileSystemError.namespaceNotEmpty
-    }
-
+    #if DEBUG
     func publishProtectedCopy(
         from source: AudioRecordingArtifact,
         attemptID: UUID,
@@ -114,21 +112,7 @@ extension IOSPendingRecordingAudioFileSystem {
             durationMilliseconds: durationMilliseconds
         )
     }
-
-    func publishProtectedCopy(
-        from source: AudioRecordingArtifact,
-        attemptID: UUID,
-        format: IOSPendingRecordingAudioFormat,
-        durationMilliseconds: Int64,
-        inventory: IOSFailedHistoryProtectedAudioInventory
-    ) async throws -> any IOSPendingRecordingPublishedAudioLease {
-        _ = source
-        _ = attemptID
-        _ = format
-        _ = durationMilliseconds
-        _ = inventory
-        throw IOSPendingRecordingAudioFileSystemError.namespaceNotEmpty
-    }
+    #endif
 
     func removePublishedAudioIfPresent(
         relativeIdentifier: String,
@@ -900,6 +884,7 @@ final class FoundationIOSPendingRecordingAudioFileSystem:
         self.queue = queue
     }
 
+    #if DEBUG
     func requireEmptyNamespace() async throws {
         try await runQueued(deadlineNanoseconds: Self.copyDeadlineNanoseconds) { control in
             guard let directory = try self.openPendingDirectory(
@@ -912,9 +897,10 @@ final class FoundationIOSPendingRecordingAudioFileSystem:
             try self.requireNoEntries(in: directory, control: control)
         }
     }
+    #endif
 
     func validateProtectedAudioNamespace(
-        _ inventory: IOSFailedHistoryProtectedAudioInventory
+        _ inventory: IOSProtectedAudioNamespaceInventory
     ) async throws {
         try await runQueued(
             deadlineNanoseconds: Self.copyDeadlineNanoseconds
@@ -952,6 +938,7 @@ final class FoundationIOSPendingRecordingAudioFileSystem:
         }
     }
 
+    #if DEBUG
     func publishProtectedCopy(
         from source: AudioRecordingArtifact,
         attemptID: UUID,
@@ -989,13 +976,14 @@ final class FoundationIOSPendingRecordingAudioFileSystem:
             )
         }
     }
+    #endif
 
     func publishProtectedCopy(
         from source: AudioRecordingArtifact,
         attemptID: UUID,
         format: IOSPendingRecordingAudioFormat,
         durationMilliseconds: Int64,
-        inventory: IOSFailedHistoryProtectedAudioInventory
+        inventory: IOSProtectedAudioNamespaceInventory
     ) async throws -> any IOSPendingRecordingPublishedAudioLease {
         try await runQueued(
             deadlineNanoseconds: Self.copyDeadlineNanoseconds,
@@ -1173,7 +1161,7 @@ fileprivate extension FoundationIOSPendingRecordingAudioFileSystem {
     }
 
     func protectedAudioExpectations(
-        for inventory: IOSFailedHistoryProtectedAudioInventory
+        for inventory: IOSProtectedAudioNamespaceInventory
     ) throws -> [ProtectedAudioExpectation] {
         guard inventory.artifacts.count
                 <= Self.maximumProtectedAudioFinalCount else {
@@ -1242,7 +1230,7 @@ fileprivate extension FoundationIOSPendingRecordingAudioFileSystem {
     }
 
     func requireInventoryAuthority(
-        _ inventory: IOSFailedHistoryProtectedAudioInventory,
+        _ inventory: IOSProtectedAudioNamespaceInventory,
         control: PendingRecordingOperationControl
     ) throws {
         try control.checkpoint()
@@ -1278,7 +1266,7 @@ fileprivate extension FoundationIOSPendingRecordingAudioFileSystem {
     func validateProtectedAudioNamespace(
         _ expectations: [ProtectedAudioExpectation],
         in directory: DirectoryHandle,
-        inventory: IOSFailedHistoryProtectedAudioInventory,
+        inventory: IOSProtectedAudioNamespaceInventory,
         control: PendingRecordingOperationControl,
         heldAudio: HeldProtectedAudioExpectation? = nil
     ) throws {
@@ -1575,7 +1563,7 @@ fileprivate extension FoundationIOSPendingRecordingAudioFileSystem {
         format: IOSPendingRecordingAudioFormat,
         durationMilliseconds: Int64,
         expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
-        inventory: IOSFailedHistoryProtectedAudioInventory?,
+        inventory: IOSProtectedAudioNamespaceInventory?,
         control: PendingRecordingOperationControl
     ) throws -> any IOSPendingRecordingPublishedAudioLease {
         guard durationMilliseconds > 0, durationMilliseconds < 300_000,

@@ -341,7 +341,7 @@ actor IOSFailedHistoryStore: IOSPendingRecordingFailedOwnershipInspecting {
         expectedPendingStoreIdentity: IOSPendingRecordingStoreIdentity,
         operationLeaseAuthorization:
             IOSPersistenceOperationLeaseAuthorization
-    ) throws -> IOSFailedHistoryProtectedAudioInventory {
+    ) async throws -> IOSFailedHistoryProtectedAudioInventory {
         try requireActiveLease(operationLeaseAuthorization)
         try requireNoMutationUncertainty()
         guard transferMutationIntent == nil,
@@ -372,7 +372,7 @@ actor IOSFailedHistoryStore: IOSPendingRecordingFailedOwnershipInspecting {
         _ inventory: IOSFailedHistoryProtectedAudioInventory,
         operationLeaseAuthorization:
             IOSPersistenceOperationLeaseAuthorization
-    ) throws {
+    ) async throws {
         try requireActiveLease(operationLeaseAuthorization)
         try requireNoMutationUncertainty()
         guard transferMutationIntent == nil,

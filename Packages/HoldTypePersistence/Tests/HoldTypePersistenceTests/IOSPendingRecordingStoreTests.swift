@@ -315,6 +315,68 @@ struct IOSPendingRecordingStoreTests {
         #expect(!events.values.contains("audio.namespace.empty"))
     }
 
+    @Test func postPublishInventoryFailureReleasesCreatorLease() async throws {
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "pending-inventory-release-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        let root = parent.appendingPathComponent(
+            "ApplicationSupport",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let context = IOSAcceptedHistoryCoordinatorProcessContextRegistry()
+            .context(for: root)
+        let inspector = FailOnSecondInventoryRevalidationInspector(
+            store: context.failedHistoryStore
+        )
+        let events = PendingStoreEventLog()
+        let journal = FakePendingRecordingJournal(events: events)
+        let audio = FakePendingRecordingAudioFileSystem(events: events)
+        let store = IOSPendingRecordingStore(
+            journal: journal,
+            audioFileSystem: audio,
+            operationGate: context.operationGate,
+            liveOwnerRegistry: context.pendingRecordingLiveOwnerRegistry,
+            capabilityOwnerIdentity: context.ownerIdentity,
+            storeIdentity: context.pendingRecordingStoreIdentity,
+            repositoryGuard: context.repositoryGuard,
+            failedHistoryMutationInterlock:
+                context.failedHistoryMutationInterlock,
+            failedOwnershipInspector: inspector,
+            now: { Date(timeIntervalSince1970: 1_752_150_896.789) }
+        )
+        let preparation = try IOSPendingRecordingPreparation(
+            attemptID: UUID(
+                uuidString: "11234567-89AB-CDEF-8123-456789ABCDEF"
+            )!,
+            sourceArtifact: AudioRecordingArtifact(
+                fileURL: URL(fileURLWithPath: "/runtime/source.m4a"),
+                duration: 1.5,
+                byteCount: 12
+            ),
+            initialState: .readyForTranscription,
+            outputIntent: .standard,
+            transcriptionConfiguration: TranscriptionConfiguration(
+                model: "initial-model",
+                language: .english,
+                freeformPrompt: ""
+            )
+        )
+
+        await #expect(throws: IOSPendingRecordingError.localRecoveryPending) {
+            _ = try await store.prepare(preparation)
+        }
+        #expect(audio.publishCallCount == 1)
+        #expect(audio.leaseReleaseCount == 1)
+        #expect(journal.recording == nil)
+    }
+
     @Test func journalFailurePreservesPublishedAudioAndReleasesItsCreatorLock() async {
         let fixture = StoreFixture()
         fixture.journal.createError = .journalWriteFailed
@@ -1446,12 +1508,71 @@ private final class StoreFixture: @unchecked Sendable {
     }
 }
 
+private final class FailOnSecondInventoryRevalidationInspector:
+    IOSPendingRecordingFailedOwnershipInspecting,
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private let store: IOSFailedHistoryStore
+    private var revalidationCount = 0
+
+    var failedStoreIdentity: IOSFailedHistoryStoreIdentity {
+        store.failedStoreIdentity
+    }
+
+    init(store: IOSFailedHistoryStore) {
+        self.store = store
+    }
+
+    func sealProtectedAudioInventory(
+        expectedPendingStoreIdentity: IOSPendingRecordingStoreIdentity,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSFailedHistoryProtectedAudioInventory {
+        try await store.sealProtectedAudioInventory(
+            expectedPendingStoreIdentity: expectedPendingStoreIdentity,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+    }
+
+    func revalidateProtectedAudioInventory(
+        _ inventory: IOSFailedHistoryProtectedAudioInventory,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws {
+        let count = lock.withLock {
+            revalidationCount += 1
+            return revalidationCount
+        }
+        if count == 2 {
+            throw IOSFailedHistoryError.compareAndSwapFailed
+        }
+        try await store.revalidateProtectedAudioInventory(
+            inventory,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+    }
+
+    func provePendingOwnershipAbsent(
+        for pendingKey: IOSFailedHistoryPendingOwnershipKey,
+        expectedPendingStoreIdentity: IOSPendingRecordingStoreIdentity,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSFailedHistoryPendingOwnershipAbsenceProof {
+        try await store.provePendingOwnershipAbsent(
+            for: pendingKey,
+            expectedPendingStoreIdentity: expectedPendingStoreIdentity,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+    }
+}
+
 private final class FakePendingRecordingJournal:
     IOSPendingRecordingJournalStoring,
     @unchecked Sendable {
     private let lock = NSLock()
     private let events: PendingStoreEventLog
     private var storedRecording: IOSPendingRecording?
+    private var storedRevision: UInt64 = 1
     private var storedCreateError: IOSPendingRecordingError?
     private var storedReplaceError: IOSPendingRecordingError?
     private var storedReplaceErrorCallNumber: Int?
@@ -1461,7 +1582,12 @@ private final class FakePendingRecordingJournal:
 
     var recording: IOSPendingRecording? {
         get { lock.withLock { storedRecording } }
-        set { lock.withLock { storedRecording = newValue } }
+        set {
+            lock.withLock {
+                storedRecording = newValue
+                storedRevision &+= 1
+            }
+        }
     }
 
     var createError: IOSPendingRecordingError? {
@@ -1493,6 +1619,20 @@ private final class FakePendingRecordingJournal:
         lock.withLock { storedRecording }
     }
 
+    func loadMetadataSnapshot(
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
+    ) throws -> IOSPendingRecordingJournalMetadataSnapshot? {
+        _ = authorization
+        return lock.withLock {
+            storedRecording.map {
+                IOSPendingRecordingJournalMetadataSnapshot(
+                    testingRecording: $0,
+                    testingRevision: storedRevision
+                )
+            }
+        }
+    }
+
     func create(_ recording: IOSPendingRecording) throws {
         events.append("journal.create")
         try lock.withLock {
@@ -1503,6 +1643,7 @@ private final class FakePendingRecordingJournal:
                 throw IOSPendingRecordingError.pendingSlotOccupied
             }
             storedRecording = recording
+            storedRevision &+= 1
         }
     }
 
@@ -1521,10 +1662,12 @@ private final class FakePendingRecordingJournal:
                 || storedReplaceErrorCallNumber == storedReplaceCallCount {
                 if storedReplaceCommitsBeforeError {
                     storedRecording = recording
+                    storedRevision &+= 1
                 }
                 throw storedReplaceError
             }
             storedRecording = recording
+            storedRevision &+= 1
         }
     }
 
@@ -1541,6 +1684,7 @@ private final class FakePendingRecordingJournal:
                 throw IOSPendingRecordingError.compareAndSwapFailed
             }
             self.storedRecording = nil
+            storedRevision &+= 1
             return true
         }
     }
@@ -1607,7 +1751,7 @@ private final class FakePendingRecordingAudioFileSystem:
     }
 
     func validateProtectedAudioNamespace(
-        _ inventory: IOSFailedHistoryProtectedAudioInventory
+        _ inventory: IOSProtectedAudioNamespaceInventory
     ) async throws {
         _ = inventory
         events.append("audio.inventory.validate")
@@ -1656,7 +1800,7 @@ private final class FakePendingRecordingAudioFileSystem:
         attemptID: UUID,
         format: IOSPendingRecordingAudioFormat,
         durationMilliseconds: Int64,
-        inventory: IOSFailedHistoryProtectedAudioInventory
+        inventory: IOSProtectedAudioNamespaceInventory
     ) async throws -> any IOSPendingRecordingPublishedAudioLease {
         _ = inventory
         events.append("audio.inventory.publish")

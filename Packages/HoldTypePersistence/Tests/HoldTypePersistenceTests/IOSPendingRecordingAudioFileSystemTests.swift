@@ -544,6 +544,311 @@ struct IOSPendingRecordingAudioFileSystemTests {
         }
     }
 
+    @Test func sealedInventoryValidatesRowsAndSkipsTombstoneMediaDecode()
+        async throws {
+        let media = FakePendingRecordingMediaValidator(durations: [1_500])
+        let fixture = try makeInventoryFixture(media: media)
+        defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
+        let rowBytes = [UInt8](repeating: 0x41, count: 40)
+        let tombstoneBytes = [UInt8](repeating: 0x42, count: 24)
+        let tombstoneID = UUID(
+            uuidString: "11111111-2222-3333-4444-555555555555"
+        )!
+        let rowRelative = relativeIdentifier(for: attemptID, format: .m4a)
+        let tombstoneRelative = relativeIdentifier(
+            for: tombstoneID,
+            format: .wav
+        )
+        fixture.adapter.installFinalAudio(
+            named: URL(fileURLWithPath: rowRelative).lastPathComponent,
+            bytes: rowBytes,
+            configured: true
+        )
+        fixture.adapter.installFinalAudio(
+            named: URL(fileURLWithPath: tombstoneRelative).lastPathComponent,
+            bytes: tombstoneBytes,
+            configured: true
+        )
+
+        try await fixture.context.operationGate.perform { authorization in
+            let inventory = IOSProtectedAudioNamespaceInventory(
+                testingRepositoryBinding: fixture.context.repositoryBinding,
+                operationLeaseAuthorization: authorization,
+                artifacts: [
+                    .row(
+                        attemptID: attemptID,
+                        relativeIdentifier: rowRelative,
+                        durationMilliseconds: 1_500,
+                        byteCount: Int64(rowBytes.count)
+                    ),
+                    .tombstone(
+                        attemptID: tombstoneID,
+                        relativeIdentifier: tombstoneRelative,
+                        byteCount: Int64(tombstoneBytes.count)
+                    ),
+                ]
+            )
+            try await fixture.fileSystem.validateProtectedAudioNamespace(
+                inventory
+            )
+        }
+
+        #expect(media.requestedTimeouts == [2_000_000_000])
+        #expect(fixture.adapter.events.filter { $0 == "flock" }.count == 2)
+        #expect(Set(fixture.adapter.pendingNames) == [
+            URL(fileURLWithPath: rowRelative).lastPathComponent,
+            URL(fileURLWithPath: tombstoneRelative).lastPathComponent,
+        ])
+    }
+
+    @Test func sealedInventoryRejectsUnknownStagingAndMissingExpectedFiles()
+        async throws {
+        let fixture = try makeInventoryFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
+        fixture.adapter.installFinalAudio(
+            named: ".recording-staging-v1-foreign.m4a",
+            bytes: [1],
+            configured: false
+        )
+
+        await #expect(
+            throws: IOSPendingRecordingAudioFileSystemError.namespaceNotEmpty
+        ) {
+            try await fixture.context.operationGate.perform { authorization in
+                let inventory = IOSProtectedAudioNamespaceInventory(
+                    testingRepositoryBinding:
+                        fixture.context.repositoryBinding,
+                    operationLeaseAuthorization: authorization,
+                    artifacts: []
+                )
+                try await fixture.fileSystem.validateProtectedAudioNamespace(
+                    inventory
+                )
+            }
+        }
+        #expect(!fixture.adapter.events.contains("unlink"))
+
+        let missingFixture = try makeInventoryFixture()
+        defer { try? FileManager.default.removeItem(at: missingFixture.rootURL) }
+        let missingRelative = relativeIdentifier(
+            for: attemptID,
+            format: .m4a
+        )
+        await #expect(
+            throws: IOSPendingRecordingAudioFileSystemError
+                .protectedAudioMissing
+        ) {
+            try await missingFixture.context.operationGate.perform {
+                authorization in
+                let inventory = IOSProtectedAudioNamespaceInventory(
+                    testingRepositoryBinding:
+                        missingFixture.context.repositoryBinding,
+                    operationLeaseAuthorization: authorization,
+                    artifacts: [
+                        .row(
+                            attemptID: attemptID,
+                            relativeIdentifier: missingRelative,
+                            durationMilliseconds: 1_500,
+                            byteCount: 24
+                        ),
+                    ]
+                )
+                try await missingFixture.fileSystem
+                    .validateProtectedAudioNamespace(inventory)
+            }
+        }
+    }
+
+    @Test func sealedInventoryStopsAtTheOverflowSentinel() async throws {
+        let fixture = try makeInventoryFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
+        for index in 0..<12 {
+            fixture.adapter.installFinalAudio(
+                named: "foreign-\(index).tmp",
+                bytes: [UInt8(index)],
+                configured: false
+            )
+        }
+
+        await #expect(
+            throws: IOSPendingRecordingAudioFileSystemError.namespaceNotEmpty
+        ) {
+            try await fixture.context.operationGate.perform { authorization in
+                let inventory = IOSProtectedAudioNamespaceInventory(
+                    testingRepositoryBinding:
+                        fixture.context.repositoryBinding,
+                    operationLeaseAuthorization: authorization,
+                    artifacts: []
+                )
+                try await fixture.fileSystem.validateProtectedAudioNamespace(
+                    inventory
+                )
+            }
+        }
+
+        // Dot entries plus eleven accepted finals and one overflow sentinel.
+        #expect(
+            fixture.adapter.events.filter { $0 == "readdir" }.count == 14
+        )
+        #expect(fixture.adapter.pendingNames.count == 12)
+    }
+
+    @Test func inventoryPublicationScansBeforeAndAfterOneHeldPublish()
+        async throws {
+        let sourceBytes = [UInt8](repeating: 0x63, count: 64)
+        let media = FakePendingRecordingMediaValidator(
+            durations: [1_500, 1_500]
+        )
+        let fixture = try makeInventoryFixture(
+            sourceBytes: sourceBytes,
+            media: media
+        )
+        defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
+        let tombstoneID = UUID(
+            uuidString: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        )!
+        let tombstoneRelative = relativeIdentifier(
+            for: tombstoneID,
+            format: .wav
+        )
+        let tombstoneBytes = [UInt8](repeating: 0x64, count: 20)
+        fixture.adapter.installFinalAudio(
+            named: URL(fileURLWithPath: tombstoneRelative).lastPathComponent,
+            bytes: tombstoneBytes,
+            configured: true
+        )
+
+        let lease = try await fixture.context.operationGate.perform {
+            authorization in
+            let inventory = IOSProtectedAudioNamespaceInventory(
+                testingRepositoryBinding: fixture.context.repositoryBinding,
+                operationLeaseAuthorization: authorization,
+                artifacts: [
+                    .tombstone(
+                        attemptID: tombstoneID,
+                        relativeIdentifier: tombstoneRelative,
+                        byteCount: Int64(tombstoneBytes.count)
+                    ),
+                ]
+            )
+            return try await fixture.fileSystem.publishProtectedCopy(
+                from: artifact(byteCount: sourceBytes.count),
+                attemptID: attemptID,
+                format: .m4a,
+                durationMilliseconds: 1_500,
+                inventory: inventory
+            )
+        }
+        defer { lease.release() }
+
+        #expect(Set(fixture.adapter.pendingNames) == [
+            finalName,
+            URL(fileURLWithPath: tombstoneRelative).lastPathComponent,
+        ])
+        #expect(media.requestedTimeouts == [
+            2_000_000_000,
+            2_000_000_000,
+        ])
+        let events = fixture.adapter.events
+        let firstScan = try #require(events.firstIndex(of: "readdir"))
+        let stagingCreate = try #require(events.firstIndex(where: {
+            $0.hasPrefix("openat:.recording-staging-v1-")
+        }))
+        let publish = try #require(events.firstIndex(of: "publish-exclusive"))
+        let lastScan = try #require(events.lastIndex(of: "readdir"))
+        #expect(firstScan < stagingCreate)
+        #expect(publish < lastScan)
+    }
+
+    @Test func expiredInventoryLeaseFailsBeforeNamespaceMutation() async throws {
+        let fixture = try makeInventoryFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
+        let inventory = try await fixture.context.operationGate.perform {
+            authorization in
+            IOSProtectedAudioNamespaceInventory(
+                testingRepositoryBinding: fixture.context.repositoryBinding,
+                operationLeaseAuthorization: authorization,
+                artifacts: []
+            )
+        }
+
+        await #expect(
+            throws: IOSPendingRecordingAudioFileSystemError.namespaceUnavailable
+        ) {
+            try await fixture.fileSystem.validateProtectedAudioNamespace(
+                inventory
+            )
+        }
+        #expect(!fixture.adapter.events.contains(where: {
+            $0.hasPrefix("mkdir:")
+        }))
+    }
+
+    @Test func compositeInventoryRejectsDuplicateOwnershipBeforeIO()
+        async throws {
+        let fixture = try makeInventoryFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
+        let m4aRelative = relativeIdentifier(for: attemptID, format: .m4a)
+        let wavRelative = relativeIdentifier(for: attemptID, format: .wav)
+
+        await #expect(
+            throws: IOSPendingRecordingAudioFileSystemError
+                .protectedAudioInvalid
+        ) {
+            try await fixture.context.operationGate.perform { authorization in
+                let inventory = IOSProtectedAudioNamespaceInventory(
+                    testingRepositoryBinding:
+                        fixture.context.repositoryBinding,
+                    operationLeaseAuthorization: authorization,
+                    artifacts: [
+                        .row(
+                            attemptID: attemptID,
+                            relativeIdentifier: m4aRelative,
+                            durationMilliseconds: 1_500,
+                            byteCount: 24
+                        ),
+                        .row(
+                            attemptID: attemptID,
+                            relativeIdentifier: wavRelative,
+                            durationMilliseconds: 1_500,
+                            byteCount: 24
+                        ),
+                    ]
+                )
+                try await fixture.fileSystem.validateProtectedAudioNamespace(
+                    inventory
+                )
+            }
+        }
+        #expect(fixture.adapter.events.isEmpty)
+    }
+
+    @Test func compositeInventoryRejectsMismatchedPhysicalRootBeforeMutation()
+        async throws {
+        let fixture = try makeInventoryFixture(rootIdentityMismatch: true)
+        defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
+
+        await #expect(
+            throws: IOSPendingRecordingAudioFileSystemError
+                .repositoryIdentityConflict
+        ) {
+            try await fixture.context.operationGate.perform { authorization in
+                let inventory = IOSProtectedAudioNamespaceInventory(
+                    testingRepositoryBinding:
+                        fixture.context.repositoryBinding,
+                    operationLeaseAuthorization: authorization,
+                    artifacts: []
+                )
+                try await fixture.fileSystem.validateProtectedAudioNamespace(
+                    inventory
+                )
+            }
+        }
+        #expect(!fixture.adapter.events.contains(where: {
+            $0.hasPrefix("mkdir:") || $0 == "publish-exclusive"
+        }))
+    }
+
     @Test func liveDarwinAndAudioToolboxRoundTripAValidWAV() async throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(
@@ -778,6 +1083,76 @@ struct IOSPendingRecordingAudioFileSystemTests {
             mediaValidator: media,
             monotonicClock: clock,
             queue: DispatchQueue(label: "pending-recording-audio-tests")
+        )
+    }
+
+    private struct InventoryFixture {
+        let rootURL: URL
+        let context: IOSAcceptedHistoryCoordinatorProcessContext
+        let adapter: SimulatedPendingRecordingPOSIXAdapter
+        let fileSystem: FoundationIOSPendingRecordingAudioFileSystem
+    }
+
+    private func makeInventoryFixture(
+        sourceBytes: [UInt8] = [UInt8](repeating: 0x61, count: 64),
+        media: FakePendingRecordingMediaValidator =
+            FakePendingRecordingMediaValidator(durations: [1_500]),
+        rootIdentityMismatch: Bool = false
+    ) throws -> InventoryFixture {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "holdtype-inventory-audio-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: rootURL,
+            withIntermediateDirectories: true
+        )
+        var rootStatus = stat()
+        let didReadRoot = rootURL.withUnsafeFileSystemRepresentation { path in
+            guard let path else { return false }
+            return Darwin.lstat(path, &rootStatus) == 0
+        }
+        guard didReadRoot else {
+            try? FileManager.default.removeItem(at: rootURL)
+            throw CocoaError(.fileReadUnknown)
+        }
+        let registry = IOSAcceptedHistoryCoordinatorProcessContextRegistry()
+        let context = registry.context(for: rootURL)
+        let adapter = SimulatedPendingRecordingPOSIXAdapter(
+            sourceBytes: sourceBytes,
+            applicationSupportPath: rootURL.path,
+            applicationSupportDevice: rootIdentityMismatch
+                ? rootStatus.st_dev &+ 1
+                : rootStatus.st_dev,
+            applicationSupportInode: rootStatus.st_ino
+        )
+        let fileSystem = FoundationIOSPendingRecordingAudioFileSystem(
+            applicationSupportDirectoryURL: rootURL,
+            adapter: adapter,
+            mediaValidator: media,
+            monotonicClock: { 1 },
+            expectedRepositoryRoot:
+                context.repositoryBinding.physicalRootIdentity,
+            queue: DispatchQueue(
+                label: "pending-recording-inventory-audio-tests"
+            )
+        )
+        return InventoryFixture(
+            rootURL: rootURL,
+            context: context,
+            adapter: adapter,
+            fileSystem: fileSystem
+        )
+    }
+
+    private func relativeIdentifier(
+        for attemptID: UUID,
+        format: IOSPendingRecordingAudioFormat
+    ) -> String {
+        IOSPendingRecordingStorageLocation.relativeAudioIdentifier(
+            for: attemptID,
+            format: format
         )
     }
 }
