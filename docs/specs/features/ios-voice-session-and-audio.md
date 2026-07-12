@@ -460,10 +460,12 @@ decision, or compact diagnostic event:
 - `postProcessing` covers output-intent validation plus optional correction,
   local final-text processing, translation, and final accepted-text validation.
   It does not by itself prove that transcription completed.
-- `outputDelivery` begins only after accepted text is available and the
-  containing app is passing a runtime `OutputDeliveryRequest` to its platform
-  output adapter. It does not mean insertion was eligible, attempted,
-  submitted, or confirmed.
+- `outputDelivery` begins only after accepted text is available and the exact
+  Pending owner durably reaches output delivery. It covers app-private accepted-
+  result persistence and, in later milestones, passing a runtime
+  `OutputDeliveryRequest` to a platform adapter. It does not prove that an
+  adapter exists or that insertion was eligible, attempted, submitted, or
+  confirmed.
 
 The stage is runtime attribution, not a state machine or ordered progress
 record. It carries no error, text, identifier, timestamp, output intent,
@@ -479,6 +481,53 @@ For the iOS product flow, a blocked microphone, consent, credential,
 configuration, or storage preflight before capture creates no attempt stage.
 Legacy platform adapters may retain narrower compatibility mappings while P1
 extracts the value, but those mappings do not redefine iOS preflight behavior.
+
+### P4D-1 Payload-Free Processing Progress
+
+- The foreground processor reports progress only as the existing
+  `VoiceAttemptStage`. A progress event contains no text, error, identifier,
+  timestamp, output intent, configuration, retry eligibility, durable owner, or
+  provider authority. It is runtime-only, non-Codable, and never enters a log,
+  journal, App Group, or keyboard surface.
+- A rejected request, invalid preflight, competing busy call, or cancellation
+  before durable transcription admission reports no progress. `transcription`
+  is reported only after the fresh transcription ID and one-shot dispatch are
+  durable; `postProcessing` only after that Pending phase is durable or its
+  same-phase durability confirmation succeeds; and `outputDelivery` only after
+  accepted text exists and that Pending phase is durable or confirmed.
+- Correction, Translation, local cleanup, Usage bookkeeping, and persistence
+  reconciliation create no extra progress cases. Case declaration order remains
+  meaningless and is never a resume algorithm.
+- One processor invocation reports each current semantic stage at most once. A
+  local-recovery invocation first reports its retained coarse stage and may then
+  report only later newly confirmed boundaries. Repeating a stage across two
+  invocations means local resumption, not a repeated provider request. Retained
+  `beginning` work is the exception: it reports nothing until reconciliation
+  confirms the matching durable `transcribing` admission and returns the same
+  live one-shot dispatch. Persisted `transcribing` bytes without that live
+  authority never report progress and move through explicit recovery instead.
+- A local-recovery resolution carries a separate payload-free kind:
+  `processingCheckpoint` while accepted output is not yet being saved, or
+  `savingResult` once final accepted text is retained for output persistence.
+  The coarse stage alone never decides whether Voice presents Retry Local
+  Checkpoint or Retry Saving Result.
+- Once final accepted text exists in retained work, task cancellation preserves
+  the `savingResult` checkpoint or finishes that exact local commit. It never
+  downgrades the attempt to Pending provider Retry and never repeats
+  transcription, correction, or Translation.
+- The nonthrowing reporter is process-internal and presentation-only. It cannot
+  authorize cancellation, Retry, Discard, provider launch, result acceptance, or
+  a durable transition. The processor's returned resolution remains terminal
+  truth. The shared owner cancels the active task itself and rejects late
+  reporter calls with its private operation token.
+- Receipt of current-token `transcription` progress may enable the Cancel
+  Processing control because that event is delayed until durable dispatch
+  admission. The progress value still grants no cancellation authority; only
+  the controller's retained task and private token can be cancelled.
+- Reporter delivery is ordered on the main actor, retained only for the current
+  processor operation, and cleared on every terminal path. The processor
+  rechecks operation identity and cancellation after each actor hop before any
+  later side effect.
 
 ### Runtime Attempt Outcome
 

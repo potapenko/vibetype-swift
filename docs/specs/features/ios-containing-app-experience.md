@@ -154,6 +154,82 @@ The app guides setup in this order:
   app-owned practice draft; it does not copy the text into another scene or
   change the process-owned accepted result.
 
+### P4D-1 Shared Voice Controller
+
+- The app-internal controller has process-lifetime ownership and is never
+  created by a SwiftUI view, scene, keyboard target, or App Group observer. P4D-1
+  proves it against injected fakes; AVFoundation adapters arrive in P4D-2,
+  production composition and scene aggregation in P4D-3, and UI binding in
+  P4D-4.
+- Initialization is passive: it creates no task, reads no Settings, Library,
+  consent, Keychain, microphone, audio session, recording, Pending data, latest
+  result, or provider state. Work begins only from an explicit controller
+  action.
+- Observable presentation keeps separate payload-free values for
+  `VoiceWorkPhase`, optional `VoiceAttemptStage`, optional
+  `VoiceAttemptOutcome`, setup requirement, visible failure, recovery action,
+  and action availability. Accepted text, Settings, Library content,
+  credentials, requests, resolutions, paths, and private operation identities
+  never enter observable state.
+- The controller admits one primary operation: Start Standard or Translate,
+  Pending Retry, Recover Recording, confirmed Discard, or Retry Saving. It
+  binds progress and commands to one private token. Duplicate actions are
+  ignored, and a callback from a cancelled or older token cannot mutate a newer
+  attempt.
+- Start moves inactive to arming. A fake-backed listening event moves to
+  listening. Done is admitted once but remains listening through the configured
+  tail; Cancel Utterance stays available until finalizing begins. Finalizing
+  publishes `recordingFinalization`; durable provider admission moves to
+  processing and the processor's payload-free stage.
+- Cancel Start, Cancel Utterance, and Cancel Processing cancel the exact active
+  task once. They do not optimistically clear shared state. The controller waits
+  for the workflow's durable cleanup or recovery resolution, rejects late
+  callbacks, and only then admits a new Start. Ordinary Start/utterance cancel
+  creates no terminal outcome.
+- A cancelled token can never publish a later `resultReady` or replace the
+  previously confirmed Latest availability. If an injected workflow violates
+  that contract, the controller rejects the late success and exposes blocked
+  local reconciliation instead of guessing that cancellation or acceptance won.
+- Cancel Processing becomes available only after the durable transcription
+  dispatch boundary. It is unavailable after `outputDelivery`, where accepted
+  text already exists and only Saving Result or its local recovery may remain.
+- Result-ready resolution returns active work to inactive and publishes
+  `resultReady` without storing accepted text in the controller. Pending
+  recovery returns inactive with `recoverableFailure` plus Retry/Discard.
+  Source-only recovery exposes its exact Recover/Discard projection. Accepted-
+  output local recovery returns inactive with Saving Result/Retry Saving and
+  never repeats provider work.
+- Blocked setup or an unrecoverable preflight returns inactive with a separate
+  setup/failure projection and no attempt stage or outcome. Too Short, maximum
+  duration, invalid capture, and ordinary cancellation never replace a prior
+  confirmed Latest Result.
+- Resolution projection is exhaustive:
+
+  | Workflow result | Phase / stage / outcome | Recovery and actions |
+  | --- | --- | --- |
+  | accepted `resultReady` | inactive / no stage / `resultReady` | Latest ready; no recovery |
+  | accepted `savingResult` | inactive / `outputDelivery` / no outcome | Saving Result and Retry Saving; prior Latest may remain |
+  | accepted `expired` | inactive / no stage / no outcome | Latest expired; no result actions |
+  | accepted clock rollback | inactive / no stage / no outcome | output recovery blocked until time is trustworthy |
+  | Pending `awaitingRecovery` | inactive / reported failure stage / `recoverableFailure` | Retry and confirmed Discard |
+  | local `processingCheckpoint` | inactive / retained stage / `recoverableFailure` | Retry Local Checkpoint; no completed provider stage repeats |
+  | local `savingResult` | inactive / retained stage / no outcome | Saving Result and Retry Saving; no provider repeat |
+  | blocked or not-started preflight | inactive / no stage / no outcome | owning setup or visible failure; no recovery action |
+  | ordinary Start/utterance cancellation | inactive / no stage / no outcome | no recovery; prior Latest unchanged |
+  | busy competing call | unchanged | current owner and actions unchanged |
+
+- Accepting a new Start clears the prior attempt's stage, outcome, failure, and
+  recovery projection, but never its independently confirmed Latest
+  availability. A terminal success clears the active stage and publishes only
+  `resultReady`; a recovery terminal retains only the stage needed to explain
+  that recovery. Ordinary cancellation clears current stage, outcome, failure,
+  and recovery only after durable cleanup finishes. A blocked preflight clears
+  attempt state and publishes only its setup/failure projection.
+- All controller/client/action/failure descriptions and reflection are
+  content-free. P4D-1 adds no UI, plist key, entitlement, microphone request,
+  audio object, file mutation, provider call, App Group publication, keyboard
+  dependency, or background behavior.
+
 ## Quick Session Gate
 
 - Quick Session is hidden or clearly unavailable until the M0B prerequisites
