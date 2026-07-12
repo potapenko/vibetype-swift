@@ -6,47 +6,43 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct KeyboardBridgeProbeView: View {
-    @State private var statusMessage = "No sample has been published in this run."
+    @State private var statusMessage =
+        "No keyboard test sample has been published in this run."
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Phase 0 Validation")
-                    .font(.headline)
-
-                Text(
-                    "Publish a short local sample, switch to the HoldType keyboard, "
-                    + "then tap Insert latest."
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            Text(
+                "Publish a short local sample, focus the practice field, "
+                + "switch to HoldType with Globe, then tap Insert latest."
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
             Button(action: publishSampleTranscript) {
-                Label("Publish Sample Transcript", systemImage: "square.and.arrow.up")
-                    .frame(maxWidth: .infinity)
+                Label(
+                    "Publish Keyboard Test Sample",
+                    systemImage: "square.and.arrow.up"
+                )
             }
-            .buttonStyle(.borderedProminent)
-            .accessibilityHint("Stores a short local transcript in the HoldType App Group")
+            .accessibilityHint(
+                "Stores a short, expiring local transcript for the HoldType keyboard"
+            )
+            .accessibilityIdentifier("ios.voice.publish-practice-sample")
 
             Label(statusMessage, systemImage: "info.circle")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("This probe does not use the microphone, network, or OpenAI.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            Text("This local test does not use the microphone, network, or OpenAI.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(.separator.opacity(0.55), lineWidth: 0.5)
-        }
     }
 
     private func publishSampleTranscript() {
@@ -67,10 +63,19 @@ struct KeyboardBridgeProbeView: View {
             )
 
             try store.save(snapshot)
-            statusMessage = "Sample published. It expires in 10 minutes."
+            publishStatus(
+                "Sample published. It expires in 10 minutes."
+            )
         } catch {
-            statusMessage = "The shared App Group is unavailable in this build."
+            publishStatus(
+                "The sample couldn’t be published. Try again."
+            )
         }
+    }
+
+    private func publishStatus(_ message: String) {
+        statusMessage = message
+        UIAccessibility.post(notification: .announcement, argument: message)
     }
 }
 

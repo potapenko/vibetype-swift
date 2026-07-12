@@ -62,30 +62,42 @@ struct HoldTypeIOSApp: App {
 
 struct HoldTypeIOSRootView: View {
     let composition: IOSContainingAppComposition
+    let layout: IOSContainingAppShellLayout
+
+    init(
+        composition: IOSContainingAppComposition,
+        layout: IOSContainingAppShellLayout = .current
+    ) {
+        self.composition = composition
+        self.layout = layout
+    }
+
+    var presentation: IOSContainingAppRootPresentation {
+        .resolve(
+            hasSettingsStateOwner:
+                composition.settingsStateOwner != nil,
+            hasLibraryStateOwner:
+                composition.libraryStateOwner != nil
+        )
+    }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 18) {
-                    HoldTypeSetupStatusView(surface: .iOSContainingApp)
-                    KeyboardBridgeProbeView()
-                }
-                .padding(24)
-            }
-            .navigationTitle("HoldType")
-            .background(Color(.systemGroupedBackground))
+        if let settingsStateOwner = composition.settingsStateOwner,
+           let libraryStateOwner = composition.libraryStateOwner {
+            IOSContainingAppShell(
+                secureProviderAvailability: .resolve(
+                    compositionAvailability: composition.availability
+                ),
+                layout: layout
+            )
+                .environment(settingsStateOwner)
+                .environment(libraryStateOwner)
+        } else {
+            IOSContainingAppStorageUnavailableView()
         }
     }
 }
 
-#Preview {
-    HoldTypeIOSRootView(
-        composition: IOSContainingAppComposition(
-            scheduleProviderStartupMaintenance: {},
-            scheduleRetryScratchStartupMaintenance: {},
-            recoverContainingAppLifecycle: { _ in
-                .pendingLocalRecovery
-            }
-        )
-    )
+#Preview("Storage unavailable") {
+    IOSContainingAppStorageUnavailableView()
 }

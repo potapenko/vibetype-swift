@@ -1,8 +1,8 @@
 # HoldType iOS Full Product Portability Plan
 
 Status: active implementation roadmap; P0, P1, and P2 complete; P3 is in
-progress, with its state-owner prerequisite complete and native shell next;
-updated 2026-07-12.
+progress, with its state-owner prerequisite and native shell complete and
+P4-owned Settings and Library editors next; updated 2026-07-12.
 
 This document plans the complete iPhone and iPad companion product around the
 HoldType keyboard. It does not authorize Swift, target, entitlement, or
@@ -1240,6 +1240,17 @@ to the last durable value. Library commits publish the exact canonical value
 returned by Persistence. Final evidence lives in
 `docs/qa/runs/ios-containing-app-state-owners-2026-07-12.md`.
 
+The P3.2 native shell is now complete. iPhone has four independent tab stacks;
+iPad has the equivalent sidebar/detail shell with compact Back re-entry; each
+scene restores only its last valid top-level destination. The SwiftUI root
+injects the exact composition-owned Settings and Library owners, blocks on root
+storage failure, and degrades secure-provider presentation without inventing a
+credential status. Voice provides passive setup guidance and a real practice
+field, while Settings and Library show truthful saved-state summaries and
+local load/retry failures. No microphone, provider, or Keychain action occurs
+on passive appearance. Final evidence lives in
+`docs/qa/runs/ios-containing-app-shell-2026-07-12.md`.
+
 No History toggle, Clear History action, first-use disclosure, Recording Cache,
 App Group publication, or keyboard dependency is exposed by C4.0 alone.
 The C4.0 contract review is recorded in
@@ -1247,10 +1258,11 @@ The C4.0 contract review is recorded in
 
 ### P3 — Native containing-app shell
 
-State-owner prerequisite: complete. Exactly one composition-owned Settings
-owner and one Library owner now provide the shared process state used by every
-scene and failed-History Retry. Remaining P3 work starts with the native shell
-and consumes those owners; it must not create scene-local repositories.
+State-owner prerequisite and native shell: complete. Exactly one
+composition-owned Settings owner and one Library owner provide the shared
+process state used by every scene and failed-History Retry. Remaining P3 work
+starts with the P4-owned editors inside that shell; it must not create
+scene-local repositories.
 
 - implement Voice, Library, History, and Settings navigation;
 - implement setup status, public system-settings routes, practice field, and
@@ -1502,16 +1514,17 @@ protected Retry scratch materialization, bounded process-loss scavenging,
 ordinary public-symbol boundary, and unchanged keyboard binary isolation are
 verified in
 `docs/qa/runs/ios-failed-history-containing-app-boundary-2026-07-12.md`.
-P3 is in progress. Its first checkpoint is complete: the existing Settings and
-Library repositories now sit behind exactly one composition-owned state owner
-each, shared with failed-History Retry and every scene, with verified
-load/default/error, FIFO read-modify-save, canonical commit, ordered observable
-publication, and durable-value rollback. The next slice builds the native
-iPhone tab shell and iPad split shell, installs these owner identities at the
-SwiftUI root, and then exposes only the P4-owned settings and Library editors.
+P3 is in progress. Its first two checkpoints are complete: composition-owned
+Settings and Library state, followed by the native iPhone tab and iPad split
+shell that consumes those exact owner identities. Navigation restoration,
+compact split re-entry, blocking root-storage failure, payload-free secure
+provider availability, truthful saved-state summaries, practice-field flow,
+Dynamic Type, dark appearance, and keyboard isolation are verified. The next
+slice exposes only the P4-owned Settings and Library editors inside this shell.
 The independent recording-cache and directional App Group bridge flows remain
-later work and do not enter the keyboard early. Final P3.1 evidence lives in
-`docs/qa/runs/ios-containing-app-state-owners-2026-07-12.md`.
+later work and do not enter the keyboard early. Final evidence lives in
+`docs/qa/runs/ios-containing-app-state-owners-2026-07-12.md` and
+`docs/qa/runs/ios-containing-app-shell-2026-07-12.md`.
 
 The app-private credential marker, settings, Library, and Usage repositories
 now run one strict bounded structural pass before Foundation decoding. It

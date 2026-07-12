@@ -49,6 +49,18 @@ setup is complete.
 - iPad presents the same destinations in a sidebar/detail experience and keeps
   the selected destination stable across ordinary size changes. This does not
   imply that the production iPad keyboard is ready.
+- The selected top-level destination is lightweight scene-local state. Each
+  window restores its own last valid selection and falls back to Voice when no
+  valid value exists. iPhone keeps a separate `NavigationStack` for each tab;
+  iPad keeps one selection across expanded and system-collapsed split layouts.
+- In a system-collapsed iPad split, Back may return to the sidebar without
+  erasing the last valid restored destination. The user can select that same
+  destination again and return to its detail; a transient empty sidebar
+  selection must not trap navigation.
+- Until an editor owns a stable semantic route identity, the app restores only
+  the top-level destination. It must not persist a transient or secret-bearing
+  draft, selected row payload, or unfinished editor path merely to recreate a
+  previous screen.
 
 ## Setup Contract
 
@@ -175,6 +187,11 @@ The app guides setup in this order:
   recoverable; do not switch apps or keyboards automatically.
 - If the user closes setup, preserve honest incomplete statuses and re-present
   the relevant next action when they next request a dependent feature.
+- If the canonical app-private storage root cannot open, replace the normal
+  destinations with one blocking local-storage-unavailable surface. Do not
+  synthesize Settings or Library defaults, offer controls backed by temporary
+  owners, or claim that persisted content is empty. The safe recovery guidance
+  is to relaunch HoldType; composition is not rebuilt from a view-level Retry.
 
 ## Route, State, And Data Implications
 
@@ -212,6 +229,16 @@ The app guides setup in this order:
   remains local to that editor/configuration path and does not hide unrelated
   History or diagnostics. If the root itself is unavailable, neither owner is
   constructed and the app does not present defaults as durable configuration.
+- The SwiftUI root injects those two concrete owner identities before the
+  normal shell is constructed. Descendants never receive optional owners,
+  create fallback owners, or receive the whole composition merely to reach a
+  repository. Settings and Library load only from their owning destination or
+  a real consumer; a load failure remains local and offers Retry through the
+  same owner without hiding other destinations.
+- Credential-coordinator unavailability is not proof that an API key is merely
+  absent. It does not block provider-free Library, History, practice, or local
+  Settings surfaces, and the app must describe the secure-provider area as
+  unavailable rather than inventing a credential status.
 - Construction schedules one provider-free launch opportunity before History,
   pending-recording, or accepted-delivery consumers can leave their local
   unavailable state. It also schedules the process-once, provider-free cleanup
@@ -252,6 +279,10 @@ The app guides setup in this order:
 
 - Navigation coverage should verify the four destinations on iPhone and the
   equivalent iPad sidebar/detail experience.
+- Navigation coverage should also verify per-scene selection fallback and
+  restoration, independent iPhone navigation stacks, one iPad selection across
+  split collapse/expansion, same-destination re-entry after compact Back, and
+  the blocking root-storage failure surface.
 - Setup coverage should verify no permission prompt or recording on launch,
   honest stale verification, denial recovery, and practice-field guidance.
 - Voice coverage should verify one-shot success, cancel, repeated-action

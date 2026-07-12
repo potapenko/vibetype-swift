@@ -151,6 +151,8 @@ struct IOSContainingAppCompositionTests {
         #expect(composition.failedHistoryService != nil)
         #expect(firstScene.composition === composition)
         #expect(secondScene.composition === composition)
+        #expect(firstScene.presentation == .shell)
+        #expect(secondScene.presentation == .shell)
         #expect(
             firstScene.composition.settingsStateOwner
                 === secondScene.composition.settingsStateOwner
@@ -230,9 +232,11 @@ struct IOSContainingAppCompositionTests {
             scheduleProviderStartupMaintenance: {},
             scheduleRetryScratchStartupMaintenance: {}
         )
+        let rootView = HoldTypeIOSRootView(composition: composition)
 
         await composition.lifecycleScheduler.waitUntilIdle()
         #expect(composition.availability == .credentialUnavailable)
+        #expect(rootView.presentation == .shell)
         #expect(composition.historyCoordinator != nil)
         #expect(composition.settingsStateOwner != nil)
         #expect(composition.libraryStateOwner != nil)
@@ -384,6 +388,7 @@ struct IOSContainingAppCompositionTests {
 
         await composition.lifecycleScheduler.waitUntilIdle()
         #expect(root.composition === composition)
+        #expect(root.presentation == .storageUnavailable)
         #expect(composition.availability == .storageUnavailable)
         #expect(composition.applicationSupportDirectoryURL == nil)
         #expect(composition.historyCoordinator == nil)
