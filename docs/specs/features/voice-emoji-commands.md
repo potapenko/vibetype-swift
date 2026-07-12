@@ -25,19 +25,29 @@ separate editing or text-expansion product.
 
 ## User-visible behavior
 
-- Settings should expose emoji commands inside Dictionary, not as a separate
-  Settings navigation item.
+- macOS Settings keeps emoji commands inside Dictionary. On iOS, Voice Emoji
+  Commands is a first-class content route inside the top-level Library
+  destination, never a separate Settings destination.
 - Emoji commands are controlled by one top-level toggle.
 - When enabled, users choose one active built-in command set from the language
   tabs. The default active set is English.
-- Dictionary should show the supported emoji commands in a compact tabbed
-  catalog. Built-in tabs are English, Russian, Spanish, German, French, and
-  Portuguese. A Custom tab lets users add their own emoji commands.
+- macOS Dictionary may keep the compact tabbed catalog. iOS uses a native
+  active-set selection list plus a searchable catalog/detail because seven
+  segmented tabs do not fit compact width. Built-in choices are English,
+  Russian, Spanish, German, French, and Portuguese; Custom stores no built-in
+  selection and keeps enabled custom rows active.
 - Each built-in tab should show the emoji, primary spoken command, and supported
   aliases so users can discover the exact phrases without reading docs.
 - The Custom tab should let users add an emoji output, a primary spoken command,
   and optional aliases. Custom commands may be enabled, disabled, or removed
   without affecting built-in sets.
+- iOS custom rows use UUID detail editors with explicit Save. A non-empty
+  normalized output and primary phrase are required. The same normalized
+  spoken phrase or alias cannot belong to two custom rows; custom/built-in
+  overlap remains allowed and the custom row wins. P3 blocks new ambiguous
+  mutations but preserves any readable legacy collision until the person edits
+  it; loading never silently removes or rewrites those rows. P3 preserves custom
+  command insertion order but does not expose custom reorder.
 - English commands use an explicit `emoji` prefix, such as `emoji smile`.
 - Russian commands use the explicit `эмодзи` prefix, such as `эмодзи улыбка`.
 - Built-in command prefixes must use the canonical emoji term for the selected

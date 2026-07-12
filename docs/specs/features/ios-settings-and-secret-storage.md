@@ -461,6 +461,12 @@ result after the operation returns.
   1 MiB, requests Complete protection before the first content write, and
   keeps the final Library record eligible for system-managed device backup. A
   failed replacement preserves the previous durable bytes.
+- Before atomic replacement, the encoder validates its canonical bytes with
+  the same bounded JSON structural limits used before decode. A candidate that
+  exceeds an array, member, nesting, decoded-string, or total-value limit fails
+  with a typed content-free error and performs no write. Bytes produced by a
+  successful save must therefore pass the decoder's bounded structural gate;
+  byte size alone is not sufficient.
 - The process has exactly one composition-owned Settings state owner and one
   Library state owner before any editor is exposed. Failed-History Retry is a
   consumer of those exact owners rather than an owner of separate repositories.
@@ -679,6 +685,70 @@ result after the operation returns.
 - Model identifiers and prompts are private app content. Editor state,
   validation, notices, accessibility announcements, diagnostics, reflection,
   and default logs never echo their values.
+
+### P3 Library editors
+
+- The iOS Library root owns three native content routes: Dictionary, Voice
+  Emoji Commands, and Replacement Rules. They use searchable `List` and
+  focused detail/editor surfaces rather than one macOS-style Settings form.
+  Import, export, cloud sync, dictionary rename/reorder, and custom-command
+  reorder remain absent until a later spec.
+- Library UI mutations run through the exact process-owned Library state owner
+  as typed operations against its latest durable value. A completion reports
+  exact canonical `IOSLibraryState` plus one closed content-free disposition:
+  committed, unchanged, duplicate, target missing, conflict, or invalid.
+  Unchanged, duplicate, missing, conflict, and invalid operations perform no
+  repository write. A successful commit publishes the repository's exact
+  canonical value before the next FIFO transaction proceeds.
+- Dictionary v1 remains an ordered string array and gains no synthetic durable
+  UUID. Batch Add parses comma- or newline-separated input, trims and
+  case-insensitively deduplicates against the latest value, commits the unique
+  subset atomically, and reports only added and duplicate counts. Empty input
+  is invalid. Removal addresses a trim-plus-lowercase semantic key and the
+  exact expected displayed value, never a visible or filtered index; missing
+  and changed targets do not delete another entry.
+- Custom emoji commands and replacement rules use their existing UUIDs.
+  Add drafts create the UUID once and retain it through retry. Edit and delete
+  require the UUID plus the full expected row. Per-row enablement requires the
+  UUID plus the expected prior Boolean so it can preserve concurrent field
+  edits. A missing row is never recreated by a stale edit.
+- A custom emoji draft requires a non-empty normalized output and primary
+  spoken phrase. Any normalized spoken phrase, including an alias, may belong
+  to at most one custom row; an ambiguous custom/custom collision is invalid
+  and performs no write. Custom/built-in overlap remains allowed because the
+  custom command has documented priority. This is a typed editor-mutation
+  invariant: an already-readable legacy collision stays visible and is never
+  silently deleted, rewritten, or made unreadable during P3. The global toggle
+  and built-in set selection mutate only their own fields and never replace
+  custom rows.
+- Replacement search, replacement, enabled state, duplicates, UUID, and order
+  remain raw durable values. Empty or whitespace-only search is stored but
+  visibly inactive for an existing row; a new-rule draft requires non-whitespace
+  search before its first Save. Empty replacement is allowed. Reorder uses an
+  expected complete UUID sequence and a requested sequence containing the same
+  IDs. A concurrent insert, delete, or reorder conflicts without writing;
+  editing another row's fields does not. Reorder is unavailable while search
+  filters the list.
+- Item-detail drafts use explicit Save. A clean draft adopts newer durable row
+  truth. A dirty draft changed elsewhere remains local and reports `Changed
+  Elsewhere`; Replace Latest requires a separate confirmation and a fresh
+  expected row. Reload Latest discards the draft. Deletion elsewhere disables
+  Save and cannot resurrect the row. Add, toggle, confirmed delete, and reorder
+  are single explicit atomic operations.
+- Dirty Library drafts participate in the same scene-local Back, Cancel,
+  iPhone-tab, and iPad-sidebar discard guard as general Settings. Confirmed
+  discard clears only the active Library route/draft. Failed persistence keeps
+  the draft visibly `Not Saved`, while shared lists remain at the last durable
+  value and may retry.
+- Search queries and drafts are memory-only. Dictionary text, emoji output,
+  spoken phrases, aliases, replacement content, and semantic keys never enter
+  navigation identity, `SceneStorage`, accessibility identifiers, notices,
+  announcements, reflection, diagnostics, or default logs. Explicit visible
+  fields and rows remain normally accessible to VoiceOver.
+- Library content stays app-private and backup-eligible. No Library value,
+  built-in catalog, editor state, repository path, or mutation is copied into
+  App Group state or the keyboard extension. CRUD performs no Keychain,
+  microphone, clipboard, network, or provider action.
 
 ## Truthful setup status
 

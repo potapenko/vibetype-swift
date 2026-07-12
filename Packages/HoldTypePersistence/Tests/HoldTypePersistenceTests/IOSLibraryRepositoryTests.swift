@@ -923,6 +923,52 @@ struct IOSLibraryRepositoryTests {
         #expect(fileSystem.replacementCallCount == 1)
     }
 
+    @Test func successfulSaveAlwaysPassesTheDecodeStructuralGate() async throws {
+        let maximumArrayCount = 65_536
+        let acceptedEntries = (0..<maximumArrayCount).map {
+            String($0, radix: 36)
+        }
+        let acceptedFileSystem = IOSLibraryFileSystemFake()
+        let acceptedRepository = makeRepository(
+            fileSystem: acceptedFileSystem
+        )
+        let acceptedContent = IOSLibraryContent(
+            customDictionary: CustomDictionary(entries: acceptedEntries)
+        )
+
+        let committed = try await acceptedRepository.save(acceptedContent)
+
+        #expect(committed == acceptedContent)
+        #expect(try await acceptedRepository.load() == acceptedContent)
+        #expect(
+            try #require(acceptedFileSystem.data).count
+                < expectedFilePolicy.maximumByteCount
+        )
+
+        let rejectedEntries = acceptedEntries + ["overflow-entry"]
+        let rejectedFileSystem = IOSLibraryFileSystemFake()
+        let rejectedRepository = makeRepository(
+            fileSystem: rejectedFileSystem
+        )
+
+        do {
+            _ = try await rejectedRepository.save(
+                IOSLibraryContent(
+                    customDictionary: CustomDictionary(
+                        entries: rejectedEntries
+                    )
+                )
+            )
+            Issue.record("Expected encoded structural limit failure")
+        } catch let error as IOSLibraryRepositoryError {
+            #expect(error == .encodedStructureTooComplex)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+        #expect(rejectedFileSystem.replacementCallCount == 0)
+        #expect(rejectedFileSystem.data == nil)
+    }
+
     @Test func everyReadAndReplacementUsesOneMiBCompleteBackupEligiblePolicy() async throws {
         let fileSystem = IOSLibraryFileSystemFake()
         let repository = makeRepository(fileSystem: fileSystem)

@@ -2,6 +2,19 @@ import Testing
 @testable import HoldTypeDomain
 
 struct EmojiCommandReplacementServiceTests {
+    @Test func spokenPhraseKeyMatchesRuntimeTokenization() {
+        #expect(
+            EmojiCommandReplacementService.normalizedSpokenPhraseKey(
+                " ÉMOJI,   Smíle! "
+            ) == "emoji smile"
+        )
+        #expect(
+            EmojiCommandReplacementService.normalizedSpokenPhraseKey(
+                " -- "
+            ) == nil
+        )
+    }
+
     private let service = EmojiCommandReplacementService()
 
     @Test func replacesOnlyAliasesFromTheSelectedBuiltInSet() {

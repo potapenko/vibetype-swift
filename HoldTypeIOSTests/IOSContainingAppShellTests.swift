@@ -60,26 +60,33 @@ struct IOSContainingAppShellTests {
         )
     }
 
-    @Test func unsavedSettingsRequireConfirmationBeforeDestinationChange() {
+    @Test func unsavedEditorRequiresConfirmationBeforeDestinationChange() {
         #expect(
             IOSContainingAppDestinationSelectionDecision.resolve(
                 current: .settings,
                 requested: .voice,
-                hasUnsavedGeneralSettings: true
+                hasUnsavedEditor: true
             ) == .confirmDiscard(.voice)
         )
         #expect(
             IOSContainingAppDestinationSelectionDecision.resolve(
-                current: .settings,
-                requested: .library,
-                hasUnsavedGeneralSettings: false
-            ) == .apply(.library)
+                current: .library,
+                requested: .history,
+                hasUnsavedEditor: true
+            ) == .confirmDiscard(.history)
+        )
+        #expect(
+            IOSContainingAppDestinationSelectionDecision.resolve(
+                current: .library,
+                requested: .settings,
+                hasUnsavedEditor: false
+            ) == .apply(.settings)
         )
         #expect(
             IOSContainingAppDestinationSelectionDecision.resolve(
                 current: .settings,
                 requested: .settings,
-                hasUnsavedGeneralSettings: true
+                hasUnsavedEditor: true
             ) == .unchanged
         )
     }

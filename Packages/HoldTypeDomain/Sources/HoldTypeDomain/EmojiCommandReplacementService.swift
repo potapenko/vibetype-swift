@@ -10,6 +10,13 @@ import Foundation
 public struct EmojiCommandReplacementService: Sendable {
     public init() {}
 
+    public static func normalizedSpokenPhraseKey(
+        _ phrase: String
+    ) -> String? {
+        let tokens = normalizedWordTokens(from: phrase)
+        return tokens.isEmpty ? nil : tokens.joined(separator: " ")
+    }
+
     public func process(
         _ text: String,
         commandSets: [EmojiCommandSet],

@@ -5,6 +5,7 @@ import SwiftUI
 struct IOSLibraryHomeView: View {
     @Environment(IOSLibraryStateOwner.self) private var stateOwner
     @State private var isLoading = false
+    @Binding var hasUnsavedLibraryEditor: Bool
 
     var body: some View {
         Group {
@@ -23,16 +24,26 @@ struct IOSLibraryHomeView: View {
             case .ready(let content):
                 IOSLibrarySummaryList(
                     content: content,
-                    showsSaveFailure: false
+                    showsSaveFailure: false,
+                    hasUnsavedLibraryEditor: $hasUnsavedLibraryEditor
                 )
             case .saveFailed(let lastDurableValue):
                 IOSLibrarySummaryList(
                     content: lastDurableValue,
-                    showsSaveFailure: true
+                    showsSaveFailure: true,
+                    hasUnsavedLibraryEditor: $hasUnsavedLibraryEditor
                 )
             }
         }
         .navigationTitle("Library")
+        .navigationDestination(for: IOSLibraryRoute.self) { route in
+            switch route {
+            case .dictionary:
+                IOSDictionaryView(
+                    hasUnsavedSceneEditor: $hasUnsavedLibraryEditor
+                )
+            }
+        }
         .accessibilityIdentifier(
             IOSContainingAppDestination.library.accessibilityIdentifier
         )
@@ -57,6 +68,7 @@ struct IOSLibraryHomeView: View {
 private struct IOSLibrarySummaryList: View {
     let content: IOSLibraryContent
     let showsSaveFailure: Bool
+    @Binding var hasUnsavedLibraryEditor: Bool
 
     var body: some View {
         List {
@@ -65,14 +77,21 @@ private struct IOSLibrarySummaryList: View {
             }
 
             Section("Saved Content") {
-                LabeledContent(
-                    "Dictionary",
-                    value: countLabel(
-                        content.customDictionary.entries.count,
-                        singular: "entry",
-                        plural: "entries"
+                NavigationLink(value: IOSLibraryRoute.dictionary) {
+                    IOSLibraryDestinationLabel(
+                        destination: .dictionary,
+                        summary: countLabel(
+                            content.customDictionary.entries.count,
+                            singular: "entry",
+                            plural: "entries"
+                        )
                     )
+                }
+                .accessibilityIdentifier(
+                    IOSLibraryDestination.dictionary
+                        .rowAccessibilityIdentifier
                 )
+
                 LabeledContent(
                     "Custom emoji commands",
                     value: countLabel(
@@ -141,9 +160,29 @@ private struct IOSLibrarySummaryList: View {
         case "pt":
             "Portuguese"
         case nil:
-            "None"
+            "Custom"
         default:
             "Unknown"
+        }
+    }
+}
+
+private struct IOSLibraryDestinationLabel: View {
+    let destination: IOSLibraryDestination
+    let summary: String
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(destination.title)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(summary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } icon: {
+            Image(systemName: destination.systemImage)
         }
     }
 }

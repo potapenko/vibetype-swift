@@ -1,9 +1,9 @@
 # HoldType iOS Full Product Portability Plan
 
 Status: active implementation roadmap; P0, P1, and P2 complete; P3 is in
-progress, with its state-owner prerequisite, native shell, and secure OpenAI
-credential editor complete; non-secret P4-owned Settings and Library editors
-are next; updated 2026-07-12.
+progress through the native shell, OpenAI and general Settings editors, typed
+Library mutation foundation, and Dictionary route. Voice Emoji Commands and
+Replacement Rules are the next P3 checkpoints; updated 2026-07-12.
 
 This document plans the complete iPhone and iPad companion product around the
 HoldType keyboard. It does not authorize Swift, target, entitlement, or
@@ -1275,6 +1275,17 @@ History, cache, automatic-insertion, Nearby Text, and Keep Latest controls
 remain absent until their owning milestones. Final evidence lives in
 `docs/qa/runs/ios-general-settings-editors-2026-07-12.md`.
 
+P3.5A is now complete. One typed Library transaction boundary applies
+Dictionary, custom-emoji, and replacement-rule operations to the latest durable
+app-private value with closed no-write outcomes and exact canonical
+publication. The first native content route provides searchable Dictionary
+batch Add, semantic deletion, persistence recovery, and guarded iPhone/iPad
+navigation without introducing row UUIDs. Save and load now share the same
+bounded structural gate. Runtime evidence proves relaunch persistence,
+filtered deletion, retained/discarded drafts, content-free logs, unchanged App
+Group bytes, and unchanged keyboard isolation. Final evidence lives in
+`docs/qa/runs/ios-library-dictionary-2026-07-12.md`.
+
 No History toggle, Clear History action, first-use disclosure, Recording Cache,
 App Group publication, or keyboard dependency is exposed by C4.0 alone.
 The C4.0 contract review is recorded in
@@ -1282,12 +1293,14 @@ The C4.0 contract review is recorded in
 
 ### P3 — Native containing-app shell
 
-State-owner prerequisite, native shell, secure OpenAI editor, and the
-non-secret general Settings editors are complete. Exactly one
+State-owner prerequisite, native shell, secure OpenAI editor, non-secret
+general Settings editors, and P3.5A Library/Dictionary foundation are complete.
+Exactly one
 composition-owned Settings owner, Library owner, and credential presentation
 owner provide shared process truth. Editor drafts are scene-local and
-ephemeral. Remaining P3 work starts with the Library editors inside that
-shell; it must not create scene-local repositories.
+ephemeral. Remaining P3 Library work is Voice Emoji Commands followed by
+Replacement Rules inside that shell; it must not create scene-local
+repositories.
 
 - implement Voice, Library, History, and Settings navigation;
 - implement setup status, public system-settings routes, practice field, and
@@ -1539,19 +1552,22 @@ protected Retry scratch materialization, bounded process-loss scavenging,
 ordinary public-symbol boundary, and unchanged keyboard binary isolation are
 verified in
 `docs/qa/runs/ios-failed-history-containing-app-boundary-2026-07-12.md`.
-P3 is in progress. Its first three checkpoints are complete: composition-owned
-Settings and Library state, the native iPhone tab and iPad split shell, and the
-app-only OpenAI credential editor. Navigation restoration, exact owner
+P3 is in progress. Its state owners, native iPhone tab and iPad split shell,
+app-only OpenAI editor, four general Settings editors, typed Library mutation
+foundation, and native Dictionary route are complete. Navigation restoration,
+exact owner
 identity, blocking root-storage failure, payload-free revisioned credential
 status, scene-local redacted retry draft, automation-disabled Keychain access,
 truthful saved-state presentation, Dynamic Type, dark appearance, and keyboard
-isolation are verified. The next slice exposes the remaining non-secret
-P4-owned Settings and Library editors inside this shell.
+isolation are verified. The next slices expose Voice Emoji Commands and
+Replacement Rules inside Library.
 The independent recording-cache and directional App Group bridge flows remain
 later work and do not enter the keyboard early. Final evidence lives in
 `docs/qa/runs/ios-containing-app-state-owners-2026-07-12.md`,
 `docs/qa/runs/ios-containing-app-shell-2026-07-12.md`, and
-`docs/qa/runs/ios-openai-credential-settings-2026-07-12.md`.
+`docs/qa/runs/ios-openai-credential-settings-2026-07-12.md`,
+`docs/qa/runs/ios-general-settings-editors-2026-07-12.md`, and
+`docs/qa/runs/ios-library-dictionary-2026-07-12.md`.
 
 The app-private credential marker, settings, Library, and Usage repositories
 now run one strict bounded structural pass before Foundation decoding. It

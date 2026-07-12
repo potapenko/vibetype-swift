@@ -19,6 +19,7 @@ public enum IOSLibraryRepositoryError: Error, Equatable, Sendable {
     case invalidBuiltInSetSelection(path: String)
     case encodingFailed
     case encodedDataTooLarge
+    case encodedStructureTooComplex
     case writeFailed
 }
 
@@ -83,6 +84,20 @@ public actor IOSLibraryRepository {
         let encoding = try IOSLibraryWireCodec.encode(content)
         guard encoding.data.count <= Self.filePolicy.maximumByteCount else {
             throw IOSLibraryRepositoryError.encodedDataTooLarge
+        }
+        do {
+            try BoundedJSONMemberValidator.validate(
+                encoding.data,
+                limits: .metadataFile(
+                    maximumInputByteCount: Self.filePolicy.maximumByteCount
+                )
+            )
+        } catch BoundedJSONMemberValidationError.inputTooLarge {
+            throw IOSLibraryRepositoryError.encodedDataTooLarge
+        } catch BoundedJSONMemberValidationError.resourceLimitExceeded {
+            throw IOSLibraryRepositoryError.encodedStructureTooComplex
+        } catch {
+            throw IOSLibraryRepositoryError.encodingFailed
         }
 
         do {

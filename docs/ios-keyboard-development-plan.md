@@ -393,8 +393,14 @@ host app, state, expected result, actual result, and go/no-go decision.
   semantic-group saves through the exact process owner, concurrent-change and
   failed-save truth, searchable language routes, and guarded iPhone/iPad
   destination changes. Evidence lives in
-  `docs/qa/runs/ios-general-settings-editors-2026-07-12.md`. The next P3 slice
-  is the Library editors. The independent recording cache
+  `docs/qa/runs/ios-general-settings-editors-2026-07-12.md`. P3.5A adds one
+  typed latest-durable Library transaction boundary and the first native
+  Library content route: searchable Dictionary batch Add, semantic deletion,
+  relaunch persistence, redacted drafts, and guarded iPhone/iPad navigation.
+  App Group bytes and the Release keyboard executable remain unchanged.
+  Evidence lives in
+  `docs/qa/runs/ios-library-dictionary-2026-07-12.md`. Voice Emoji Commands and
+  Replacement Rules are the next P3 slices. The independent recording cache
   and directional bridge remain later milestones behind the physical M0 gates.
   The runtime-only four-case `VoiceAttemptStage` is portable too; preflight,
   outcomes, recovery eligibility, and durable resume checkpoints remain

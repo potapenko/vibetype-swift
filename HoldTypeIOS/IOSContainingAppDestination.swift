@@ -73,10 +73,10 @@ enum IOSContainingAppDestinationSelectionDecision: Equatable, Sendable {
     static func resolve(
         current: IOSContainingAppDestination,
         requested: IOSContainingAppDestination,
-        hasUnsavedGeneralSettings: Bool
+        hasUnsavedEditor: Bool
     ) -> Self {
         guard requested != current else { return .unchanged }
-        return hasUnsavedGeneralSettings
+        return hasUnsavedEditor
             ? .confirmDiscard(requested)
             : .apply(requested)
     }
@@ -85,6 +85,10 @@ enum IOSContainingAppDestinationSelectionDecision: Equatable, Sendable {
 enum IOSSettingsRoute: Hashable {
     case openAI
     case general(IOSGeneralSettingsDestination)
+}
+
+enum IOSLibraryRoute: Hashable {
+    case dictionary
 }
 
 enum IOSSecureProviderAvailability: Equatable, Sendable {

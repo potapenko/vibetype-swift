@@ -62,6 +62,12 @@ model-based correction on.
 - Replacement rule search text is matched literally, not as a regular
   expression. The replacement text is inserted exactly as configured.
 - Replacement rules with an empty search value must be ignored.
+- On iOS, Replacement Rules is a searchable Library list with UUID detail
+  editors and explicit Save. Add, per-row enablement, confirmed delete, and
+  reorder are separate atomic actions. Reorder is unavailable while the list
+  is filtered. A new rule requires non-whitespace Search before its first Save;
+  an existing empty-search row remains visible, editable, and preservable as
+  inactive.
 - Built-in emoji command replacement is governed by
   `voice-emoji-commands.md`. When enabled, it runs after local typography
   cleanup and before user replacement rules.
@@ -170,6 +176,10 @@ Library persistence preserves replacement-rule identifiers, enabled state,
 search and replacement strings, duplicates, and array order. It does not trim,
 case-fold, deduplicate, reorder, or silently remove an empty-search row. An
 empty search is ignored only when the local replacement pipeline executes.
+Edit/delete use the UUID plus the expected full row, enablement uses the UUID
+plus its expected prior Boolean, and reorder uses expected and requested full
+UUID sequences. A stale or missing target never recreates or mutates another
+row; concurrent sequence changes conflict without writing.
 
 Keychain still stores only the OpenAI API key.
 

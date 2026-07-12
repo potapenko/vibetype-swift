@@ -6,14 +6,15 @@ struct IOSContainingAppShell: View {
         IOSContainingAppDestination.voice.rawValue
 
     @State private var settingsNavigationPath = NavigationPath()
+    @State private var libraryNavigationPath = NavigationPath()
     @State private var preferredCompactColumn:
         NavigationSplitViewColumn = .detail
     @State private var openAIEditorDraft =
         IOSOpenAICredentialEditorDraft()
-    @State private var hasUnsavedGeneralSettings = false
+    @State private var hasUnsavedEditor = false
     @State private var pendingDestination:
         IOSContainingAppDestination?
-    @State private var showsSettingsDiscardConfirmation = false
+    @State private var showsEditorDiscardConfirmation = false
 
     let secureProviderAvailability: IOSSecureProviderAvailability
     let layout: IOSContainingAppShellLayout
@@ -37,8 +38,8 @@ struct IOSContainingAppShell: View {
         }
         .onAppear(perform: restoreSelectionIfNeeded)
         .confirmationDialog(
-            "Discard Settings Changes?",
-            isPresented: $showsSettingsDiscardConfirmation,
+            "Discard Unsaved Changes?",
+            isPresented: $showsEditorDiscardConfirmation,
             titleVisibility: .visible
         ) {
             Button("Discard Changes and Continue", role: .destructive) {
@@ -49,8 +50,7 @@ struct IOSContainingAppShell: View {
             }
         } message: {
             Text(
-                "Your unsaved edits on the current Settings screen will "
-                    + "be lost."
+                "Your unsaved edits on the current screen will be lost."
             )
         }
     }
@@ -132,6 +132,10 @@ struct IOSContainingAppShell: View {
             NavigationStack(path: $settingsNavigationPath) {
                 destinationRoot(destination)
             }
+        } else if destination == .library {
+            NavigationStack(path: $libraryNavigationPath) {
+                destinationRoot(destination)
+            }
         } else {
             NavigationStack {
                 destinationRoot(destination)
@@ -149,14 +153,16 @@ struct IOSContainingAppShell: View {
                 secureProviderAvailability: secureProviderAvailability
             )
         case .library:
-            IOSLibraryHomeView()
+            IOSLibraryHomeView(
+                hasUnsavedLibraryEditor: $hasUnsavedEditor
+            )
         case .history:
             IOSHistoryHomeView()
         case .settings:
             IOSSettingsHomeView(
                 openAIEditorDraft: $openAIEditorDraft,
                 hasUnsavedGeneralSettings:
-                    $hasUnsavedGeneralSettings
+                    $hasUnsavedEditor
             )
         }
     }
@@ -177,7 +183,7 @@ struct IOSContainingAppShell: View {
         switch IOSContainingAppDestinationSelectionDecision.resolve(
             current: selectedDestination,
             requested: destination,
-            hasUnsavedGeneralSettings: hasUnsavedGeneralSettings
+            hasUnsavedEditor: hasUnsavedEditor
         ) {
         case .unchanged:
             if layout == .split {
@@ -188,16 +194,27 @@ struct IOSContainingAppShell: View {
             applyDestination(destination)
         case .confirmDiscard(let destination):
             pendingDestination = destination
-            showsSettingsDiscardConfirmation = true
+            showsEditorDiscardConfirmation = true
         }
     }
 
     private func applyPendingDestination() {
         guard let pendingDestination else { return }
-        hasUnsavedGeneralSettings = false
-        settingsNavigationPath = NavigationPath()
+        hasUnsavedEditor = false
+        clearActiveEditorPath()
         self.pendingDestination = nil
         applyDestination(pendingDestination)
+    }
+
+    private func clearActiveEditorPath() {
+        switch selectedDestination {
+        case .settings:
+            settingsNavigationPath = NavigationPath()
+        case .library:
+            libraryNavigationPath = NavigationPath()
+        case .voice, .history:
+            break
+        }
     }
 
     private func applyDestination(

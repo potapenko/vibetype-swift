@@ -160,6 +160,26 @@ final class IOSLibraryStateOwner {
         return Self.map(resolved)
     }
 
+    func apply(
+        _ mutation: IOSLibraryMutation
+    ) async throws -> IOSLibraryMutationCompletion {
+        let result = try await core.transact(
+            { content in
+                let receipt = mutation.apply(to: &content)
+                return receipt.disposition == .committed
+                    ? .commit(receipt)
+                    : .finishWithoutCommit(receipt)
+            },
+            publish: { [self] coreState in
+                state = Self.map(coreState)
+            }
+        )
+        return IOSLibraryMutationCompletion(
+            state: Self.map(result.state),
+            receipt: result.receipt
+        )
+    }
+
     func confirmedValueForProviderAction() async throws -> IOSLibraryContent {
         try await core.confirmedValue { [self] coreState in
             state = Self.map(coreState)
@@ -180,6 +200,20 @@ final class IOSLibraryStateOwner {
             .saveFailed(lastDurableValue: lastDurableValue)
         }
     }
+}
+
+private nonisolated enum IOSPersistentStateMutationDirective<Receipt: Sendable>:
+    Sendable {
+    case commit(Receipt)
+    case finishWithoutCommit(Receipt)
+}
+
+private nonisolated struct IOSPersistentStateMutationResult<
+    State: Sendable,
+    Receipt: Sendable
+>: Sendable {
+    let state: State
+    let receipt: Receipt
 }
 
 private actor IOSPersistentStateOwnerCore<Value: Equatable & Sendable> {
@@ -232,6 +266,17 @@ private actor IOSPersistentStateOwnerCore<Value: Equatable & Sendable> {
         }
     }
 
+    func transact<Receipt: Sendable>(
+        _ mutation: @escaping @Sendable (
+            inout Value
+        ) -> IOSPersistentStateMutationDirective<Receipt>,
+        publish: @escaping Publisher
+    ) async throws -> IOSPersistentStateMutationResult<State, Receipt> {
+        try await performExclusive { [self] in
+            try await performTransaction(mutation, publish: publish)
+        }
+    }
+
     private func performLoad(
         publish: @escaping Publisher
     ) async throws -> State {
@@ -268,6 +313,46 @@ private actor IOSPersistentStateOwnerCore<Value: Equatable & Sendable> {
             state = .saveFailed(durableValue)
             await publish(state)
             throw IOSContainingAppStateOwnerError.saveFailed
+        }
+    }
+
+    private func performTransaction<Receipt: Sendable>(
+        _ mutation: @escaping @Sendable (
+            inout Value
+        ) -> IOSPersistentStateMutationDirective<Receipt>,
+        publish: @escaping Publisher
+    ) async throws -> IOSPersistentStateMutationResult<State, Receipt> {
+        let durableValue: Value
+        do {
+            durableValue = try await resolveDurableValue()
+        } catch {
+            await publish(state)
+            throw error
+        }
+
+        var candidate = durableValue
+        let directive = mutation(&candidate)
+        switch directive {
+        case .finishWithoutCommit(let receipt):
+            await publish(state)
+            return IOSPersistentStateMutationResult(
+                state: state,
+                receipt: receipt
+            )
+        case .commit(let receipt):
+            do {
+                let committedValue = try await commitValue(candidate)
+                state = .ready(committedValue)
+                await publish(state)
+                return IOSPersistentStateMutationResult(
+                    state: state,
+                    receipt: receipt
+                )
+            } catch {
+                state = .saveFailed(durableValue)
+                await publish(state)
+                throw IOSContainingAppStateOwnerError.saveFailed
+            }
         }
     }
 
