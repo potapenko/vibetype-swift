@@ -24,9 +24,16 @@ protocol IOSAcceptedOutputDeliveryJournalStoring: Sendable {
     ) throws -> IOSAcceptedOutputDeliveryJournalSnapshot
     func remove(expected: IOSAcceptedOutputDeliveryJournalSnapshot) throws
     func removeOpaque(expected: IOSAcceptedOutputDeliveryOpaqueSnapshot) throws
+    func confirmCanonicalAbsence() throws
     func performStagingMaintenance(
         now: Date
     ) throws -> IOSStrictProtectedRecordMaintenanceReport
+}
+
+extension IOSAcceptedOutputDeliveryJournalStoring {
+    func confirmCanonicalAbsence() throws {
+        throw IOSAcceptedOutputDeliveryError.removalCommitUncertain
+    }
 }
 
 enum IOSAcceptedOutputDeliveryJournal {
@@ -37,6 +44,8 @@ struct FoundationIOSAcceptedOutputDeliveryJournalRepository:
     IOSAcceptedOutputDeliveryJournalStoring,
     Sendable {
     private let fileSystem: any IOSStrictProtectedRecordFileSystem
+    private let expectedRepositoryRoot:
+        IOSPersistenceRepositoryRootIdentity?
     private let stagingMaintenance: @Sendable (Date) throws
         -> IOSStrictProtectedRecordMaintenanceReport
 
@@ -56,6 +65,7 @@ struct FoundationIOSAcceptedOutputDeliveryJournalRepository:
             }
         )
         self.fileSystem = fileSystem
+        expectedRepositoryRoot = repositoryGuard?.expectedPhysicalRootIdentity
         stagingMaintenance = { now in
             try fileSystem.removeAbandonedTemporaryFiles(now: now)
         }
@@ -67,6 +77,7 @@ struct FoundationIOSAcceptedOutputDeliveryJournalRepository:
             -> IOSStrictProtectedRecordMaintenanceReport = { _ in .empty }
     ) {
         self.fileSystem = fileSystem
+        expectedRepositoryRoot = nil
         self.stagingMaintenance = stagingMaintenance
     }
 
@@ -161,6 +172,30 @@ struct FoundationIOSAcceptedOutputDeliveryJournalRepository:
             throw IOSAcceptedOutputDeliveryError.removalCommitUncertain
         } catch {
             throw IOSAcceptedOutputDeliveryError.removeFailed
+        }
+    }
+
+    func confirmCanonicalAbsence() throws {
+        do {
+            let evidence = try fileSystem.proveCanonicalFileAbsent(
+                expectedRepositoryRoot: expectedRepositoryRoot
+            )
+            guard evidence.configuration == .acceptedOutputDelivery else {
+                throw IOSAcceptedOutputDeliveryError.removalCommitUncertain
+            }
+        } catch IOSStrictProtectedRecordFileSystemError.missing {
+            // A never-created record directory has no prior unlink whose
+            // durability needs reconciliation. Existing directories take the
+            // descriptor-bound absence barrier above.
+            return
+        } catch IOSAcceptedOutputDeliveryError.removalCommitUncertain {
+            throw IOSAcceptedOutputDeliveryError.removalCommitUncertain
+        } catch IOSStrictProtectedRecordFileSystemError.protectedDataUnavailable {
+            throw IOSAcceptedOutputDeliveryError.dataProtectionUnavailable
+        } catch IOSStrictProtectedRecordFileSystemError.repositoryIdentityConflict {
+            throw IOSAcceptedOutputDeliveryError.readFailed
+        } catch {
+            throw IOSAcceptedOutputDeliveryError.removalCommitUncertain
         }
     }
 

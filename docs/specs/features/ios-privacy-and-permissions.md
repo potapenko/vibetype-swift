@@ -131,19 +131,26 @@ renewed consent before the changed request path runs.
   reflected with a path or raw persistence error.
 - One process-owned consent owner serializes review, acceptance, withdrawal,
   reset, and voice-preflight observations across scenes. Every mutation requires
-  the exact observed epoch and revision; each committed decision increments the
-  revision, and an explicit unreadable-data reset requires a fresh epoch. A
-  scene-local Boolean or a previously rendered status never authorizes provider
-  work.
+  the exact observed epoch, revision, and process gate fence; each committed
+  decision increments the revision, and an explicit unreadable-data reset
+  requires a fresh epoch. Withdrawal or Reset advances the fence before file
+  I/O, so even a failed write invalidates every earlier observation. A scene-
+  local Boolean or a previously rendered status never authorizes provider work.
 - Acceptance commits the current disclosure version, epoch, and revision before
   P4 may resolve the credential, request microphone permission, activate audio,
   or continue the same explicit Start action. A stale queued Accept cannot
   overwrite a later confirmed Withdrawal.
 - Every provider stage, including transcription, correction, and translation,
-  validates the same current accepted consent epoch and revision immediately
-  before dispatch. A stage holding older authority cannot dispatch, and a result
-  that returns after withdrawal, reset, or supersession cannot become accepted
-  output.
+  is bound to the same current accepted consent epoch, revision, exact consent-
+  file revision, gate fence, and canonical physical repository root. Every
+  register, launch, result handoff, and result consume rereads that durable
+  snapshot and revalidates the root before its non-suspending gate transition.
+  Validation, cancellation registration, and launch permission are one atomic
+  gate operation; result authorization is consumed once under that same gate. A
+  stage holding older, same-root-replaced, deleted, unavailable, or alternate-
+  root authority cannot dispatch, and a result that returns after withdrawal,
+  reset, supersession, root substitution, or duplicate consumption cannot
+  become accepted output.
 - Withdrawal first closes the process-wide dispatch gate and invalidates the
   accepted revision, then atomically persists `withdrawn`. The UI does not claim
   completion until persistence is confirmed. If persistence fails, the process

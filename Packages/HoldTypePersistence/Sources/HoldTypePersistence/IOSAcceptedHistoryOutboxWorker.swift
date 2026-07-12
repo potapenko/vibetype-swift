@@ -132,6 +132,8 @@ public extension IOSAcceptedHistoryCoordinator {
         let policyCutoverState = policyCutoverState
         let failedHistoryTransferState = failedHistoryTransferState
         let failedHistoryRetryState = failedHistoryRetryState
+        let foregroundVoicePersistenceState =
+            foregroundVoicePersistenceState
         let failedHistoryMutationInterlock =
             failedHistoryMutationInterlock
         let ownerIdentity = ownerIdentity
@@ -141,6 +143,10 @@ public extension IOSAcceptedHistoryCoordinator {
         do {
             return try await operationGate.perform {
                 operationLeaseAuthorization in
+                guard await foregroundVoicePersistenceState.current() == nil
+                else {
+                    return .pendingLocalRecovery
+                }
                 guard await failedHistoryRetryState.hasLiveOwner() == false
                 else {
                     return .pendingLocalRecovery

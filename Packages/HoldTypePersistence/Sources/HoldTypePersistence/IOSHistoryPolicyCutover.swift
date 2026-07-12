@@ -263,6 +263,8 @@ extension IOSAcceptedHistoryCoordinator {
         let failedHistoryTransferState = failedHistoryTransferState
         let failedHistoryAudioCleanupState = failedHistoryAudioCleanupState
         let failedHistoryRetryState = failedHistoryRetryState
+        let foregroundVoicePersistenceState =
+            foregroundVoicePersistenceState
         let failedHistoryMutationInterlock =
             failedHistoryMutationInterlock
         let ownerIdentity = ownerIdentity
@@ -272,6 +274,10 @@ extension IOSAcceptedHistoryCoordinator {
         do {
             return try await operationGate.perform {
                 operationLeaseAuthorization in
+                guard await foregroundVoicePersistenceState.current() == nil
+                else {
+                    return .pendingLocalRecovery
+                }
                 if completingPendingAcceptedOutputBeforeGenericHistory {
                     guard let pendingRecordingStore else {
                         return .pendingLocalRecovery
@@ -499,6 +505,8 @@ private extension IOSAcceptedHistoryCoordinator {
         let failedHistoryTransferState = failedHistoryTransferState
         let failedHistoryAudioCleanupState = failedHistoryAudioCleanupState
         let failedHistoryRetryState = failedHistoryRetryState
+        let foregroundVoicePersistenceState =
+            foregroundVoicePersistenceState
         let failedHistoryMutationInterlock =
             failedHistoryMutationInterlock
         let ownerIdentity = ownerIdentity
@@ -508,6 +516,11 @@ private extension IOSAcceptedHistoryCoordinator {
         do {
             return try await operationGate.perform {
                 operationLeaseAuthorization in
+                guard await foregroundVoicePersistenceState.current() == nil
+                else {
+                    throw IOSAcceptedHistoryCoordinatorError
+                        .localRecoveryPending
+                }
                 let retainedAtEntry = await cutoverState.current()
                 let mayResumeFailedHistory = retainedAtEntry?.ownerIdentity
                     == ownerIdentity

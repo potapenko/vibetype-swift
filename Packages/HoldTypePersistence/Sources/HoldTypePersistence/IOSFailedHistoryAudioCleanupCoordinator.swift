@@ -222,12 +222,19 @@ extension IOSAcceptedHistoryCoordinator {
         let policyCutoverState = policyCutoverState
         let failedHistoryTransferState = failedHistoryTransferState
         let failedHistoryRetryState = failedHistoryRetryState
+        let foregroundVoicePersistenceState =
+            foregroundVoicePersistenceState
         let deliveryStore = deliveryStore
         let repositoryIdentityState = repositoryIdentityState
         let repositoryRegistration = repositoryRegistration
 
         do {
             return try await operationGate.perform { authorization in
+                guard await foregroundVoicePersistenceState.current() == nil
+                else {
+                    throw IOSAcceptedHistoryCoordinatorError
+                        .localRecoveryPending
+                }
                 guard await failedHistoryRetryState.hasLiveOwner() == false
                 else {
                     throw IOSAcceptedHistoryCoordinatorError

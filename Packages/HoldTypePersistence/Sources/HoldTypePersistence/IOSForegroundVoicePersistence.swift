@@ -57,12 +57,17 @@ public struct IOSForegroundVoiceSavingResultExpectation: Equatable, Sendable {
 public enum IOSForegroundVoiceAcceptanceResult: Equatable, Sendable {
     case resultReady(IOSAcceptedOutputDeliveryRecord)
     case savingResult(IOSForegroundVoiceSavingResultExpectation)
+    case expired(IOSAcceptedOutputDeliveryExpectation)
+    case clockRollbackAmbiguous(IOSAcceptedOutputDeliveryExpectation)
 }
 
 public enum IOSForegroundVoiceLatestResultObservation: Equatable, Sendable {
     case absent
     case resultReady(IOSAcceptedOutputDeliveryRecord)
-    case savingResult(IOSForegroundVoiceSavingResultExpectation)
+    case savingResult(
+        IOSForegroundVoiceSavingResultExpectation,
+        priorResult: IOSAcceptedOutputDeliveryRecord?
+    )
     case expired(IOSAcceptedOutputDeliveryExpectation)
     case clockRollbackAmbiguous(IOSAcceptedOutputDeliveryExpectation)
     case clearedCleanupPending
@@ -86,8 +91,14 @@ public enum IOSForegroundVoicePersistenceError: Error, Equatable, Sendable {
 }
 
 struct IOSForegroundVoicePersistenceWork: Equatable, Sendable {
+    enum RetirementOrigin: Equatable, Sendable {
+        case liveProcess
+        case processLoss
+    }
+
     let preparation: IOSAcceptedOutputDeliveryPreparation
     let pendingRecording: IOSPendingRecording
+    let retirementOrigin: RetirementOrigin
 
     var expectation: IOSForegroundVoiceSavingResultExpectation {
         IOSForegroundVoiceSavingResultExpectation(preparation: preparation)
@@ -102,6 +113,7 @@ struct IOSForegroundVoicePersistenceWork: Equatable, Sendable {
 
 actor IOSForegroundVoicePersistenceOperationState {
     private var work: IOSForegroundVoicePersistenceWork?
+    private var retirementCompleted = false
 
     func begin(
         _ candidate: IOSForegroundVoicePersistenceWork
@@ -114,10 +126,32 @@ actor IOSForegroundVoicePersistenceOperationState {
             return work
         }
         work = candidate
+        retirementCompleted = false
         return candidate
     }
 
     func current() -> IOSForegroundVoicePersistenceWork? { work }
+
+    func hasCompletedRetirement(
+        matching expectation: IOSForegroundVoiceSavingResultExpectation
+    ) throws -> Bool {
+        guard let work else { return false }
+        guard work.matches(expectation) else {
+            throw IOSForegroundVoicePersistenceError
+                .savingResultIdentityMismatch
+        }
+        return retirementCompleted
+    }
+
+    func markRetirementCompleted(
+        matching expectation: IOSForegroundVoiceSavingResultExpectation
+    ) throws {
+        guard let work, work.matches(expectation) else {
+            throw IOSForegroundVoicePersistenceError
+                .savingResultIdentityMismatch
+        }
+        retirementCompleted = true
+    }
 
     func clear(
         matching expectation: IOSForegroundVoiceSavingResultExpectation
@@ -128,6 +162,7 @@ actor IOSForegroundVoicePersistenceOperationState {
                 .savingResultIdentityMismatch
         }
         self.work = nil
+        retirementCompleted = false
     }
 }
 
@@ -252,6 +287,40 @@ extension IOSAcceptedOutputDeliveryRecord {
     }
 }
 
+private extension IOSAcceptedOutputDeliveryExpectation {
+    func matchesForegroundVoiceIdentity(
+        _ preparation: IOSAcceptedOutputDeliveryPreparation
+    ) -> Bool {
+        deliveryID == preparation.deliveryID
+            && sessionID == preparation.sessionID
+            && attemptID == preparation.attemptID
+            && transcriptID == preparation.transcriptID
+            && failedRetryID == nil
+    }
+
+    func overlapsPendingIdentity(
+        _ recording: IOSPendingRecording
+    ) -> Bool {
+        attemptID == recording.attemptID
+            || recording.transcriptionID.map { transcriptID == $0 } == true
+    }
+}
+
+private extension IOSAcceptedOutputDeliveryObservation {
+    func overlapsPendingIdentity(
+        _ recording: IOSPendingRecording
+    ) -> Bool {
+        switch self {
+        case .active(let record):
+            IOSAcceptedOutputDeliveryExpectation(record: record)
+                .overlapsPendingIdentity(recording)
+        case .expired(let expectation),
+             .clockRollbackAmbiguous(let expectation):
+            expectation.overlapsPendingIdentity(recording)
+        }
+    }
+}
+
 /// Canonical P4 app-only accepted-output and PendingRecording transaction.
 /// It performs no History, outbox, bridge, or keyboard operation.
 public struct IOSForegroundVoicePersistence: Sendable {
@@ -310,7 +379,8 @@ public struct IOSForegroundVoicePersistence: Sendable {
             let work = try await state.begin(
                 IOSForegroundVoicePersistenceWork(
                     preparation: preparation.deliveryPreparation,
-                    pendingRecording: pending
+                    pendingRecording: pending,
+                    retirementOrigin: .liveProcess
                 )
             )
             do {
@@ -319,7 +389,11 @@ public struct IOSForegroundVoicePersistence: Sendable {
                     operationLeaseAuthorization: lease
                 )
             } catch {
-                return .savingResult(work.expectation)
+                return try await resolveResumeFailure(
+                    error,
+                    work: work,
+                    operationLeaseAuthorization: lease
+                )
             }
         }
     }
@@ -341,7 +415,11 @@ public struct IOSForegroundVoicePersistence: Sendable {
                     operationLeaseAuthorization: lease
                 )
             } catch {
-                return .savingResult(work.expectation)
+                return try await resolveResumeFailure(
+                    error,
+                    work: work,
+                    operationLeaseAuthorization: lease
+                )
             }
         }
     }
@@ -382,28 +460,117 @@ public struct IOSForegroundVoicePersistence: Sendable {
             let pending = try await pendingRecordingStore
                 .loadForContainingAppBoundary(
                     operationLeaseAuthorization: lease
-                )
+            )
             if let retainedWork {
-                return .savingResult(retainedWork.expectation)
-            }
-            let delivery = try await deliveryStore
-                .loadForegroundVoiceLatestResult(
-                    operationLeaseAuthorization: lease
+                if try await state.hasCompletedRetirement(
+                    matching: retainedWork.expectation
+                ) {
+                    do {
+                        _ = try await pendingRecordingStore
+                            .proveForegroundVoicePendingJournalAbsent(
+                                operationLeaseAuthorization: lease
+                            )
+                        let completed = try await loadCompletedResult(
+                            for: retainedWork,
+                            operationLeaseAuthorization: lease
+                        )
+                        try await state.clear(
+                            matching: retainedWork.expectation
+                        )
+                        switch completed {
+                        case .resultReady(let record):
+                            return .resultReady(record)
+                        case .expired(let expectation):
+                            return .expired(expectation)
+                        case .clockRollbackAmbiguous(let expectation):
+                            return .clockRollbackAmbiguous(expectation)
+                        case .savingResult:
+                            throw IOSForegroundVoicePersistenceError
+                                .savingResultPending
+                        }
+                    } catch {
+                        return .savingResult(
+                            retainedWork.expectation,
+                            priorResult: nil
+                        )
+                    }
+                }
+                let delivery: IOSAcceptedOutputDeliveryObservation?
+                do {
+                    delivery = try await deliveryStore
+                        .loadForegroundVoiceLatestResultWhileSaving(
+                            preparation: retainedWork.preparation,
+                            operationLeaseAuthorization: lease
+                        )
+                } catch let error
+                    where isRetryableSavingFailure(error) {
+                    return .savingResult(
+                        retainedWork.expectation,
+                        priorResult: nil
+                    )
+                }
+                let priorResult: IOSAcceptedOutputDeliveryRecord?
+                if case .active(let record)? = delivery,
+                   record.deliveryState != .discarded,
+                   record.acceptedText != nil,
+                   !record.hasSameAcceptance(
+                       as: retainedWork.preparation
+                   ) {
+                    priorResult = record
+                } else {
+                    priorResult = nil
+                }
+                return .savingResult(
+                    retainedWork.expectation,
+                    priorResult: priorResult
                 )
+            }
             if let pending,
                pending.recording.phase == .outputDelivery,
-               case .active(let record)? = delivery,
-               record.isExactForegroundVoiceDestination(
-                   for: pending.recording
-               ) {
-                return .savingResult(
-                    IOSForegroundVoiceSavingResultExpectation(
-                        preparation: try record
-                            .foregroundVoicePreparation()
+               let destination = try await deliveryStore
+                .confirmForegroundVoiceDestinationIfPresent(
+                    pendingRecording: pending.recording,
+                    operationLeaseAuthorization: lease
+                ) {
+                let preparation = try destination.record
+                    .foregroundVoicePreparation()
+                let recoveredWork = try await state.begin(
+                    IOSForegroundVoicePersistenceWork(
+                        preparation: preparation,
+                        pendingRecording: pending.recording,
+                        retirementOrigin: .processLoss
                     )
                 )
+                return .savingResult(
+                    recoveredWork.expectation,
+                    priorResult: nil
+                )
             }
-            guard let delivery else { return .absent }
+            if pending == nil {
+                _ = try await pendingRecordingStore
+                    .proveForegroundVoicePendingJournalAbsent(
+                        operationLeaseAuthorization: lease
+                    )
+            }
+            let delivery: IOSAcceptedOutputDeliveryObservation?
+            do {
+                delivery = try await deliveryStore
+                    .loadForegroundVoiceLatestResult(
+                        operationLeaseAuthorization: lease
+                    )
+            } catch IOSAcceptedOutputDeliveryError.removalCommitUncertain {
+                return .clearedCleanupPending
+            }
+            guard let delivery else {
+                return await deliveryStore
+                    .hasForegroundVoiceCleanupPending()
+                    ? .clearedCleanupPending
+                    : .absent
+            }
+            if let pending,
+               delivery.overlapsPendingIdentity(pending.recording) {
+                throw IOSForegroundVoicePersistenceError.invalidPendingOwner
+            }
             switch delivery {
             case .active(let record):
                 if record.deliveryState == .discarded {
@@ -422,17 +589,39 @@ public struct IOSForegroundVoicePersistence: Sendable {
         expected: IOSAcceptedOutputDeliveryExpectation
     ) async throws -> IOSForegroundVoiceClearResult {
         try await performRootOperation { lease in
-            guard await state.current() == nil else {
+            if let retainedWork = await state.current(),
+               retainedWork.pendingRecording.attemptID
+                == expected.attemptID,
+               retainedWork.pendingRecording.transcriptionID
+                == expected.transcriptID {
                 throw IOSForegroundVoicePersistenceError
                     .savingResultPending
             }
-            if let pending = try await pendingRecordingStore
+            let pending = try await pendingRecordingStore
                 .loadForContainingAppBoundary(
                     operationLeaseAuthorization: lease
-                ), pending.recording.phase == .outputDelivery,
-               pending.recording.attemptID == expected.attemptID,
-               pending.recording.transcriptionID == expected.transcriptID {
+                )
+            if let pending,
+               expected.overlapsPendingIdentity(pending.recording) {
+                guard pending.recording.phase == .outputDelivery,
+                      let destination = try await deliveryStore
+                        .confirmForegroundVoiceDestinationIfPresent(
+                            pendingRecording: pending.recording,
+                            operationLeaseAuthorization: lease
+                        ),
+                      IOSAcceptedOutputDeliveryExpectation(
+                          record: destination.record
+                      ) == expected else {
+                    throw IOSForegroundVoicePersistenceError
+                        .invalidPendingOwner
+                }
                 throw IOSForegroundVoicePersistenceError.savingResultPending
+            }
+            if pending == nil {
+                _ = try await pendingRecordingStore
+                    .proveForegroundVoicePendingJournalAbsent(
+                        operationLeaseAuthorization: lease
+                    )
             }
             return try await deliveryStore.clearForegroundVoiceLatestResult(
                 expected: expected,
@@ -441,29 +630,75 @@ public struct IOSForegroundVoicePersistence: Sendable {
         }
     }
 
+    /// Retries only physical cleanup for an already-cleared P4 result. It has
+    /// no text or identity input and cannot clear an active result.
+    public func retryLatestResultCleanup()
+        async throws -> IOSForegroundVoiceClearResult {
+        try await performRootOperation { lease in
+            try await deliveryStore
+                .retryForegroundVoiceLatestResultCleanup(
+                    operationLeaseAuthorization: lease
+                )
+        }
+    }
+
     private func resume(
         _ work: IOSForegroundVoicePersistenceWork,
         operationLeaseAuthorization lease:
             IOSPersistenceOperationLeaseAuthorization
     ) async throws -> IOSForegroundVoiceAcceptanceResult {
-        let record = try await deliveryStore.acceptForegroundVoiceOutput(
-            work.preparation,
-            pendingRecording: work.pendingRecording,
-            operationLeaseAuthorization: lease
-        )
-        let firstDestination = try await deliveryStore
-            .confirmForegroundVoiceDestination(
-                expected: IOSAcceptedOutputDeliveryExpectation(record: record),
+        if try await state.hasCompletedRetirement(
+            matching: work.expectation
+        ) {
+            let result = try await loadCompletedResult(
+                for: work,
+                operationLeaseAuthorization: lease
+            )
+            try await state.clear(matching: work.expectation)
+            return result
+        }
+        let firstDestination: IOSForegroundVoiceAcceptedDestinationAuthorization
+        if let existing = try await deliveryStore
+            .resumeForegroundVoiceDestinationIfPresent(
+                preparation: work.preparation,
+                pendingRecording: work.pendingRecording,
+                operationLeaseAuthorization: lease
+            ) {
+            firstDestination = existing
+        } else {
+            let record = try await deliveryStore.acceptForegroundVoiceOutput(
+                work.preparation,
                 pendingRecording: work.pendingRecording,
                 operationLeaseAuthorization: lease
             )
-        let audioRemoval = try await pendingRecordingStore
-            .removeForegroundVoiceAcceptedOutputAudio(
-                expected: work.pendingRecording,
-                destinationAuthorization: firstDestination,
-                deliveryStoreIdentity: deliveryStore.storeIdentity,
-                operationLeaseAuthorization: lease
-            )
+            firstDestination = try await deliveryStore
+                .confirmForegroundVoiceDestination(
+                    expected: IOSAcceptedOutputDeliveryExpectation(
+                        record: record
+                    ),
+                    pendingRecording: work.pendingRecording,
+                    operationLeaseAuthorization: lease
+                )
+        }
+        let audioRemoval: IOSForegroundVoicePendingAudioRemovalAuthorization
+        switch work.retirementOrigin {
+        case .liveProcess:
+            audioRemoval = try await pendingRecordingStore
+                .removeForegroundVoiceAcceptedOutputAudio(
+                    expected: work.pendingRecording,
+                    destinationAuthorization: firstDestination,
+                    deliveryStoreIdentity: deliveryStore.storeIdentity,
+                    operationLeaseAuthorization: lease
+                )
+        case .processLoss:
+            audioRemoval = try await pendingRecordingStore
+                .removeForegroundVoiceAcceptedOutputAudioAfterProcessLoss(
+                    expected: work.pendingRecording,
+                    destinationAuthorization: firstDestination,
+                    deliveryStoreIdentity: deliveryStore.storeIdentity,
+                    operationLeaseAuthorization: lease
+                )
+        }
         let confirmedDestination = try await deliveryStore
             .confirmForegroundVoiceDestination(
                 expected: IOSAcceptedOutputDeliveryExpectation(
@@ -480,8 +715,171 @@ public struct IOSForegroundVoicePersistence: Sendable {
                 deliveryStoreIdentity: deliveryStore.storeIdentity,
                 operationLeaseAuthorization: lease
             )
+        try await state.markRetirementCompleted(
+            matching: work.expectation
+        )
+        let result = try await loadCompletedResult(
+            for: work,
+            operationLeaseAuthorization: lease
+        )
         try await state.clear(matching: work.expectation)
-        return .resultReady(confirmedDestination.record)
+        return result
+    }
+
+    private func loadCompletedResult(
+        for work: IOSForegroundVoicePersistenceWork,
+        operationLeaseAuthorization lease:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSForegroundVoiceAcceptanceResult {
+        let completion = try await deliveryStore
+            .loadForegroundVoiceLatestResult(
+                operationLeaseAuthorization: lease
+            )
+        switch completion {
+        case .active(let record)?
+            where record.hasSameAcceptance(as: work.preparation)
+                && record.isForegroundVoiceAppOnlyRecord
+                && record.deliveryState != .discarded:
+            return .resultReady(record)
+        case .expired(let expectation)?
+            where expectation.matchesForegroundVoiceIdentity(
+                work.preparation
+            ):
+            return .expired(expectation)
+        case .clockRollbackAmbiguous(let expectation)?
+            where expectation.matchesForegroundVoiceIdentity(
+                work.preparation
+            ):
+            return .clockRollbackAmbiguous(expectation)
+        case .none, .active, .expired, .clockRollbackAmbiguous:
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+    }
+
+    private func resolveResumeFailure(
+        _ error: Error,
+        work: IOSForegroundVoicePersistenceWork,
+        operationLeaseAuthorization lease:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSForegroundVoiceAcceptanceResult {
+        if try await state.hasCompletedRetirement(
+            matching: work.expectation
+        ) {
+            return .savingResult(work.expectation)
+        }
+        if await shouldRetainSavingWork(
+            after: error,
+            work: work,
+            operationLeaseAuthorization: lease
+        ) {
+            return .savingResult(work.expectation)
+        }
+        try await state.clear(matching: work.expectation)
+        throw error
+    }
+
+    private func shouldRetainSavingWork(
+        after error: Error,
+        work: IOSForegroundVoicePersistenceWork,
+        operationLeaseAuthorization lease:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async -> Bool {
+        if isRetryableSavingFailure(error) {
+            return true
+        }
+        do {
+            if try await deliveryStore
+                .resumeForegroundVoiceDestinationIfPresent(
+                    preparation: work.preparation,
+                    pendingRecording: work.pendingRecording,
+                    operationLeaseAuthorization: lease
+                ) != nil {
+                return true
+            }
+        } catch {
+            if isRetryableSavingFailure(error) {
+                return true
+            }
+        }
+        do {
+            guard let pending = try await pendingRecordingStore
+                .loadForContainingAppBoundary(
+                    operationLeaseAuthorization: lease
+                ) else {
+                return false
+            }
+            return pending.recording == work.pendingRecording
+                && pending.recording.phase == .outputDelivery
+        } catch {
+            return isRetryableSavingFailure(error)
+        }
+    }
+
+    private func isRetryableSavingFailure(_ error: Error) -> Bool {
+        if let error = error as? IOSAcceptedOutputDeliveryError {
+            switch error {
+            case .readFailed,
+                 .writeFailed,
+                 .dataProtectionUnavailable,
+                 .commitUncertain,
+                 .removeFailed,
+                 .removalCommitUncertain,
+                 .expired,
+                 .clockRollbackAmbiguous:
+                return true
+            case .invalidPreparation,
+                 .invalidRecord,
+                 .sourceTooLarge,
+                 .malformedData,
+                 .unsupportedSchemaVersion,
+                 .slotOccupied,
+                 .compareAndSwapFailed,
+                 .identityCollision,
+                 .invalidTransition,
+                 .revisionOverflow,
+                 .historyTransferRequired,
+                 .bridgeRevocationRequired:
+                return false
+            }
+        }
+        if let error = error as? IOSPendingRecordingError {
+            switch error {
+            case .dataProtectionUnavailable,
+                 .journalWriteFailed,
+                 .journalCommitUncertain,
+                 .audioRemoveFailed,
+                 .journalRemoveFailed,
+                 .destinationInspectionFailed:
+                return true
+            case .cancelledBeforeOperation,
+                 .reentrantOperation,
+                 .repositoryIdentityConflict,
+                 .localRecoveryPending,
+                 .pendingSlotOccupied,
+                 .orphanedAudio,
+                 .journalUnreadable,
+                 .journalTooLarge,
+                 .journalMalformed,
+                 .unsupportedJournalVersion,
+                 .invalidJournal,
+                 .invalidSourceArtifact,
+                 .invalidTranscriptionConfiguration,
+                 .sourceUnavailable,
+                 .sourceChanged,
+                 .protectedAudioConflict,
+                 .audioPublicationFailed,
+                 .audioPublicationTimedOut,
+                 .mediaValidationFailed,
+                 .mediaValidationTimedOut,
+                 .linkedAudioMissing,
+                 .linkedAudioInvalid,
+                 .compareAndSwapFailed,
+                 .invalidTransition,
+                 .dispatchAlreadyCommitted:
+                return false
+            }
+        }
+        return false
     }
 
     private func requireOutputDeliveryPending(

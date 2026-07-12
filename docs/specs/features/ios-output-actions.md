@@ -148,6 +148,11 @@ behavior remain platform-owned.
   never reconstructs text from a tombstone. Commit uncertainty first reconciles
   the intended tombstone bytes and shows a retryable local error until the
   logical state is known.
+- Physical cleanup after a confirmed tombstone accepts no caller payload and
+  returns no content. The store validates the current canonical tombstone and
+  internally derives its opaque expectation; it cannot accept or reconstruct
+  accepted text, remove a newer active record, turn the tombstone visible again,
+  or grant Copy, Share, or Use in Practice.
 - Keep Latest Result off never bypasses the mandatory record or removes text
   while the current app-only result or recovery decision is unresolved. With no
   P4 insertion acknowledgement, the result remains recoverable until confirmed
@@ -155,7 +160,11 @@ behavior remain platform-owned.
   expiry. P4 does not expose a control for changing this preference.
 - Replacing an existing P4 latest result is one fail-closed atomic old-to-new
   delivery operation. It never clears the previous record first and never
-  presents the new result until its durable replacement is confirmed.
+  presents the new result until its durable replacement is confirmed. While the
+  new attempt remains in `Saving Result`, the prior confirmed and unexpired
+  result may remain visible. Failed invisible replacement preserves that prior
+  result; ambiguous replacement blocks another destructive mutation. A
+  discarded, expired, or tombstoned predecessor never returns as prior text.
 
 ## Latest And Pending Result Lifetime
 
@@ -196,8 +205,9 @@ behavior remain platform-owned.
   delivery with unresolved History work, the app must durably transfer exact
   ownership to the bounded History outbox or fail closed.
   The app retries only local metadata persistence, never provider work. If the
-  mandatory delivery record fails, no accepted text is published and the
-  journaled attempt remains recoverable. The exact contract is frozen in
+  mandatory delivery record fails, the new accepted text is not published and
+  the journaled attempt remains recoverable. An independently existing prior
+  valid Latest Result is not erased by that failure. The exact contract is frozen in
   `ios-accepted-output-delivery-record.md`.
 
 ## Keyboard Insertion

@@ -1,8 +1,9 @@
 # HoldType iOS Keyboard Development Plan
 
 Status: active feasibility work; canonical roadmap P3 is complete and P4 is in
-progress. Its app-only foreground voice contract is frozen; the Persistence
-transaction foundation is next. Started 2026-07-09 and updated 2026-07-12.
+progress. Its app-only foreground voice contract and Persistence transaction
+are complete; reader-based, consent-gated containing-app processing is next.
+Started 2026-07-09 and updated 2026-07-12.
 
 The complete containing-app, settings, data, privacy, and macOS feature
 portability roadmap lives in `docs/ios-product-portability-plan.md`. This file
@@ -413,11 +414,14 @@ host app, state, expected result, actual result, and go/no-go decision.
   App Group bytes and the Release keyboard binary remain unchanged. Evidence
   lives in
   `docs/qa/runs/ios-library-replacement-rules-2026-07-12.md`. P3 is complete;
-  P4A now freezes the app-only foreground voice, consent, Pending, descriptor-
-  reader, accepted-delivery, output-action, multi-scene, and lifecycle
-  contracts in `docs/qa/runs/ios-p4-contract-freeze-2026-07-12.md`. P4B's
-  Persistence transaction closure is next. The independent recording cache
-  and directional bridge remain later milestones behind the physical M0 gates.
+  P4A froze the app-only foreground voice, consent, Pending, descriptor-reader,
+  accepted-delivery, output-action, multi-scene, and lifecycle contracts in
+  `docs/qa/runs/ios-p4-contract-freeze-2026-07-12.md`. P4B completed the
+  app-only Persistence transaction. P4C now implements reader-based,
+  consent-gated containing-app processing; P4D will add foreground audio and
+  the shared Voice UI. None of these slices changes the extension dependency
+  boundary. The independent recording cache and directional bridge remain
+  later milestones behind the physical M0 gates.
   The runtime-only four-case `VoiceAttemptStage` is portable too; preflight,
   outcomes, recovery eligibility, and durable resume checkpoints remain
   separate. The containing-app output handoff is now narrowed to accepted text

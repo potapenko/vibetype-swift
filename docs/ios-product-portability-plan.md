@@ -3,8 +3,9 @@
 Status: active implementation roadmap; P0, P1, P2, and P3 are complete. The
 native containing app now includes its state owners, shell, Settings editors,
 Dictionary, Voice Emoji Commands, and Replacement Rules. P4 is in progress: its
-app-only foreground voice contract is frozen and the Persistence transaction
-foundation is next; updated 2026-07-12.
+app-only foreground voice contract and Persistence transaction are complete;
+reader-based OpenAI and consent-gated foreground processing are next; updated
+2026-07-12.
 
 This document plans the complete iPhone and iPad companion product around the
 HoldType keyboard. It does not authorize Swift, target, entitlement, or
@@ -1318,6 +1319,20 @@ no History, App Group publication, background-audio mode, Quick Session, or
 external-app insertion. Final evidence lives in
 `docs/qa/runs/ios-p4-contract-freeze-2026-07-12.md`.
 
+P4B is complete. The canonical app-only Persistence transaction now owns
+mandatory generation-0 accepted delivery, exact Pending audio and journal
+retirement, Latest Result load/Clear, and provider-free `Saving Result`
+recovery. Final evidence lives in
+`docs/qa/runs/ios-p4b-persistence-foundation-2026-07-12.md`.
+
+P4C is next. It adds the neutral reader request to `HoldTypeOpenAI`, binds the
+protected Pending reader only inside `HoldTypeIOSCore`, and implements
+consent-gated foreground Transcription, correction, local processing,
+Translation, Usage handoff, exact Pending transitions, cancellation recovery,
+and P4B acceptance. It adds no microphone implementation, Voice UI, background
+mode, Quick Session, App Group publication, or keyboard dependency; those
+foreground audio and presentation surfaces remain P4D.
+
 No History toggle, Clear History action, first-use disclosure, Recording Cache,
 App Group publication, or keyboard dependency is exposed by C4.0 alone.
 The C4.0 contract review is recorded in
@@ -1378,6 +1393,10 @@ commands.
   the same generation cutover and cleanup contract;
 - reconcile the independent pending-recording journal after relaunch and allow
   retry of that interrupted active attempt and any approved durable failed row;
+- before exposing failed-row Retry, migrate its legacy URL-materialization
+  provider path to the same neutral reader and consent-gated stage executor, or
+  keep the action unavailable; no existing internal Retry path is exempt from
+  the current consent contract;
 - add playback, Share/Save to Files, retention and clear flows;
 - add transcription usage estimate and typed-allowlist diagnostic export;
 - verify privacy manifests and default-log redaction.
@@ -1593,13 +1612,12 @@ redacted drafts, automation-disabled Keychain access, truthful saved-state
 presentation, Dynamic Type, dark appearance, and keyboard isolation remain
 intact.
 
-P4 is now in progress. P4A freezes the explicit-action, foreground-only flow
-from consent and microphone permission through protected recording, bounded
-provider/local processing, accepted result, and Copy/Share. P4B next closes the
-canonical Persistence transaction for app-only acceptance, exact Pending
-retirement, load/Clear, and `Saving Result` recovery before audio or UI is built.
-No P4 slice adds an audio background mode or Quick Session. The independent
-recording-cache and directional App Group bridge flows remain later work.
+P4 is in progress. P4A froze the foreground-only contract and P4B completed its
+canonical Persistence transaction. P4C now owns reader-based OpenAI and
+consent-gated foreground processing; P4D follows with audio-session/recorder
+integration, the shared Voice owner and UI, and bounded simulator runtime QA.
+No P4 slice adds background audio, Quick Session, directional App Group work,
+or keyboard provider dependencies.
 
 Final P3 evidence lives in
 `docs/qa/runs/ios-containing-app-state-owners-2026-07-12.md`,

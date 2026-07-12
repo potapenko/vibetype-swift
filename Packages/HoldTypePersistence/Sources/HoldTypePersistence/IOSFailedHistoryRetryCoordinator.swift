@@ -1186,12 +1186,18 @@ extension IOSAcceptedHistoryCoordinator {
         let policyCutoverState = policyCutoverState
         let failedTransferState = failedHistoryTransferState
         let failedAudioCleanupState = failedHistoryAudioCleanupState
+        let foregroundVoicePersistenceState =
+            foregroundVoicePersistenceState
         let failedMutationInterlock = failedHistoryMutationInterlock
         let deliveryStore = deliveryStore
         let repositoryIdentityState = repositoryIdentityState
         let repositoryRegistration = repositoryRegistration
         let ownerIdentity = ownerIdentity
         let transcriptionConfiguration = setup.transcriptionConfiguration
+
+        guard await foregroundVoicePersistenceState.current() == nil else {
+            throw IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+        }
 
         // A previous provider completion may have exhausted its bounded local
         // Store attempts after the exact terminal claim was already retained.
@@ -1211,6 +1217,11 @@ extension IOSAcceptedHistoryCoordinator {
         let handoff: IOSFailedHistoryRetryHandoff
         do {
             handoff = try await operationGate.perform { lease in
+                guard await foregroundVoicePersistenceState.current() == nil
+                else {
+                    throw IOSAcceptedHistoryCoordinatorError
+                        .localRecoveryPending
+                }
                 let repositoryBinding = repositoryRegistration?.revalidate()
                 guard !repositoryIdentityState.isConflicted else {
                     throw IOSAcceptedHistoryCoordinatorError

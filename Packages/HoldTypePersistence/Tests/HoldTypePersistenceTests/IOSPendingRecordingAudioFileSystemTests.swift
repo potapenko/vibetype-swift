@@ -40,6 +40,342 @@ struct IOSPendingRecordingAudioFileSystemTests {
         #expect(!adapter.events.contains("publish-exclusive"))
     }
 
+    @Test func acceptedOutputUnlinkSyncFailureNeedsDurableAbsenceProof()
+        async throws {
+        let bytes = [UInt8](repeating: 0x5A, count: 64)
+        let adapter = SimulatedPendingRecordingPOSIXAdapter(
+            sourceBytes: bytes
+        )
+        let fileSystem = makeFileSystem(adapter: adapter)
+        let lease = try await fileSystem.publishProtectedCopy(
+            from: artifact(byteCount: bytes.count),
+            attemptID: attemptID,
+            format: .m4a,
+            durationMilliseconds: 1_500
+        )
+        lease.release()
+        let timestamp = Date(timeIntervalSince1970: 1_750_000_000)
+        let recording = try IOSPendingRecording(
+            attemptID: attemptID,
+            audioRelativeIdentifier: lease.relativeIdentifier,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            phase: .outputDelivery,
+            outputIntent: .standard,
+            transcriptionID: UUID(),
+            transcriptionModel: "gpt-4o-mini-transcribe",
+            transcriptionLanguageCode: "en",
+            durationMilliseconds: 1_500,
+            byteCount: Int64(bytes.count)
+        )
+        let gate = IOSPersistenceOperationGate()
+
+        try await gate.perform { operationLease in
+            let authorization = try #require(
+                IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization(
+                    testing: recording,
+                    operationLeaseAuthorization: operationLease
+                )
+            )
+            adapter.failNext("fsyncDirectory", errors: [EIO])
+
+            await #expect(
+                throws: IOSPendingRecordingAudioFileSystemError.removeFailed
+            ) {
+                _ = try await fileSystem
+                    .reconcileAcceptedOutputAudioRemoval(
+                        using: authorization
+                    )
+            }
+            #expect(adapter.publishedBytes == nil)
+
+            let evidence = try await fileSystem
+                .reconcileAcceptedOutputAudioRemoval(
+                    using: authorization
+                )
+            #expect(evidence.provesAbsence(using: authorization))
+            #expect(!evidence.provesPreexistingAbsence)
+            #expect(
+                evidence.description
+                    == "IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence(redacted)"
+            )
+            #expect(evidence.customMirror.children.isEmpty)
+        }
+    }
+
+    @Test func acceptedOutputRetainsInodeAfterCommittedEINTR()
+        async throws {
+        let bytes = [UInt8](repeating: 0x6A, count: 64)
+        let adapter = SimulatedPendingRecordingPOSIXAdapter(
+            sourceBytes: bytes
+        )
+        let fileSystem = makeFileSystem(adapter: adapter)
+        let lease = try await fileSystem.publishProtectedCopy(
+            from: artifact(byteCount: bytes.count),
+            attemptID: attemptID,
+            format: .m4a,
+            durationMilliseconds: 1_500
+        )
+        lease.release()
+        let recording = try acceptedOutputRecording(
+            relativeIdentifier: lease.relativeIdentifier,
+            byteCount: bytes.count
+        )
+        let gate = IOSPersistenceOperationGate()
+        let storeIdentity = IOSPendingRecordingStoreIdentity()
+        let ownerIdentity = IOSAcceptedHistoryCapabilityOwnerIdentity()
+        adapter.failNextUnlinkAfterCommit(with: EINTR)
+
+        try await gate.perform { operationLease in
+            let authorization = try #require(
+                IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization(
+                    testing: recording,
+                    expectedPendingStoreIdentity: storeIdentity,
+                    ownerIdentity: ownerIdentity,
+                    operationLeaseAuthorization: operationLease
+                )
+            )
+            await #expect(
+                throws: IOSPendingRecordingAudioFileSystemError.removeFailed
+            ) {
+                _ = try await fileSystem.reconcileAcceptedOutputAudioRemoval(
+                    using: authorization
+                )
+            }
+        }
+
+        let evidence = try await gate.perform { operationLease in
+            let authorization = try #require(
+                IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization(
+                    testing: recording,
+                    expectedPendingStoreIdentity: storeIdentity,
+                    ownerIdentity: ownerIdentity,
+                    operationLeaseAuthorization: operationLease
+                )
+            )
+            let evidence = try await fileSystem
+                .reconcileAcceptedOutputAudioRemoval(using: authorization)
+            #expect(evidence.provesAbsence(using: authorization))
+            return evidence
+        }
+        #expect(!evidence.provesPreexistingAbsence)
+        #expect(adapter.events.filter { $0.hasPrefix("unlink:") }.count == 1)
+    }
+
+    @Test func acceptedOutputPreservesRecreatedPathAfterFsyncUncertainty()
+        async throws {
+        let bytes = [UInt8](repeating: 0x6B, count: 64)
+        let replacement = [UInt8](repeating: 0x6C, count: 64)
+        let adapter = SimulatedPendingRecordingPOSIXAdapter(
+            sourceBytes: bytes
+        )
+        let fileSystem = makeFileSystem(adapter: adapter)
+        let lease = try await fileSystem.publishProtectedCopy(
+            from: artifact(byteCount: bytes.count),
+            attemptID: attemptID,
+            format: .m4a,
+            durationMilliseconds: 1_500
+        )
+        lease.release()
+        let recording = try acceptedOutputRecording(
+            relativeIdentifier: lease.relativeIdentifier,
+            byteCount: bytes.count
+        )
+        let gate = IOSPersistenceOperationGate()
+        let storeIdentity = IOSPendingRecordingStoreIdentity()
+        let ownerIdentity = IOSAcceptedHistoryCapabilityOwnerIdentity()
+        adapter.failNext("fsyncDirectory", errors: [EIO])
+
+        try await gate.perform { operationLease in
+            let authorization = try #require(
+                IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization(
+                    testing: recording,
+                    expectedPendingStoreIdentity: storeIdentity,
+                    ownerIdentity: ownerIdentity,
+                    operationLeaseAuthorization: operationLease
+                )
+            )
+            await #expect(
+                throws: IOSPendingRecordingAudioFileSystemError.removeFailed
+            ) {
+                _ = try await fileSystem.reconcileAcceptedOutputAudioRemoval(
+                    using: authorization
+                )
+            }
+        }
+        adapter.installFinalAudio(
+            named: URL(
+                fileURLWithPath: recording.audioRelativeIdentifier
+            ).lastPathComponent,
+            bytes: replacement,
+            configured: true
+        )
+
+        try await gate.perform { operationLease in
+            let authorization = try #require(
+                IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization(
+                    testing: recording,
+                    expectedPendingStoreIdentity: storeIdentity,
+                    ownerIdentity: ownerIdentity,
+                    operationLeaseAuthorization: operationLease
+                )
+            )
+            await #expect(
+                throws: IOSPendingRecordingAudioFileSystemError.removeFailed
+            ) {
+                _ = try await fileSystem.reconcileAcceptedOutputAudioRemoval(
+                    using: authorization
+                )
+            }
+        }
+        #expect(adapter.publishedBytes == replacement)
+        #expect(adapter.events.filter { $0.hasPrefix("unlink:") }.count == 1)
+    }
+
+    @Test func discardPreservesRecreatedPathAcrossFileSystemRecreation()
+        async throws {
+        let bytes = [UInt8](repeating: 0x7B, count: 64)
+        let replacement = [UInt8](repeating: 0x7C, count: 64)
+        let adapter = SimulatedPendingRecordingPOSIXAdapter(
+            sourceBytes: bytes
+        )
+        let intentStore = InMemoryPendingAudioRemovalIntentStore()
+        var firstFileSystem:
+            FoundationIOSPendingRecordingAudioFileSystem? = makeFileSystem(
+                adapter: adapter,
+                audioRemovalIntentStore: intentStore
+            )
+        let initialFileSystem = try #require(firstFileSystem)
+        let lease = try await initialFileSystem.publishProtectedCopy(
+            from: artifact(byteCount: bytes.count),
+            attemptID: attemptID,
+            format: .m4a,
+            durationMilliseconds: 1_500
+        )
+        lease.release()
+        let recording = try discardRecording(
+            relativeIdentifier: lease.relativeIdentifier,
+            byteCount: bytes.count
+        )
+        adapter.failNext("fsyncDirectory", errors: [EIO])
+        let firstGate = IOSPersistenceOperationGate()
+
+        try await firstGate.perform { operationLease in
+            let authorization = try #require(
+                IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization(
+                    testing: recording,
+                    purpose: .discard,
+                    operationLeaseAuthorization: operationLease
+                )
+            )
+            await #expect(
+                throws: IOSPendingRecordingAudioFileSystemError.removeFailed
+            ) {
+                _ = try await initialFileSystem.reconcilePendingAudioRemoval(
+                    using: authorization
+                )
+            }
+        }
+        #expect(adapter.publishedBytes == nil)
+        firstFileSystem = nil
+        adapter.installFinalAudio(
+            named: URL(
+                fileURLWithPath: recording.audioRelativeIdentifier
+            ).lastPathComponent,
+            bytes: replacement,
+            configured: true
+        )
+
+        let relaunchedFileSystem = makeFileSystem(
+            adapter: adapter,
+            audioRemovalIntentStore: intentStore
+        )
+        let relaunchedGate = IOSPersistenceOperationGate()
+        try await relaunchedGate.perform { operationLease in
+            let authorization = try #require(
+                IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization(
+                    testing: recording,
+                    purpose: .discard,
+                    operationLeaseAuthorization: operationLease
+                )
+            )
+            await #expect(
+                throws: IOSPendingRecordingAudioFileSystemError.removeFailed
+            ) {
+                _ = try await relaunchedFileSystem
+                    .reconcilePendingAudioRemoval(using: authorization)
+            }
+        }
+        #expect(adapter.publishedBytes == replacement)
+        #expect(adapter.events.filter { $0.hasPrefix("unlink:") }.count == 1)
+    }
+
+    @Test func discardCommittedEINTRReconcilesAcrossFileSystemRecreation()
+        async throws {
+        let bytes = [UInt8](repeating: 0x7D, count: 64)
+        let adapter = SimulatedPendingRecordingPOSIXAdapter(
+            sourceBytes: bytes
+        )
+        let intentStore = InMemoryPendingAudioRemovalIntentStore()
+        var firstFileSystem:
+            FoundationIOSPendingRecordingAudioFileSystem? = makeFileSystem(
+                adapter: adapter,
+                audioRemovalIntentStore: intentStore
+            )
+        let initialFileSystem = try #require(firstFileSystem)
+        let lease = try await initialFileSystem.publishProtectedCopy(
+            from: artifact(byteCount: bytes.count),
+            attemptID: attemptID,
+            format: .m4a,
+            durationMilliseconds: 1_500
+        )
+        lease.release()
+        let recording = try discardRecording(
+            relativeIdentifier: lease.relativeIdentifier,
+            byteCount: bytes.count
+        )
+        adapter.failNextUnlinkAfterCommit(with: EINTR)
+
+        try await IOSPersistenceOperationGate().perform { operationLease in
+            let authorization = try #require(
+                IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization(
+                    testing: recording,
+                    purpose: .discard,
+                    operationLeaseAuthorization: operationLease
+                )
+            )
+            await #expect(
+                throws: IOSPendingRecordingAudioFileSystemError.removeFailed
+            ) {
+                _ = try await initialFileSystem.reconcilePendingAudioRemoval(
+                    using: authorization
+                )
+            }
+        }
+        firstFileSystem = nil
+
+        let relaunchedFileSystem = makeFileSystem(
+            adapter: adapter,
+            audioRemovalIntentStore: intentStore
+        )
+        let evidence = try await IOSPersistenceOperationGate().perform {
+            operationLease in
+            let authorization = try #require(
+                IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization(
+                    testing: recording,
+                    purpose: .discard,
+                    operationLeaseAuthorization: operationLease
+                )
+            )
+            let evidence = try await relaunchedFileSystem
+                .reconcilePendingAudioRemoval(using: authorization)
+            #expect(evidence.provesAbsence(using: authorization))
+            return evidence
+        }
+        #expect(evidence.provesPreexistingAbsence)
+        #expect(adapter.events.filter { $0.hasPrefix("unlink:") }.count == 1)
+    }
+
     @Test func publishConfiguresBeforeWritingStreamsAndKeepsCreatorLease() async throws {
         let bytes = [UInt8](repeating: 0x5A, count: 131_073)
         let adapter = SimulatedPendingRecordingPOSIXAdapter(sourceBytes: bytes)
@@ -1803,11 +2139,54 @@ struct IOSPendingRecordingAudioFileSystemTests {
         )
     }
 
+    private func acceptedOutputRecording(
+        relativeIdentifier: String,
+        byteCount: Int
+    ) throws -> IOSPendingRecording {
+        let timestamp = Date(timeIntervalSince1970: 1_750_000_000)
+        return try IOSPendingRecording(
+            attemptID: attemptID,
+            audioRelativeIdentifier: relativeIdentifier,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            phase: .outputDelivery,
+            outputIntent: .standard,
+            transcriptionID: UUID(),
+            transcriptionModel: "gpt-4o-mini-transcribe",
+            transcriptionLanguageCode: "en",
+            durationMilliseconds: 1_500,
+            byteCount: Int64(byteCount)
+        )
+    }
+
+    private func discardRecording(
+        relativeIdentifier: String,
+        byteCount: Int
+    ) throws -> IOSPendingRecording {
+        let timestamp = Date(timeIntervalSince1970: 1_750_000_000)
+        return try IOSPendingRecording(
+            attemptID: attemptID,
+            audioRelativeIdentifier: relativeIdentifier,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            phase: .awaitingRecovery,
+            outputIntent: .standard,
+            transcriptionID: nil,
+            transcriptionModel: "gpt-4o-mini-transcribe",
+            transcriptionLanguageCode: "en",
+            durationMilliseconds: 1_500,
+            byteCount: Int64(byteCount)
+        )
+    }
+
     private func makeFileSystem(
         adapter: SimulatedPendingRecordingPOSIXAdapter,
         media: FakePendingRecordingMediaValidator =
             FakePendingRecordingMediaValidator(durations: [1_500]),
-        clock: @escaping @Sendable () -> UInt64? = { 1 }
+        clock: @escaping @Sendable () -> UInt64? = { 1 },
+        audioRemovalIntentStore:
+            any IOSPendingRecordingAudioRemovalIntentStoring =
+                InMemoryPendingAudioRemovalIntentStore()
     ) -> FoundationIOSPendingRecordingAudioFileSystem {
         FoundationIOSPendingRecordingAudioFileSystem(
             applicationSupportDirectoryURL: URL(
@@ -1817,6 +2196,7 @@ struct IOSPendingRecordingAudioFileSystemTests {
             adapter: adapter,
             mediaValidator: media,
             monotonicClock: clock,
+            audioRemovalIntentStore: audioRemovalIntentStore,
             queue: DispatchQueue(label: "pending-recording-audio-tests")
         )
     }
@@ -1927,6 +2307,55 @@ struct IOSPendingRecordingAudioFileSystemTests {
             for: attemptID,
             format: format
         )
+    }
+}
+
+private final class InMemoryPendingAudioRemovalIntentStore:
+    IOSPendingRecordingAudioRemovalIntentStoring,
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedIntent: IOSPendingRecordingAudioRemovalIntent?
+    private var revision: UInt64 = 1
+
+    func load(
+        expected recording: IOSPendingRecording,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+    ) throws -> IOSPendingRecordingAudioRemovalIntentSnapshot? {
+        _ = expectedRepositoryRoot
+        return try lock.withLock {
+            guard let storedIntent else { return nil }
+            guard storedIntent.recording == recording else {
+                throw IOSPendingRecordingAudioFileSystemError.removeFailed
+            }
+            return IOSPendingRecordingAudioRemovalIntentSnapshot(
+                intent: storedIntent,
+                journalRevision: IOSPendingRecordingJournalFileRevision(
+                    testingToken: revision
+                )
+            )
+        }
+    }
+
+    func commit(
+        _ intent: IOSPendingRecordingAudioRemovalIntent,
+        expected recording: IOSPendingRecording,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+    ) throws -> IOSPendingRecordingAudioRemovalIntentSnapshot {
+        _ = expectedRepositoryRoot
+        return try lock.withLock {
+            guard intent.recording == recording,
+                  storedIntent == nil || storedIntent == intent else {
+                throw IOSPendingRecordingAudioFileSystemError.removeFailed
+            }
+            storedIntent = intent
+            revision &+= 1
+            return IOSPendingRecordingAudioRemovalIntentSnapshot(
+                intent: intent,
+                journalRevision: IOSPendingRecordingJournalFileRevision(
+                    testingToken: revision
+                )
+            )
+        }
     }
 }
 

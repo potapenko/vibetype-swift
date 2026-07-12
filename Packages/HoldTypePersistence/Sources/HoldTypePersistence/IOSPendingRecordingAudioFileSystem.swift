@@ -133,6 +133,68 @@ extension IOSPendingRecordingProtectedAudioCleanupEvidence:
     var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
+/// Opaque proof that the exact accepted-output audio path was absent on both
+/// sides of a successful directory durability barrier. Store/root/lease
+/// binding is carried by the authorization rather than by caller assertions.
+struct IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence:
+    Equatable,
+    Sendable {
+    fileprivate enum Disposition: Equatable, Sendable {
+        case removed
+        case alreadyAbsent
+    }
+
+    fileprivate let authorization:
+        IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization
+    fileprivate let disposition: Disposition
+
+    fileprivate init(
+        authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization,
+        disposition: Disposition
+    ) {
+        self.authorization = authorization
+        self.disposition = disposition
+    }
+
+    #if DEBUG
+    init(
+        testing authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization,
+        removed: Bool
+    ) {
+        self.authorization = authorization
+        disposition = removed ? .removed : .alreadyAbsent
+    }
+    #endif
+
+    func provesAbsence(
+        using expected:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization
+    ) -> Bool {
+        authorization == expected
+            && authorization.operationLeaseAuthorization
+                .provesSameActiveLease(
+                    as: expected.operationLeaseAuthorization
+                )
+    }
+
+    var provesPreexistingAbsence: Bool {
+        disposition == .alreadyAbsent
+    }
+}
+
+extension IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 protocol IOSPendingRecordingPublishedAudioLease: AnyObject, Sendable {
     var relativeIdentifier: String { get }
     var audioArtifact: AudioRecordingArtifact { get }
@@ -162,6 +224,16 @@ protocol IOSPendingRecordingAudioFileSystem: Sendable {
         using authorization:
             IOSPendingRecordingProtectedAudioCleanupAuthorization
     ) async throws -> IOSPendingRecordingProtectedAudioCleanupEvidence
+    func reconcileAcceptedOutputAudioRemoval(
+        using authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization
+    ) async throws
+        -> IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence
+    func reconcilePendingAudioRemoval(
+        using authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization
+    ) async throws
+        -> IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence
 
     #if DEBUG
     func publishProtectedCopy(
@@ -213,6 +285,23 @@ protocol IOSPendingRecordingAudioFileSystem: Sendable {
 }
 
 extension IOSPendingRecordingAudioFileSystem {
+    func reconcilePendingAudioRemoval(
+        using authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization
+    ) async throws
+        -> IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence {
+        try await reconcileAcceptedOutputAudioRemoval(using: authorization)
+    }
+
+    func reconcileAcceptedOutputAudioRemoval(
+        using authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization
+    ) async throws
+        -> IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence {
+        _ = authorization
+        throw IOSPendingRecordingAudioFileSystemError.removeFailed
+    }
+
     func validateProtectedAudioNamespace(
         _ inventory: IOSProtectedAudioNamespaceInventory,
         holding audioLeases: [any IOSPendingRecordingPublishedAudioLease]
@@ -980,6 +1069,8 @@ final class FoundationIOSPendingRecordingAudioFileSystem:
     private let configuredExpectedRepositoryRoot:
         IOSPersistenceRepositoryRootIdentity?
     private let onRepositoryIdentityMismatch: @Sendable () -> Void
+    private let audioRemovalIntentStore:
+        any IOSPendingRecordingAudioRemovalIntentStoring
     /// Accessed only by `queue`. A post-unlink failure keeps the exact opened
     /// descriptors alive so same-process recovery cannot accept a recreated
     /// pathname as the removed inode.
@@ -989,6 +1080,16 @@ final class FoundationIOSPendingRecordingAudioFileSystem:
     /// produced evidence. Preserve that exact result for the matching retry.
     private var lateProtectedAudioCleanupEvidence:
         IOSPendingRecordingProtectedAudioCleanupEvidence?
+    /// Accepted-output removal keeps the exact pre-unlink inode and directory
+    /// open across an uncertain boundary. A retry may unlink again only while
+    /// that same inode still owns the pathname; a recreated path is preserved.
+    private var retainedAcceptedOutputAudioRemoval:
+        RetainedAcceptedOutputAudioRemoval?
+    /// A timeout may win after the queued operation already produced evidence.
+    /// Rebind that completed intent to the next active root lease only after a
+    /// fresh absence barrier.
+    private var lateAcceptedOutputAudioRemovalEvidence:
+        IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence?
 
     init(
         applicationSupportDirectoryURL: URL,
@@ -1003,6 +1104,8 @@ final class FoundationIOSPendingRecordingAudioFileSystem:
             IOSPersistenceRepositoryRootIdentity? = nil,
         onRepositoryIdentityMismatch:
             @escaping @Sendable () -> Void = {},
+        audioRemovalIntentStore:
+            (any IOSPendingRecordingAudioRemovalIntentStoring)? = nil,
         queue: DispatchQueue = DispatchQueue(
             label: "app.holdtype.pending-recording-audio",
             qos: .utility
@@ -1015,6 +1118,14 @@ final class FoundationIOSPendingRecordingAudioFileSystem:
         configuredExpectedRepositoryRoot = expectedRepositoryRoot
         self.onRepositoryIdentityMismatch =
             onRepositoryIdentityMismatch
+        self.audioRemovalIntentStore = audioRemovalIntentStore
+            ?? FoundationIOSPendingRecordingAudioRemovalIntentRepository(
+                applicationSupportDirectoryURL:
+                    applicationSupportDirectoryURL,
+                expectedRepositoryRoot: expectedRepositoryRoot,
+                onRepositoryIdentityMismatch:
+                    onRepositoryIdentityMismatch
+            )
         self.queue = queue
     }
 
@@ -1023,6 +1134,14 @@ final class FoundationIOSPendingRecordingAudioFileSystem:
             adapter.closeFile(retainedProtectedAudioCleanup.fileDescriptor)
             adapter.closeFile(
                 retainedProtectedAudioCleanup.directory.descriptor
+            )
+        }
+        if let retainedAcceptedOutputAudioRemoval {
+            adapter.closeFile(
+                retainedAcceptedOutputAudioRemoval.fileDescriptor
+            )
+            adapter.closeFile(
+                retainedAcceptedOutputAudioRemoval.directory.descriptor
             )
         }
     }
@@ -1042,6 +1161,32 @@ final class FoundationIOSPendingRecordingAudioFileSystem:
                 control: control
             )
         }
+    }
+
+    func reconcileAcceptedOutputAudioRemoval(
+        using authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization
+    ) async throws
+        -> IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence {
+        try await runQueued(
+            deadlineNanoseconds: Self.copyDeadlineNanoseconds,
+            onLateValue: { [self] evidence in
+                lateAcceptedOutputAudioRemovalEvidence = evidence
+            }
+        ) { control in
+            try self.reconcilePendingAudioRemovalSynchronously(
+                using: authorization,
+                control: control
+            )
+        }
+    }
+
+    func reconcilePendingAudioRemoval(
+        using authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization
+    ) async throws
+        -> IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence {
+        try await reconcileAcceptedOutputAudioRemoval(using: authorization)
     }
 
     #if DEBUG
@@ -1441,6 +1586,16 @@ fileprivate extension FoundationIOSPendingRecordingAudioFileSystem {
         let fileDescriptor: Int32
         let fileIdentity: FileIdentity
         let targetExpectation: ProtectedAudioExpectation
+        let targetName: String
+    }
+
+    struct RetainedAcceptedOutputAudioRemoval {
+        let authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization
+        let durableIntent: IOSPendingRecordingAudioRemovalIntent
+        let directory: DirectoryHandle
+        let fileDescriptor: Int32
+        let fileIdentity: FileIdentity
         let targetName: String
     }
 
@@ -3501,6 +3656,497 @@ fileprivate extension FoundationIOSPendingRecordingAudioFileSystem {
         } catch {
             adapter.closeFile(fileDescriptor)
             throw error
+        }
+    }
+
+    func reconcilePendingAudioRemovalSynchronously(
+        using authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization,
+        control: PendingRecordingOperationControl
+    ) throws -> IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence {
+        try requireAcceptedOutputAudioRemovalAuthority(
+            authorization,
+            control: control
+        )
+        if retainedAcceptedOutputAudioRemoval != nil {
+            return try finishRetainedAcceptedOutputAudioRemoval(
+                using: authorization,
+                control: control
+            )
+        }
+        if lateAcceptedOutputAudioRemovalEvidence != nil {
+            return try reconcileLateAcceptedOutputAudioRemovalEvidence(
+                using: authorization,
+                control: control
+            )
+        }
+
+        let expectation = try acceptedOutputAudioExpectation(
+            authorization
+        )
+        guard let directory = try openPendingDirectory(
+            createIfMissing: false,
+            expectedRepositoryRoot: authorization.expectedRepositoryRoot,
+            control: control
+        ) else {
+            throw IOSPendingRecordingAudioFileSystemError.namespaceUnavailable
+        }
+        var ownsDirectory = true
+        defer {
+            if ownsDirectory {
+                adapter.closeFile(directory.descriptor)
+            }
+        }
+        try validatePendingDirectoryPath(directory, control: control)
+        let name = try acceptedOutputAudioName(expectation)
+        let pathResult = try call(control: control) {
+            adapter.statusAt(
+                directoryDescriptor: directory.descriptor,
+                name: name,
+                flags: AT_SYMLINK_NOFOLLOW
+            )
+        }
+        if case .failure(let errorCode) = pathResult,
+           isDataProtectionFailure(errorCode) {
+            throw IOSPendingRecordingAudioFileSystemError
+                .dataProtectionUnavailable
+        }
+        if case .failure(ENOENT) = pathResult {
+            try proveAcceptedOutputAudioAbsent(
+                using: authorization,
+                directory: directory,
+                control: control
+            )
+            return IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence(
+                authorization: authorization,
+                disposition: .alreadyAbsent
+            )
+        }
+        guard case .success = pathResult else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+
+        let target: OpenedProtectedAudioCleanupTarget
+        do {
+            target = try openLockedProtectedAudioCleanupTarget(
+                expectation,
+                in: directory,
+                control: control
+            )
+        } catch IOSPendingRecordingAudioFileSystemError
+            .dataProtectionUnavailable {
+            throw IOSPendingRecordingAudioFileSystemError
+                .dataProtectionUnavailable
+        } catch {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        var ownsTarget = true
+        defer {
+            if ownsTarget {
+                adapter.closeFile(target.descriptor)
+            }
+        }
+        try requireAcceptedOutputAudioRemovalAuthority(
+            authorization,
+            control: control
+        )
+        let durableIntent = try confirmDurableAudioRemovalIntent(
+            authorization,
+            target: target,
+            control: control
+        )
+        retainedAcceptedOutputAudioRemoval =
+            RetainedAcceptedOutputAudioRemoval(
+                authorization: authorization,
+                durableIntent: durableIntent,
+                directory: directory,
+                fileDescriptor: target.descriptor,
+                fileIdentity: target.identity,
+                targetName: target.name
+            )
+        ownsDirectory = false
+        ownsTarget = false
+        try attemptRetainedAcceptedOutputAudioUnlink(control: control)
+        return try finishRetainedAcceptedOutputAudioRemoval(
+            using: authorization,
+            control: control
+        )
+    }
+
+    func proveAcceptedOutputAudioAbsent(
+        using authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization,
+        control: PendingRecordingOperationControl
+    ) throws {
+        try requireAcceptedOutputAudioRemovalAuthority(
+            authorization,
+            control: control
+        )
+        guard let fileURL = IOSPendingRecordingStorageLocation.audioFileURL(
+            forRelativeIdentifier: authorization.audioRelativeIdentifier,
+            in: applicationSupportDirectoryURL
+        ), authorization.audioRelativeIdentifier == expectedRelativeIdentifier(
+            attemptID: authorization.attemptID,
+            fileExtension: fileURL.pathExtension
+        ), let directory = try openPendingDirectory(
+            createIfMissing: false,
+            expectedRepositoryRoot: authorization.expectedRepositoryRoot,
+            control: control
+        ) else {
+            throw IOSPendingRecordingAudioFileSystemError.namespaceUnavailable
+        }
+        defer { adapter.closeFile(directory.descriptor) }
+        _ = fileURL
+        try proveAcceptedOutputAudioAbsent(
+            using: authorization,
+            directory: directory,
+            control: control
+        )
+    }
+
+    func proveAcceptedOutputAudioAbsent(
+        using authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization,
+        directory: DirectoryHandle,
+        control: PendingRecordingOperationControl
+    ) throws {
+        let expectation = try acceptedOutputAudioExpectation(authorization)
+        let name = try acceptedOutputAudioName(expectation)
+        try validatePendingDirectoryPath(directory, control: control)
+        try requireMissingAfterRemoval(
+            name: name,
+            directoryDescriptor: directory.descriptor,
+            control: control
+        )
+        try synchronize(
+            directory.descriptor,
+            control: control,
+            failure: .removeFailed
+        )
+        try requireMissingAfterRemoval(
+            name: name,
+            directoryDescriptor: directory.descriptor,
+            control: control
+        )
+        try validatePendingDirectoryPath(directory, control: control)
+        try requireAcceptedOutputAudioRemovalAuthority(
+            authorization,
+            control: control
+        )
+    }
+
+    func requireAcceptedOutputAudioRemovalAuthority(
+        _ authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization,
+        control: PendingRecordingOperationControl
+    ) throws {
+        try control.checkpoint()
+        guard authorization.operationLeaseAuthorization.provesActiveLease(),
+              authorization.recording.attemptID == authorization.attemptID,
+              authorization.recording.audioRelativeIdentifier
+                == authorization.audioRelativeIdentifier,
+              authorization.recording.byteCount == authorization.byteCount,
+              authorization.byteCount > 0,
+              authorization.byteCount < Self.maximumAudioByteCount else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+    }
+
+    func confirmDurableAudioRemovalIntent(
+        _ authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization,
+        target: OpenedProtectedAudioCleanupTarget,
+        control: PendingRecordingOperationControl
+    ) throws -> IOSPendingRecordingAudioRemovalIntent {
+        try control.checkpoint()
+        let targetStatus = try status(
+            descriptor: target.descriptor,
+            control: control,
+            failure: .removeFailed
+        )
+        guard FileIdentity(targetStatus) == target.identity,
+              targetStatus.st_nlink == 1,
+              let intended = IOSPendingRecordingAudioRemovalIntent(
+                  purpose: authorization.purpose,
+                  recording: authorization.recording,
+                  physicalSnapshot:
+                    IOSPendingRecordingAudioRemovalPhysicalSnapshot(
+                        targetStatus
+                    )
+              ) else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        let existing = try audioRemovalIntentStore.load(
+            expected: authorization.recording,
+            expectedRepositoryRoot: authorization.expectedRepositoryRoot
+        )
+        if let existing {
+            guard existing.intent == intended else {
+                throw IOSPendingRecordingAudioFileSystemError.removeFailed
+            }
+        } else {
+            guard authorization.mayCreateDurableIntent else {
+                throw IOSPendingRecordingAudioFileSystemError.removeFailed
+            }
+        }
+        let confirmed = try audioRemovalIntentStore.commit(
+            intended,
+            expected: authorization.recording,
+            expectedRepositoryRoot: authorization.expectedRepositoryRoot
+        )
+        guard confirmed.intent == intended else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        try control.checkpoint()
+        let finalStatus = try status(
+            descriptor: target.descriptor,
+            control: control,
+            failure: .removeFailed
+        )
+        guard IOSPendingRecordingAudioRemovalPhysicalSnapshot(finalStatus)
+                == intended.physicalSnapshot else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        return intended
+    }
+
+    func acceptedOutputAudioExpectation(
+        _ authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization
+    ) throws -> ProtectedAudioExpectation {
+        let expectation = ProtectedAudioExpectation(
+            attemptID: authorization.attemptID,
+            relativeIdentifier: authorization.audioRelativeIdentifier,
+            durationMilliseconds: nil,
+            byteCount: authorization.byteCount
+        )
+        _ = try acceptedOutputAudioName(expectation)
+        return expectation
+    }
+
+    func acceptedOutputAudioName(
+        _ expectation: ProtectedAudioExpectation
+    ) throws -> String {
+        guard expectation.durationMilliseconds == nil,
+              expectation.byteCount > 0,
+              expectation.byteCount < Self.maximumAudioByteCount,
+              let fileURL = IOSPendingRecordingStorageLocation.audioFileURL(
+                  forRelativeIdentifier: expectation.relativeIdentifier,
+                  in: applicationSupportDirectoryURL
+              ), expectation.relativeIdentifier == expectedRelativeIdentifier(
+                  attemptID: expectation.attemptID,
+                  fileExtension: fileURL.pathExtension
+              ) else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        return fileURL.lastPathComponent
+    }
+
+    func finishRetainedAcceptedOutputAudioRemoval(
+        using authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization,
+        control: PendingRecordingOperationControl
+    ) throws -> IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence {
+        guard let retained = retainedAcceptedOutputAudioRemoval,
+              retained.authorization.provesSameRemovalIntent(
+                  as: authorization
+              ) else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        try requireAcceptedOutputAudioRemovalAuthority(
+            authorization,
+            control: control
+        )
+        try validatePendingDirectoryPath(
+            retained.directory,
+            control: control
+        )
+        switch try retainedAcceptedOutputAudioLinkState(
+            retained,
+            control: control
+        ) {
+        case .present:
+            try attemptRetainedAcceptedOutputAudioUnlink(control: control)
+        case .absent:
+            break
+        }
+        let confirmed = try requireRetainedAcceptedOutputAudioRemoval()
+        try validateUnlinkedAcceptedOutputAudioRemovalTarget(
+            confirmed,
+            control: control
+        )
+        try proveAcceptedOutputAudioAbsent(
+            using: authorization,
+            directory: confirmed.directory,
+            control: control
+        )
+        try validateUnlinkedAcceptedOutputAudioRemovalTarget(
+            confirmed,
+            control: control
+        )
+        let evidence = IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence(
+            authorization: authorization,
+            disposition: .removed
+        )
+        retainedAcceptedOutputAudioRemoval = nil
+        adapter.closeFile(confirmed.fileDescriptor)
+        adapter.closeFile(confirmed.directory.descriptor)
+        return evidence
+    }
+
+    func reconcileLateAcceptedOutputAudioRemovalEvidence(
+        using authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization,
+        control: PendingRecordingOperationControl
+    ) throws -> IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence {
+        guard let lateEvidence = lateAcceptedOutputAudioRemovalEvidence,
+              lateEvidence.authorization.provesSameRemovalIntent(
+                  as: authorization
+              ) else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        try requireAcceptedOutputAudioRemovalAuthority(
+            authorization,
+            control: control
+        )
+        try proveAcceptedOutputAudioAbsent(
+            using: authorization,
+            control: control
+        )
+        let evidence = IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence(
+            authorization: authorization,
+            disposition: lateEvidence.disposition
+        )
+        lateAcceptedOutputAudioRemovalEvidence = nil
+        return evidence
+    }
+
+    func requireRetainedAcceptedOutputAudioRemoval()
+        throws -> RetainedAcceptedOutputAudioRemoval {
+        guard let retainedAcceptedOutputAudioRemoval else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        return retainedAcceptedOutputAudioRemoval
+    }
+
+    func attemptRetainedAcceptedOutputAudioUnlink(
+        control: PendingRecordingOperationControl
+    ) throws {
+        let retained = try requireRetainedAcceptedOutputAudioRemoval()
+        try control.checkpoint()
+        try validatePendingDirectoryPath(
+            retained.directory,
+            control: control
+        )
+        guard try retainedAcceptedOutputAudioLinkState(
+            retained,
+            control: control
+        ) == .present else {
+            return
+        }
+
+        // A returned error may follow a committed unlink. Keep the descriptor
+        // and never use the generic EINTR retry loop at this mutation boundary.
+        let result = adapter.unlinkAt(
+            directoryDescriptor: retained.directory.descriptor,
+            name: retained.targetName
+        )
+        switch result {
+        case .success:
+            return
+        case .failure(let errorCode) where isDataProtectionFailure(errorCode):
+            throw IOSPendingRecordingAudioFileSystemError
+                .dataProtectionUnavailable
+        case .failure:
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+    }
+
+    func retainedAcceptedOutputAudioLinkState(
+        _ retained: RetainedAcceptedOutputAudioRemoval,
+        control: PendingRecordingOperationControl
+    ) throws -> RetainedProtectedAudioLinkState {
+        let status = try status(
+            descriptor: retained.fileDescriptor,
+            control: control,
+            failure: .removeFailed
+        )
+        guard status.st_mode & S_IFMT == S_IFREG,
+              status.st_uid == retained.directory.effectiveUserID,
+              status.st_mode & mode_t(0o7777) == mode_t(0o600),
+              status.st_size == off_t(retained.authorization.byteCount),
+              FileIdentity(status) == retained.fileIdentity else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        do {
+            try validateExactConfiguration(
+                descriptor: retained.fileDescriptor,
+                control: control
+            )
+        } catch IOSPendingRecordingAudioFileSystemError
+            .dataProtectionUnavailable {
+            throw IOSPendingRecordingAudioFileSystemError
+                .dataProtectionUnavailable
+        } catch {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        let pathResult = try call(control: control) {
+            adapter.statusAt(
+                directoryDescriptor: retained.directory.descriptor,
+                name: retained.targetName,
+                flags: AT_SYMLINK_NOFOLLOW
+            )
+        }
+        if case .failure(let errorCode) = pathResult,
+           isDataProtectionFailure(errorCode) {
+            throw IOSPendingRecordingAudioFileSystemError
+                .dataProtectionUnavailable
+        }
+        if status.st_nlink == 0, case .failure(ENOENT) = pathResult {
+            return .absent
+        }
+        guard status.st_nlink == 1,
+              IOSPendingRecordingAudioRemovalPhysicalSnapshot(status)
+                == retained.durableIntent.physicalSnapshot,
+              case .success(let pathStatus) = pathResult,
+              isExactOwnedAudioStatus(
+                  pathStatus,
+                  effectiveUserID: retained.directory.effectiveUserID,
+                  expectedByteCount: retained.authorization.byteCount
+              ), FileSnapshot(pathStatus) == FileSnapshot(status) else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        return .present
+    }
+
+    func validateUnlinkedAcceptedOutputAudioRemovalTarget(
+        _ retained: RetainedAcceptedOutputAudioRemoval,
+        control: PendingRecordingOperationControl
+    ) throws {
+        let status = try status(
+            descriptor: retained.fileDescriptor,
+            control: control,
+            failure: .removeFailed
+        )
+        guard status.st_mode & S_IFMT == S_IFREG,
+              status.st_uid == retained.directory.effectiveUserID,
+              status.st_nlink == 0,
+              status.st_mode & mode_t(0o7777) == mode_t(0o600),
+              status.st_size == off_t(retained.authorization.byteCount),
+              FileIdentity(status) == retained.fileIdentity else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        do {
+            try validateExactConfiguration(
+                descriptor: retained.fileDescriptor,
+                control: control
+            )
+        } catch IOSPendingRecordingAudioFileSystemError
+            .dataProtectionUnavailable {
+            throw IOSPendingRecordingAudioFileSystemError
+                .dataProtectionUnavailable
+        } catch {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
         }
     }
 

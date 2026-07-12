@@ -47,7 +47,9 @@ three explicit data lifecycles.
   commit; fresh transcription ID commit; one-shot provider execution;
   `postProcessing`; exact `outputDelivery` transition; mandatory accepted-output
   commit with `historyWrite: null`; exact destination verification; protected
-  audio removal; then journal retirement.
+  audio removal with canonical absence evidence; then journal retirement with
+  separate canonical absence evidence. `resultReady` is unavailable until both
+  evidence values are confirmed.
 - In P4, accepted text is the durable destination because History and Recording
   Cache integration are absent. Audio is removed before journal retirement.
   Failure or uncertainty preserves the journal and blocks Clear or replacement
@@ -72,7 +74,8 @@ three explicit data lifecycles.
   consent, and credential again; commits a fresh transcription ID; and creates
   one new one-shot provider authorization. Relaunch never uploads automatically.
 - Discard requires the current attempt and phase expectation, removes protected
-  audio before the journal, and reports success only after both are absent.
+  audio before the journal, and reports success only after root-bound,
+  directory-durable absence of both is proved.
   Failure preserves the journal and recovery surface. It never deletes an
   unrelated accepted result.
 - One unresolved Pending attempt blocks another recording or provider chain
@@ -366,8 +369,10 @@ the journal. The runtime-only
 
 After process loss, a valid `transcribing`, `postProcessing`, or unresolved
 `outputDelivery` record moves to `awaitingRecovery` only after the containing
-app proves that no matching live owner and no canonical destination record
-exists. That local transition clears the old transcription ID before Retry is
+app proves that no matching live owner exists and proves directory-durable
+absence of the canonical destination record under the expected physical root.
+An ordinary missing-path lookup is insufficient. That local transition clears
+the old transcription ID before Retry is
 presented. It never resumes or repeats provider work automatically. A
 `readyForTranscription` record also remains explicit after relaunch; its name
 does not authorize automatic dispatch.
@@ -381,12 +386,22 @@ ID equal to the Pending transcription ID, no failed-Retry provenance, the same
 output intent, and matching model/language/duration metadata whenever a History
 write is present. Under the shared physical-root operation gate, completion
 removes the exact Pending audio if present, confirms the same destination
-again, and then retires the exact Pending journal. Removal is idempotent so a
-crash after audio removal but before journal retirement resumes safely. A
+again, and then retires the exact Pending journal. Launch uses the same
+evidence-producing retirement path as live completion and confirms separate
+directory-durable absence of audio and journal before clearing ownership or
+publishing ready state. Removal is idempotent so a crash after audio removal but
+before journal retirement resumes safely. A
 partial identity match, failed-Retry delivery, metadata mismatch, corrupt or
 unavailable destination, invalid audio identity, or canonical destination for
 `transcribing` or `postProcessing` fails closed and preserves the journal. This
 completion never republishes accepted text or repeats provider work.
+
+Process-loss audio retirement pins the exact physical source identity before
+unlink. If unlink may have succeeded but directory synchronization is
+uncertain, retry reconciles only absence or that pinned original identity. It
+never opens or deletes a new file created at the same relative pathname, even
+when filename, marker, format, and byte count match. Identity mismatch preserves
+the new object and keeps local recovery pending.
 
 Every mutating callback must present the expected attempt ID, transcription ID
 when one exists, and current phase. A cancelled, superseded, or late callback
@@ -510,11 +525,14 @@ Explicit Discard requires the expected attempt ID and removes the protected
 audio before the journal. A crash between those steps therefore leaves a
 visible journal with missing audio instead of hidden retained audio. Repeating
 Discard for that same journal is idempotent. Journal removal is permitted only
-after audio removal or already-absent state is successfully verified. Any audio
+after root-bound, directory-durable audio absence is successfully proved;
+journal completion likewise requires its own canonical-absence evidence. Any audio
 validation/removal error preserves the journal and returns a typed local
 failure. A missing journal never authorizes deletion of an orphan by filename
-alone. Reconciliation, History transfer, recording-cache transfer, delivery
-records, relaunch UI, and automatic source cleanup remain later checkpoints.
+alone. History transfer, recording-cache transfer, orphan reconciliation, and
+automatic source cleanup remain later checkpoints; P4 app-only relaunch
+recovery and accepted-delivery reconciliation are already part of this
+contract.
 
 Future app-only reconciliation is non-recursive and recognizes only the exact
 filename grammar plus descriptor-bound v1 marker. Its frozen per-pass caps are
@@ -537,6 +555,25 @@ stable attempt-scoped relative path until its destination is durable. The
 destination record and relative identifier commit before the prior journal or
 source file is removed. A crash between steps is reconciled from stable attempt
 identity without deleting the only valid artifact.
+
+For every audio unlink that can outlive its initiating process, the removal
+intent retains the pinned physical file identity. A retry after ambiguous
+directory synchronization may prove the original absent or reconcile the same
+identity, but must not unlink a recreated pathname. The required race test is:
+unlink, uncertain directory barrier, create a new file at the same path, retry;
+the recreated file survives and recovery remains pending.
+
+The durable intent is the content-free, descriptor-bound extended attribute
+`com.holdtype.ios.pending-audio-removal` on the exact current Pending journal
+inode. Its canonical payload is exactly 50 big-endian bytes: schema `1`,
+purpose `1` for accepted output or `2` for Discard, then the audio device,
+inode, byte count, modification seconds/nanoseconds, and status-change
+seconds/nanoseconds. Reading or writing it must pin the journal descriptor,
+path revision, repository root, and current Pending value before and after the
+operation. Ordinary journal replacement or removal is forbidden while this
+intent remains. The journal file and its directory are synchronized before
+the audio unlink, so a fresh filesystem instance can resume the same intent
+without trusting process memory.
 
 - On success, HoldType first commits the mandatory protected accepted-output
   delivery record. When History is on, it then attempts the accepted History
@@ -612,6 +649,10 @@ identity without deleting the only valid artifact.
 - Default logs never include transcript text, file paths, or audio contents.
 - Process eviction or force quit must not turn a completed journaled recording
   into an invisible orphan.
+- Missing canonical files never count as retired until the expected physical
+  root and containing directory have produced durable absence evidence.
+- Retry after ambiguous unlink never deletes a newly created object at the same
+  relative pathname.
 - Cancelled capture and pre-capture setup failures do not create history rows.
 - Retention pruning removes only HoldType-owned records and files selected by
   the applicable policy.

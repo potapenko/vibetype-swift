@@ -27,19 +27,35 @@ public struct IOSProviderConsentObservation: Equatable, Sendable {
 
     let ownerIdentity: IOSProviderConsentOwnerIdentity
     let source: IOSProviderConsentObservationSource
+    let gateFence: IOSProviderConsentObservationFence?
 
     init(
         status: IOSProviderConsentStatus,
         decisionAt: Date?,
         canResetUnreadableData: Bool,
         ownerIdentity: IOSProviderConsentOwnerIdentity,
-        source: IOSProviderConsentObservationSource
+        source: IOSProviderConsentObservationSource,
+        gateFence: IOSProviderConsentObservationFence? = nil
     ) {
         self.status = status
         self.decisionAt = decisionAt
         self.canResetUnreadableData = canResetUnreadableData
         self.ownerIdentity = ownerIdentity
         self.source = source
+        self.gateFence = gateFence
+    }
+
+    public static func == (
+        lhs: IOSProviderConsentObservation,
+        rhs: IOSProviderConsentObservation
+    ) -> Bool {
+        // The opaque process fence controls authority, not the public semantic
+        // consent state represented by Equatable.
+        lhs.status == rhs.status
+            && lhs.decisionAt == rhs.decisionAt
+            && lhs.canResetUnreadableData == rhs.canResetUnreadableData
+            && lhs.ownerIdentity == rhs.ownerIdentity
+            && lhs.source == rhs.source
     }
 }
 
@@ -67,8 +83,49 @@ extension IOSProviderConsentAuthorization:
     public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
+/// Opaque registration for one provider-stage launch owned by the consent gate.
+public struct IOSProviderConsentDispatchRegistration: Equatable, Sendable {
+    let gateIdentity: IOSProviderConsentAuthorizationGateIdentity
+    let registrationID: UUID
+    let binding: IOSProviderConsentAuthorizationBinding
+    let gateGeneration: UUID
+    let stage: IOSProviderConsentProviderStage
+}
+
+extension IOSProviderConsentDispatchRegistration:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    public var description: String {
+        "IOSProviderConsentDispatchRegistration(redacted)"
+    }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+/// One-shot authority for applying a matching provider response while the
+/// process-wide consent fence remains current.
+public struct IOSProviderConsentResultAuthorization: Equatable, Sendable {
+    let gateIdentity: IOSProviderConsentAuthorizationGateIdentity
+    let resultID: UUID
+    let binding: IOSProviderConsentAuthorizationBinding
+    let gateGeneration: UUID
+    let stage: IOSProviderConsentProviderStage
+}
+
+extension IOSProviderConsentResultAuthorization:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    public var description: String {
+        "IOSProviderConsentResultAuthorization(redacted)"
+    }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 /// Remote stages that independently require the same live provider authority.
-public enum IOSProviderConsentProviderStage: CaseIterable, Sendable {
+public enum IOSProviderConsentProviderStage: CaseIterable, Equatable, Sendable {
     case transcription
     case correction
     case translation
@@ -152,11 +209,72 @@ extension IOSProviderConsentOwnerIdentity:
     var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
+struct IOSProviderConsentObservationFence: Equatable, Sendable {
+    private let value = UUID()
+}
+
+extension IOSProviderConsentObservationFence:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSProviderConsentObservationFence(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 struct IOSProviderConsentAuthorizationBinding: Equatable, Sendable {
     let ownerIdentity: IOSProviderConsentOwnerIdentity
     let epochID: UUID
     let revision: Int64
     let disclosureVersion: Int64
+    let fileRevision: IOSStrictProtectedRecordFileRevision?
+    let repositoryRootIdentity: IOSPersistenceRepositoryRootIdentity?
+
+    init(
+        ownerIdentity: IOSProviderConsentOwnerIdentity,
+        epochID: UUID,
+        revision: Int64,
+        disclosureVersion: Int64,
+        fileRevision: IOSStrictProtectedRecordFileRevision? = nil,
+        repositoryRootIdentity: IOSPersistenceRepositoryRootIdentity? = nil
+    ) {
+        self.ownerIdentity = ownerIdentity
+        self.epochID = epochID
+        self.revision = revision
+        self.disclosureVersion = disclosureVersion
+        self.fileRevision = fileRevision
+        self.repositoryRootIdentity = repositoryRootIdentity
+    }
+
+    func bound(
+        to repositoryRootIdentity: IOSPersistenceRepositoryRootIdentity?
+    ) -> Self {
+        Self(
+            ownerIdentity: ownerIdentity,
+            epochID: epochID,
+            revision: revision,
+            disclosureVersion: disclosureVersion,
+            fileRevision: fileRevision,
+            repositoryRootIdentity: repositoryRootIdentity
+        )
+    }
+}
+
+struct IOSProviderConsentAuthorizationGateIdentity: Equatable, Sendable {
+    private let value = UUID()
+}
+
+extension IOSProviderConsentAuthorizationGateIdentity:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSProviderConsentAuthorizationGateIdentity(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
 extension IOSProviderConsentAuthorizationBinding:

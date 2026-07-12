@@ -163,6 +163,47 @@ struct IOSProviderConsentJournalTests {
         }
     }
 
+    @Test func journalAndDirectoryBarrierRejectPhysicalRootReplacement() throws {
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "provider-consent-journal-root-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        let root = parent.appendingPathComponent("root", isDirectory: true)
+        let original = parent.appendingPathComponent(
+            "original",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let registry = IOSAcceptedHistoryCoordinatorProcessContextRegistry()
+        let context = registry.context(for: root)
+        let unavailable = LockedCounter()
+        let journal = FoundationIOSProviderConsentJournalRepository(
+            applicationSupportDirectoryURL: root,
+            repositoryGuard: context.repositoryGuard,
+            onRepositoryUnavailable: { unavailable.increment() }
+        )
+
+        try FileManager.default.moveItem(at: root, to: original)
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: false
+        )
+
+        #expect(throws: IOSProviderConsentJournalError.localDataUnavailable) {
+            _ = try journal.load()
+        }
+        #expect(throws: IOSProviderConsentJournalError.commitUncertain) {
+            try journal.synchronizeDirectory()
+        }
+        #expect(unavailable.value >= 2)
+        #expect(context.repositoryIdentityState.isConflicted)
+    }
+
     @Test func consentAdapterEnforcesBackupEligibilityInsteadOfExclusion() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString,

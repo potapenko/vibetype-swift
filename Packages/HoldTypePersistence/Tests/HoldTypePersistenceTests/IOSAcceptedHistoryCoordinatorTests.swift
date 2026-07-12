@@ -237,6 +237,115 @@ struct IOSAcceptedHistoryCoordinatorTests {
         #expect(fixture.events.events.isEmpty)
     }
 
+    @Test func retainedForegroundVoiceSaveBlocksEveryRootHistoryAdmission()
+        async throws {
+        let fixture = CoordinatorFixture()
+        let firstScene = fixture.coordinator()
+        let secondScene = fixture.coordinator()
+        let work = try coordinatorForegroundVoiceWork()
+        _ = try await fixture.foregroundVoicePersistenceState.begin(work)
+
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+        ) {
+            _ = try await firstScene.capture(
+                transcriptionModel: "model",
+                transcriptionLanguageCode: nil,
+                durationMilliseconds: nil
+            )
+        }
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+        ) {
+            _ = try await secondScene.accept(work.preparation)
+        }
+        #expect(
+            try await secondScene.recoverAcceptedHistory()
+                == .pendingLocalRecovery
+        )
+        #expect(
+            try await firstScene.recoverAcceptedHistoryOutbox()
+                == .pendingLocalRecovery
+        )
+        #expect(
+            try await secondScene.recoverHistoryPolicyCleanup()
+                == .pendingLocalRecovery
+        )
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+        ) {
+            _ = try await firstScene.clearHistoryPolicy()
+        }
+        #expect(
+            await secondScene.recoverContainingAppLifecycle(.processLaunch)
+                == .pendingLocalRecovery
+        )
+        #expect(fixture.events.events.isEmpty)
+        #expect(
+            await fixture.foregroundVoicePersistenceState.current() == work
+        )
+    }
+
+    @Test func retainedForegroundVoiceSaveBlocksFailedHistoryRootsBeforeIO()
+        async throws {
+        let fixture = CoordinatorFixture()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "foreground-reverse-admission-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pendingStore = IOSPendingRecordingStore(
+            journal: FoundationIOSPendingRecordingJournalRepository(
+                applicationSupportDirectoryURL: root
+            ),
+            audioFileSystem: FoundationIOSPendingRecordingAudioFileSystem(
+                applicationSupportDirectoryURL: root
+            ),
+            operationGate: fixture.gate,
+            failedHistoryRetryState:
+                fixture.failedHistoryStore.retryLiveOwnerState,
+            capabilityOwnerIdentity: fixture.ownerIdentity,
+            failedHistoryMutationInterlock:
+                fixture.failedHistoryStore.mutationInterlock,
+            failedOwnershipInspector: fixture.failedHistoryStore
+        )
+        let coordinator = fixture.coordinator(
+            pendingRecordingStore: pendingStore
+        )
+        let work = try coordinatorForegroundVoiceWork()
+        _ = try await fixture.foregroundVoicePersistenceState.begin(work)
+
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+        ) {
+            _ = try await coordinator.deleteFailedHistoryEntry(
+                attemptID: UUID()
+            )
+        }
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+        ) {
+            _ = try await coordinator.recoverFailedHistoryAudioCleanup()
+        }
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+        ) {
+            _ = try await coordinator.reconcileFailedHistoryTransfer()
+        }
+        #expect(
+            try await coordinator.recoverInterruptedFailedHistoryRetry()
+                == .pendingLocalRecovery
+        )
+        #expect(fixture.events.events.isEmpty)
+        #expect(
+            await fixture.foregroundVoicePersistenceState.current() == work
+        )
+    }
+
     @Test func productionContextRegistrySharesOnlyOnePhysicalRoot() async throws {
         let registry = IOSAcceptedHistoryCoordinatorProcessContextRegistry()
         let parent = FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -273,6 +382,14 @@ struct IOSAcceptedHistoryCoordinatorTests {
         #expect(first === symlinkAlias)
         #expect(first.operationGate === sameRoot.operationGate)
         #expect(first.operationGate === symlinkAlias.operationGate)
+        #expect(
+            first.foregroundVoicePersistenceState
+                === sameRoot.foregroundVoicePersistenceState
+        )
+        #expect(
+            first.foregroundVoicePersistenceState
+                === symlinkAlias.foregroundVoicePersistenceState
+        )
         #expect(
             first.pendingRecordingMediaValidationWorkerGate
                 === sameRoot.pendingRecordingMediaValidationWorkerGate
@@ -7250,6 +7367,45 @@ private func rebuiltPreparation(
     )
 }
 
+private func coordinatorForegroundVoiceWork()
+    throws -> IOSForegroundVoicePersistenceWork {
+    let attemptID = UUID()
+    let transcriptionID = UUID()
+    let pending = try IOSPendingRecording(
+        attemptID: attemptID,
+        audioRelativeIdentifier:
+            IOSPendingRecordingStorageLocation.relativeAudioIdentifier(
+                for: attemptID,
+                format: .m4a
+            ),
+        createdAt: Date(timeIntervalSince1970: 1_900_000_000),
+        updatedAt: Date(timeIntervalSince1970: 1_900_000_001),
+        phase: .outputDelivery,
+        outputIntent: .standard,
+        transcriptionID: transcriptionID,
+        transcriptionModel: "model",
+        transcriptionLanguageCode: nil,
+        durationMilliseconds: 1_000,
+        byteCount: 32
+    )
+    let preparation = try IOSAcceptedOutputDeliveryPreparation(
+        deliveryID: UUID(),
+        sessionID: UUID(),
+        attemptID: attemptID,
+        transcriptID: transcriptionID,
+        rawAcceptedText: "accepted",
+        outputIntent: .standard,
+        automaticInsertionPreferenceEnabled: false,
+        keepLatestResult: true,
+        historyWrite: nil
+    )
+    return IOSForegroundVoicePersistenceWork(
+        preparation: preparation,
+        pendingRecording: pending,
+        retirementOrigin: .liveProcess
+    )
+}
+
 private final class CoordinatorFixture: @unchecked Sendable {
     let events = CoordinatorEventRecorder()
     let policy: CoordinatorPolicyJournal
@@ -7263,6 +7419,8 @@ private final class CoordinatorFixture: @unchecked Sendable {
         IOSAcceptedHistoryPendingReplacementOperationState()
     let outboxWorkerState = IOSAcceptedHistoryOutboxWorkerOperationState()
     let policyCutoverState = IOSHistoryPolicyCutoverOperationState()
+    let foregroundVoicePersistenceState =
+        IOSForegroundVoicePersistenceOperationState()
     let ownerIdentity = IOSAcceptedHistoryCoordinatorOwnerIdentity()
     let clock: CoordinatorClock
     let policyStore: IOSHistoryPolicyStore
@@ -7328,11 +7486,14 @@ private final class CoordinatorFixture: @unchecked Sendable {
         )
     }
 
-    func coordinator() -> IOSAcceptedHistoryCoordinator {
+    func coordinator(
+        pendingRecordingStore: IOSPendingRecordingStore? = nil
+    ) -> IOSAcceptedHistoryCoordinator {
         IOSAcceptedHistoryCoordinator(
             policyStore: policyStore,
             acceptedHistoryStore: acceptedHistoryStore,
             failedHistoryStore: failedHistoryStore,
+            pendingRecordingStore: pendingRecordingStore,
             outboxStore: outboxStore,
             deliveryStore: deliveryStore,
             operationGate: gate,
@@ -7341,6 +7502,8 @@ private final class CoordinatorFixture: @unchecked Sendable {
             pendingReplacementState: pendingReplacementState,
             outboxWorkerState: outboxWorkerState,
             policyCutoverState: policyCutoverState,
+            foregroundVoicePersistenceState:
+                foregroundVoicePersistenceState,
             ownerIdentity: ownerIdentity,
             repositoryIdentityState: repositoryIdentityState,
             repositoryRegistration: repositoryRegistration

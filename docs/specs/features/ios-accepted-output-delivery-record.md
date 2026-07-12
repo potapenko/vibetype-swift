@@ -324,6 +324,14 @@ visible, the store rewrites those identical bytes without changing logical
 revision or timestamp and completes a successful directory sync before it
 confirms durability.
 
+A canonical empty slot also requires positive durability evidence. A pathname
+lookup returning `ENOENT` by itself is not proof of absence. Under an active
+operation bound to the expected physical repository root, the store pins and
+revalidates the canonical directory/path identity, confirms that the canonical
+file is absent, and completes the containing-directory durability barrier.
+Barrier failure, protected-data unavailability, or directory/root substitution
+remains uncertainty and cannot be projected as an empty slot.
+
 An uncertain ordinary acceptance keeps a process-local exact intent containing
 the preparation, missing or physical source snapshot, and sealed intended
 record. Every load, mutation, authorization, clear, and staging-maintenance path
@@ -411,7 +419,8 @@ P4 app-only acceptance has this separate normative sequence:
    that no History-transfer or publication reservation exists;
 4. under the same canonical operation gate, it removes the exact protected
    Pending audio, revalidates the same accepted destination, and retires the
-   exact Pending journal;
+   exact Pending journal, producing separate durable canonical-absence evidence
+   for the audio and journal;
 5. only then does the Voice owner publish `resultReady` from the confirmed
    delivery record. It performs no History decision, generation-1 transition,
    App Group write, insertion claim, or acknowledgement.
@@ -427,6 +436,25 @@ uncertain result first reloads and compares the exact intended bytes: an exact
 match continues at step 3, a proven unchanged prior record may retry the same
 atomic replacement, and ambiguity remains blocked.
 
+`Saving Result` for a replacement may retain a separately confirmed, unexpired
+prior record for display. The new accepted text is not Latest until replacement
+is durably confirmed. An invisible failed replacement preserves the prior value;
+an uncertain replacement blocks Clear or another replacement. A discarded,
+expired, or tombstoned predecessor is never reconstructed as prior text.
+
+Fresh-process launch recovery uses the same evidence-producing retirement path
+as live completion. It cannot clear process ownership or publish `resultReady`
+from unlink success or a later missing load alone. Ready state requires the
+exact destination plus durable absence evidence for both Pending audio and the
+Pending journal.
+
+Once both retirement evidence values are confirmed, any failed, missing, or
+mismatched final delivery observation retains a cleanup-completed Saving
+checkpoint. Retry and passive load revalidate only the exact delivery and
+canonical Pending absence; they do not require the already-cleared live dispatch
+marker or repeat either unlink. The checkpoint clears only after an exact
+active, expired, or rollback-ambiguous observation is classified.
+
 Only when delivery commit or replacement never produced a destination may the
 coordinator prove that no intended destination or reservation exists and offer
 an explicit recovery transition. That action retires the delivery intent, moves
@@ -438,6 +466,13 @@ is durable stays in `Saving Result`; it cannot fall back to provider Retry.
 After proven process loss, the existing provider-free launch recovery may
 resume exact destination retirement or perform no-destination normalization as
 applicable. No path automatically repeats provider work.
+
+A definitive local create/replacement error before any destination does not
+discard the in-process recovery capability while the exact Pending
+`outputDelivery` owner remains. Voice continues to expose `Saving Result` plus
+the provider-free `Recover Recording` decision; a prior unrelated Latest Result
+may remain visible only as prior content, never as the state of that unresolved
+attempt.
 
 P5 History-integrated acceptance and the later production bridge use this
 sequence:
@@ -595,6 +630,12 @@ uncertain, the store first reloads and compares the exact intended bytes; an
 exact tombstone completes logical Clear, an exact prior active record remains
 visible, and any other ambiguity stays blocked without guessing.
 
+Physical tombstone cleanup accepts no caller payload. The store derives and
+validates its own opaque expectation from the current confirmed canonical
+tombstone. The entry point accepts no accepted text, active record, identity, or
+caller-reconstructed value; it returns no text and cannot make the tombstone
+visible again or remove a newer active record.
+
 A new result never destroys the only durable accepted payload between two file
 commits. The app first revokes the old bridge and transfers any pending History
 write. It then atomically CAS-replaces the old bytes directly with the new
@@ -617,9 +658,16 @@ Eligibility is `createdAt <= now < expiresAt`; the record is expired exactly at
 `expiresAt`. Reading, relaunching, publishing, or mutating never extends the
 deadline. A wall-clock value earlier than `createdAt` or the last committed
 `updatedAt` is a rollback ambiguity and fails closed: automatic insertion and
-state mutation stop while the protected app recovery value remains available
-for explicit clear or later trustworthy maintenance. Explicit clear uses the
-exception above. A forward clock jump may expire the record early.
+state mutation stop while protected bytes remain available only as internal
+recovery state for explicit clear or later trustworthy maintenance. Public
+`clockRollbackAmbiguous` and `expired` observations are content-free: they do
+not expose accepted text, become `resultReady`, or enable Copy, Share, Use in
+Practice, publication, or insertion. Explicit clear uses the exception above.
+A forward clock jump may expire the record early.
+
+This content-free rule also applies when reconciliation confirms the exact
+intended record after a commit-uncertain write: temporal ineligibility cannot be
+converted into a text-bearing success.
 
 Inside one process lifetime, the store always captures a monotonic deadline
 from the remaining wall interval; that deadline may further restrict
@@ -685,7 +733,8 @@ deterministic coverage for:
   two store actors, duplicate callbacks, revision overflow, and generation
   values outside the version-1 `0...1` range;
 - expiry immediately before/at/after the deadline, rollback and forward jumps,
-  no sliding TTL, explicit-clear exception, and direct expired removal;
+  no sliding TTL, content-free temporal outcomes, explicit-clear exception, and
+  direct expired removal;
 - ordinary `pending` and store-minted `pendingReplacement`, caller inability to
   forge the replacement marker, committed/cancelled transitions, immutable
   metadata, exact retained uncertainty phases, and provider-free recovery;
@@ -707,6 +756,14 @@ deterministic coverage for:
   expected production root operation gate;
 - atomic replacement keeps old bytes on every pre-rename failure and keeps new
   bytes visible but unauthorized on every post-rename uncertain outcome;
+- Saving replacement preserves only an independently confirmed valid prior
+  result and never resurrects a discarded, expired, or tombstoned predecessor;
+- empty-slot, Pending-audio, and Pending-journal absence require root-bound
+  directory-durable evidence across live completion and fresh-process launch;
+- unlink uncertainty followed by pathname recreation never deletes the new
+  object, and retry reconciles only the pinned original physical identity;
+- tombstone cleanup is opaque and content-free, including public-value,
+  reflection, and content-canary coverage;
 - first-process authorization performs the identical durability-confirmation
   rewrite after a simulated prior-process crash;
 - opaque corrupt/future discard requires bridge-wide revocation proof and exact

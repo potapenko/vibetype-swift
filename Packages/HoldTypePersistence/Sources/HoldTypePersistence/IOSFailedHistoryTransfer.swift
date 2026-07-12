@@ -1356,11 +1356,18 @@ extension IOSAcceptedHistoryCoordinator {
         let outboxWorkerState = outboxWorkerState
         let policyCutoverState = policyCutoverState
         let failedHistoryRetryState = failedHistoryRetryState
+        let foregroundVoicePersistenceState =
+            foregroundVoicePersistenceState
         let repositoryIdentityState = repositoryIdentityState
         let repositoryRegistration = repositoryRegistration
 
         do {
             return try await operationGate.perform { authorization in
+                guard await foregroundVoicePersistenceState.current() == nil
+                else {
+                    throw IOSAcceptedHistoryCoordinatorError
+                        .localRecoveryPending
+                }
                 guard await failedHistoryRetryState.hasLiveOwner() == false
                 else {
                     throw IOSAcceptedHistoryCoordinatorError
@@ -1518,11 +1525,18 @@ extension IOSAcceptedHistoryCoordinator {
         let outboxWorkerState = outboxWorkerState
         let policyCutoverState = policyCutoverState
         let failedHistoryRetryState = failedHistoryRetryState
+        let foregroundVoicePersistenceState =
+            foregroundVoicePersistenceState
         let repositoryIdentityState = repositoryIdentityState
         let repositoryRegistration = repositoryRegistration
 
         do {
             return try await operationGate.perform { authorization in
+                guard await foregroundVoicePersistenceState.current() == nil
+                else {
+                    throw IOSAcceptedHistoryCoordinatorError
+                        .localRecoveryPending
+                }
                 guard await failedHistoryRetryState.hasLiveOwner() == false
                 else {
                     throw IOSAcceptedHistoryCoordinatorError

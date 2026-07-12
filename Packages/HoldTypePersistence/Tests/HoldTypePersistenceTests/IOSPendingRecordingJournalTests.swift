@@ -483,6 +483,42 @@ struct IOSPendingRecordingJournalTests {
         }
     }
 
+    @Test func genericCanonicalAbsenceProofRequiresDirectoryDurability() throws {
+        try withTemporaryJournalDirectory { directoryURL in
+            let writer = FoundationIOSPendingRecordingJournalFileSystem(
+                applicationSupportDirectoryURL: directoryURL
+            )
+            let revision = try writer.createFile(
+                with: Data(#"{"schemaVersion":1}"#.utf8)
+            )
+            try writer.removeFile(expected: revision)
+
+            let evidence = try writer.proveCanonicalFileAbsent(
+                expectedRepositoryRoot: nil
+            )
+            #expect(evidence.configuration == .pendingRecording)
+            #expect(
+                evidence.description
+                    == "IOSStrictProtectedRecordAbsenceEvidence(redacted)"
+            )
+            #expect(evidence.customMirror.children.isEmpty)
+
+            let failingProof = FoundationIOSPendingRecordingJournalFileSystem(
+                applicationSupportDirectoryURL: directoryURL,
+                directorySynchronizationOperation: { _ in .failure(EIO) }
+            )
+            #expect(
+                throws:
+                    IOSPendingRecordingJournalFileSystemError
+                        .synchronizationFailed
+            ) {
+                _ = try failingProof.proveCanonicalFileAbsent(
+                    expectedRepositoryRoot: nil
+                )
+            }
+        }
+    }
+
     @Test func metadataRetirementRejectsChangedRevisionWithSameBytes() throws {
         try withTemporaryJournalDirectory { directoryURL in
             let fileSystem = FoundationIOSPendingRecordingJournalFileSystem(
@@ -810,6 +846,175 @@ struct IOSPendingRecordingJournalTests {
                 )
             }
             try fileSystem.removeFile(expected: replacementRevision)
+            #expect(try fileSystem.readFileIfPresent() == nil)
+        }
+    }
+
+    @Test func audioRemovalIntentReadRejectsPathSubstitutionAfterOpen()
+        throws {
+        try withTemporaryJournalDirectory { directoryURL in
+            let adapter = DeterministicMaintenancePOSIXAdapter(
+                directoryEntries: []
+            )
+            let fileSystem = FoundationIOSPendingRecordingJournalFileSystem(
+                applicationSupportDirectoryURL: directoryURL,
+                adapter: adapter
+            )
+            let transcriptionID = try #require(
+                UUID(uuidString: "11111111-2222-4333-8444-555555555555")
+            )
+            let recording = try fixtureRecording(
+                phase: .outputDelivery,
+                transcriptionID: transcriptionID
+            )
+            let initialRevision = try fileSystem.createFile(
+                with: IOSPendingRecordingJournalWireCodec.encode(recording)
+            )
+            let physicalSnapshot = try #require(
+                IOSPendingRecordingAudioRemovalPhysicalSnapshot(
+                    device: 11,
+                    inode: 22,
+                    byteCount: recording.byteCount,
+                    modificationSeconds: 33,
+                    modificationNanoseconds: 44,
+                    statusChangeSeconds: 55,
+                    statusChangeNanoseconds: 66
+                )
+            )
+            let intent = try #require(
+                IOSPendingRecordingAudioRemovalIntent(
+                    purpose: .acceptedOutput,
+                    recording: recording,
+                    physicalSnapshot: physicalSnapshot
+                )
+            )
+            let encoded = IOSPendingRecordingAudioRemovalIntentCodec.encode(
+                intent
+            )
+            #expect(
+                encoded.count
+                    == IOSPendingRecordingAudioRemovalIntent.encodedByteCount
+            )
+            #expect(
+                try IOSPendingRecordingAudioRemovalIntentCodec.decode(
+                    encoded,
+                    recording: recording
+                ) == intent
+            )
+            let intentRevision = try fileSystem.writeAudioRemovalIntent(
+                encoded,
+                expected: initialRevision,
+                expectedRepositoryRoot: nil,
+                createOnly: true,
+                authorization:
+                    IOSPendingRecordingAudioRemovalIntentAuthorization(
+                        testingToken: ()
+                    )
+            )
+
+            let journalURL = journalTestFileURL(directoryURL)
+            let displacedURL = journalURL.appendingPathExtension("displaced")
+            adapter.beforeNextOpen(
+                named: IOSPendingRecordingStorageLocation.journalFileName
+            ) {
+                try! FileManager.default.moveItem(
+                    at: journalURL,
+                    to: displacedURL
+                )
+                try! FileManager.default.copyItem(
+                    at: displacedURL,
+                    to: journalURL
+                )
+            }
+
+            #expect(
+                throws: IOSPendingRecordingJournalFileSystemError.staleRevision
+            ) {
+                _ = try fileSystem.readAudioRemovalIntent(
+                    expected: intentRevision,
+                    expectedRepositoryRoot: nil,
+                    authorization:
+                        IOSPendingRecordingAudioRemovalIntentAuthorization(
+                            testingToken: ()
+                        )
+                )
+            }
+            #expect(FileManager.default.fileExists(atPath: journalURL.path))
+            #expect(
+                FileManager.default.fileExists(atPath: displacedURL.path)
+            )
+        }
+    }
+
+    @Test func audioRemovalIntentBlocksGenericJournalMutationUntilRetirement()
+        throws {
+        try withTemporaryJournalDirectory { directoryURL in
+            let fileSystem = FoundationIOSPendingRecordingJournalFileSystem(
+                applicationSupportDirectoryURL: directoryURL
+            )
+            let transcriptionID = try #require(
+                UUID(uuidString: "11111111-2222-4333-8444-555555555555")
+            )
+            let recording = try fixtureRecording(
+                phase: .outputDelivery,
+                transcriptionID: transcriptionID
+            )
+            let bytes = try IOSPendingRecordingJournalWireCodec.encode(
+                recording
+            )
+            let initialRevision = try fileSystem.createFile(with: bytes)
+            let physicalSnapshot = try #require(
+                IOSPendingRecordingAudioRemovalPhysicalSnapshot(
+                    device: 71,
+                    inode: 72,
+                    byteCount: recording.byteCount,
+                    modificationSeconds: 73,
+                    modificationNanoseconds: 74,
+                    statusChangeSeconds: 75,
+                    statusChangeNanoseconds: 76
+                )
+            )
+            let intent = try #require(
+                IOSPendingRecordingAudioRemovalIntent(
+                    purpose: .acceptedOutput,
+                    recording: recording,
+                    physicalSnapshot: physicalSnapshot
+                )
+            )
+            let intentRevision = try fileSystem.writeAudioRemovalIntent(
+                IOSPendingRecordingAudioRemovalIntentCodec.encode(intent),
+                expected: initialRevision,
+                expectedRepositoryRoot: nil,
+                createOnly: true,
+                authorization:
+                    IOSPendingRecordingAudioRemovalIntentAuthorization(
+                        testingToken: ()
+                    )
+            )
+
+            #expect(
+                throws:
+                    IOSPendingRecordingJournalFileSystemError.commitUncertain
+            ) {
+                _ = try fileSystem.replaceFile(
+                    with: bytes,
+                    expected: intentRevision
+                )
+            }
+            #expect(
+                throws:
+                    IOSPendingRecordingJournalFileSystemError.commitUncertain
+            ) {
+                try fileSystem.removeFile(expected: intentRevision)
+            }
+            #expect(try fileSystem.readFileIfPresent()?.data == bytes)
+
+            let evidence = try fileSystem.removeMetadataFile(
+                expected: intentRevision,
+                expectedRepositoryRoot: nil,
+                authorization: journalMetadataAuthorization()
+            )
+            #expect(evidence.provesCanonicalPendingRecordingPath)
             #expect(try fileSystem.readFileIfPresent() == nil)
         }
     }
@@ -1454,6 +1659,8 @@ private final class DeterministicMaintenancePOSIXAdapter:
     private var streamIndexes: [Int: Int] = [:]
     private var openedStreamCount = 0
     private var entryReadCount = 0
+    private var nextNamedOpenHook:
+        (name: String, operation: @Sendable () -> Void)?
 
     init(directoryEntries: [String]) {
         self.directoryEntries = directoryEntries
@@ -1465,6 +1672,15 @@ private final class DeterministicMaintenancePOSIXAdapter:
 
     var directoryEntryReadCount: Int {
         lock.withLock { entryReadCount }
+    }
+
+    func beforeNextOpen(
+        named name: String,
+        perform operation: @escaping @Sendable () -> Void
+    ) {
+        lock.withLock {
+            nextNamedOpenHook = (name, operation)
+        }
     }
 
     func effectiveUserID() -> IOSPendingRecordingPOSIXResult<uid_t> {
@@ -1485,7 +1701,13 @@ private final class DeterministicMaintenancePOSIXAdapter:
         flags: Int32,
         mode: mode_t?
     ) -> IOSPendingRecordingPOSIXResult<Int32> {
-        live.openAt(
+        let hook: (@Sendable () -> Void)? = lock.withLock {
+            guard nextNamedOpenHook?.name == name else { return nil }
+            defer { nextNamedOpenHook = nil }
+            return nextNamedOpenHook?.operation
+        }
+        hook?()
+        return live.openAt(
             directoryDescriptor: directoryDescriptor,
             name: name,
             flags: flags,

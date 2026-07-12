@@ -224,6 +224,12 @@ Full Access, none of these extension-to-app commands is available.
   exists; that explicit action moves the exact Pending owner to Retry-or-Discard
   without another provider request. Once a destination exists, local retirement
   failure can retry only the exact remaining cleanup checkpoints.
+- While a new result is in `Saving Result`, Voice may also display the preceding
+  confirmed, unexpired Latest Result. The new accepted bytes do not become
+  Latest until atomic replacement is durably confirmed. A failed invisible
+  replacement preserves the prior result; an uncertain replacement blocks Clear
+  or another replacement until reconciled. A discarded, expired, or tombstoned
+  predecessor is never restored as prior text.
 - Recoverable pending audio presents `Retry` and confirmed `Discard`. A new
   Start remains unavailable until one of those actions reaches a durable result.
 - Result-ready presents selectable final text, Copy, Share, Use in Practice,
@@ -348,6 +354,12 @@ without that retained ownership is not recoverable.
 ordinary user cancellation or blocked preflight. `expired` is reserved for a
 listening attempt ended by the independent five-minute Quick Session deadline,
 not a provider timeout or the separate per-utterance maximum.
+
+Accepted-output retention expiry and detected delivery-record clock rollback
+are not `VoiceAttemptOutcome.expired`. They produce separate content-free output
+recovery observations and never produce `resultReady`, Copy, Share, or Use in
+Practice while temporally ineligible, even if protected bytes remain available
+internally for Clear or later trustworthy maintenance.
 
 Quick Session expiry while merely `ready` creates no attempt outcome. Expiry
 while `processing` does not overwrite the still-valid attempt; its eventual

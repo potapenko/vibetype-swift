@@ -77,17 +77,23 @@ consent.
 ## Mutation And Compare-And-Swap
 
 - Each observation carries one opaque expectation: exact absence or the current
-  readable epoch ID plus revision. Acceptance and withdrawal require that
-  expectation and fail without writing when it is stale.
+  readable epoch ID plus revision, together with the process gate fence current
+  when that value was observed. Acceptance and withdrawal require that complete
+  expectation and fail without writing when either the repository value or gate
+  fence is stale.
 - The first readable decision mints a fresh epoch ID and starts at revision `1`.
   Each later committed decision in that epoch increments revision exactly once.
   The composite epoch/revision authority is never reused; overflow fails closed.
   Repeating an already-current accepted disclosure or already-withdrawn state is
   an exact no-op.
-- Withdrawal closes the process provider gate before it waits for its repository
-  lease. It wins over every earlier authorization. A queued or late Accept made
-  from an older expectation cannot overwrite it; re-acceptance requires a fresh
-  post-withdrawal observation and an explicit new decision.
+- Withdrawal closes the process provider gate and advances its fence before it
+  waits for repository I/O. That fence invalidates every earlier observation
+  even when the withdrawal write later fails and the prior accepted bytes remain
+  durable. A queued or late Accept made from an older observation cannot reopen
+  the gate or overwrite the decision; re-acceptance requires a fresh post-fence
+  observation, an explicit new decision, and renewed durability confirmation.
+  Repeating identical accepted bytes is a durable no-op only after those checks;
+  it is never permission to reuse a pre-withdrawal observation.
 - A successful mutation publishes the exact canonical value returned by the
   repository. The coordinator never synthesizes a success from its request or
   increments presentation state before durable confirmation.
@@ -110,15 +116,24 @@ consent.
 
 - Durable acceptance creates only local eligibility. The process coordinator
   mints an opaque authorization bound to the exact repository epoch ID,
-  revision, and current disclosure version. It contains no key, prompt,
-  content, provider configuration, or user-facing copy.
-- Transcription, correction, and translation each validate that authorization
-  immediately before dispatch. Validation also requires that the process gate
-  is open and the same accepted decision remains current.
-- Provider response handling revalidates the same authorization before it can
-  advance Pending state or create accepted output. Withdrawal, reset, a newer
-  decision, disclosure-version change, repository unavailability, or process-
-  gate closure makes matching late output ineligible.
+  revision, current disclosure version, exact confirmed consent-file physical
+  revision, current gate fence, and canonical physical repository-root identity.
+  It contains no key, prompt, content, provider configuration, path, or user-
+  facing copy. A substituted root, same-root consent replacement/deletion,
+  unreadable or unavailable data, a different physical alias, or loss of root
+  identity invalidates it.
+- Transcription, correction, and translation use one atomic gate operation that
+  validates the authorization, rereads the exact durable consent snapshot,
+  revalidates the same physical root before and after that read, registers
+  cancellation, and grants launch. There is no validation-
+  to-dispatch window: withdrawal either closes the gate first or observes the
+  already registered task and cancels it.
+- Provider response handling atomically consumes a one-shot result authorization
+  under that same gate before it can advance Pending state or create accepted
+  output. Withdrawal, reset, a newer decision, disclosure-version change,
+  repository/root unavailability, process-gate closure, duplicate completion,
+  or physical-root mismatch makes matching output ineligible. There is no
+  validation-to-result-consumption window.
 - Provider acceptance does not replace microphone or credential preflight. All
   three gates must independently succeed in their specified order.
 - A request already received by OpenAI cannot be recalled. Withdrawal cancels
@@ -147,14 +162,25 @@ consent.
   History, usage, diagnostics export, provider requests, or source control.
 - Production construction does not accept an alternate path from a scene,
   preview, provider service, or runtime request. Test repositories remain
-  isolated and cannot mint production authority.
+  isolated and cannot mint production authority. On a fresh app container, the
+  no-path composition constructor securely creates and synchronizes the missing
+  canonical Application Support directory through a descriptor-relative,
+  no-symlink, owner-only bootstrap before the process context pins its physical
+  root. Bootstrap failure leaves consent unavailable and cannot permanently mint
+  a pathless fallback context.
 
 ## Invariants
 
 - No provider request without a current durable accepted decision and a matching
   live authorization.
 - No stale Accept can overwrite a later Withdrawal.
+- No observation issued before any Withdrawal or Reset attempt can reopen the
+  gate, even when that attempted mutation fails.
 - No old provider stage or late result can reuse an epoch/revision authority.
+- No consent authority survives a canonical physical-root mismatch or alternate
+  production repository path.
+- No time-of-check/time-of-use gap exists between gate validation and provider
+  launch or one-shot result consumption.
 - No passive status read grants consent or starts dependent work.
 - No malformed, future, inaccessible, or ambiguous file is treated as consent.
 - Reset is explicit, fail-closed, and cannot delete an unobserved replacement.
@@ -165,10 +191,15 @@ consent.
   keys, unexpected fields, corrupt/future preservation, missing baseline, Data
   Protection request, backup eligibility, and atomic replacement failure.
 - Test absent-to-accept, accept no-op, withdrawal, re-acceptance, stale CAS,
-  multi-scene queued Accept versus Withdrawal, overflow, fresh epoch IDs,
-  commit-uncertain reconciliation, confirmed reset, and reset identity races.
+  failed Withdrawal versus queued old Accept, multi-scene queued Accept versus
+  Withdrawal, overflow, fresh epoch IDs, commit-uncertain reconciliation,
+  confirmed reset, and reset identity races.
 - Test stage dispatch and response validation for Transcription, Correction,
-  and Translation across withdrawal, reset, disclosure update, another scene,
-  cancellation, and non-cooperative late completion.
+  and Translation across withdrawal-versus-launch, withdrawal-versus-result,
+  duplicate result, reset, disclosure update, another scene, root alias/root
+  substitution, same-root accepted-file withdrawal/corruption/deletion or
+  unavailability, cancellation, and non-cooperative late completion.
+- Test fresh-container canonical-root bootstrap, owner-only mode, symlink/path
+  substitution, bounded interrupted syscalls, and fail-closed bootstrap errors.
 - Test public state, errors, reflection, logs, and diagnostics with forbidden
   canaries. No normal test uses a real API key, microphone, or live OpenAI call.

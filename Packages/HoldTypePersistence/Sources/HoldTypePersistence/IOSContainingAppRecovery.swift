@@ -20,6 +20,9 @@ public extension IOSAcceptedHistoryCoordinator {
         guard !Task.isCancelled else {
             return .pendingLocalRecovery
         }
+        guard await foregroundVoicePersistenceState.current() == nil else {
+            return .pendingLocalRecovery
+        }
 
         do {
             if opportunity == .processLaunch {

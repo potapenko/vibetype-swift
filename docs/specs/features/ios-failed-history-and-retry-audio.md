@@ -997,8 +997,11 @@ Each lifecycle opportunity is bounded and provider-free:
    resume;
 2. on launch only, check whether the one process-lost
    `PendingRecording.outputDelivery` has an exact non-discarded ordinary
-   accepted destination, and retire that Pending audio and journal before any
-   generic expiry or discard can remove the proof;
+   accepted destination, and retire that Pending audio and journal through the
+   shared physical-root-bound evidence path before any generic expiry or discard
+   can remove the proof; completion requires separate directory-durable absence
+   evidence for both artifacts and never treats unlink success or `ENOENT` alone
+   as retirement;
 3. run one canonical History-policy cleanup pass; that pass owns or resumes
    any retained cutover and performs its embedded strict failed-Retry scan,
    while preserving the existing one-failed-action bound;

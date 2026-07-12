@@ -106,6 +106,9 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
     let failedHistoryRetryState: IOSFailedHistoryRetryLiveOwnerState
     let foregroundVoicePersistenceState:
         IOSForegroundVoicePersistenceOperationState
+    let providerConsentOwner: IOSProviderConsentOwner
+    let providerConsentAuthorizationGate:
+        IOSProviderConsentAuthorizationGate
     let ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity
     let repositoryIdentityState:
         IOSAcceptedHistoryCoordinatorRepositoryIdentityState
@@ -132,6 +135,8 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
             IOSFailedHistoryRetryLiveOwnerState()
         let foregroundVoicePersistenceState =
             IOSForegroundVoicePersistenceOperationState()
+        let providerConsentAuthorizationGate =
+            IOSProviderConsentAuthorizationGate()
         let deliveryStoreIdentity = IOSAcceptedOutputDeliveryStoreIdentity()
         let outboxStoreIdentity = IOSAcceptedHistoryOutboxStoreIdentity()
         let repositoryIdentityState =
@@ -139,6 +144,20 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
         let repositoryGuard = IOSAcceptedHistoryCoordinatorRepositoryGuard(
             expectedBinding: repositoryBinding,
             repositoryIdentityState: repositoryIdentityState
+        )
+        let providerConsentOwner = IOSProviderConsentOwner(
+            journal: FoundationIOSProviderConsentJournalRepository(
+                applicationSupportDirectoryURL:
+                    applicationSupportDirectoryURL,
+                repositoryGuard: repositoryGuard
+            ),
+            currentDisclosureVersion:
+                IOSProviderConsentCoordinator.currentDisclosureVersion,
+            expectedRepositoryRootIdentity:
+                repositoryBinding.physicalRootIdentity,
+            repositoryAdmissionRevalidation: {
+                try repositoryGuard.revalidate().physicalRootIdentity
+            }
         )
         self.applicationSupportDirectoryURL = applicationSupportDirectoryURL
         self.repositoryBinding = repositoryBinding
@@ -216,6 +235,9 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
         self.failedHistoryRetryState = failedHistoryRetryState
         self.foregroundVoicePersistenceState =
             foregroundVoicePersistenceState
+        self.providerConsentOwner = providerConsentOwner
+        self.providerConsentAuthorizationGate =
+            providerConsentAuthorizationGate
         self.repositoryIdentityState = repositoryIdentityState
 
         let pendingGateBindingAccepted =
@@ -877,6 +899,8 @@ public actor IOSAcceptedHistoryCoordinator {
     let failedHistoryAudioCleanupState:
         IOSFailedHistoryAudioCleanupOperationState
     let failedHistoryRetryState: IOSFailedHistoryRetryLiveOwnerState
+    let foregroundVoicePersistenceState:
+        IOSForegroundVoicePersistenceOperationState
     let failedHistoryMutationInterlock: IOSFailedHistoryMutationInterlock
     let ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity
     let repositoryIdentityState:
@@ -906,6 +930,8 @@ public actor IOSAcceptedHistoryCoordinator {
         failedHistoryAudioCleanupState =
             context.failedHistoryAudioCleanupState
         failedHistoryRetryState = context.failedHistoryRetryState
+        foregroundVoicePersistenceState =
+            context.foregroundVoicePersistenceState
         failedHistoryMutationInterlock =
             context.failedHistoryMutationInterlock
         ownerIdentity = context.ownerIdentity
@@ -978,6 +1004,8 @@ public actor IOSAcceptedHistoryCoordinator {
         failedHistoryAudioCleanupState =
             IOSFailedHistoryAudioCleanupOperationState()
         self.failedHistoryRetryState = failedHistoryRetryState
+        foregroundVoicePersistenceState =
+            IOSForegroundVoicePersistenceOperationState()
         failedHistoryMutationInterlock =
             failedHistoryStore.mutationInterlock
         ownerIdentity = capabilityOwnerIdentity
@@ -1050,6 +1078,9 @@ public actor IOSAcceptedHistoryCoordinator {
                 IOSFailedHistoryAudioCleanupOperationState(),
         failedHistoryRetryState:
             IOSFailedHistoryRetryLiveOwnerState? = nil,
+        foregroundVoicePersistenceState:
+            IOSForegroundVoicePersistenceOperationState =
+                IOSForegroundVoicePersistenceOperationState(),
         ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity? = nil,
         repositoryIdentityState:
             IOSAcceptedHistoryCoordinatorRepositoryIdentityState =
@@ -1104,6 +1135,8 @@ public actor IOSAcceptedHistoryCoordinator {
         self.failedHistoryAudioCleanupState =
             failedHistoryAudioCleanupState
         self.failedHistoryRetryState = failedHistoryRetryState
+        self.foregroundVoicePersistenceState =
+            foregroundVoicePersistenceState
         self.failedHistoryMutationInterlock =
             failedHistoryStore.mutationInterlock
         self.ownerIdentity = capabilityOwnerIdentity
@@ -1170,6 +1203,8 @@ public actor IOSAcceptedHistoryCoordinator {
         let policyCutoverState = policyCutoverState
         let failedHistoryTransferState = failedHistoryTransferState
         let failedHistoryRetryState = failedHistoryRetryState
+        let foregroundVoicePersistenceState =
+            foregroundVoicePersistenceState
         let failedHistoryMutationInterlock =
             failedHistoryMutationInterlock
         let repositoryIdentityState = repositoryIdentityState
@@ -1179,6 +1214,11 @@ public actor IOSAcceptedHistoryCoordinator {
         do {
             let capture = try await operationGate.perform {
                 operationLeaseAuthorization in
+                guard await foregroundVoicePersistenceState.current() == nil
+                else {
+                    throw IOSAcceptedHistoryCoordinatorError
+                        .localRecoveryPending
+                }
                 guard await failedHistoryRetryState.hasLiveOwner() == false
                 else {
                     throw IOSAcceptedHistoryCoordinatorError

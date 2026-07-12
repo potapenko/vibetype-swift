@@ -735,12 +735,18 @@ extension IOSAcceptedHistoryCoordinator {
         let policyCutoverState = policyCutoverState
         let failedTransferState = failedHistoryTransferState
         let failedAudioCleanupState = failedHistoryAudioCleanupState
+        let foregroundVoicePersistenceState =
+            foregroundVoicePersistenceState
         let ownerIdentity = ownerIdentity
         let repositoryIdentityState = repositoryIdentityState
         let repositoryRegistration = repositoryRegistration
 
         do {
             return try await operationGate.perform { lease in
+                guard await foregroundVoicePersistenceState.current() == nil
+                else {
+                    return .pendingLocalRecovery
+                }
                 let repositoryBinding = repositoryRegistration?.revalidate()
                 guard !repositoryIdentityState.isConflicted else {
                     throw IOSAcceptedHistoryCoordinatorError

@@ -334,6 +334,8 @@ private extension IOSAcceptedHistoryCoordinator {
         let failedHistoryTransferState = failedHistoryTransferState
         let failedHistoryAudioCleanupState = failedHistoryAudioCleanupState
         let failedHistoryRetryState = failedHistoryRetryState
+        let foregroundVoicePersistenceState =
+            foregroundVoicePersistenceState
         let failedHistoryMutationInterlock = failedHistoryMutationInterlock
         let deliveryStore = deliveryStore
         let repositoryIdentityState = repositoryIdentityState
@@ -341,6 +343,11 @@ private extension IOSAcceptedHistoryCoordinator {
 
         do {
             return try await operationGate.perform { authorization in
+                guard await foregroundVoicePersistenceState.current() == nil
+                else {
+                    throw IOSAcceptedHistoryCoordinatorError
+                        .localRecoveryPending
+                }
                 let repositoryBinding = repositoryRegistration?.revalidate()
                 guard !repositoryIdentityState.isConflicted,
                       await baselineRecoveryState.value() == false else {

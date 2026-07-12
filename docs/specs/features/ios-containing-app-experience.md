@@ -283,8 +283,11 @@ The app guides setup in this order:
   launch checks only for the exact ordinary destination of a process-lost
   `PendingRecording.outputDelivery`. This check also precedes resuming a
   retained cutover. An exact, non-discarded accepted destination with stored
-  accepted text idempotently retires that Pending audio and journal instead of
-  presenting a duplicate Retry. A discarded delivery is not an accepted
+  accepted text idempotently retires that Pending audio and journal through the
+  same physical-root-bound, evidence-producing path used by live completion.
+  The app clears ownership or exposes ready state only after separate directory-
+  durable absence evidence for audio and journal; unlink success or a later
+  missing lookup alone is insufficient. A discarded delivery is not an accepted
   destination. Partial identity, failed-Retry provenance, corrupt storage, or
   unavailable protection remains pending and performs no provider work.
 - Launch recovery then enters canonical bounded History cleanup. That cleanup

@@ -64,6 +64,11 @@ extension IOSProviderConsentJournalSnapshot:
 
 protocol IOSProviderConsentJournalStoring: Sendable {
     func load() throws -> IOSProviderConsentJournalSnapshot?
+    func withProviderAdmissionLease<Result>(
+        _ operation: (
+            IOSProviderConsentJournalSnapshot?
+        ) throws -> Result
+    ) throws -> Result
     func create(_ record: IOSProviderConsentRecord) throws
         -> IOSProviderConsentJournalSnapshot
     func replace(
@@ -76,24 +81,72 @@ protocol IOSProviderConsentJournalStoring: Sendable {
     func synchronizeDirectory() throws
 }
 
+final class IOSProviderConsentRepositoryAdmissionGuard:
+    @unchecked Sendable {
+    // Provider-consent repository access is process-owned. A non-recursive
+    // lease prevents a mutation from reentering between the admission read and
+    // the decisive gate transition.
+    private let lock = NSLock()
+
+    func withLease<Result>(
+        _ operation: () throws -> Result
+    ) rethrows -> Result {
+        lock.lock()
+        defer { lock.unlock() }
+        return try operation()
+    }
+}
+
 struct FoundationIOSProviderConsentJournalRepository:
     IOSProviderConsentJournalStoring,
     Sendable {
+    private static let repositoryAdmissionGuard =
+        IOSProviderConsentRepositoryAdmissionGuard()
+
     private let fileSystem: any IOSStrictProtectedRecordFileSystem
     private let directorySynchronization: @Sendable () throws -> Void
+    private let repositoryRevalidation: @Sendable () throws -> Void
+    private let onRepositoryUnavailable: @Sendable () -> Void
 
-    init(applicationSupportDirectoryURL: URL) {
+    init(
+        applicationSupportDirectoryURL: URL,
+        repositoryGuard:
+            IOSAcceptedHistoryCoordinatorRepositoryGuard? = nil,
+        onRepositoryUnavailable:
+            @escaping @Sendable () -> Void = {}
+    ) {
+        let markRepositoryIdentityMismatch: @Sendable () -> Void = {
+            repositoryGuard?.invalidate()
+        }
         fileSystem = FoundationIOSStrictProtectedRecordFileSystem(
             applicationSupportDirectoryURL: applicationSupportDirectoryURL,
             configuration: .providerConsent,
-            adapter: IOSProviderConsentBackupEligiblePOSIXAdapter()
+            adapter: IOSProviderConsentBackupEligiblePOSIXAdapter(),
+            expectedRepositoryRoot:
+                repositoryGuard?.expectedPhysicalRootIdentity,
+            onRepositoryIdentityMismatch:
+                markRepositoryIdentityMismatch
         )
         let synchronizer = IOSProviderConsentDirectorySynchronizer(
-            applicationSupportDirectoryURL: applicationSupportDirectoryURL
+            applicationSupportDirectoryURL: applicationSupportDirectoryURL,
+            expectedRepositoryRoot:
+                repositoryGuard?.expectedPhysicalRootIdentity
         )
-        directorySynchronization = {
-            try synchronizer.synchronize()
+        let revalidate: @Sendable () throws -> Void = {
+            _ = try repositoryGuard?.revalidate()
         }
+        directorySynchronization = {
+            do {
+                try revalidate()
+                try synchronizer.synchronize()
+                try revalidate()
+            } catch {
+                _ = try? repositoryGuard?.revalidate()
+                throw error
+            }
+        }
+        repositoryRevalidation = revalidate
+        self.onRepositoryUnavailable = onRepositoryUnavailable
     }
 
     init(
@@ -102,22 +155,47 @@ struct FoundationIOSProviderConsentJournalRepository:
     ) {
         self.fileSystem = fileSystem
         self.directorySynchronization = directorySynchronization
+        repositoryRevalidation = {}
+        onRepositoryUnavailable = {}
     }
 
     func load() throws -> IOSProviderConsentJournalSnapshot? {
+        try Self.repositoryAdmissionGuard.withLease {
+            try loadWithoutAdmissionLease()
+        }
+    }
+
+    func withProviderAdmissionLease<Result>(
+        _ operation: (
+            IOSProviderConsentJournalSnapshot?
+        ) throws -> Result
+    ) throws -> Result {
+        try Self.repositoryAdmissionGuard.withLease {
+            try operation(try loadWithoutAdmissionLease())
+        }
+    }
+
+    private func loadWithoutAdmissionLease() throws
+        -> IOSProviderConsentJournalSnapshot? {
+        try revalidateRepository(or: .localDataUnavailable)
         let file: IOSStrictProtectedRecordFile
         do {
             guard let value = try fileSystem.readFileIfPresent() else {
+                try revalidateRepository(or: .localDataUnavailable)
                 return nil
             }
             file = value
         } catch IOSStrictProtectedRecordFileSystemError.sourceTooLarge,
                 IOSStrictProtectedRecordFileSystemError.invalidFile {
-            return try loadOpaqueSnapshot()
+            let snapshot = try loadOpaqueSnapshot()
+            try revalidateRepository(or: .localDataUnavailable)
+            return snapshot
         } catch IOSStrictProtectedRecordFileSystemError.protectedDataUnavailable,
                 IOSStrictProtectedRecordFileSystemError.repositoryIdentityConflict {
+            onRepositoryUnavailable()
             throw IOSProviderConsentJournalError.localDataUnavailable
         } catch {
+            onRepositoryUnavailable()
             throw IOSProviderConsentJournalError.localDataUnavailable
         }
 
@@ -129,29 +207,45 @@ struct FoundationIOSProviderConsentJournalRepository:
             // only through the exact revision captured by this observation.
             content = .unreadable
         }
-        return IOSProviderConsentJournalSnapshot(
+        let snapshot = IOSProviderConsentJournalSnapshot(
             content: content,
             fileRevision: file.revision
         )
+        try revalidateRepository(or: .localDataUnavailable)
+        return snapshot
     }
 
     func create(_ record: IOSProviderConsentRecord) throws
         -> IOSProviderConsentJournalSnapshot {
+        try Self.repositoryAdmissionGuard.withLease {
+            try createWithoutAdmissionLease(record)
+        }
+    }
+
+    private func createWithoutAdmissionLease(
+        _ record: IOSProviderConsentRecord
+    ) throws -> IOSProviderConsentJournalSnapshot {
+        try revalidateRepository(or: .localDataUnavailable)
         let data = try encode(record)
         do {
             let revision = try fileSystem.createFile(with: data)
-            return IOSProviderConsentJournalSnapshot(
+            let snapshot = IOSProviderConsentJournalSnapshot(
                 content: .readable(record),
                 fileRevision: revision
             )
+            try revalidateRepository(or: .commitUncertain)
+            return snapshot
         } catch IOSStrictProtectedRecordFileSystemError.destinationConflict {
             throw IOSProviderConsentJournalError.staleRevision
         } catch IOSStrictProtectedRecordFileSystemError.protectedDataUnavailable,
                 IOSStrictProtectedRecordFileSystemError.repositoryIdentityConflict {
+            onRepositoryUnavailable()
             throw IOSProviderConsentJournalError.localDataUnavailable
         } catch IOSStrictProtectedRecordFileSystemError.commitUncertain,
                 IOSStrictProtectedRecordFileSystemError.synchronizationFailed {
             throw IOSProviderConsentJournalError.commitUncertain
+        } catch let error as IOSProviderConsentJournalError {
+            throw error
         } catch {
             throw IOSProviderConsentJournalError.mutationNotSaved
         }
@@ -161,28 +255,46 @@ struct FoundationIOSProviderConsentJournalRepository:
         _ record: IOSProviderConsentRecord,
         expected: IOSProviderConsentJournalSnapshot
     ) throws -> IOSProviderConsentJournalSnapshot {
+        try Self.repositoryAdmissionGuard.withLease {
+            try replaceWithoutAdmissionLease(
+                record,
+                expected: expected
+            )
+        }
+    }
+
+    private func replaceWithoutAdmissionLease(
+        _ record: IOSProviderConsentRecord,
+        expected: IOSProviderConsentJournalSnapshot
+    ) throws -> IOSProviderConsentJournalSnapshot {
         guard case .readable = expected.content else {
             throw IOSProviderConsentJournalError.staleRevision
         }
+        try revalidateRepository(or: .localDataUnavailable)
         let data = try encode(record)
         do {
             let revision = try fileSystem.replaceFile(
                 with: data,
                 expected: expected.fileRevision
             )
-            return IOSProviderConsentJournalSnapshot(
+            let snapshot = IOSProviderConsentJournalSnapshot(
                 content: .readable(record),
                 fileRevision: revision
             )
+            try revalidateRepository(or: .commitUncertain)
+            return snapshot
         } catch IOSStrictProtectedRecordFileSystemError.staleRevision,
                 IOSStrictProtectedRecordFileSystemError.missing {
             throw IOSProviderConsentJournalError.staleRevision
         } catch IOSStrictProtectedRecordFileSystemError.protectedDataUnavailable,
                 IOSStrictProtectedRecordFileSystemError.repositoryIdentityConflict {
+            onRepositoryUnavailable()
             throw IOSProviderConsentJournalError.localDataUnavailable
         } catch IOSStrictProtectedRecordFileSystemError.commitUncertain,
                 IOSStrictProtectedRecordFileSystemError.synchronizationFailed {
             throw IOSProviderConsentJournalError.commitUncertain
+        } catch let error as IOSProviderConsentJournalError {
+            throw error
         } catch {
             throw IOSProviderConsentJournalError.mutationNotSaved
         }
@@ -191,30 +303,61 @@ struct FoundationIOSProviderConsentJournalRepository:
     func removeUnreadable(
         expected: IOSProviderConsentJournalSnapshot
     ) throws {
+        try Self.repositoryAdmissionGuard.withLease {
+            try removeUnreadableWithoutAdmissionLease(expected: expected)
+        }
+    }
+
+    private func removeUnreadableWithoutAdmissionLease(
+        expected: IOSProviderConsentJournalSnapshot
+    ) throws {
         guard expected.content == .unreadable else {
             throw IOSProviderConsentJournalError.staleRevision
         }
+        try revalidateRepository(or: .localDataUnavailable)
         do {
             try fileSystem.removeOpaqueFile(expected: expected.fileRevision)
+            try revalidateRepository(or: .commitUncertain)
         } catch IOSStrictProtectedRecordFileSystemError.staleRevision,
                 IOSStrictProtectedRecordFileSystemError.missing {
             throw IOSProviderConsentJournalError.staleRevision
         } catch IOSStrictProtectedRecordFileSystemError.protectedDataUnavailable,
                 IOSStrictProtectedRecordFileSystemError.repositoryIdentityConflict {
+            onRepositoryUnavailable()
             throw IOSProviderConsentJournalError.localDataUnavailable
         } catch IOSStrictProtectedRecordFileSystemError.commitUncertain,
                 IOSStrictProtectedRecordFileSystemError.synchronizationFailed {
             throw IOSProviderConsentJournalError.commitUncertain
+        } catch let error as IOSProviderConsentJournalError {
+            throw error
         } catch {
             throw IOSProviderConsentJournalError.mutationNotSaved
         }
     }
 
     func synchronizeDirectory() throws {
+        try Self.repositoryAdmissionGuard.withLease {
+            try synchronizeDirectoryWithoutAdmissionLease()
+        }
+    }
+
+    private func synchronizeDirectoryWithoutAdmissionLease() throws {
         do {
             try directorySynchronization()
         } catch {
+            onRepositoryUnavailable()
             throw IOSProviderConsentJournalError.commitUncertain
+        }
+    }
+
+    private func revalidateRepository(
+        or mappedError: IOSProviderConsentJournalError
+    ) throws {
+        do {
+            try repositoryRevalidation()
+        } catch {
+            onRepositoryUnavailable()
+            throw mappedError
         }
     }
 
@@ -231,8 +374,10 @@ struct FoundationIOSProviderConsentJournalRepository:
             )
         } catch IOSStrictProtectedRecordFileSystemError.protectedDataUnavailable,
                 IOSStrictProtectedRecordFileSystemError.repositoryIdentityConflict {
+            onRepositoryUnavailable()
             throw IOSProviderConsentJournalError.localDataUnavailable
         } catch {
+            onRepositoryUnavailable()
             throw IOSProviderConsentJournalError.localDataUnavailable
         }
     }
@@ -485,6 +630,7 @@ private struct IOSProviderConsentDirectorySynchronizer: Sendable {
     private static let maximumInterruptedRetryCount = 8
 
     let applicationSupportDirectoryURL: URL
+    let expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
 
     func synchronize() throws {
         guard applicationSupportDirectoryURL.isFileURL,
@@ -495,6 +641,7 @@ private struct IOSProviderConsentDirectorySynchronizer: Sendable {
 
         let parent = try openDirectory(path: applicationSupportDirectoryURL.path)
         defer { Darwin.close(parent) }
+        try validateRepositoryRoot(descriptor: parent)
         let directory = try openDirectory(
             named: IOSProviderConsentStorageLocation.directoryName,
             parent: parent
@@ -517,6 +664,7 @@ private struct IOSProviderConsentDirectorySynchronizer: Sendable {
             parent: parent,
             expected: after
         )
+        try validateRepositoryRoot(descriptor: parent)
     }
 
     private func openDirectory(path: String) throws -> Int32 {
@@ -552,6 +700,16 @@ private struct IOSProviderConsentDirectorySynchronizer: Sendable {
             throw IOSProviderConsentJournalError.commitUncertain
         }
         return Identity(device: status.st_dev, inode: status.st_ino)
+    }
+
+    private func validateRepositoryRoot(descriptor: Int32) throws {
+        guard let expectedRepositoryRoot else { return }
+        var status = stat()
+        guard Darwin.fstat(descriptor, &status) == 0,
+              status.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR),
+              expectedRepositoryRoot.matches(status) else {
+            throw IOSProviderConsentJournalError.commitUncertain
+        }
     }
 
     private func validateDirectoryPath(

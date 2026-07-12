@@ -407,6 +407,212 @@ enum IOSPendingRecordingJournalMetadataAbsenceEvidence:
     var provesCanonicalPendingRecordingPath: Bool {
         binding.pathIdentity == .pendingRecording
     }
+
+    #if DEBUG
+    init(
+        testingRemoved source:
+            IOSPendingRecordingJournalMetadataSnapshot,
+        repositoryRoot: IOSPersistenceRepositoryRootIdentity =
+            IOSPersistenceRepositoryRootIdentity(device: 1, inode: 1)
+    ) {
+        self = .removed(
+            Removed(
+                sourceRevision: source.fileRevision,
+                binding: Binding(
+                    repositoryRoot: repositoryRoot,
+                    journalDirectory:
+                        IOSPendingRecordingJournalDirectoryIdentity(
+                            device: 1,
+                            inode: 2
+                        ),
+                    pathIdentity: .pendingRecording
+                )
+            )
+        )
+    }
+
+    init(
+        testingAlreadyAbsentRepositoryRoot repositoryRoot:
+            IOSPersistenceRepositoryRootIdentity =
+                IOSPersistenceRepositoryRootIdentity(device: 1, inode: 1)
+    ) {
+        self = .alreadyAbsent(
+            AlreadyAbsent(
+                binding: Binding(
+                    repositoryRoot: repositoryRoot,
+                    journalDirectory:
+                        IOSPendingRecordingJournalDirectoryIdentity(
+                            device: 1,
+                            inode: 2
+                        ),
+                    pathIdentity: .pendingRecording
+                )
+            )
+        )
+    }
+    #endif
+}
+
+/// Descriptor-derived identity durably attached to the exact Pending journal
+/// before an audio unlink. It contains no transcript or provider payload.
+struct IOSPendingRecordingAudioRemovalPhysicalSnapshot: Equatable, Sendable {
+    let device: UInt64
+    let inode: UInt64
+    let byteCount: Int64
+    let modificationSeconds: Int64
+    let modificationNanoseconds: Int64
+    let statusChangeSeconds: Int64
+    let statusChangeNanoseconds: Int64
+
+    init(_ value: stat) {
+        device = UInt64(truncatingIfNeeded: value.st_dev)
+        inode = UInt64(truncatingIfNeeded: value.st_ino)
+        byteCount = Int64(value.st_size)
+        modificationSeconds = Int64(value.st_mtimespec.tv_sec)
+        modificationNanoseconds = Int64(value.st_mtimespec.tv_nsec)
+        statusChangeSeconds = Int64(value.st_ctimespec.tv_sec)
+        statusChangeNanoseconds = Int64(value.st_ctimespec.tv_nsec)
+    }
+
+    init?(
+        device: UInt64,
+        inode: UInt64,
+        byteCount: Int64,
+        modificationSeconds: Int64,
+        modificationNanoseconds: Int64,
+        statusChangeSeconds: Int64,
+        statusChangeNanoseconds: Int64
+    ) {
+        guard inode > 0,
+              byteCount > 0,
+              modificationNanoseconds >= 0,
+              modificationNanoseconds < 1_000_000_000,
+              statusChangeNanoseconds >= 0,
+              statusChangeNanoseconds < 1_000_000_000 else {
+            return nil
+        }
+        self.device = device
+        self.inode = inode
+        self.byteCount = byteCount
+        self.modificationSeconds = modificationSeconds
+        self.modificationNanoseconds = modificationNanoseconds
+        self.statusChangeSeconds = statusChangeSeconds
+        self.statusChangeNanoseconds = statusChangeNanoseconds
+    }
+}
+
+struct IOSPendingRecordingAudioRemovalIntent: Equatable, Sendable {
+    static let extendedAttributeName =
+        "com.holdtype.ios.pending-audio-removal"
+    static let encodedByteCount = 50
+
+    let purpose: IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization.Purpose
+    let recording: IOSPendingRecording
+    let physicalSnapshot: IOSPendingRecordingAudioRemovalPhysicalSnapshot
+
+    init?(
+        purpose: IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization.Purpose,
+        recording: IOSPendingRecording,
+        physicalSnapshot: IOSPendingRecordingAudioRemovalPhysicalSnapshot
+    ) {
+        let phaseIsEligible = switch purpose {
+        case .acceptedOutput:
+            recording.phase == .outputDelivery
+        case .discard:
+            recording.phase == .readyForTranscription
+                || recording.phase == .awaitingRecovery
+        }
+        guard phaseIsEligible,
+              physicalSnapshot.byteCount == recording.byteCount else {
+            return nil
+        }
+        self.purpose = purpose
+        self.recording = recording
+        self.physicalSnapshot = physicalSnapshot
+    }
+}
+
+extension IOSPendingRecordingAudioRemovalIntent:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSPendingRecordingAudioRemovalIntent(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+struct IOSPendingRecordingAudioRemovalIntentSnapshot: Equatable, Sendable {
+    let intent: IOSPendingRecordingAudioRemovalIntent
+    let journalRevision: IOSPendingRecordingJournalFileRevision
+}
+
+struct IOSPendingRecordingAudioRemovalIntentAuthorization:
+    Equatable,
+    Sendable {
+    fileprivate init() {}
+
+    #if DEBUG
+    init(testingToken: Void) {}
+    #endif
+}
+
+protocol IOSPendingRecordingAudioRemovalIntentStoring: Sendable {
+    func load(
+        expected recording: IOSPendingRecording,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+    ) throws -> IOSPendingRecordingAudioRemovalIntentSnapshot?
+    func commit(
+        _ intent: IOSPendingRecordingAudioRemovalIntent,
+        expected recording: IOSPendingRecording,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+    ) throws -> IOSPendingRecordingAudioRemovalIntentSnapshot
+}
+
+/// Generic proof that one configured strict-record path was absent on both
+/// sides of a successful directory durability barrier. It is intentionally
+/// content-free so a record-specific journal can bind it to its own opaque
+/// cleanup capability without decoding unavailable or tombstoned bytes.
+struct IOSStrictProtectedRecordAbsenceEvidence: Equatable, Sendable {
+    let repositoryRoot: IOSPersistenceRepositoryRootIdentity
+    let recordDirectory: IOSPendingRecordingJournalDirectoryIdentity
+    let configuration: IOSStrictProtectedRecordConfiguration
+
+    init(
+        repositoryRoot: IOSPersistenceRepositoryRootIdentity,
+        recordDirectory: IOSPendingRecordingJournalDirectoryIdentity,
+        configuration: IOSStrictProtectedRecordConfiguration
+    ) {
+        self.repositoryRoot = repositoryRoot
+        self.recordDirectory = recordDirectory
+        self.configuration = configuration
+    }
+
+    #if DEBUG
+    init(testingConfiguration configuration: IOSStrictProtectedRecordConfiguration) {
+        repositoryRoot = IOSPersistenceRepositoryRootIdentity(
+            device: 1,
+            inode: 1
+        )
+        recordDirectory = IOSPendingRecordingJournalDirectoryIdentity(
+            device: 1,
+            inode: 2
+        )
+        self.configuration = configuration
+    }
+    #endif
+}
+
+extension IOSStrictProtectedRecordAbsenceEvidence:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSStrictProtectedRecordAbsenceEvidence(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
 protocol IOSPendingRecordingJournalFileSystem: Sendable {
@@ -449,6 +655,21 @@ protocol IOSPendingRecordingJournalFileSystem: Sendable {
         expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
         authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence
+    func proveCanonicalFileAbsent(
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+    ) throws -> IOSStrictProtectedRecordAbsenceEvidence
+    func readAudioRemovalIntent(
+        expected: IOSPendingRecordingJournalFileRevision,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingAudioRemovalIntentAuthorization
+    ) throws -> Data?
+    func writeAudioRemovalIntent(
+        _ data: Data,
+        expected: IOSPendingRecordingJournalFileRevision,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        createOnly: Bool,
+        authorization: IOSPendingRecordingAudioRemovalIntentAuthorization
+    ) throws -> IOSPendingRecordingJournalFileRevision
 }
 
 extension IOSPendingRecordingJournalFileSystem {
@@ -511,6 +732,39 @@ extension IOSPendingRecordingJournalFileSystem {
         authorization: IOSPendingRecordingMetadataRetirementAuthorization
     ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence {
         _ = expectedRepositoryRoot
+        _ = authorization
+        throw IOSPendingRecordingJournalFileSystemError.invalidLocation
+    }
+
+    func proveCanonicalFileAbsent(
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+    ) throws -> IOSStrictProtectedRecordAbsenceEvidence {
+        _ = expectedRepositoryRoot
+        throw IOSPendingRecordingJournalFileSystemError.invalidLocation
+    }
+
+    func readAudioRemovalIntent(
+        expected: IOSPendingRecordingJournalFileRevision,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingAudioRemovalIntentAuthorization
+    ) throws -> Data? {
+        _ = expected
+        _ = expectedRepositoryRoot
+        _ = authorization
+        throw IOSPendingRecordingJournalFileSystemError.invalidLocation
+    }
+
+    func writeAudioRemovalIntent(
+        _ data: Data,
+        expected: IOSPendingRecordingJournalFileRevision,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        createOnly: Bool,
+        authorization: IOSPendingRecordingAudioRemovalIntentAuthorization
+    ) throws -> IOSPendingRecordingJournalFileRevision {
+        _ = data
+        _ = expected
+        _ = expectedRepositoryRoot
+        _ = createOnly
         _ = authorization
         throw IOSPendingRecordingJournalFileSystemError.invalidLocation
     }
@@ -836,6 +1090,263 @@ struct FoundationIOSPendingRecordingJournalRepository:
 
 typealias IOSPendingRecordingJournalRepository =
     FoundationIOSPendingRecordingJournalRepository
+
+struct FoundationIOSPendingRecordingAudioRemovalIntentRepository:
+    IOSPendingRecordingAudioRemovalIntentStoring,
+    Sendable {
+    private let fileSystem: any IOSPendingRecordingJournalFileSystem
+
+    init(
+        applicationSupportDirectoryURL: URL,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        onRepositoryIdentityMismatch: @escaping @Sendable () -> Void
+    ) {
+        fileSystem = FoundationIOSPendingRecordingJournalFileSystem(
+            applicationSupportDirectoryURL: applicationSupportDirectoryURL,
+            expectedRepositoryRoot: expectedRepositoryRoot,
+            onRepositoryIdentityMismatch: onRepositoryIdentityMismatch
+        )
+    }
+
+    init(fileSystem: any IOSPendingRecordingJournalFileSystem) {
+        self.fileSystem = fileSystem
+    }
+
+    func load(
+        expected recording: IOSPendingRecording,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+    ) throws -> IOSPendingRecordingAudioRemovalIntentSnapshot? {
+        let current = try requireCurrent(
+            recording,
+            expectedRepositoryRoot: expectedRepositoryRoot
+        )
+        let data: Data?
+        do {
+            data = try fileSystem.readAudioRemovalIntent(
+                expected: current.revision,
+                expectedRepositoryRoot: expectedRepositoryRoot,
+                authorization:
+                    IOSPendingRecordingAudioRemovalIntentAuthorization()
+            )
+        } catch let error as IOSPendingRecordingJournalFileSystemError {
+            throw map(error)
+        } catch {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        guard let data else { return nil }
+        return IOSPendingRecordingAudioRemovalIntentSnapshot(
+            intent: try IOSPendingRecordingAudioRemovalIntentCodec.decode(
+                data,
+                recording: recording
+            ),
+            journalRevision: current.revision
+        )
+    }
+
+    func commit(
+        _ intent: IOSPendingRecordingAudioRemovalIntent,
+        expected recording: IOSPendingRecording,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+    ) throws -> IOSPendingRecordingAudioRemovalIntentSnapshot {
+        guard intent.recording == recording else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        let current = try requireCurrent(
+            recording,
+            expectedRepositoryRoot: expectedRepositoryRoot
+        )
+        let existingData: Data?
+        do {
+            existingData = try fileSystem.readAudioRemovalIntent(
+                expected: current.revision,
+                expectedRepositoryRoot: expectedRepositoryRoot,
+                authorization:
+                    IOSPendingRecordingAudioRemovalIntentAuthorization()
+            )
+        } catch let error as IOSPendingRecordingJournalFileSystemError {
+            throw map(error)
+        } catch {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        if let existingData {
+            let existing = try IOSPendingRecordingAudioRemovalIntentCodec
+                .decode(existingData, recording: recording)
+            guard existing == intent else {
+                throw IOSPendingRecordingAudioFileSystemError.removeFailed
+            }
+        }
+        let data = IOSPendingRecordingAudioRemovalIntentCodec.encode(intent)
+        let revision: IOSPendingRecordingJournalFileRevision
+        do {
+            revision = try fileSystem.writeAudioRemovalIntent(
+                data,
+                expected: current.revision,
+                expectedRepositoryRoot: expectedRepositoryRoot,
+                createOnly: existingData == nil,
+                authorization:
+                    IOSPendingRecordingAudioRemovalIntentAuthorization()
+            )
+        } catch let error as IOSPendingRecordingJournalFileSystemError {
+            throw map(error)
+        } catch {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        return IOSPendingRecordingAudioRemovalIntentSnapshot(
+            intent: intent,
+            journalRevision: revision
+        )
+    }
+
+    private func requireCurrent(
+        _ recording: IOSPendingRecording,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+    ) throws -> IOSPendingRecordingJournalFile {
+        let file: IOSPendingRecordingJournalFile
+        do {
+            guard let current = try fileSystem.readFileIfPresent() else {
+                throw IOSPendingRecordingAudioFileSystemError.removeFailed
+            }
+            file = current
+        } catch let error as IOSPendingRecordingAudioFileSystemError {
+            throw error
+        } catch let error as IOSPendingRecordingJournalFileSystemError {
+            throw map(error)
+        } catch {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        guard try IOSPendingRecordingJournalWireCodec.decode(file.data)
+                == recording else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        _ = expectedRepositoryRoot
+        return file
+    }
+
+    private func map(
+        _ error: IOSPendingRecordingJournalFileSystemError
+    ) -> IOSPendingRecordingAudioFileSystemError {
+        switch error {
+        case .protectedDataUnavailable:
+            .dataProtectionUnavailable
+        case .repositoryIdentityConflict:
+            .repositoryIdentityConflict
+        case .commitUncertain, .synchronizationFailed:
+            .synchronizationFailed
+        default:
+            .removeFailed
+        }
+    }
+}
+
+enum IOSPendingRecordingAudioRemovalIntentCodec {
+    private static let schemaVersion: UInt8 = 1
+
+    static func encode(
+        _ intent: IOSPendingRecordingAudioRemovalIntent
+    ) -> Data {
+        var data = Data()
+        data.reserveCapacity(IOSPendingRecordingAudioRemovalIntent.encodedByteCount)
+        data.append(schemaVersion)
+        data.append(intent.purpose.rawValue)
+        append(intent.physicalSnapshot.device, to: &data)
+        append(intent.physicalSnapshot.inode, to: &data)
+        append(UInt64(bitPattern: intent.physicalSnapshot.byteCount), to: &data)
+        append(
+            UInt64(bitPattern: intent.physicalSnapshot.modificationSeconds),
+            to: &data
+        )
+        append(
+            UInt32(intent.physicalSnapshot.modificationNanoseconds),
+            to: &data
+        )
+        append(
+            UInt64(bitPattern: intent.physicalSnapshot.statusChangeSeconds),
+            to: &data
+        )
+        append(
+            UInt32(intent.physicalSnapshot.statusChangeNanoseconds),
+            to: &data
+        )
+        return data
+    }
+
+    static func decode(
+        _ data: Data,
+        recording: IOSPendingRecording
+    ) throws -> IOSPendingRecordingAudioRemovalIntent {
+        guard data.count == IOSPendingRecordingAudioRemovalIntent.encodedByteCount,
+              data[0] == schemaVersion,
+              let purpose =
+                IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization.Purpose(
+                    rawValue: data[1]
+                ) else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        var offset = 2
+        let device = readUInt64(data, offset: &offset)
+        let inode = readUInt64(data, offset: &offset)
+        let byteCount = Int64(bitPattern: readUInt64(data, offset: &offset))
+        let modificationSeconds = Int64(
+            bitPattern: readUInt64(data, offset: &offset)
+        )
+        let modificationNanoseconds = Int64(readUInt32(data, offset: &offset))
+        let statusChangeSeconds = Int64(
+            bitPattern: readUInt64(data, offset: &offset)
+        )
+        let statusChangeNanoseconds = Int64(readUInt32(data, offset: &offset))
+        guard offset == data.count,
+              let physicalSnapshot =
+                IOSPendingRecordingAudioRemovalPhysicalSnapshot(
+                    device: device,
+                    inode: inode,
+                    byteCount: byteCount,
+                    modificationSeconds: modificationSeconds,
+                    modificationNanoseconds: modificationNanoseconds,
+                    statusChangeSeconds: statusChangeSeconds,
+                    statusChangeNanoseconds: statusChangeNanoseconds
+                ),
+              let intent = IOSPendingRecordingAudioRemovalIntent(
+                  purpose: purpose,
+                  recording: recording,
+                  physicalSnapshot: physicalSnapshot
+              ) else {
+            throw IOSPendingRecordingAudioFileSystemError.removeFailed
+        }
+        return intent
+    }
+
+    private static func append<T: FixedWidthInteger>(
+        _ value: T,
+        to data: inout Data
+    ) {
+        var bigEndian = value.bigEndian
+        withUnsafeBytes(of: &bigEndian) { data.append(contentsOf: $0) }
+    }
+
+    private static func readUInt64(
+        _ data: Data,
+        offset: inout Int
+    ) -> UInt64 {
+        var value: UInt64 = 0
+        for _ in 0..<8 {
+            value = (value << 8) | UInt64(data[offset])
+            offset += 1
+        }
+        return value
+    }
+
+    private static func readUInt32(
+        _ data: Data,
+        offset: inout Int
+    ) -> UInt32 {
+        var value: UInt32 = 0
+        for _ in 0..<4 {
+            value = (value << 8) | UInt32(data[offset])
+            offset += 1
+        }
+        return value
+    }
+}
 
 enum IOSPendingRecordingJournalWireCodec {
     static let supportedSchemaVersion = 1
@@ -1489,6 +2000,7 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
         try lockDirectoryForMutation(directory)
         try validateDirectoryIdentity(directory)
         try validateCurrentFile(directory: directory, expected: expected)
+        try requireNoAudioRemovalIntent(directory: directory)
 
         return try commitTemporaryFile(
             data: data,
@@ -1621,6 +2133,263 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
         )
     }
 
+    func proveCanonicalFileAbsent(
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+    ) throws -> IOSStrictProtectedRecordAbsenceEvidence {
+        Self.processMutationLock.lock()
+        defer { Self.processMutationLock.unlock() }
+        try beforeRepositoryRootOpen()
+        guard let directory = try openJournalDirectory(
+            createIfMissing: false,
+            expectedRepositoryRoot: expectedRepositoryRoot
+        ) else {
+            throw IOSPendingRecordingJournalFileSystemError.missing
+        }
+        defer { close(directory) }
+        try validateDirectoryIdentity(directory)
+        try lockDirectoryForMutation(directory)
+        try validateDirectoryIdentity(directory)
+
+        guard try statusIfPresent(
+            named: configuration.fileName,
+            directory: directory,
+            failure: .readFailed
+        ) == nil else {
+            throw IOSPendingRecordingJournalFileSystemError.staleRevision
+        }
+        try validateDirectoryIdentity(directory)
+        try synchronizeDirectory(directory.descriptor)
+        beforeMetadataAbsenceFinalCheck()
+        guard try statusIfPresent(
+            named: configuration.fileName,
+            directory: directory,
+            failure: .readFailed
+        ) == nil else {
+            throw IOSPendingRecordingJournalFileSystemError.staleRevision
+        }
+        try validateDirectoryIdentity(directory)
+
+        return IOSStrictProtectedRecordAbsenceEvidence(
+            repositoryRoot: directory.repositoryRootIdentity,
+            recordDirectory: IOSPendingRecordingJournalDirectoryIdentity(
+                device: directory.identity.device,
+                inode: directory.identity.inode
+            ),
+            configuration: configuration
+        )
+    }
+
+    func readAudioRemovalIntent(
+        expected: IOSPendingRecordingJournalFileRevision,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingAudioRemovalIntentAuthorization
+    ) throws -> Data? {
+        _ = authorization
+        try requirePendingRecordingMetadataConfiguration()
+        Self.processMutationLock.lock()
+        defer { Self.processMutationLock.unlock() }
+        try beforeRepositoryRootOpen()
+        guard let directory = try openJournalDirectory(
+            createIfMissing: false,
+            expectedRepositoryRoot: expectedRepositoryRoot
+        ) else {
+            throw IOSPendingRecordingJournalFileSystemError.missing
+        }
+        defer { close(directory) }
+        try validateDirectoryIdentity(directory)
+        try lockDirectoryForMutation(directory)
+        try validateDirectoryIdentity(directory)
+        try validateCurrentFile(directory: directory, expected: expected)
+
+        let descriptor = try openJournalForReading(directory: directory)
+        defer { adapter.closeFile(descriptor) }
+        let openedStatus = try status(
+            descriptor: descriptor,
+            failure: .readFailed
+        )
+        guard let expectedSnapshot = expected.snapshot,
+              IOSPendingRecordingJournalFileSnapshot(openedStatus)
+                == expectedSnapshot else {
+            throw IOSPendingRecordingJournalFileSystemError.staleRevision
+        }
+        try validateJournalStatus(
+            openedStatus,
+            effectiveUserID: directory.effectiveUserID
+        )
+        try validateExactConfiguration(descriptor: descriptor)
+        try validatePathIdentity(
+            named: configuration.fileName,
+            descriptorStatus: openedStatus,
+            directory: directory,
+            failure: .readFailed
+        )
+        let result = retryInterrupted {
+            adapter.extendedAttribute(
+                fileDescriptor: descriptor,
+                name: IOSPendingRecordingAudioRemovalIntent
+                    .extendedAttributeName,
+                maximumByteCount:
+                    IOSPendingRecordingAudioRemovalIntent.encodedByteCount + 1
+            )
+        }
+        let data: Data?
+        switch result {
+        case .success(let bytes):
+            guard bytes.count
+                    == IOSPendingRecordingAudioRemovalIntent.encodedByteCount
+            else {
+                throw IOSPendingRecordingJournalFileSystemError.invalidFile
+            }
+            data = Data(bytes)
+        case .failure(ENOATTR):
+            data = nil
+        case .failure(let code) where isProtectedDataError(code):
+            throw IOSPendingRecordingJournalFileSystemError
+                .protectedDataUnavailable
+        case .failure:
+            throw IOSPendingRecordingJournalFileSystemError.invalidFile
+        }
+        let finalStatus = try status(
+            descriptor: descriptor,
+            failure: .readFailed
+        )
+        guard IOSPendingRecordingJournalFileSnapshot(finalStatus)
+                == expectedSnapshot else {
+            throw IOSPendingRecordingJournalFileSystemError.staleRevision
+        }
+        try validatePathIdentity(
+            named: configuration.fileName,
+            descriptorStatus: finalStatus,
+            directory: directory,
+            failure: .readFailed
+        )
+        try validateDirectoryIdentity(directory)
+        return data
+    }
+
+    func writeAudioRemovalIntent(
+        _ data: Data,
+        expected: IOSPendingRecordingJournalFileRevision,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        createOnly: Bool,
+        authorization: IOSPendingRecordingAudioRemovalIntentAuthorization
+    ) throws -> IOSPendingRecordingJournalFileRevision {
+        _ = authorization
+        guard data.count
+                == IOSPendingRecordingAudioRemovalIntent.encodedByteCount else {
+            throw IOSPendingRecordingJournalFileSystemError.invalidFile
+        }
+        try requirePendingRecordingMetadataConfiguration()
+        Self.processMutationLock.lock()
+        defer { Self.processMutationLock.unlock() }
+        try beforeRepositoryRootOpen()
+        guard let directory = try openJournalDirectory(
+            createIfMissing: false,
+            expectedRepositoryRoot: expectedRepositoryRoot
+        ) else {
+            throw IOSPendingRecordingJournalFileSystemError.missing
+        }
+        defer { close(directory) }
+        try validateDirectoryIdentity(directory)
+        try lockDirectoryForMutation(directory)
+        try validateDirectoryIdentity(directory)
+        try validateCurrentFile(directory: directory, expected: expected)
+
+        let descriptor = try openJournalForMutation(directory: directory)
+        defer { adapter.closeFile(descriptor) }
+        let beforeStatus = try status(
+            descriptor: descriptor,
+            failure: .writeFailed
+        )
+        guard let expectedSnapshot = expected.snapshot,
+              IOSPendingRecordingJournalFileSnapshot(beforeStatus)
+                == expectedSnapshot else {
+            throw IOSPendingRecordingJournalFileSystemError.staleRevision
+        }
+        try validateExactConfiguration(descriptor: descriptor)
+        try validatePathIdentity(
+            named: configuration.fileName,
+            descriptorStatus: beforeStatus,
+            directory: directory,
+            failure: .writeFailed
+        )
+
+        let setResult = adapter.setExtendedAttribute(
+            fileDescriptor: descriptor,
+            name: IOSPendingRecordingAudioRemovalIntent.extendedAttributeName,
+            value: Array(data),
+            flags: createOnly ? XATTR_CREATE : XATTR_REPLACE
+        )
+        switch setResult {
+        case .success:
+            break
+        case .failure(let code) where isProtectedDataError(code):
+            throw IOSPendingRecordingJournalFileSystemError
+                .protectedDataUnavailable
+        case .failure(EEXIST), .failure(ENOATTR):
+            throw IOSPendingRecordingJournalFileSystemError.staleRevision
+        case .failure:
+            throw IOSPendingRecordingJournalFileSystemError.commitUncertain
+        }
+
+        do {
+            try synchronizeFile(descriptor)
+            let committedStatus = try status(
+                descriptor: descriptor,
+                failure: .writeFailed
+            )
+            try validateJournalStatus(
+                committedStatus,
+                effectiveUserID: directory.effectiveUserID
+            )
+            try validateExactConfiguration(descriptor: descriptor)
+            try validatePathIdentity(
+                named: configuration.fileName,
+                descriptorStatus: committedStatus,
+                directory: directory,
+                failure: .writeFailed
+            )
+            try validateDirectoryIdentity(directory)
+            try synchronizeDirectory(directory.descriptor)
+            let finalStatus = try status(
+                descriptor: descriptor,
+                failure: .writeFailed
+            )
+            guard IOSPendingRecordingJournalFileSnapshot(finalStatus)
+                    == IOSPendingRecordingJournalFileSnapshot(committedStatus)
+            else {
+                throw IOSPendingRecordingJournalFileSystemError.commitUncertain
+            }
+            try validatePathIdentity(
+                named: configuration.fileName,
+                descriptorStatus: finalStatus,
+                directory: directory,
+                failure: .writeFailed
+            )
+            let persisted = retryInterrupted {
+                adapter.extendedAttribute(
+                    fileDescriptor: descriptor,
+                    name: IOSPendingRecordingAudioRemovalIntent
+                        .extendedAttributeName,
+                    maximumByteCount: data.count + 1
+                )
+            }
+            guard case .success(Array(data)) = persisted else {
+                throw IOSPendingRecordingJournalFileSystemError.commitUncertain
+            }
+            try validateDirectoryIdentity(directory)
+            return IOSPendingRecordingJournalFileRevision(
+                snapshot: IOSPendingRecordingJournalFileSnapshot(finalStatus)
+            )
+        } catch IOSPendingRecordingJournalFileSystemError
+            .protectedDataUnavailable {
+            throw IOSPendingRecordingJournalFileSystemError
+                .protectedDataUnavailable
+        } catch {
+            throw IOSPendingRecordingJournalFileSystemError.commitUncertain
+        }
+    }
+
     private func removeFile(
         expected: IOSPendingRecordingJournalFileRevision,
         expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
@@ -1644,6 +2413,7 @@ struct FoundationIOSPendingRecordingJournalFileSystem:
             expected: expected,
             requiresExactConfiguration: requiresExactConfiguration
         )
+        try requireNoAudioRemovalIntent(directory: directory)
         try validateDirectoryIdentity(directory)
 
         let result = retryInterrupted {
@@ -2785,6 +3555,62 @@ private extension FoundationIOSPendingRecordingJournalFileSystem {
                 .protectedDataUnavailable
         case .failure:
             throw IOSPendingRecordingJournalFileSystemError.readFailed
+        }
+    }
+
+    func openJournalForMutation(
+        directory: DirectoryHandle
+    ) throws -> Int32 {
+        let result = retryInterrupted {
+            adapter.openAt(
+                directoryDescriptor: directory.descriptor,
+                name: configuration.fileName,
+                flags: O_RDWR | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK,
+                mode: nil
+            )
+        }
+        switch result {
+        case .success(let descriptor):
+            return descriptor
+        case .failure(ENOENT):
+            throw IOSPendingRecordingJournalFileSystemError.missing
+        case .failure(let code) where isProtectedDataError(code):
+            throw IOSPendingRecordingJournalFileSystemError
+                .protectedDataUnavailable
+        case .failure:
+            throw IOSPendingRecordingJournalFileSystemError.writeFailed
+        }
+    }
+
+    /// A Pending journal carrying an audio-removal intent owns the exact audio
+    /// retirement recovery. Generic replacement/removal must not erase that
+    /// cross-process authority; only descriptor-bound metadata retirement may
+    /// unlink the journal after audio absence has been proven.
+    func requireNoAudioRemovalIntent(
+        directory: DirectoryHandle
+    ) throws {
+        guard configuration == .pendingRecording else { return }
+        let descriptor = try openJournalForReading(directory: directory)
+        defer { adapter.closeFile(descriptor) }
+        let result = retryInterrupted {
+            adapter.extendedAttribute(
+                fileDescriptor: descriptor,
+                name: IOSPendingRecordingAudioRemovalIntent
+                    .extendedAttributeName,
+                maximumByteCount:
+                    IOSPendingRecordingAudioRemovalIntent.encodedByteCount + 1
+            )
+        }
+        switch result {
+        case .failure(ENOATTR):
+            return
+        case .failure(let code) where isProtectedDataError(code):
+            throw IOSPendingRecordingJournalFileSystemError
+                .protectedDataUnavailable
+        case .success:
+            throw IOSPendingRecordingJournalFileSystemError.commitUncertain
+        case .failure:
+            throw IOSPendingRecordingJournalFileSystemError.invalidFile
         }
     }
 

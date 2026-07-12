@@ -1675,6 +1675,9 @@ struct IOSPendingRecordingStoreTests {
                 expected: IOSPendingRecordingCASExpectation(recording: transcribing)
             )
         }
+        #expect(fixture.journal.recording == transcribing)
+        #expect(fixture.audio.published)
+        #expect(destination.inspectionCallCount == 3)
     }
 
     @Test func outputDeliveryHappyPathIsIdempotentAndRecoverableAfterRelaunch() async throws {
@@ -1746,6 +1749,169 @@ struct IOSPendingRecordingStoreTests {
                 .completeAcceptedOutputForContainingAppLaunchIfPresent()
         )
         #expect(fixture.journal.recording == nil)
+        #expect(
+            fixture.events.values.contains("audio.accepted-output.remove")
+        )
+        #expect(fixture.events.values.contains("journal.metadata.remove"))
+        #expect(!fixture.events.values.contains("audio.remove"))
+        #expect(!fixture.events.values.contains("journal.remove"))
+    }
+
+    @Test func sameProcessLiveOwnerCannotClaimProcessLossRetirement()
+        async throws {
+        let fixture = StoreFixture()
+        let prepared = try await fixture.store.prepare(fixture.preparation())
+        _ = try await fixture.store.beginTranscription(
+            expected: IOSPendingRecordingCASExpectation(recording: prepared),
+            transcriptionID: UUID()
+        )
+        let transcribing = try #require(fixture.journal.recording)
+        let postProcessing = try await fixture.store.markPostProcessing(
+            expected: IOSPendingRecordingCASExpectation(
+                recording: transcribing
+            )
+        )
+        let outputDelivery = try await fixture.store.markOutputDelivery(
+            expected: IOSPendingRecordingCASExpectation(
+                recording: postProcessing
+            )
+        )
+        let destination = FakePendingDestinationInspector()
+        destination.hasDestination = true
+        let sameProcessStore = fixture.makeSameProcessStore(
+            destinationInspector: destination
+        )
+
+        await #expect(throws: IOSPendingRecordingError.invalidTransition) {
+            _ = try await sameProcessStore
+                .completeAcceptedOutputForContainingAppLaunchIfPresent()
+        }
+        #expect(fixture.journal.recording == outputDelivery)
+        #expect(fixture.audio.published)
+        #expect(
+            !fixture.events.values.contains("audio.accepted-output.remove")
+        )
+    }
+
+    @Test func freshProcessRegistryCanUseExactForegroundRetirementPath()
+        async throws {
+        let fixture = StoreFixture()
+        let prepared = try await fixture.store.prepare(fixture.preparation())
+        _ = try await fixture.store.beginTranscription(
+            expected: IOSPendingRecordingCASExpectation(recording: prepared),
+            transcriptionID: UUID()
+        )
+        let transcribing = try #require(fixture.journal.recording)
+        let postProcessing = try await fixture.store.markPostProcessing(
+            expected: IOSPendingRecordingCASExpectation(
+                recording: transcribing
+            )
+        )
+        let outputDelivery = try await fixture.store.markOutputDelivery(
+            expected: IOSPendingRecordingCASExpectation(
+                recording: postProcessing
+            )
+        )
+        let freshGate = IOSPersistenceOperationGate()
+        let freshOwner = IOSAcceptedHistoryCapabilityOwnerIdentity()
+        let freshStoreIdentity = IOSPendingRecordingStoreIdentity()
+        let deliveryStoreIdentity = IOSAcceptedOutputDeliveryStoreIdentity()
+        let freshStore = IOSPendingRecordingStore(
+            journal: fixture.journal,
+            audioFileSystem: fixture.audio,
+            operationGate: freshGate,
+            liveOwnerRegistry: IOSPendingRecordingLiveOwnerRegistry(),
+            capabilityOwnerIdentity: freshOwner,
+            storeIdentity: freshStoreIdentity
+        )
+        let timestamp = outputDelivery.updatedAt
+        let record = try IOSAcceptedOutputDeliveryRecord(
+            revision: 1,
+            deliveryID: UUID(),
+            sessionID: UUID(),
+            attemptID: outputDelivery.attemptID,
+            transcriptID: try #require(outputDelivery.transcriptionID),
+            acceptedText: "accepted",
+            outputIntent: outputDelivery.outputIntent,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            expiresAt: timestamp.addingTimeInterval(86_400),
+            deliveryState: .pending,
+            automaticInsertionPreferenceEnabled: false,
+            keepLatestResult: true,
+            publicationGeneration: 0,
+            historyWrite: nil
+        )
+
+        try await freshGate.perform { lease in
+            let destination = IOSForegroundVoiceAcceptedDestinationAuthorization(
+                record: record,
+                snapshot: IOSAcceptedOutputDeliveryJournalSnapshot(
+                    record: record,
+                    fileRevision: IOSStrictProtectedRecordFileRevision(
+                        testingToken: 1
+                    )
+                ),
+                storeIdentity: deliveryStoreIdentity,
+                ownerIdentity: freshOwner,
+                operationLeaseAuthorization: lease
+            )
+            let audioRemoval = try await freshStore
+                .removeForegroundVoiceAcceptedOutputAudioAfterProcessLoss(
+                    expected: outputDelivery,
+                    destinationAuthorization: destination,
+                    deliveryStoreIdentity: deliveryStoreIdentity,
+                    operationLeaseAuthorization: lease
+                )
+            try await freshStore.retireForegroundVoiceAcceptedOutputJournal(
+                expected: outputDelivery,
+                destinationAuthorization: destination,
+                audioRemovalAuthorization: audioRemoval,
+                deliveryStoreIdentity: deliveryStoreIdentity,
+                operationLeaseAuthorization: lease
+            )
+        }
+
+        #expect(fixture.journal.recording == nil)
+        #expect(!fixture.audio.published)
+        #expect(
+            fixture.events.values.contains("audio.accepted-output.remove")
+        )
+        #expect(fixture.events.values.contains("journal.metadata.remove"))
+    }
+
+    @Test func foregroundJournalAbsenceProofIsRootStoreOwnerAndLeaseBound()
+        async throws {
+        let fixture = StoreFixture()
+
+        let captured = try await fixture.operationGate.perform { lease in
+            let proof = try await fixture.store
+                .proveForegroundVoicePendingJournalAbsent(
+                    operationLeaseAuthorization: lease
+                )
+            #expect(
+                proof.provesAbsence(
+                    issuerStoreIdentity: fixture.storeIdentity,
+                    ownerIdentity: fixture.capabilityOwnerIdentity,
+                    operationLeaseAuthorization: lease
+                )
+            )
+            #expect(
+                proof.description
+                    == "IOSForegroundVoicePendingJournalAbsenceAuthorization(redacted)"
+            )
+            #expect(proof.customMirror.children.isEmpty)
+            return (proof, lease)
+        }
+
+        #expect(
+            !captured.0.provesAbsence(
+                issuerStoreIdentity: fixture.storeIdentity,
+                ownerIdentity: fixture.capabilityOwnerIdentity,
+                operationLeaseAuthorization: captured.1
+            )
+        )
+        #expect(fixture.events.values == ["journal.metadata.absence"])
     }
 
     @Test func publicDestinationProofReceivesExactDurableIdentity() async throws {
@@ -1801,6 +1967,87 @@ struct IOSPendingRecordingStoreTests {
         #expect(recovered.phase == .awaitingRecovery)
         #expect(capture.attemptID == attemptID)
         #expect(capture.transcriptionID == transcriptionID)
+    }
+
+    @Test func productionDestinationInspectorConfirmsAbsentAndUnrelatedState()
+        throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "pending-destination-proof-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: false
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let context = IOSAcceptedHistoryCoordinatorProcessContextRegistry()
+            .context(for: root)
+        let inspector = IOSPendingRecordingProductionDestinationInspector(
+            applicationSupportDirectoryURL: root,
+            repositoryGuard: context.repositoryGuard
+        )
+        let attemptID = UUID()
+        let transcriptionID = UUID()
+        let timestamp = try IOSPendingRecordingTimestampCodec.canonicalDate(
+            from: Date(timeIntervalSince1970: 1_752_150_896.789)
+        )
+        let recording = try IOSPendingRecording(
+            attemptID: attemptID,
+            audioRelativeIdentifier: IOSPendingRecordingStorageLocation
+                .relativeAudioIdentifier(for: attemptID, format: .m4a),
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            phase: .outputDelivery,
+            outputIntent: .standard,
+            transcriptionID: transcriptionID,
+            transcriptionModel: TranscriptionConfiguration.defaultModel,
+            transcriptionLanguageCode: nil,
+            durationMilliseconds: 1_000,
+            byteCount: 1_000
+        )
+        let expectedRoot = context.repositoryBinding.physicalRootIdentity
+
+        #expect(
+            try inspector.inspectCanonicalDestination(
+                for: recording,
+                expectedRepositoryRoot: expectedRoot
+            ) == .provenAbsent
+        )
+
+        let deliveryJournal =
+            FoundationIOSAcceptedOutputDeliveryJournalRepository(
+                applicationSupportDirectoryURL: root,
+                repositoryGuard: context.repositoryGuard
+            )
+        let unrelated = try IOSAcceptedOutputDeliveryRecord(
+            revision: 1,
+            deliveryID: UUID(),
+            sessionID: UUID(),
+            attemptID: UUID(),
+            transcriptID: UUID(),
+            acceptedText: "unrelated",
+            outputIntent: .standard,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            expiresAt: timestamp.addingTimeInterval(86_400),
+            deliveryState: .pending,
+            automaticInsertionPreferenceEnabled: false,
+            keepLatestResult: true,
+            publicationGeneration: 0,
+            historyWrite: nil
+        )
+        let before = try deliveryJournal.create(unrelated)
+
+        #expect(
+            try inspector.inspectCanonicalDestination(
+                for: recording,
+                expectedRepositoryRoot: expectedRoot
+            ) == .provenAbsent
+        )
+        let after = try #require(try deliveryJournal.load())
+        #expect(after.record == unrelated)
+        #expect(after.fileRevision != before.fileRevision)
     }
 
     @Test func loadNeverExposesAudioURLAndDistinguishesOrphanAndAvailability() async throws {
@@ -1911,7 +2158,12 @@ struct IOSPendingRecordingStoreTests {
                 expected: IOSPendingRecordingCASExpectation(recording: prepared)
             ) == .discarded
         )
-        #expect(fixture.events.values == ["audio.remove", "journal.remove"])
+        #expect(
+            fixture.events.values == [
+                "audio.accepted-output.remove",
+                "journal.metadata.remove",
+            ]
+        )
         #expect(fixture.journal.recording == nil)
         #expect(
             try await fixture.store.discard(
@@ -1930,7 +2182,7 @@ struct IOSPendingRecordingStoreTests {
             )
         }
         #expect(failing.journal.recording == retained)
-        #expect(!failing.events.values.contains("journal.remove"))
+        #expect(!failing.events.values.contains("journal.metadata.remove"))
     }
 
     @Test func processGatePreventsTwoStoresFromPublishingTheSameSlot() async {
@@ -1997,12 +2249,17 @@ struct IOSPendingRecordingStoreTests {
         )
         orphan.journal.recording = nil
         orphan.events.reset()
-        #expect(
-            try await orphan.store.discard(
+        await #expect(throws: IOSPendingRecordingError.orphanedAudio) {
+            _ = try await orphan.store.discard(
                 expected: IOSPendingRecordingCASExpectation(recording: prepared)
-            ) == .alreadyAbsent
+            )
+        }
+        #expect(
+            orphan.events.values == [
+                "journal.metadata.absence",
+                "audio.namespace.empty",
+            ]
         )
-        #expect(orphan.events.values.isEmpty)
         #expect(orphan.audio.published)
     }
 }
@@ -2174,6 +2431,11 @@ private final class StoreFixture: @unchecked Sendable {
     let journal: FakePendingRecordingJournal
     let audio: FakePendingRecordingAudioFileSystem
     let clockDate = Date(timeIntervalSince1970: 1_752_150_896.789)
+    let operationGate = IOSPersistenceOperationGate()
+    let liveOwnerRegistry = IOSPendingRecordingLiveOwnerRegistry()
+    let capabilityOwnerIdentity =
+        IOSAcceptedHistoryCapabilityOwnerIdentity()
+    let storeIdentity = IOSPendingRecordingStoreIdentity()
     let failedHistoryRetryState: IOSFailedHistoryRetryLiveOwnerState
     let store: IOSPendingRecordingStore
 
@@ -2188,7 +2450,11 @@ private final class StoreFixture: @unchecked Sendable {
         store = IOSPendingRecordingStore(
             journal: journal,
             audioFileSystem: audio,
+            operationGate: operationGate,
+            liveOwnerRegistry: liveOwnerRegistry,
             failedHistoryRetryState: failedHistoryRetryState,
+            capabilityOwnerIdentity: capabilityOwnerIdentity,
+            storeIdentity: storeIdentity,
             now: { Date(timeIntervalSince1970: 1_752_150_896.789) }
         )
     }
@@ -2201,6 +2467,22 @@ private final class StoreFixture: @unchecked Sendable {
             audioFileSystem: audio,
             destinationInspector: destinationInspector,
             failedHistoryRetryState: failedHistoryRetryState,
+            now: { self.clockDate }
+        )
+    }
+
+    func makeSameProcessStore(
+        destinationInspector: any IOSPendingRecordingDestinationInspecting
+    ) -> IOSPendingRecordingStore {
+        IOSPendingRecordingStore(
+            journal: journal,
+            audioFileSystem: audio,
+            destinationInspector: destinationInspector,
+            operationGate: operationGate,
+            liveOwnerRegistry: liveOwnerRegistry,
+            failedHistoryRetryState: failedHistoryRetryState,
+            capabilityOwnerIdentity: capabilityOwnerIdentity,
+            storeIdentity: storeIdentity,
             now: { self.clockDate }
         )
     }
@@ -2410,6 +2692,57 @@ private final class FakePendingRecordingJournal:
             return true
         }
     }
+
+    func removeMetadata(
+        expected: IOSPendingRecordingJournalMetadataSnapshot,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
+    ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence {
+        _ = authorization
+        events.append("journal.metadata.remove")
+        return try lock.withLock {
+            if let storedRemoveError {
+                throw storedRemoveError
+            }
+            guard let storedRecording,
+                  IOSPendingRecordingJournalMetadataSnapshot(
+                      testingRecording: storedRecording,
+                      testingRevision: storedRevision
+                  ) == expected else {
+                throw IOSPendingRecordingError.compareAndSwapFailed
+            }
+            self.storedRecording = nil
+            storedRevision &+= 1
+            return IOSPendingRecordingJournalMetadataAbsenceEvidence(
+                testingRemoved: expected,
+                repositoryRoot: expectedRepositoryRoot
+                    ?? IOSPersistenceRepositoryRootIdentity(
+                        device: 1,
+                        inode: 1
+                    )
+            )
+        }
+    }
+
+    func proveMetadataAbsent(
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?,
+        authorization: IOSPendingRecordingMetadataRetirementAuthorization
+    ) throws -> IOSPendingRecordingJournalMetadataAbsenceEvidence {
+        _ = authorization
+        events.append("journal.metadata.absence")
+        return try lock.withLock {
+            guard storedRecording == nil else {
+                throw IOSPendingRecordingError.compareAndSwapFailed
+            }
+            return IOSPendingRecordingJournalMetadataAbsenceEvidence(
+                testingAlreadyAbsentRepositoryRoot: expectedRepositoryRoot
+                    ?? IOSPersistenceRepositoryRootIdentity(
+                        device: 1,
+                        inode: 1
+                    )
+            )
+        }
+    }
 }
 
 private final class FakePendingRecordingAudioFileSystem:
@@ -2495,6 +2828,9 @@ private final class FakePendingRecordingAudioFileSystem:
         if let error = lock.withLock({ storedRequireEmptyError }) {
             throw error
         }
+        if lock.withLock({ storedPublished }) {
+            throw IOSPendingRecordingAudioFileSystemError.namespaceNotEmpty
+        }
     }
 
     func validateProtectedAudioNamespace(
@@ -2525,6 +2861,25 @@ private final class FakePendingRecordingAudioFileSystem:
                 testingAlreadyAbsent: authorization.cleanupAuthorization
             )
         }
+    }
+
+    func reconcileAcceptedOutputAudioRemoval(
+        using authorization:
+            IOSPendingRecordingAcceptedOutputAudioRemovalAuthorization
+    ) async throws
+        -> IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence {
+        events.append("audio.accepted-output.remove")
+        if let error = lock.withLock({ storedRemoveError }) {
+            throw error
+        }
+        let removed = lock.withLock {
+            defer { storedPublished = false }
+            return storedPublished
+        }
+        return IOSPendingRecordingAcceptedOutputAudioAbsenceEvidence(
+            testing: authorization,
+            removed: removed
+        )
     }
 
     func publishProtectedCopy(
@@ -3034,6 +3389,7 @@ private final class FakePendingDestinationInspector:
     private let lock = NSLock()
     private var storedHasDestination = false
     private var storedError: IOSPendingRecordingError?
+    private var storedInspectionCallCount = 0
 
     var hasDestination: Bool {
         get { lock.withLock { storedHasDestination } }
@@ -3045,14 +3401,29 @@ private final class FakePendingDestinationInspector:
         set { lock.withLock { storedError = newValue } }
     }
 
-    func hasCanonicalDestination(
-        for recording: IOSPendingRecording
-    ) throws -> Bool {
+    var inspectionCallCount: Int {
+        lock.withLock { storedInspectionCallCount }
+    }
+
+    func inspectCanonicalDestination(
+        for recording: IOSPendingRecording,
+        expectedRepositoryRoot: IOSPersistenceRepositoryRootIdentity?
+    ) throws -> IOSPendingRecordingCanonicalDestinationDisposition {
         _ = recording
-        if let error = lock.withLock({ storedError }) {
-            throw error
+        _ = expectedRepositoryRoot
+        let result = lock.withLock { () -> Result<Bool, IOSPendingRecordingError> in
+            storedInspectionCallCount += 1
+            if let storedError { return .failure(storedError) }
+            return .success(storedHasDestination)
         }
-        return hasDestination
+        switch result {
+        case .failure(let error):
+            throw error
+        case .success(true):
+            return .exactDestination
+        case .success(false):
+            return .provenAbsent
+        }
     }
 }
 

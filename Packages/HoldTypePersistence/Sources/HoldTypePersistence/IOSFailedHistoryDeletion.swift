@@ -22,6 +22,8 @@ extension IOSAcceptedHistoryCoordinator {
         let failedHistoryAudioCleanupState =
             failedHistoryAudioCleanupState
         let failedHistoryRetryState = failedHistoryRetryState
+        let foregroundVoicePersistenceState =
+            foregroundVoicePersistenceState
         let failedHistoryMutationInterlock =
             failedHistoryMutationInterlock
         let deliveryStore = deliveryStore
@@ -34,6 +36,11 @@ extension IOSAcceptedHistoryCoordinator {
         )
         do {
             logicalDelete = try await operationGate.perform { authorization in
+                guard await foregroundVoicePersistenceState.current() == nil
+                else {
+                    throw IOSAcceptedHistoryCoordinatorError
+                        .localRecoveryPending
+                }
                 guard await failedHistoryRetryState.hasLiveOwner() == false
                 else {
                     throw IOSAcceptedHistoryCoordinatorError
@@ -187,6 +194,11 @@ extension IOSAcceptedHistoryCoordinator {
         // provider-free lifecycle recovery and still returns logical success.
         do {
             _ = try await operationGate.perform { authorization in
+                guard await foregroundVoicePersistenceState.current() == nil
+                else {
+                    throw IOSAcceptedHistoryCoordinatorError
+                        .localRecoveryPending
+                }
                 guard await failedHistoryRetryState.hasLiveOwner() == false
                 else {
                     throw IOSAcceptedHistoryCoordinatorError
