@@ -3111,7 +3111,8 @@ private extension IOSPendingRecordingStore {
             for: current,
             operationLeaseAuthorization: operationLeaseAuthorization
         )
-        guard current.phase == .awaitingRecovery,
+        guard (current.phase == .readyForTranscription
+                || current.phase == .awaitingRecovery),
               current.transcriptionID == nil,
               !liveOwnerRegistry.hasLiveOwner(attemptID: current.attemptID),
               !liveOwnerRegistry.isRetired(

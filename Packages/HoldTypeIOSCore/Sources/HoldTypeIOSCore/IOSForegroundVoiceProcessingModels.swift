@@ -55,6 +55,21 @@ public enum IOSForegroundVoiceProcessingFailure: Equatable, Sendable {
     case localPersistence
 }
 
+/// Ordered, payload-free foreground progress. The callback always runs on the
+/// main actor so UI owners can consume it without introducing another hop.
+@_spi(HoldTypeIOSCore)
+public typealias IOSForegroundVoiceProcessingProgressHandler =
+    @MainActor @Sendable (VoiceAttemptStage) -> Void
+
+/// Payload-free guidance for a local-only retry surface.
+@_spi(HoldTypeIOSCore)
+public enum IOSForegroundVoiceLocalRecoveryDisposition:
+    Equatable,
+    Sendable {
+    case processingCheckpoint
+    case savingResult
+}
+
 /// Redacted orchestration result. Provider text and credentials never cross
 /// this boundary; accepted text appears only through the existing P4B record.
 @_spi(HoldTypeIOSCore)
@@ -68,7 +83,8 @@ public enum IOSForegroundVoiceProcessingResolution: Equatable, Sendable {
     )
     case localRecoveryPending(
         failure: IOSForegroundVoiceProcessingFailure,
-        stage: VoiceAttemptStage
+        stage: VoiceAttemptStage,
+        disposition: IOSForegroundVoiceLocalRecoveryDisposition
     )
     case busy
 }
@@ -103,6 +119,18 @@ extension IOSForegroundVoiceProcessingFailure:
     CustomReflectable {
     public var description: String {
         "IOSForegroundVoiceProcessingFailure(redacted)"
+    }
+
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+extension IOSForegroundVoiceLocalRecoveryDisposition:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    public var description: String {
+        "IOSForegroundVoiceLocalRecoveryDisposition(redacted)"
     }
 
     public var debugDescription: String { description }

@@ -68,6 +68,9 @@ public actor IOSForegroundVoiceProcessor {
     private let postProcessor: TranscriptTextPostProcessor
 
     private var activeOperationID: UUID?
+    private var activeProgressHandler:
+        IOSForegroundVoiceProcessingProgressHandler?
+    private var reportedProgressStages: [VoiceAttemptStage] = []
     private var retainedWork: IOSForegroundVoiceRetainedWork?
 
     public init(
@@ -118,13 +121,17 @@ public actor IOSForegroundVoiceProcessor {
     }
 
     public func process(
-        _ request: IOSForegroundVoiceProcessingRequest
+        _ request: IOSForegroundVoiceProcessingRequest,
+        progress: @escaping IOSForegroundVoiceProcessingProgressHandler = {
+            _ in
+        }
     ) async -> IOSForegroundVoiceProcessingResolution {
         guard activeOperationID == nil else { return .busy }
         if let retainedWork {
             return .localRecoveryPending(
                 failure: .localPersistence,
-                stage: retainedWork.stage
+                stage: retainedWork.stage,
+                disposition: retainedWork.recoveryDisposition
             )
         }
         guard let context = makeContext(from: request) else {
@@ -137,31 +144,40 @@ public actor IOSForegroundVoiceProcessor {
         }
 
         let operationID = UUID()
-        activeOperationID = operationID
+        beginOperation(operationID, progress: progress)
         let work = IOSForegroundVoiceRetainedWork.beginning(context)
         retainedWork = work
         let resolution = await resume(work, operationID: operationID)
-        if activeOperationID == operationID {
-            activeOperationID = nil
-        }
+        finishOperation(operationID)
         return resolution
     }
 
-    public func retryLocalRecovery()
+    public func retryLocalRecovery(
+        progress: @escaping IOSForegroundVoiceProcessingProgressHandler = {
+            _ in
+        }
+    )
         async -> IOSForegroundVoiceProcessingResolution {
         guard activeOperationID == nil else { return .busy }
         guard let retainedWork else {
             return .notStarted(.localPersistence)
         }
         let operationID = UUID()
-        activeOperationID = operationID
+        beginOperation(operationID, progress: progress)
+        if case .beginning = retainedWork {
+            // Transcription begins only after Persistence returns the durable
+            // one-shot dispatch below.
+        } else {
+            await reportProgress(
+                retainedWork.stage,
+                operationID: operationID
+            )
+        }
         let resolution = await resume(
             retainedWork,
             operationID: operationID
         )
-        if activeOperationID == operationID {
-            activeOperationID = nil
-        }
+        finishOperation(operationID)
         return resolution
     }
 
@@ -186,7 +202,9 @@ public actor IOSForegroundVoiceProcessor {
             return await recover(
                 context: context,
                 recording: recording,
-                failure: .localPersistence,
+                failure: Task.isCancelled
+                    ? .cancelled
+                    : .localPersistence,
                 stage: .transcription,
                 operationID: operationID
             )
@@ -296,7 +314,9 @@ public actor IOSForegroundVoiceProcessor {
 
         let recording = dispatch.recording
         retainedWork = .transcribing(context, recording)
-        guard !Task.isCancelled else {
+        await reportProgress(.transcription, operationID: operationID)
+        guard activeOperationID == operationID,
+              !Task.isCancelled else {
             return await recover(
                 context: context,
                 recording: recording,
@@ -431,6 +451,16 @@ public actor IOSForegroundVoiceProcessor {
             transcript
         )
         retainedWork = current
+        guard activeOperationID == operationID,
+              !Task.isCancelled else {
+            return await recover(
+                context: localContext.providerFree,
+                recording: recording,
+                failure: .cancelled,
+                stage: .transcription,
+                operationID: operationID
+            )
+        }
         let postProcessing: IOSPendingRecording
         do {
             postProcessing = try await persistenceOwner.markPostProcessing(
@@ -447,7 +477,9 @@ public actor IOSForegroundVoiceProcessor {
                 sourceWork: current
             )
         }
-        guard !Task.isCancelled else {
+        await reportProgress(.postProcessing, operationID: operationID)
+        guard activeOperationID == operationID,
+              !Task.isCancelled else {
             return await recover(
                 context: localContext.providerFree,
                 recording: postProcessing,
@@ -484,6 +516,16 @@ public actor IOSForegroundVoiceProcessor {
         usageAttempted: Bool,
         operationID: UUID
     ) async -> IOSForegroundVoiceProcessingResolution {
+        guard activeOperationID == operationID,
+              !Task.isCancelled else {
+            return await recover(
+                context: context.providerFree,
+                recording: recording,
+                failure: .cancelled,
+                stage: .postProcessing,
+                operationID: operationID
+            )
+        }
         if !usageAttempted {
             retainedWork = .providerFreePostProcessing(
                 context,
@@ -551,6 +593,16 @@ public actor IOSForegroundVoiceProcessor {
         usageAttempted: Bool,
         operationID: UUID
     ) async -> IOSForegroundVoiceProcessingResolution {
+        guard activeOperationID == operationID,
+              !Task.isCancelled else {
+            return await recover(
+                context: context,
+                recording: recording,
+                failure: .cancelled,
+                stage: .postProcessing,
+                operationID: operationID
+            )
+        }
         var usageWasAttempted = usageAttempted
         if !usageWasAttempted {
             usageWasAttempted = true
@@ -889,13 +941,15 @@ public actor IOSForegroundVoiceProcessor {
                 sourceWork: current
             )
         }
+        await reportProgress(.outputDelivery, operationID: operationID)
         let next = IOSForegroundVoiceRetainedWork.outputDelivery(
             context,
             outputDelivery,
             text
         )
         retainedWork = next
-        guard !Task.isCancelled else {
+        guard activeOperationID == operationID,
+              !Task.isCancelled else {
             return localRecovery(
                 retaining: next,
                 failure: .cancelled,
@@ -1198,7 +1252,9 @@ public actor IOSForegroundVoiceProcessor {
                 stage: .transcription
             )
         }
-        guard !Task.isCancelled else {
+        await reportProgress(.postProcessing, operationID: operationID)
+        guard activeOperationID == operationID,
+              !Task.isCancelled else {
             return await recover(
                 context: localContext.providerFree,
                 recording: confirmedPostProcessing,
@@ -1298,13 +1354,14 @@ public actor IOSForegroundVoiceProcessor {
                 stage: .postProcessing
             )
         }
+        await reportProgress(.outputDelivery, operationID: operationID)
         let next = IOSForegroundVoiceRetainedWork.outputDelivery(
             context,
             confirmedOutputDelivery,
             text
         )
         retainedWork = next
-        if Task.isCancelled {
+        if activeOperationID != operationID || Task.isCancelled {
             return localRecovery(
                 retaining: next,
                 failure: .cancelled,
@@ -1521,8 +1578,36 @@ public actor IOSForegroundVoiceProcessor {
         retainedWork = work
         return .localRecoveryPending(
             failure: failure,
-            stage: stage
+            stage: stage,
+            disposition: work.recoveryDisposition
         )
+    }
+
+    private func beginOperation(
+        _ operationID: UUID,
+        progress: @escaping IOSForegroundVoiceProcessingProgressHandler
+    ) {
+        activeOperationID = operationID
+        activeProgressHandler = progress
+        reportedProgressStages = []
+    }
+
+    private func finishOperation(_ operationID: UUID) {
+        guard activeOperationID == operationID else { return }
+        activeOperationID = nil
+        activeProgressHandler = nil
+        reportedProgressStages = []
+    }
+
+    private func reportProgress(
+        _ stage: VoiceAttemptStage,
+        operationID: UUID
+    ) async {
+        guard activeOperationID == operationID,
+              !reportedProgressStages.contains(stage) else { return }
+        reportedProgressStages.append(stage)
+        guard let activeProgressHandler else { return }
+        await activeProgressHandler(stage)
     }
 
     private func makeContext(
@@ -1534,7 +1619,8 @@ public actor IOSForegroundVoiceProcessor {
             guard pending.phase == .readyForTranscription,
                   pending.transcriptionID == nil else { return nil }
         case .retry:
-            guard pending.phase == .awaitingRecovery,
+            guard (pending.phase == .readyForTranscription
+                    || pending.phase == .awaitingRecovery),
                   pending.transcriptionID == nil else { return nil }
         }
         let transcription = request.settings.transcriptionConfiguration
@@ -1729,6 +1815,20 @@ private enum IOSForegroundVoiceRetainedWork: Sendable {
             .outputDelivery
         case .recovering(_, _, _, let stage):
             stage
+        }
+    }
+
+    var recoveryDisposition: IOSForegroundVoiceLocalRecoveryDisposition {
+        switch self {
+        case .finalText, .outputDelivery:
+            .savingResult
+        case .beginning,
+             .transcribing,
+             .transcriptionConsumed,
+             .providerFreePostProcessing,
+             .postProcessing,
+             .recovering:
+            .processingCheckpoint
         }
     }
 }

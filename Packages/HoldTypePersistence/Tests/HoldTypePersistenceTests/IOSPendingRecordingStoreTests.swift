@@ -1008,6 +1008,39 @@ struct IOSPendingRecordingStoreTests {
         #expect(recording.transcriptionLanguageCode == "ja")
     }
 
+    @Test func explicitRetryCanWidenReadyUsingFreshCompactConfiguration()
+        async throws {
+        let fixture = StoreFixture()
+        let prepared = try await fixture.store.prepare(
+            fixture.preparation(initialState: .readyForTranscription)
+        )
+        let transcriptionID = UUID()
+
+        let handoff = try await fixture.store.retryTranscription(
+            expected: IOSPendingRecordingCASExpectation(recording: prepared),
+            transcriptionID: transcriptionID,
+            transcriptionConfiguration: TranscriptionConfiguration(
+                model: "ready-retry-model",
+                language: .german,
+                freeformPrompt: "runtime only"
+            )
+        )
+
+        let executor = CapturingPendingTranscriptionExecutor()
+        _ = try await handoff.execute(using: executor)
+        let recording = try #require(executor.recording)
+        #expect(recording.phase == .transcribing)
+        #expect(recording.attemptID == prepared.attemptID)
+        #expect(recording.audioRelativeIdentifier == prepared.audioRelativeIdentifier)
+        #expect(recording.createdAt == prepared.createdAt)
+        #expect(recording.outputIntent == prepared.outputIntent)
+        #expect(recording.durationMilliseconds == prepared.durationMilliseconds)
+        #expect(recording.byteCount == prepared.byteCount)
+        #expect(recording.transcriptionID == transcriptionID)
+        #expect(recording.transcriptionModel == "ready-retry-model")
+        #expect(recording.transcriptionLanguageCode == "de")
+    }
+
     @Test func providerAudioIsBoundedAndInvalidImmediatelyAfterExecution()
         async throws {
         let fixture = StoreFixture()

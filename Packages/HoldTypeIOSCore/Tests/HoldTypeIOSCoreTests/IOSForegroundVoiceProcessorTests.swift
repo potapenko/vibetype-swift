@@ -27,6 +27,7 @@ struct IOSForegroundVoiceProcessorTests {
         defer { fixture.removeFiles() }
         let calls = ProcessorCallLog()
         let usageCapture = ProcessorUsageCapture()
+        let progress = ProcessorProgressCapture()
         let processor = fixture.makeProcessor(
             provider: IOSForegroundVoiceOpenAIProviderOperations(
                 transcribe: { _, _ in
@@ -46,7 +47,10 @@ struct IOSForegroundVoiceProcessorTests {
             usageCapture: usageCapture
         )
 
-        let resolution = await processor.process(fixture.request())
+        let resolution = await processor.process(
+            fixture.request(),
+            progress: { progress.record($0) }
+        )
         let record = try resolution.requireReady()
 
         #expect(record.acceptedText == "Hello world")
@@ -62,6 +66,10 @@ struct IOSForegroundVoiceProcessorTests {
         #expect(usageCapture.values.first?.audioDuration == 1)
         #expect(try await fixture.persistenceOwner.load() == nil)
         #expect(await processor.hasLocalRecoveryPending() == false)
+        #expect(
+            progress.stages
+                == [.transcription, .postProcessing, .outputDelivery]
+        )
     }
 
     @Test func correctionFailureIsFailOpenAfterConsentConsumption()
@@ -75,6 +83,7 @@ struct IOSForegroundVoiceProcessorTests {
         defer { fixture.removeFiles() }
         let calls = ProcessorCallLog()
         let rejectionCapture = ProcessorCredentialGenerationCapture()
+        let progress = ProcessorProgressCapture()
         let processor = fixture.makeProcessor(
             provider: IOSForegroundVoiceOpenAIProviderOperations(
                 transcribe: { _, _ in
@@ -94,8 +103,10 @@ struct IOSForegroundVoiceProcessorTests {
             rejectionCapture: rejectionCapture
         )
 
-        let record = try await processor.process(fixture.request())
-            .requireReady()
+        let record = try await processor.process(
+            fixture.request(),
+            progress: { progress.record($0) }
+        ).requireReady()
 
         #expect(record.acceptedText == "Original transcript")
         #expect(
@@ -108,6 +119,10 @@ struct IOSForegroundVoiceProcessorTests {
                 ]
         )
         #expect(rejectionCapture.values == [fixture.credential.generation])
+        #expect(
+            progress.stages
+                == [.transcription, .postProcessing, .outputDelivery]
+        )
     }
 
     @Test func translationWithdrawalRejectsLateTextAndDurablyRecovers()
@@ -186,6 +201,8 @@ struct IOSForegroundVoiceProcessorTests {
             base: fixture.persistenceOwner,
             failure: .postProcessing
         )
+        let initialProgress = ProcessorProgressCapture()
+        let retryProgress = ProcessorProgressCapture()
         let processor = fixture.makeProcessor(
             persistence: persistence,
             provider: IOSForegroundVoiceOpenAIProviderOperations(
@@ -202,21 +219,32 @@ struct IOSForegroundVoiceProcessorTests {
             calls: calls
         )
 
-        let first = await processor.process(fixture.request())
+        let first = await processor.process(
+            fixture.request(),
+            progress: { initialProgress.record($0) }
+        )
         #expect(
             first == .localRecoveryPending(
                 failure: .localPersistence,
-                stage: .transcription
+                stage: .transcription,
+                disposition: .processingCheckpoint
             )
         )
         #expect(await processor.hasLocalRecoveryPending())
         #expect(calls.events == ["transcription", "usage"])
+        #expect(initialProgress.stages == [.transcription])
 
-        let record = try await processor.retryLocalRecovery().requireReady()
+        let record = try await processor.retryLocalRecovery(
+            progress: { retryProgress.record($0) }
+        ).requireReady()
         #expect(record.acceptedText == "Retained provider text")
         #expect(calls.events == ["transcription", "usage"])
         #expect(persistence.postProcessingCallCount == 2)
         #expect(await processor.hasLocalRecoveryPending() == false)
+        #expect(
+            retryProgress.stages
+                == [.transcription, .postProcessing, .outputDelivery]
+        )
     }
 
     @Test func translationCredentialRejectionIsGenerationBoundAndStrict()
@@ -233,6 +261,7 @@ struct IOSForegroundVoiceProcessorTests {
         defer { fixture.removeFiles() }
         let calls = ProcessorCallLog()
         let rejectionCapture = ProcessorCredentialGenerationCapture()
+        let progress = ProcessorProgressCapture()
         let processor = fixture.makeProcessor(
             provider: IOSForegroundVoiceOpenAIProviderOperations(
                 transcribe: { _, _ in
@@ -253,7 +282,10 @@ struct IOSForegroundVoiceProcessorTests {
             let recovered,
             failure: .credentialRejected,
             stage: .postProcessing
-        ) = await processor.process(fixture.request()) else {
+        ) = await processor.process(
+            fixture.request(),
+            progress: { progress.record($0) }
+        ) else {
             Issue.record("Expected strict Translation credential recovery.")
             return
         }
@@ -268,6 +300,7 @@ struct IOSForegroundVoiceProcessorTests {
                     "credential-rejected",
                 ]
         )
+        #expect(progress.stages == [.transcription, .postProcessing])
     }
 
     @Test func invalidTranslateConfigurationStopsBeforeProviderAndMutation()
@@ -279,6 +312,7 @@ struct IOSForegroundVoiceProcessorTests {
         defer { fixture.removeFiles() }
         let calls = ProcessorCallLog()
         let rejectionCapture = ProcessorCredentialGenerationCapture()
+        let progress = ProcessorProgressCapture()
         let processor = fixture.makeProcessor(
             provider: IOSForegroundVoiceOpenAIProviderOperations(
                 transcribe: { _, _ in
@@ -293,11 +327,15 @@ struct IOSForegroundVoiceProcessorTests {
         )
 
         #expect(
-            await processor.process(fixture.request())
+            await processor.process(
+                fixture.request(),
+                progress: { progress.record($0) }
+            )
                 == .notStarted(.invalidConfiguration)
         )
         #expect(calls.events.isEmpty)
         #expect(rejectionCapture.values.isEmpty)
+        #expect(progress.stages.isEmpty)
         #expect(
             try await fixture.persistenceOwner.load()?.recording
                 == fixture.pending
@@ -331,6 +369,7 @@ struct IOSForegroundVoiceProcessorTests {
         let capture = ProcessorTranscriptionCapture()
         let usageCapture = ProcessorUsageCapture()
         let calls = ProcessorCallLog()
+        let progress = ProcessorProgressCapture()
         let processor = fixture.makeProcessor(
             provider: IOSForegroundVoiceOpenAIProviderOperations(
                 transcribe: { request, _ in
@@ -351,7 +390,8 @@ struct IOSForegroundVoiceProcessorTests {
                 mode: .retry,
                 settings: retrySettings,
                 library: retryLibrary
-            )
+            ),
+            progress: { progress.record($0) }
         ).requireReady()
 
         #expect(record.attemptID == fixture.pending.attemptID)
@@ -367,6 +407,81 @@ struct IOSForegroundVoiceProcessorTests {
         #expect(usageCapture.values.first?.transcriptionID == record.transcriptID)
         #expect(usageCapture.values.first?.model == "fresh-retry-model")
         #expect(usageCapture.values.first?.audioDuration == 1)
+        #expect(
+            progress.stages
+                == [.transcription, .postProcessing, .outputDelivery]
+        )
+    }
+
+    @Test func explicitRetryCanStartFromReadyUsingCurrentSettings()
+        async throws {
+        let fixture = try await ProcessorFixture(outputIntent: .standard)
+        defer { fixture.removeFiles() }
+        var settings = fixture.settings
+        settings.transcriptionConfiguration = TranscriptionConfiguration(
+            model: "ready-retry-model",
+            language: .german
+        )
+        let capture = ProcessorTranscriptionCapture()
+        let calls = ProcessorCallLog()
+        let processor = fixture.makeProcessor(
+            provider: IOSForegroundVoiceOpenAIProviderOperations(
+                transcribe: { request, _ in
+                    calls.record("transcription")
+                    capture.record(request)
+                    return "Ready retry"
+                },
+                correct: { transcript, _, _ in transcript.text },
+                translate: { _, _ in "unexpected" }
+            ),
+            calls: calls
+        )
+
+        let record = try await processor.process(
+            fixture.request(mode: .retry, settings: settings)
+        ).requireReady()
+
+        #expect(record.attemptID == fixture.pending.attemptID)
+        #expect(capture.model == "ready-retry-model")
+        #expect(capture.languageCode == "de")
+        #expect(calls.events == ["transcription", "usage"])
+    }
+
+    @Test func initialProcessingKeepsThePreparedCompactConfiguration()
+        async throws {
+        let fixture = try await ProcessorFixture(outputIntent: .standard)
+        defer { fixture.removeFiles() }
+        var settings = fixture.settings
+        settings.transcriptionConfiguration = TranscriptionConfiguration(
+            model: "changed-after-prepare",
+            language: .japanese
+        )
+        let calls = ProcessorCallLog()
+        let progress = ProcessorProgressCapture()
+        let processor = fixture.makeProcessor(
+            provider: IOSForegroundVoiceOpenAIProviderOperations(
+                transcribe: { _, _ in
+                    calls.record("transcription")
+                    return "must not launch"
+                },
+                correct: { transcript, _, _ in transcript.text },
+                translate: { _, _ in "unexpected" }
+            ),
+            calls: calls
+        )
+
+        #expect(
+            await processor.process(
+                fixture.request(settings: settings),
+                progress: { progress.record($0) }
+            ) == .notStarted(.invalidConfiguration)
+        )
+        #expect(calls.events.isEmpty)
+        #expect(progress.stages.isEmpty)
+        #expect(
+            try await fixture.persistenceOwner.load()?.recording
+                == fixture.pending
+        )
     }
 
     @Test func consumedCredentialRejectionIsRecordedThenMadeRecoverable()
@@ -493,7 +608,8 @@ struct IOSForegroundVoiceProcessorTests {
             await processor.process(fixture.request())
                 == .localRecoveryPending(
                     failure: .localPersistence,
-                    stage: .transcription
+                    stage: .transcription,
+                    disposition: .processingCheckpoint
                 )
         )
         guard case .awaitingRecovery(
@@ -518,6 +634,8 @@ struct IOSForegroundVoiceProcessorTests {
             base: fixture.persistenceOwner,
             failure: .outputDelivery
         )
+        let initialProgress = ProcessorProgressCapture()
+        let retryProgress = ProcessorProgressCapture()
         let processor = fixture.makeProcessor(
             persistence: persistence,
             provider: IOSForegroundVoiceOpenAIProviderOperations(
@@ -532,17 +650,25 @@ struct IOSForegroundVoiceProcessorTests {
         )
 
         #expect(
-            await processor.process(fixture.request())
+            await processor.process(
+                fixture.request(),
+                progress: { initialProgress.record($0) }
+            )
                 == .localRecoveryPending(
                     failure: .localPersistence,
-                    stage: .postProcessing
+                    stage: .postProcessing,
+                    disposition: .savingResult
                 )
         )
-        let record = try await processor.retryLocalRecovery().requireReady()
+        let record = try await processor.retryLocalRecovery(
+            progress: { retryProgress.record($0) }
+        ).requireReady()
         #expect(record.acceptedText == "Local output retry")
         #expect(calls.events == ["transcription", "usage"])
         #expect(persistence.outputDeliveryCallCount == 2)
         #expect(persistence.acceptanceCallCount == 1)
+        #expect(initialProgress.stages == [.transcription, .postProcessing])
+        #expect(retryProgress.stages == [.postProcessing, .outputDelivery])
     }
 
     @Test func acceptanceFailureRetriesOnlyTheLocalCheckpoint()
@@ -554,6 +680,8 @@ struct IOSForegroundVoiceProcessorTests {
             base: fixture.persistenceOwner,
             failure: .acceptance
         )
+        let initialProgress = ProcessorProgressCapture()
+        let retryProgress = ProcessorProgressCapture()
         let processor = fixture.makeProcessor(
             persistence: persistence,
             provider: IOSForegroundVoiceOpenAIProviderOperations(
@@ -568,16 +696,27 @@ struct IOSForegroundVoiceProcessorTests {
         )
 
         #expect(
-            await processor.process(fixture.request())
+            await processor.process(
+                fixture.request(),
+                progress: { initialProgress.record($0) }
+            )
                 == .localRecoveryPending(
                     failure: .localPersistence,
-                    stage: .outputDelivery
+                    stage: .outputDelivery,
+                    disposition: .savingResult
                 )
         )
-        let record = try await processor.retryLocalRecovery().requireReady()
+        let record = try await processor.retryLocalRecovery(
+            progress: { retryProgress.record($0) }
+        ).requireReady()
         #expect(record.acceptedText == "Local acceptance retry")
         #expect(calls.events == ["transcription", "usage"])
         #expect(persistence.acceptanceCallCount == 2)
+        #expect(
+            initialProgress.stages
+                == [.transcription, .postProcessing, .outputDelivery]
+        )
+        #expect(retryProgress.stages == [.outputDelivery])
     }
 
     @Test func recoveryFailureRetriesWithoutProviderReplay()
@@ -589,6 +728,8 @@ struct IOSForegroundVoiceProcessorTests {
             base: fixture.persistenceOwner,
             failure: .awaitingRecovery
         )
+        let initialProgress = ProcessorProgressCapture()
+        let retryProgress = ProcessorProgressCapture()
         let processor = fixture.makeProcessor(
             persistence: persistence,
             provider: IOSForegroundVoiceOpenAIProviderOperations(
@@ -603,23 +744,31 @@ struct IOSForegroundVoiceProcessorTests {
         )
 
         #expect(
-            await processor.process(fixture.request())
+            await processor.process(
+                fixture.request(),
+                progress: { initialProgress.record($0) }
+            )
                 == .localRecoveryPending(
                     failure: .localPersistence,
-                    stage: .transcription
+                    stage: .transcription,
+                    disposition: .processingCheckpoint
                 )
         )
         guard case .awaitingRecovery(
             let recovered,
             failure: .networkFailure,
             stage: .transcription
-        ) = await processor.retryLocalRecovery() else {
+        ) = await processor.retryLocalRecovery(
+            progress: { retryProgress.record($0) }
+        ) else {
             Issue.record("Expected exact recovery retry.")
             return
         }
         #expect(recovered.phase == .awaitingRecovery)
         #expect(calls.events == ["transcription"])
         #expect(persistence.awaitingRecoveryCallCount == 2)
+        #expect(initialProgress.stages == [.transcription])
+        #expect(retryProgress.stages == [.transcription])
     }
 
     @Test func committedLocalTransitionsAreAdoptedAfterThrownResults()
@@ -638,6 +787,7 @@ struct IOSForegroundVoiceProcessorTests {
             )
             defer { fixture.removeFiles() }
             let calls = ProcessorCallLog()
+            let progress = ProcessorProgressCapture()
             let persistence = FailingOnceForegroundPersistence(
                 base: fixture.persistenceOwner,
                 failure: failure
@@ -658,8 +808,10 @@ struct IOSForegroundVoiceProcessorTests {
                 calls: calls
             )
 
-            let record = try await processor.process(fixture.request())
-                .requireReady()
+            let record = try await processor.process(
+                fixture.request(),
+                progress: { progress.record($0) }
+            ).requireReady()
             #expect(record.acceptedText == "Committed local result")
             if failure == .postProcessingAfterCommit {
                 #expect(calls.events == ["transcription", "usage"])
@@ -670,6 +822,10 @@ struct IOSForegroundVoiceProcessorTests {
                 )
             }
             #expect(await processor.hasLocalRecoveryPending() == false)
+            #expect(
+                progress.stages
+                    == [.transcription, .postProcessing, .outputDelivery]
+            )
         }
     }
 
@@ -717,6 +873,7 @@ struct IOSForegroundVoiceProcessorTests {
             base: fixture.persistenceOwner,
             failure: .beginAfterCommit
         )
+        let progress = ProcessorProgressCapture()
         let processor = fixture.makeProcessor(
             persistence: persistence,
             provider: IOSForegroundVoiceOpenAIProviderOperations(
@@ -734,13 +891,17 @@ struct IOSForegroundVoiceProcessorTests {
             let recovered,
             failure: .localPersistence,
             stage: .transcription
-        ) = await processor.process(fixture.request()) else {
+        ) = await processor.process(
+            fixture.request(),
+            progress: { progress.record($0) }
+        ) else {
             Issue.record("Expected lost-handoff recovery.")
             return
         }
         #expect(recovered.phase == .awaitingRecovery)
         #expect(persistence.beginCallCount == 1)
         #expect(calls.events.isEmpty)
+        #expect(progress.stages.isEmpty)
     }
 
     @Test func activeProcessorReportsBusyWithoutClaimingLocalRecovery()
@@ -749,6 +910,9 @@ struct IOSForegroundVoiceProcessorTests {
         defer { fixture.removeFiles() }
         let calls = ProcessorCallLog()
         let transcription = ControlledTextProvider(value: "Single result")
+        let activeProgress = ProcessorProgressCapture()
+        let busyProcessProgress = ProcessorProgressCapture()
+        let busyRetryProgress = ProcessorProgressCapture()
         let processor = fixture.makeProcessor(
             provider: IOSForegroundVoiceOpenAIProviderOperations(
                 transcribe: { _, _ in
@@ -761,16 +925,34 @@ struct IOSForegroundVoiceProcessorTests {
             calls: calls
         )
         let processing = Task {
-            await processor.process(fixture.request())
+            await processor.process(
+                fixture.request(),
+                progress: { activeProgress.record($0) }
+            )
         }
         await transcription.waitUntilStarted()
 
         #expect(await processor.hasLocalRecoveryPending() == false)
-        #expect(await processor.process(fixture.request()) == .busy)
-        #expect(await processor.retryLocalRecovery() == .busy)
+        #expect(
+            await processor.process(
+                fixture.request(),
+                progress: { busyProcessProgress.record($0) }
+            ) == .busy
+        )
+        #expect(
+            await processor.retryLocalRecovery(
+                progress: { busyRetryProgress.record($0) }
+            ) == .busy
+        )
         await transcription.release()
         _ = try await processing.value.requireReady()
         #expect(calls.events == ["transcription", "usage"])
+        #expect(
+            activeProgress.stages
+                == [.transcription, .postProcessing, .outputDelivery]
+        )
+        #expect(busyProcessProgress.stages.isEmpty)
+        #expect(busyRetryProgress.stages.isEmpty)
     }
 
     @Test func processorDiagnosticsNeverExposeRuntimePayloads()
@@ -790,6 +972,7 @@ struct IOSForegroundVoiceProcessorTests {
             library: library
         )
         defer { fixture.removeFiles() }
+        let progressCanary = "PROGRESS-CANARY-4382"
         let calls = ProcessorCallLog()
         let persistence = FailingOnceForegroundPersistence(
             base: fixture.persistenceOwner,
@@ -805,10 +988,16 @@ struct IOSForegroundVoiceProcessorTests {
             calls: calls
         )
         let request = fixture.request()
-        let resolution = await processor.process(request)
+        let resolution = await processor.process(
+            request,
+            progress: { _ in _ = progressCanary }
+        )
         let diagnostics = [
             diagnosticDump(request),
             diagnosticDump(resolution),
+            diagnosticDump(
+                IOSForegroundVoiceLocalRecoveryDisposition.savingResult
+            ),
             diagnosticDump(processor),
             String(describing: processor),
             String(reflecting: processor),
@@ -819,6 +1008,7 @@ struct IOSForegroundVoiceProcessorTests {
             "PROMPT-CANARY-4931",
             "DICTIONARY-CANARY-7824",
             "TRANSCRIPT-CANARY-1596",
+            progressCanary,
             fixture.root.path,
         ] {
             #expect(!diagnostics.contains(canary))
@@ -871,6 +1061,87 @@ struct IOSForegroundVoiceProcessorTests {
         #expect(calls.events == ["transcription"])
         #expect(try await fixture.persistenceOwner.load()?.recording == recovered)
         #expect(try await fixture.persistenceOwner.loadLatestResult() == .absent)
+    }
+
+    @Test func progressCancellationIsObservedBeforeTheNextStage()
+        async throws {
+        for cancellationStage in [
+            VoiceAttemptStage.transcription,
+            .postProcessing,
+            .outputDelivery,
+        ] {
+            let fixture = try await ProcessorFixture(outputIntent: .standard)
+            defer { fixture.removeFiles() }
+            let calls = ProcessorCallLog()
+            let progress = ProcessorProgressCapture(
+                cancellingAt: cancellationStage
+            )
+            let processor = fixture.makeProcessor(
+                provider: IOSForegroundVoiceOpenAIProviderOperations(
+                    transcribe: { _, _ in
+                        calls.record("transcription")
+                        return "Progress cancellation"
+                    },
+                    correct: { transcript, _, _ in transcript.text },
+                    translate: { _, _ in "unexpected" }
+                ),
+                calls: calls
+            )
+
+            let processing = Task {
+                await processor.process(
+                    fixture.request(),
+                    progress: { progress.record($0) }
+                )
+            }
+            let resolution = await processing.value
+
+            switch cancellationStage {
+            case .transcription:
+                guard case .awaitingRecovery(
+                    _,
+                    failure: .cancelled,
+                    stage: .transcription
+                ) = resolution else {
+                    Issue.record("Expected Transcription cancellation.")
+                    continue
+                }
+                #expect(progress.stages == [.transcription])
+                #expect(calls.events.isEmpty)
+            case .postProcessing:
+                guard case .awaitingRecovery(
+                    _,
+                    failure: .cancelled,
+                    stage: .postProcessing
+                ) = resolution else {
+                    Issue.record("Expected Post Processing cancellation.")
+                    continue
+                }
+                #expect(progress.stages == [.transcription, .postProcessing])
+                #expect(calls.events == ["transcription", "usage"])
+            case .outputDelivery:
+                #expect(
+                    resolution == .localRecoveryPending(
+                        failure: .cancelled,
+                        stage: .outputDelivery,
+                        disposition: .savingResult
+                    )
+                )
+                #expect(
+                    progress.stages
+                        == [.transcription, .postProcessing, .outputDelivery]
+                )
+                #expect(calls.events == ["transcription", "usage"])
+                let retryProgress = ProcessorProgressCapture()
+                _ = try await processor.retryLocalRecovery(
+                    progress: { retryProgress.record($0) }
+                ).requireReady()
+                #expect(retryProgress.stages == [.outputDelivery])
+                #expect(calls.events == ["transcription", "usage"])
+            case .recordingFinalization:
+                Issue.record("Recording Finalization is not processor progress.")
+            }
+        }
     }
 }
 
@@ -1164,6 +1435,25 @@ private final class ProcessorCallLog: @unchecked Sendable {
 
     func record(_ event: String) {
         lock.withLock { storedEvents.append(event) }
+    }
+}
+
+@MainActor
+private final class ProcessorProgressCapture {
+    private(set) var stages: [VoiceAttemptStage] = []
+    private let cancellingStage: VoiceAttemptStage?
+
+    init(cancellingAt stage: VoiceAttemptStage? = nil) {
+        cancellingStage = stage
+    }
+
+    func record(_ stage: VoiceAttemptStage) {
+        stages.append(stage)
+        if stage == cancellingStage {
+            withUnsafeCurrentTask { task in
+                task?.cancel()
+            }
+        }
     }
 }
 
