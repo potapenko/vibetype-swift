@@ -1263,6 +1263,18 @@ retry draft, and repository automation/XCTest selects a no-Security-call
 Keychain mode before composition construction. Final evidence lives in
 `docs/qa/runs/ios-openai-credential-settings-2026-07-12.md`.
 
+The P3.4 general Settings editors are now complete. Transcription, Writing &
+Correction, Translation, and Voice & Recording use native containing-app
+Forms with explicit scene-local drafts and semantic-group saves through the
+exact process Settings owner. Clean editors adopt newer durable truth; dirty,
+failed, and concurrently superseded drafts remain visibly unsaved without
+leaking prompts or model identifiers. iPhone tabs and the iPad sidebar cannot
+replace a dirty editor before an explicit discard decision, and language
+selection uses a dedicated searchable route. Future keyboard, Quick Session,
+History, cache, automatic-insertion, Nearby Text, and Keep Latest controls
+remain absent until their owning milestones. Final evidence lives in
+`docs/qa/runs/ios-general-settings-editors-2026-07-12.md`.
+
 No History toggle, Clear History action, first-use disclosure, Recording Cache,
 App Group publication, or keyboard dependency is exposed by C4.0 alone.
 The C4.0 contract review is recorded in
@@ -1270,12 +1282,12 @@ The C4.0 contract review is recorded in
 
 ### P3 — Native containing-app shell
 
-State-owner prerequisite, native shell, and secure OpenAI editor: complete.
-Exactly one composition-owned Settings owner, Library owner, and credential
-presentation owner provide shared process truth. The credential draft alone is
-scene-local and ephemeral. Remaining P3 work starts with the non-secret
-P4-owned Settings and Library editors inside that shell; it must not create
-scene-local repositories.
+State-owner prerequisite, native shell, secure OpenAI editor, and the
+non-secret general Settings editors are complete. Exactly one
+composition-owned Settings owner, Library owner, and credential presentation
+owner provide shared process truth. Editor drafts are scene-local and
+ephemeral. Remaining P3 work starts with the Library editors inside that
+shell; it must not create scene-local repositories.
 
 - implement Voice, Library, History, and Settings navigation;
 - implement setup status, public system-settings routes, practice field, and

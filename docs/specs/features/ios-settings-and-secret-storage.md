@@ -622,6 +622,64 @@ result after the operation returns.
 - Usage presentation, retention, and Reset behavior follow
   `ios-usage-estimate.md`.
 
+### P3 general Settings editors
+
+- The Settings root pushes four native containing-app `Form` destinations:
+  Transcription, Writing & Correction, Translation, and Voice & Recording.
+  They expose only fields already present in general app settings v1. They do
+  not expose keyboard typing, Quick Session, History, recording-cache,
+  automatic-insertion, Nearby Text, or macOS-only controls.
+- Each destination owns one scene-local, memory-only non-secret draft created
+  from the latest durable semantic group. Editing never performs provider,
+  microphone, Keychain, clipboard, App Group, or filesystem work. A draft is
+  not stored in `SceneStorage`, `UserDefaults`, diagnostics, or a replacement
+  repository.
+- `Save` is explicit. It validates the visible group and calls the exact
+  process-owned Settings owner once. The owner applies only that semantic
+  group to its latest durable value, so an older screen cannot overwrite
+  unrelated changes from another scene. A clean editor adopts a newer durable
+  group automatically. A dirty editor retains its draft, identifies that
+  settings changed elsewhere, and makes the pending overwrite explicit.
+- A dirty editor replaces the normal Back action with Cancel and a discard
+  confirmation. Switching an iPhone tab or iPad sidebar destination while a
+  general-Settings draft is dirty requires the same confirmation before the
+  detail can be replaced. Until the choice is made, the same editor and draft
+  remain visible; Keep Editing or dismissal retains them, while confirmed
+  discard clears the Settings route and enters the requested destination. A
+  failed write keeps the scene-local draft visibly
+  marked `Not Saved`, while shared summaries and provider snapshots remain on
+  the last durable value. The warning remains visible in a persistent bottom
+  status while the user edits lower form content. The user may retry or
+  discard; the failed draft is never presented as saved. A successful commit
+  adopts the exact value returned by the owner and clears the warning only
+  while that semantic group is still current. If a newer same-group value has
+  already reached the process owner before the older caller resumes, the newer
+  value remains authoritative and the older draft stays visibly unsaved as
+  `changed elsewhere`. A transition to either warning posts one content-free
+  accessibility announcement.
+- Blank transcription, correction, or translation model fields visibly use
+  their documented default. Transcription Custom with an empty code visibly
+  falls back to Auto. A non-empty custom language code must be two or three
+  ASCII letters before Save is enabled. Language choices use a dedicated
+  searchable list rather than a long menu, including an explicit Custom row.
+  Translation may be saved while its route is incomplete; the action remains
+  unavailable and the editor states exactly which source or target
+  configuration is missing. Custom-code fields expose a content-free
+  accessibility hint and announce invalid-to-valid transitions without
+  reading the entered value.
+- Correction and Translation prompts and models remain editable while their
+  remote stage or action preference is off. Reset restores the exact shared
+  standard prompt in the draft, announces that the draft is not saved, and
+  does not save until the user taps `Save`.
+- Voice & Recording exposes only recording cues, stop tail, and the fixed
+  five-minute utterance limit explanation. `Keep Latest Result` is not
+  editable in P3: turning it off requires coordinated accepted-output,
+  bridge-revocation, and History-outbox cleanup under `ios-output-actions.md`.
+  Its control appears only with that owning storage/recovery coordinator.
+- Model identifiers and prompts are private app content. Editor state,
+  validation, notices, accessibility announcements, diagnostics, reflection,
+  and default logs never echo their values.
+
 ## Truthful setup status
 
 - API-key readiness is separate from microphone and keyboard setup.
@@ -660,8 +718,10 @@ result after the operation returns.
 
 - If settings cannot be read, HoldType shows a local configuration error and
   keeps unrelated History and diagnostics available.
-- If a settings write fails, the UI restores the last durable value instead of
-  pretending the change persisted.
+- If a settings write fails, shared UI truth restores the last durable value
+  instead of pretending the change persisted. A scene may retain its local
+  editor draft only while it is explicitly labelled unsaved and offers retry
+  or discard.
 - If Library data is corrupt, HoldType preserves the file for bounded local
   recovery and does not publish it to the keyboard.
 - If a credential becomes unavailable after recording, the protected pending

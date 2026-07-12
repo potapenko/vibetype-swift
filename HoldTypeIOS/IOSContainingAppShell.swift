@@ -5,10 +5,15 @@ struct IOSContainingAppShell: View {
     private var selectedDestinationRawValue =
         IOSContainingAppDestination.voice.rawValue
 
-    @State private var splitSelection: IOSContainingAppDestination?
-    @State private var didRestoreSplitSelection = false
+    @State private var settingsNavigationPath = NavigationPath()
+    @State private var preferredCompactColumn:
+        NavigationSplitViewColumn = .detail
     @State private var openAIEditorDraft =
         IOSOpenAICredentialEditorDraft()
+    @State private var hasUnsavedGeneralSettings = false
+    @State private var pendingDestination:
+        IOSContainingAppDestination?
+    @State private var showsSettingsDiscardConfirmation = false
 
     let secureProviderAvailability: IOSSecureProviderAvailability
     let layout: IOSContainingAppShellLayout
@@ -31,9 +36,22 @@ struct IOSContainingAppShell: View {
             }
         }
         .onAppear(perform: restoreSelectionIfNeeded)
-        .onChange(of: splitSelection) { _, destination in
-            guard let destination else { return }
-            selectedDestinationRawValue = destination.rawValue
+        .confirmationDialog(
+            "Discard Settings Changes?",
+            isPresented: $showsSettingsDiscardConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Discard Changes and Continue", role: .destructive) {
+                applyPendingDestination()
+            }
+            Button("Keep Editing", role: .cancel) {
+                pendingDestination = nil
+            }
+        } message: {
+            Text(
+                "Your unsaved edits on the current Settings screen will "
+                    + "be lost."
+            )
         }
     }
 
@@ -47,16 +65,14 @@ struct IOSContainingAppShell: View {
         Binding<IOSContainingAppDestination> {
         Binding(
             get: { selectedDestination },
-            set: { selectedDestinationRawValue = $0.rawValue }
+            set: { requestDestination($0) }
         )
     }
 
     private var tabShell: some View {
         TabView(selection: destinationSelection) {
             ForEach(IOSContainingAppDestination.allCases) { destination in
-                NavigationStack {
-                    destinationRoot(destination)
-                }
+                destinationStack(destination)
                 .tabItem {
                     Label(destination.title, systemImage: destination.systemImage)
                 }
@@ -70,17 +86,31 @@ struct IOSContainingAppShell: View {
     }
 
     private var splitShell: some View {
-        NavigationSplitView {
-            List(
-                IOSContainingAppDestination.allCases,
-                selection: $splitSelection
-            ) { destination in
-                NavigationLink(value: destination) {
+        NavigationSplitView(
+            preferredCompactColumn: $preferredCompactColumn
+        ) {
+            List(IOSContainingAppDestination.allCases) { destination in
+                Button {
+                    requestDestination(destination)
+                } label: {
                     Label(
                         destination.title,
                         systemImage: destination.systemImage
                     )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .listRowBackground(
+                    selectedDestination == destination
+                        ? Color.accentColor.opacity(0.14)
+                        : Color.clear
+                )
+                .accessibilityAddTraits(
+                    selectedDestination == destination
+                        ? .isSelected
+                        : []
+                )
                 .accessibilityIdentifier(
                     "\(destination.accessibilityIdentifier).sidebar"
                 )
@@ -88,12 +118,25 @@ struct IOSContainingAppShell: View {
             .navigationTitle("HoldType")
             .accessibilityIdentifier("ios.containing-app.sidebar")
         } detail: {
-            NavigationStack {
-                destinationRoot(selectedDestination)
-            }
+            destinationStack(selectedDestination)
         }
         .navigationSplitViewStyle(.balanced)
         .accessibilityIdentifier("ios.containing-app.split")
+    }
+
+    @ViewBuilder
+    private func destinationStack(
+        _ destination: IOSContainingAppDestination
+    ) -> some View {
+        if destination == .settings {
+            NavigationStack(path: $settingsNavigationPath) {
+                destinationRoot(destination)
+            }
+        } else {
+            NavigationStack {
+                destinationRoot(destination)
+            }
+        }
     }
 
     @ViewBuilder
@@ -111,7 +154,9 @@ struct IOSContainingAppShell: View {
             IOSHistoryHomeView()
         case .settings:
             IOSSettingsHomeView(
-                openAIEditorDraft: $openAIEditorDraft
+                openAIEditorDraft: $openAIEditorDraft,
+                hasUnsavedGeneralSettings:
+                    $hasUnsavedGeneralSettings
             )
         }
     }
@@ -124,9 +169,44 @@ struct IOSContainingAppShell: View {
                 IOSContainingAppDestination.voice.rawValue
         }
 
-        guard layout == .split, !didRestoreSplitSelection else { return }
-        splitSelection = selectedDestination
-        didRestoreSplitSelection = true
+    }
+
+    private func requestDestination(
+        _ destination: IOSContainingAppDestination
+    ) {
+        switch IOSContainingAppDestinationSelectionDecision.resolve(
+            current: selectedDestination,
+            requested: destination,
+            hasUnsavedGeneralSettings: hasUnsavedGeneralSettings
+        ) {
+        case .unchanged:
+            if layout == .split {
+                preferredCompactColumn = .detail
+            }
+            return
+        case .apply(let destination):
+            applyDestination(destination)
+        case .confirmDiscard(let destination):
+            pendingDestination = destination
+            showsSettingsDiscardConfirmation = true
+        }
+    }
+
+    private func applyPendingDestination() {
+        guard let pendingDestination else { return }
+        hasUnsavedGeneralSettings = false
+        settingsNavigationPath = NavigationPath()
+        self.pendingDestination = nil
+        applyDestination(pendingDestination)
+    }
+
+    private func applyDestination(
+        _ destination: IOSContainingAppDestination
+    ) {
+        selectedDestinationRawValue = destination.rawValue
+        if layout == .split {
+            preferredCompactColumn = .detail
+        }
     }
 }
 

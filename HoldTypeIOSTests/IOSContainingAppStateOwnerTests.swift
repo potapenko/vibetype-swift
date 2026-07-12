@@ -221,6 +221,90 @@ struct IOSContainingAppStateOwnerTests {
         #expect(await rollbackRepository.storedValue() == recoveredValue)
     }
 
+    @Test func settingsEditorsShareOneOwnerAndPreserveUnrelatedGroups()
+        async throws {
+        let initial = IOSAppSettings(
+            transcriptionConfiguration: TranscriptionConfiguration(
+                model: "initial-transcription"
+            ),
+            textCorrectionConfiguration: TextCorrectionConfiguration(
+                isEnabled: true,
+                modelPreset: .balanced
+            ),
+            localTextCleanupEnabled: false,
+            translationConfiguration: TranslationConfiguration(
+                targetLanguage: .english
+            ),
+            keepLatestResult: false,
+            voiceSessionPreferences: VoiceSessionPreferences(
+                audioCuesEnabled: false,
+                recordingStopTailDuration: .seconds1
+            )
+        )
+        let repository = StateOwnerRepositoryFixture(
+            initialValue: initial,
+            suspendNextCommit: true
+        )
+        let owner = IOSAppSettingsStateOwner(
+            load: { try await repository.load() },
+            commit: { try await repository.commit($0) }
+        )
+        let firstSceneOwner = owner
+        let secondSceneOwner = owner
+        _ = try await owner.load()
+
+        let transcription = TranscriptionConfiguration(
+            model: "scene-one-transcription",
+            language: .french
+        )
+        let translation = TranslationConfiguration(
+            actionPreferenceEnabled: false,
+            targetLanguage: .german
+        )
+        let firstSave = Task {
+            try await firstSceneOwner.update {
+                IOSAppSettingsEditorMutation.applyTranscription(
+                    transcription,
+                    to: &$0
+                )
+            }
+        }
+        try await stateOwnerEventually {
+            await repository.commitCallCount() == 1
+        }
+        let secondSave = Task {
+            try await secondSceneOwner.update {
+                IOSAppSettingsEditorMutation.applyTranslation(
+                    translation,
+                    to: &$0
+                )
+            }
+        }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(await repository.commitCallCount() == 1)
+
+        await repository.resumeCommit()
+        _ = try await firstSave.value
+        _ = try await secondSave.value
+
+        let stored = await repository.storedValue()
+        #expect(stored.transcriptionConfiguration == transcription)
+        #expect(stored.translationConfiguration == translation)
+        #expect(
+            stored.textCorrectionConfiguration
+                == initial.textCorrectionConfiguration
+        )
+        #expect(
+            stored.localTextCleanupEnabled
+                == initial.localTextCleanupEnabled
+        )
+        #expect(stored.keepLatestResult == initial.keepLatestResult)
+        #expect(
+            stored.voiceSessionPreferences
+                == initial.voiceSessionPreferences
+        )
+    }
+
     @Test func libraryPublishesCanonicalCommitAndRollsBackExactly()
         async throws {
         let commandID = UUID()

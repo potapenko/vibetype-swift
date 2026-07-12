@@ -7,6 +7,7 @@ struct IOSSettingsHomeView: View {
     @Environment(IOSAppSettingsStateOwner.self) private var stateOwner
     @State private var isLoading = false
     @Binding var openAIEditorDraft: IOSOpenAICredentialEditorDraft
+    @Binding var hasUnsavedGeneralSettings: Bool
 
     var body: some View {
         Group {
@@ -26,13 +27,17 @@ struct IOSSettingsHomeView: View {
                 IOSSettingsSummaryList(
                     settings: settings,
                     showsSaveFailure: false,
-                    openAIEditorDraft: $openAIEditorDraft
+                    openAIEditorDraft: $openAIEditorDraft,
+                    hasUnsavedGeneralSettings:
+                        $hasUnsavedGeneralSettings
                 )
             case .saveFailed(let lastDurableValue):
                 IOSSettingsSummaryList(
                     settings: lastDurableValue,
                     showsSaveFailure: true,
-                    openAIEditorDraft: $openAIEditorDraft
+                    openAIEditorDraft: $openAIEditorDraft,
+                    hasUnsavedGeneralSettings:
+                        $hasUnsavedGeneralSettings
                 )
             }
         }
@@ -65,6 +70,7 @@ private struct IOSSettingsSummaryList: View {
     let settings: IOSAppSettings
     let showsSaveFailure: Bool
     @Binding var openAIEditorDraft: IOSOpenAICredentialEditorDraft
+    @Binding var hasUnsavedGeneralSettings: Bool
 
     var body: some View {
         List {
@@ -73,86 +79,158 @@ private struct IOSSettingsSummaryList: View {
             }
 
             Section("OpenAI") {
-                NavigationLink {
-                    IOSOpenAISettingsView(
-                        editorDraft: $openAIEditorDraft
+                NavigationLink(value: IOSSettingsRoute.openAI) {
+                    IOSSettingsDestinationLabel(
+                        title: "API Key",
+                        summary: openAISummary,
+                        systemImage: "key"
                     )
-                } label: {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("API Key")
-                            Text(openAISummary)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "key")
-                    }
                 }
                 .accessibilityIdentifier("ios.settings.openai.row")
             }
 
-            Section("Saved Transcription Configuration") {
-                LabeledContent(
-                    "Model",
-                    value: settings.transcriptionConfiguration.resolvedModel
-                )
-                LabeledContent(
-                    "Language",
-                    value: transcriptionLanguageName(
-                        settings.transcriptionConfiguration
+            Section("Language & Writing") {
+                NavigationLink(
+                    value: IOSSettingsRoute.general(.transcription)
+                ) {
+                    IOSSettingsDestinationLabel(
+                        title: IOSGeneralSettingsDestination
+                            .transcription.title,
+                        summary: transcriptionSummary,
+                        systemImage: IOSGeneralSettingsDestination
+                            .transcription.systemImage
                     )
+                }
+                .accessibilityIdentifier(
+                    IOSGeneralSettingsDestination.transcription
+                        .rowAccessibilityIdentifier
+                )
+
+                NavigationLink(
+                    value: IOSSettingsRoute.general(.writingCorrection)
+                ) {
+                    IOSSettingsDestinationLabel(
+                        title: IOSGeneralSettingsDestination
+                            .writingCorrection.title,
+                        summary: writingSummary,
+                        systemImage: IOSGeneralSettingsDestination
+                            .writingCorrection.systemImage
+                    )
+                }
+                .accessibilityIdentifier(
+                    IOSGeneralSettingsDestination.writingCorrection
+                        .rowAccessibilityIdentifier
+                )
+
+                NavigationLink(
+                    value: IOSSettingsRoute.general(.translation)
+                ) {
+                    IOSSettingsDestinationLabel(
+                        title: IOSGeneralSettingsDestination.translation.title,
+                        summary: translationPreferenceName(settings),
+                        systemImage: IOSGeneralSettingsDestination.translation
+                            .systemImage
+                    )
+                }
+                .accessibilityIdentifier(
+                    IOSGeneralSettingsDestination.translation
+                        .rowAccessibilityIdentifier
                 )
             }
 
-            Section("Saved Writing Preferences") {
-                LabeledContent(
-                    "Local cleanup",
-                    value: preferenceName(settings.localTextCleanupEnabled)
-                )
-                LabeledContent(
-                    "OpenAI correction",
-                    value: preferenceName(
-                        settings.textCorrectionConfiguration.isEnabled
+            Section("Voice") {
+                NavigationLink(
+                    value: IOSSettingsRoute.general(.voiceRecording)
+                ) {
+                    IOSSettingsDestinationLabel(
+                        title: IOSGeneralSettingsDestination
+                            .voiceRecording.title,
+                        summary: voiceSummary,
+                        systemImage: IOSGeneralSettingsDestination
+                            .voiceRecording.systemImage
                     )
+                }
+                .accessibilityIdentifier(
+                    IOSGeneralSettingsDestination.voiceRecording
+                        .rowAccessibilityIdentifier
                 )
-                LabeledContent(
-                    "Translate action",
-                    value: translationPreferenceName(settings)
-                )
-            }
 
-            Section("Voice & Result Behavior") {
-                LabeledContent(
-                    "Recording sounds",
-                    value: preferenceName(
-                        settings.voiceSessionPreferences.audioCuesEnabled
-                    )
-                )
-                LabeledContent(
-                    "Stop tail",
-                    value: stopTailName(
-                        settings.voiceSessionPreferences
-                            .recordingStopTailDuration
-                    )
-                )
-                LabeledContent(
-                    "Keep latest result",
-                    value: preferenceName(settings.keepLatestResult)
-                )
-                LabeledContent("Maximum utterance", value: "5 minutes")
+                LabeledContent("Maximum Utterance", value: "5 minutes")
             }
 
             Section {
                 Text(
                     "Prompts and complete settings stay in HoldType’s private "
-                    + "storage and are never copied into the keyboard extension."
+                        + "storage and are never copied into the keyboard "
+                        + "extension."
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .navigationDestination(for: IOSSettingsRoute.self) { route in
+            settingsDestination(route)
+        }
+    }
+
+    @ViewBuilder
+    private func settingsDestination(_ route: IOSSettingsRoute) -> some View {
+        switch route {
+        case .openAI:
+            IOSOpenAISettingsView(editorDraft: $openAIEditorDraft)
+        case .general(.transcription):
+            IOSTranscriptionSettingsView(
+                configuration: settings.transcriptionConfiguration,
+                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
+            )
+        case .general(.writingCorrection):
+            IOSWritingCorrectionSettingsView(
+                configuration: settings.textCorrectionConfiguration,
+                localTextCleanupEnabled: settings.localTextCleanupEnabled,
+                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
+            )
+        case .general(.translation):
+            IOSTranslationSettingsView(
+                configuration: settings.translationConfiguration,
+                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
+            )
+        case .general(.voiceRecording):
+            IOSVoiceRecordingSettingsView(
+                preferences: settings.voiceSessionPreferences,
+                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
+            )
+        }
+    }
+
+    private var transcriptionSummary: String {
+        let configuration = settings.transcriptionConfiguration
+        return transcriptionLanguageName(configuration)
+            + " · "
+            + IOSSettingsModelPresentation.summary(
+                rawModel: configuration.model,
+                defaultModel: TranscriptionConfiguration.defaultModel
+            )
+    }
+
+    private var writingSummary: String {
+        let correction = settings.textCorrectionConfiguration.isEnabled
+            ? "Correction on"
+            : "Correction off"
+        let cleanup = settings.localTextCleanupEnabled
+            ? "Cleanup on"
+            : "Cleanup off"
+        return correction + " · " + cleanup
+    }
+
+    private var voiceSummary: String {
+        let cues = settings.voiceSessionPreferences.audioCuesEnabled
+            ? "Sounds on"
+            : "Sounds off"
+        let tail = stopTailName(
+            settings.voiceSessionPreferences.recordingStopTailDuration
+        )
+        return cues + " · Tail " + tail
     }
 
     private var openAISummary: String {
@@ -171,25 +249,21 @@ private struct IOSSettingsSummaryList: View {
     ) -> String {
         switch configuration.language {
         case .automatic:
-            return "Automatic"
+            return "Auto"
         case .custom:
             switch configuration.customLanguageCodeValidation {
             case .emptyFallsBackToAutomatic:
-                return "Automatic (empty custom code)"
+                return "Auto (empty custom code)"
             case .invalid:
-                return "Needs attention"
+                return "Custom needs attention"
             case .valid(let normalizedCode):
                 return "Custom (\(normalizedCode))"
             case .notRequired:
                 return "Custom"
             }
         default:
-            return configuration.language.rawValue.capitalized
+            return configuration.language.iosSettingsLanguageName
         }
-    }
-
-    private func preferenceName(_ isEnabled: Bool) -> String {
-        isEnabled ? "Preference on" : "Preference off"
     }
 
     private func translationPreferenceName(
@@ -197,7 +271,7 @@ private struct IOSSettingsSummaryList: View {
     ) -> String {
         let configuration = settings.translationConfiguration
         guard configuration.actionPreferenceEnabled else {
-            return "Preference off"
+            return "Action off"
         }
         return configuration.isConfigurationReady
             ? "Configured"
@@ -207,17 +281,27 @@ private struct IOSSettingsSummaryList: View {
     private func stopTailName(
         _ duration: RecordingStopTailDuration
     ) -> String {
-        switch duration {
-        case .off:
-            return "Off"
-        case .milliseconds500:
-            return "0.5 seconds"
-        case .seconds1:
-            return "1 second"
-        case .seconds1_5:
-            return "1.5 seconds"
-        case .seconds2:
-            return "2 seconds"
+        duration.iosSettingsDisplayName
+    }
+}
+
+private struct IOSSettingsDestinationLabel: View {
+    let title: String
+    let summary: String
+    let systemImage: String
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(summary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } icon: {
+            Image(systemName: systemImage)
         }
     }
 }

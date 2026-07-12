@@ -60,6 +60,30 @@ struct IOSContainingAppShellTests {
         )
     }
 
+    @Test func unsavedSettingsRequireConfirmationBeforeDestinationChange() {
+        #expect(
+            IOSContainingAppDestinationSelectionDecision.resolve(
+                current: .settings,
+                requested: .voice,
+                hasUnsavedGeneralSettings: true
+            ) == .confirmDiscard(.voice)
+        )
+        #expect(
+            IOSContainingAppDestinationSelectionDecision.resolve(
+                current: .settings,
+                requested: .library,
+                hasUnsavedGeneralSettings: false
+            ) == .apply(.library)
+        )
+        #expect(
+            IOSContainingAppDestinationSelectionDecision.resolve(
+                current: .settings,
+                requested: .settings,
+                hasUnsavedGeneralSettings: true
+            ) == .unchanged
+        )
+    }
+
     @Test func rootRequiresAllConcreteStateOwners() {
         #expect(
             IOSContainingAppRootPresentation.resolve(

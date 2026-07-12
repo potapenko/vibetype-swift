@@ -1,3 +1,4 @@
+import Foundation
 import UIKit
 
 enum IOSContainingAppDestination: String, CaseIterable, Identifiable,
@@ -53,8 +54,37 @@ enum IOSContainingAppShellLayout: Equatable, Sendable {
     }
 
     static var current: Self {
-        Self(interfaceIdiom: UIDevice.current.userInterfaceIdiom)
+        #if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        if environment["HOLDTYPE_AUTOMATION"] == "1",
+           environment["HOLDTYPE_AUTOMATION_LAYOUT"] == "split" {
+            return .split
+        }
+        #endif
+        return Self(interfaceIdiom: UIDevice.current.userInterfaceIdiom)
     }
+}
+
+enum IOSContainingAppDestinationSelectionDecision: Equatable, Sendable {
+    case unchanged
+    case apply(IOSContainingAppDestination)
+    case confirmDiscard(IOSContainingAppDestination)
+
+    static func resolve(
+        current: IOSContainingAppDestination,
+        requested: IOSContainingAppDestination,
+        hasUnsavedGeneralSettings: Bool
+    ) -> Self {
+        guard requested != current else { return .unchanged }
+        return hasUnsavedGeneralSettings
+            ? .confirmDiscard(requested)
+            : .apply(requested)
+    }
+}
+
+enum IOSSettingsRoute: Hashable {
+    case openAI
+    case general(IOSGeneralSettingsDestination)
 }
 
 enum IOSSecureProviderAvailability: Equatable, Sendable {

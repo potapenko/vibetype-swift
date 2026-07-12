@@ -388,9 +388,13 @@ host app, state, expected result, actual result, and go/no-go decision.
   payload-free presentation owner and one scene-local redacted draft. Explicit
   Keychain checks and mutations remain outside the extension, and repository
   automation uses a no-Security-call access mode. Evidence lives in
-  `docs/qa/runs/ios-openai-credential-settings-2026-07-12.md`. The next P3
-  slice is the remaining non-secret P4-owned Settings and Library editors. The
-  independent recording cache
+  `docs/qa/runs/ios-openai-credential-settings-2026-07-12.md`. P3.4 adds four
+  native non-secret general Settings editors with explicit scene-local drafts,
+  semantic-group saves through the exact process owner, concurrent-change and
+  failed-save truth, searchable language routes, and guarded iPhone/iPad
+  destination changes. Evidence lives in
+  `docs/qa/runs/ios-general-settings-editors-2026-07-12.md`. The next P3 slice
+  is the Library editors. The independent recording cache
   and directional bridge remain later milestones behind the physical M0 gates.
   The runtime-only four-case `VoiceAttemptStage` is portable too; preflight,
   outcomes, recovery eligibility, and durable resume checkpoints remain
