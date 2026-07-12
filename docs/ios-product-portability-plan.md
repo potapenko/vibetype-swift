@@ -2,10 +2,11 @@
 
 Status: active implementation roadmap; P0, P1, P2, and P3 are complete. The
 native containing app now includes its state owners, shell, Settings editors,
-Dictionary, Voice Emoji Commands, and Replacement Rules. P4A, P4B, and P4C are
-complete: the app-only foreground contract, Persistence transaction,
-reader-based OpenAI, and consent-gated processing are implemented. P4D audio,
-shared Voice UI, and bounded runtime QA are next; updated 2026-07-12.
+Dictionary, Voice Emoji Commands, and Replacement Rules. P4A, P4B, P4C, and
+P4D-0 are complete: the app-only foreground contract, Persistence transaction,
+reader-based OpenAI, consent-gated processing, and foreground audio/storage
+contracts are frozen. P4D-1 shared Voice orchestration is next; updated
+2026-07-12.
 
 This document plans the complete iPhone and iPad companion product around the
 HoldType keyboard. It does not authorize Swift, target, entitlement, or
@@ -1333,11 +1334,23 @@ once Usage handoff, exact Pending transitions, cancellation recovery,
 same-process provider-free local reconciliation, and P4B acceptance. One
 composition-owned Persistence owner keeps the canonical Pending actor and
 foreground facade identity alive for the process. P4C adds no microphone
-implementation, Voice
-UI, background mode, Quick Session, App Group publication, or keyboard
+implementation, Voice UI, background mode, Quick Session, App Group
+publication, or keyboard
 dependency; those foreground audio and presentation surfaces remain P4D.
 Final evidence lives in
 `docs/qa/runs/ios-p4c-foreground-processing-2026-07-12.md`.
+
+P4D-0 contract freeze is complete. Explicit relaunch Retry now accepts either
+`readyForTranscription` or `awaitingRecovery` while passive lifecycle recovery
+remains provider-free. P4 capture validity begins at 300 milliseconds. The
+foreground session uses `playAndRecord` plus the default mode, HFP input, and
+built-in-speaker fallback without mixing, ducking, hidden resume, or background
+audio. A new descriptor-bound capture-source owner and bounded launch
+reconciler preserve completed audio across the recorder-to-Pending gap without
+trusting a reopened pathname. P4D-1 next builds the fake-backed shared Voice
+controller and payload-free progress seam; AVFoundation remains P4D-2. Final
+contract evidence lives in
+`docs/qa/runs/ios-p4d-foreground-audio-contract-freeze-2026-07-12.md`.
 
 No History toggle, Clear History action, first-use disclosure, Recording Cache,
 App Group publication, or keyboard dependency is exposed by C4.0 alone.
@@ -1619,9 +1632,12 @@ presentation, Dynamic Type, dark appearance, and keyboard isolation remain
 intact.
 
 P4 is in progress. P4A froze the foreground-only contract, P4B completed its
-canonical Persistence transaction, and P4C completed reader-based OpenAI plus
-consent-gated foreground processing. P4D is next: audio-session/recorder
-integration, the shared Voice owner and UI, and bounded simulator runtime QA.
+canonical Persistence transaction, P4C completed reader-based OpenAI plus
+consent-gated foreground processing, and P4D-0 froze foreground audio,
+descriptor-bound capture-source, validity, permission, and explicit relaunch
+Retry contracts. P4D-1 is next: the fake-backed shared Voice owner and
+payload-free progress seam, followed by AVFoundation integration, native Voice
+UI, and bounded simulator runtime QA.
 No P4 slice adds background audio, Quick Session, directional App Group work,
 or keyboard provider dependencies.
 

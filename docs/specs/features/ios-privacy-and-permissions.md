@@ -66,6 +66,25 @@ containing app can grant or reliably inspect settings owned by iOS.
 - Inside the extension, live `hasFullAccess` may explain that voice commands are
   unavailable while ordinary typing continues.
 
+### P4D Microphone Permission Adapter
+
+- The iOS 17+ containing app reads
+  `AVAudioApplication.shared.recordPermission` and calls
+  `AVAudioApplication.requestRecordPermission` only from the explicit Start
+  continuation when status is not determined. It does not use the deprecated
+  `AVAudioSession` permission API.
+- Permission completion is treated as an untrusted asynchronous callback. The
+  process owner revalidates the initiating scene, attempt token, current
+  provider consent, credential generation, and aggregate foreground activity
+  before audio configuration or source creation.
+- Denied permission creates no audio session or file and offers the public app
+  Settings URL. Granted permission with no usable input is `unavailable`, not
+  `listening`. Passive Privacy & Permissions status never prompts.
+- The containing-app purpose string is exactly:
+  `HoldType uses the microphone to record speech you choose to transcribe.`
+  The keyboard target has no microphone purpose string, permission adapter,
+  AVFAudio dependency, or Speech permission.
+
 ## Provider consent
 
 Before the first OpenAI request, HoldType explains and obtains explicit

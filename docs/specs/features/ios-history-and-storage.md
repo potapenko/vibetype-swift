@@ -357,10 +357,11 @@ dispatch authorization and cancels a registered provider task, then moves
 transcription ID durably, and only then completes cancellation. If the journal
 mutation fails, the old authorization remains retired and cannot start or
 restart provider work; the unresolved live owner continues to block Retry and
-Discard until the local transition is reconciled. Explicit Retry
-moves `awaitingRecovery` to `transcribing` with a fresh ID and current compact
-configuration identifiers. Same-phase calls are idempotent only when all
-identity-bearing inputs match. P4 has one additional store-authorized current-
+Discard until the local transition is reconciled. Explicit Retry moves either
+`readyForTranscription` or `awaitingRecovery`, each with a null transcription
+ID, to `transcribing` with a fresh ID and current compact configuration
+identifiers. Same-phase calls are idempotent only when all identity-bearing
+inputs match. P4 has one additional store-authorized current-
 process transition from `outputDelivery` to `awaitingRecovery`: the app-only
 delivery coordinator must first retire the exact accepted-delivery intent and
 prove through the canonical delivery store that no matching destination,
@@ -379,7 +380,11 @@ An ordinary missing-path lookup is insufficient. That local transition clears
 the old transcription ID before Retry is
 presented. It never resumes or repeats provider work automatically. A
 `readyForTranscription` record also remains explicit after relaunch; its name
-does not authorize automatic dispatch.
+does not authorize automatic dispatch. Passive process-launch or foreground
+reconciliation leaves that record unchanged and does not load Settings or
+Library, inspect consent, resolve a credential, request microphone permission,
+or create provider authority. Its user-visible actions are the same explicit
+Retry or confirmed Discard offered for `awaitingRecovery`.
 
 After the strict failed-Retry cold scan proves no work and before generic
 accepted-output expiry or policy cleanup, the process-launch lifecycle path
@@ -413,17 +418,25 @@ cannot advance, discard, publish, or transfer a different durable owner.
 
 The containing-app attempt owner allocates one local transcription UUID and the
 store atomically commits it while moving `readyForTranscription` to
-`transcribing`, then returns the validated audio handoff. Provider and transport
-internals never generate this durable identity. Re-entering that same begun
-handoff with the same proposed UUID may return the already-live handoff but
-never authorizes a second network dispatch. After process loss, the old UUID
-cannot dispatch again; the process-loss transition must first clear it and only
-an explicit Retry may commit a fresh UUID for new provider work. An explicit
-eligible Retry from `awaitingRecovery` allocates and commits that new UUID,
-updates the compact model/language identifiers from current settings, preserves
-the attempt ID, audio identity, creation date, duration, byte count, and output
-intent, and returns only after the new `transcribing` record is durable. This
-UUID is the local usage/replay identity, not an OpenAI idempotency header.
+`transcribing`, then returns the validated audio handoff. This same-process
+initial path uses the exact frozen Settings snapshot that created the Pending
+record and fails before mutation if compact model/language no longer match.
+Provider and transport internals never generate this durable identity.
+Re-entering that same begun handoff with the same proposed UUID may return the
+already-live handoff but never authorizes a second network dispatch. After
+process loss, the old UUID cannot dispatch again; the process-loss transition
+must first clear it and only an explicit Retry may commit a fresh UUID for new
+provider work.
+
+An explicit eligible Retry accepts either `readyForTranscription` with a null
+transcription ID or `awaitingRecovery` with a null transcription ID. It
+allocates and atomically commits a fresh UUID, updates compact model/language
+identifiers from the current Settings snapshot, preserves attempt ID, audio
+identity, creation date, duration, byte count, and output intent, and returns
+only after the new `transcribing` record is durable. Invalid current
+configuration, stale CAS, unavailable consent or credential, or cancelled
+preflight leaves the Pending journal phase unchanged and creates no handoff. This UUID
+is the local usage/replay identity, not an OpenAI idempotency header.
 
 Only that successful commit may create one process-local, one-shot dispatch
 authorization containing a validated descriptor-backed audio source. The
@@ -476,6 +489,244 @@ provider-free local checkpoint. App-only acceptance reconciliation additionally
 requires Persistence-owned equality of accepted bytes, output intent, app-only
 mode, and immutable identities; a one-way `keepLatestResult` revocation from on
 to off remains valid and is never reversed by replay.
+
+### P4D Foreground Capture-Source Ownership
+
+P4D does not pass an ordinary recorder URL into the path-based Pending prepare
+API. Persistence owns one app-private foreground capture-source namespace at
+`HoldType/Recordings/Capture`. The namespace is owner-only, no-follow, mode
+`0700`, Complete-protected, excluded from backup, and marked with
+`com.holdtype.ios.capture-source-namespace` exact ASCII bytes `v1`. The
+containing app may receive one transient source URL only through an opaque
+Persistence-issued recording lease for `AVAudioRecorder`; no provider, scene
+state, log, App Group, or keyboard surface receives it.
+
+#### Capture creation and wire format
+
+One production source uses
+`capture-v1-<attempt UUID>.m4a`; the UUID is lowercase canonical spelling and
+equals the durable attempt ID. Test fixtures may use the corresponding `.wav`
+grammar. Production capture is mono MPEG-4 AAC at 44.1 kHz with high encoder
+quality.
+
+Persistence holds the namespace creator lock and writes
+`com.holdtype.ios.capture-source-creation-intent` on the pinned directory
+before creating any file. Its exact 27-byte value is schema byte `1`, attempt
+UUID, output-intent byte, format byte, and UInt64 UTC creation milliseconds.
+The directory is synchronized before file creation. Persistence then:
+
+1. exclusively creates
+   `.capture-source-creating-v1-<attempt UUID>.<m4a|wav>`;
+2. pins the regular file and verifies effective owner, mode `0600`, one link,
+   stable device/inode/generation, Complete protection, and backup exclusion;
+3. writes the source marker, identity manifest, and `active-v1` phase, then
+   synchronizes the descriptor;
+4. publishes the final source name with a no-overwrite rename, synchronizes the
+   directory, and revalidates descriptor/path identity; and
+5. removes the matching creation intent, synchronizes the directory, and only
+   then exposes the final recording URL.
+
+A crash before URL exposure is bounded by that intent. Launch may clear an
+exact intent with directory-durable absence of both names, remove its exact
+hidden creation file regardless of partial marker setup, or clear the intent
+while retaining one fully valid published `active-v1` source. Each mutation
+pins identity and synchronizes the directory. A competing name, unexpected
+hard link or byte in the hidden creation file, intent/source mismatch, identity
+change, or absence uncertainty is preserved. An unmarked file without the
+exact durable creation intent is never inferred to be app-created.
+
+Capture-source xattrs use one strict v1 wire. Integers are unsigned big-endian
+unless `Int64` is named; signed values use big-endian two's-complement bytes.
+UUIDs use their 16 RFC 4122 bytes. No value has padding, trailing bytes,
+alternate encoding, or optional fields:
+
+- `com.holdtype.ios.capture-source-audio` is exact ASCII `v1`;
+- `com.holdtype.ios.capture-source-identity` is exactly 47 bytes: schema byte
+  `1`, attempt UUID, output intent (`1` Standard, `2` Translate), format
+  (`1` m4a, `2` wav), creation time as UInt64 UTC milliseconds, device as
+  UInt64, inode as UInt64, and generation as UInt32;
+- `com.holdtype.ios.capture-source-completion` is exactly 25 bytes: schema byte
+  `1`, duration milliseconds as UInt32, byte count as UInt64, modification
+  seconds as Int64, and modification nanoseconds as UInt32; and
+- `com.holdtype.ios.capture-source-phase` is exactly one of `active-v1`,
+  `finalizing-v1`, `completed-v1`, `preparing-pending-v1`, `transferred-v1`,
+  or `discarding-v1`.
+
+`active-v1` has no completion value. `finalizing-v1` permits no completion
+or one exact completion value; completed, preparing, and transferred require
+one; discarding permits either shape inherited from its validated source. A
+missing phase-required key, wrong length, reserved value, future schema,
+overflow, creation time outside `0...253402300799999`, nanoseconds outside
+`0..<1000000000`, filename/attempt mismatch, or stat/manifest mismatch is
+unknown state and is preserved without implicit repair or removal.
+
+The source marker and identity are written before `active-v1`. Every phase
+replacement and completion value is descriptor-synchronized before the work it
+guards. Any recorder-side truncate that preserves the inode is allowed;
+replacement, rename, link-count change, symlink, owner/mode change, or
+path/descriptor disagreement fails closed. The manifests contain no prompt,
+Library content, credential, consent value, provider data, transcript, scene
+identity, or external-app context.
+
+#### Capture finalization and active recovery
+
+Done or another recoverable stop writes and synchronizes `finalizing-v1`
+before asking the recorder to close. Cancel first writes and synchronizes
+`discarding-v1`, then stops and identity-pinned removes only that exact source.
+The action never exposes cancelled bytes through Recover Recording; a crash or
+uncertain unlink leaves discarding state for bounded cleanup. After close,
+Persistence validates the descriptor-bound media,
+canonical duration, byte count, stable modification time, and the P4 range
+`300..<300000` milliseconds. It writes and synchronizes the completion value,
+then writes and synchronizes `completed-v1`. A crash at any point retains
+either finalizing state or a finalizing-plus-completion residue; it never
+becomes completed automatically.
+
+Recover Recording for finalizing state acquires the creator lock, CAS-validates
+phase plus immutable identity, and revalidates descriptor/path media and stable
+content metadata. Without a completion value it writes and synchronizes the one
+canonical value; with an exact value it confirms those same bytes and metadata.
+It then writes and synchronizes `completed-v1` before entering the completed-to-
+preparing handoff. A mismatch remains blocked; a typed invalid result enters
+discarding cleanup and never becomes provider work.
+
+Interruption or media-service loss may close the recorder before finalizing can
+be written. An unlocked positive-byte `active-v1` source is therefore never
+age-deleted. Explicit Recover Recording revalidates identity and media: a valid
+partial in `300..<300000` advances through finalizing and completed, while an
+exact empty, too-short, maximum-duration, or invalid/corrupt partial follows its
+typed non-provider cleanup. Any validation or removal uncertainty preserves
+blocked local recovery.
+
+Only an exact unlocked zero-byte `active-v1` source may use the abandoned
+rule. Both its identity creation time and descriptor modification time must be
+at least 3,600,000 milliseconds before a trustworthy current wall clock. A
+future time, subtraction overflow, clock rollback, generation mismatch, or
+either younger timestamp preserves it and offers confirmed Discard. A proven
+abandoned source enters synchronized `discarding-v1` before unlink. Finalizing,
+completed, and positive-byte active sources are never age-deleted.
+
+#### Descriptor-bound Pending handoff
+
+P4D adds a capability-only prepare/recover operation under the same canonical
+repository-root operation gate as the existing Pending store. The legacy
+path-based prepare API remains for existing fixtures and older internal flows,
+but the production Voice controller cannot receive or call it. Both paths
+serialize against the same protected-audio inventory and single Pending slot.
+
+Recover Recording for an exact completed source first acquires the operation
+gate and creator lock, CAS-validates phase plus immutable identity, revalidates
+the whole Pending inventory, writes and synchronizes
+`preparing-pending-v1`, and only then creates or adopts Pending audio. A
+repeated action resumes the same attempt and cannot mint another destination.
+The same transition is part of normal same-process Done.
+
+The P4D copy uses exact staging grammar
+`.capture-transfer-v1-<attempt UUID>.<m4a|wav>` and the normal final Pending
+name `recording-v1-<attempt UUID>.<m4a|wav>`. Its staging descriptor receives
+Complete protection, backup exclusion, the existing
+`com.holdtype.ios.pending-recording-audio = v1` marker, and
+`com.holdtype.ios.capture-source-transfer` before its first audio byte. The
+transfer value is exactly 51 bytes: schema byte `1`, source attempt UUID,
+source device UInt64, source inode UInt64, source generation UInt32, output
+intent byte, format byte, duration milliseconds UInt32, and byte count UInt64.
+Both application xattrs are descriptor-synchronized and revalidated together
+with protection and backup exclusion before the first audio byte. The transfer
+binding survives the no-overwrite rename. Unknown, legacy, malformed, or
+mismatched staging/final files never become P4D recovery authority.
+
+The copy streams from the already-open source descriptor and never reopens the
+source pathname. Source and Pending descriptor/path identity are revalidated
+before and after every await and commit point. Explicit recovery from preparing
+state handles every later crash window under the operation gate and starts no
+provider:
+
+- empty Pending inventory starts the bound descriptor-to-staging copy;
+- one exact zero-byte P4D staging name with an allowed application-marker prefix
+  is a pre-byte residue authorized by the durable preparing source. It may contain
+  neither application marker, the expected Pending marker only, or the exact
+  matching transfer binding only. It must have no unexpected application-owned
+  marker and any binding must match the source. Recover identity-pins and
+  removes it, then restarts the copy. When both expected values are present, the
+  non-overlapping transfer-bound staging case below applies;
+- one exact transfer-bound staging file is validated; a complete media-valid
+  copy is published, while an incomplete or invalid but exact owned staging file
+  may be identity-pinned, removed, and recopied only by explicit Recover;
+- one exact transfer-bound final audio without a journal is validated and
+  adopted by committing the matching `awaitingRecovery` journal;
+- a matching journal with directory-durably absent final audio may recreate that
+  exact transfer-bound audio from the source and then confirm the same journal
+  phase durably; and
+- a corrupt or foreign journal, invalid existing final audio, unbound nonempty
+  or legacy staging, multiple inventory entries, source mismatch, uncertain
+  absence, or any other ambiguity is preserved and blocks Recover, Discard, and
+  new capture.
+
+Normal same-process Done creates `readyForTranscription` with its frozen
+Settings snapshot. Explicit relaunch recovery creates `awaitingRecovery` with
+current compact transcription settings. Both use the capture identity's
+canonical creation time as Pending `createdAt`. Neither transition launches a
+provider. After the exact Pending audio and journal are revalidated and
+same-phase journal durability is confirmed, the source advances to
+`transferred-v1` and synchronizes. Source retirement then uses
+identity-pinned `unlinkat` plus directory synchronization.
+
+Provider launch requires the durable Pending commit and either confirmed source
+removal or durable `transferred-v1`. Cancellation after Pending commit finishes
+this local checkpoint and never repeats prepare or provider work. Separate
+identity-pinned cleanup first writes and synchronizes `discarding-v1` for an
+exact active or finalizing source after Cancel or a typed
+empty/too-short/maximum/invalid result. Confirmed Discard of an exact completed
+or preparing source may write discarding only after proving that no matching or
+ambiguous Pending destination owns it. Discarding state is never recoverable;
+uncertain validation or removal preserves it for bounded cleanup.
+
+Confirmed Discard for a source-only active, finalizing, completed, or eligible
+preparing phase is one CAS operation under the operation gate and creator lock.
+It requires expected attempt, phase, descriptor identity, and canonical Pending-
+inventory proof; preparing is eligible only with no matching or ambiguous
+destination. It writes and synchronizes `discarding-v1`, stops the recorder if
+needed, then uses identity-pinned unlink plus directory synchronization. A
+repeat may confirm directory-durable absence of that original identity but can
+never unlink a recreated path. Discarding state is cleanup-only after relaunch.
+
+#### Relaunch reconciliation
+
+Passive process launch classifies capture source before a new recording and
+performs no provider, Settings, Library, consent, credential, microphone, or
+audio-session work:
+
+- exact creation-intent residues use only the pre-exposure rules above;
+- exact `discarding-v1` is identity-pinned cleanup-only and never presents
+  Recover Recording;
+- exact `transferred-v1` is removable after acquiring its lock;
+- exact preparing state with a matching, media-valid Pending audio and matching
+  journal advances to transferred only after same-phase journal durability
+  confirmation, then the redundant source is removable;
+- exact preparing state with a matching journal but directory-durably absent
+  final audio presents Recover Recording, not Retry or Discard;
+- exact preparing state without a matching Pending owner presents Recover
+  Recording; confirmed Discard is available only after the Pending inventory
+  proves no matching or ambiguous destination;
+- exact completed, finalizing, or positive-byte active state presents Recover
+  Recording or confirmed Discard and is never age-deleted;
+- exact unlocked zero-byte active state uses the one-hour rule above; and
+- unknown, malformed, unmarked, linked, replaced, locked, unavailable, or
+  mismatched state is preserved and blocks mutation.
+
+Launch never adopts an orphan, recopies audio, creates or repairs a journal, or
+uploads. Its only automatic mutations are the exact pre-exposure cleanup,
+discarding cleanup, zero-byte abandoned cleanup, transferred cleanup, and
+redundant preparing-plus-fully-valid-Pending retirement defined above.
+
+The bounded launch scavenger examines at most 128 entries, removes at most 16
+confirmed artifacts and 200,000,000 logical bytes, stops before 500 monotonic
+milliseconds, and permits no more than eight consecutive `EINTR` retries. A
+missing namespace is a no-op; maintenance never creates or repairs it. Default
+logs contain one compact action/result plus aggregate counts. Paths, filenames,
+UUIDs, physical identities, audio bytes, and payloads remain behind opt-in debug
+logging and redacted diagnostic values. The keyboard never links or runs this
+owner.
 
 Preparing a pending attempt follows this order:
 

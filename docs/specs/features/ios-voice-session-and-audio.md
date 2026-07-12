@@ -48,17 +48,39 @@ microphone activity or losing completed recordings.
 - A single retained utterance has a five-minute maximum. Reaching it fails the
   utterance visibly and does not upload the maximum-duration artifact as a
   successful recording.
-- A valid completed runtime artifact carries its current app-local file URL,
-  duration, and byte count. Before any provider request, the app maps that file
-  to a stable attempt-owned relative identifier and writes the identifier to
-  the minimal `PendingRecording` journal; the runtime URL is never the durable
-  identity.
+- A valid completed runtime artifact carries an opaque descriptor-bound capture
+  capability plus duration and byte count. Only the AVFoundation adapter sees
+  its transient app-local URL. Before any provider request, Persistence maps
+  the capability to a stable attempt-owned Pending relative identifier; the
+  runtime URL is never a durable or provider-facing identity.
 - The P2 handoff first publishes an app-private protected copy and then commits
   the strict single-record journal defined by `ios-history-and-storage.md`.
   Provider work receives the copy only after its local transcription UUID is
   durable. The recording service's source remains untouched until the complete
   handoff returns, so a local persistence failure cannot trigger provider work
   or destroy the only completed artifact.
+
+### P4D Capture Validity And Durable Finalization
+
+- A P4 foreground artifact is valid only when its canonical validated duration
+  is at least 300 milliseconds and strictly less than 300,000 milliseconds,
+  with a positive byte count below the Pending limit. The Persistence wire
+  format keeps its broader structural range for old and test data; P4D enforces
+  the product minimum before a source may become `completed-v1`.
+- Done below 300 milliseconds is `Too Short`: HoldType removes only the exact
+  active capture source, makes no Pending record or provider request, and keeps
+  the prior Latest Result unchanged. An interrupted partial follows recovery
+  only at or above 300 milliseconds; a shorter partial is removed.
+- Reaching 300,000 milliseconds is the existing maximum-duration failure, not a
+  successful partial. It is never uploaded or accepted through ordinary Retry.
+- The recorder writes only through the descriptor-bound capture-source owner in
+  `ios-history-and-storage.md`. A finalized source is durably marked completed
+  before it is copied to Pending. If process loss occurs in that gap, relaunch
+  offers Recover Recording or confirmed Discard and never auto-uploads it.
+- Normal same-process Done prepares `readyForTranscription` with the frozen
+  Settings snapshot. Explicit recovery prepares `awaitingRecovery` with current
+  compact transcription settings, then still requires a separate explicit
+  Retry. In both cases the provider sees only the protected Pending reader.
 
 ### P4 Foreground Preflight And Ownership
 
@@ -105,13 +127,68 @@ microphone activity or losing completed recordings.
 - Recording start/stop cues are short and non-verbal. Haptics/text state remain
   available when audio cues are muted by system behavior.
 - Calls, Siri, alarms, route loss, Bluetooth/AirPods changes, built-in mic mute,
-  lock, scene changes, and media-services reset produce explicit interruption
-  or recoverable failure state.
+  lock, scene changes, and media-services lost/reset produce explicit
+  interruption or recoverable failure state.
 - HoldType never continues capture invisibly after an interruption.
 - A route change never silently switches into a new recording attempt or
   duplicates the current one.
 - Deactivation occurs when capture ends, is cancelled, expires, fails, or is no
   longer needed for local playback/cues.
+
+### P4D Foreground Audio Configuration
+
+- P4D uses one process-owned `AVAudioSession` configured while inactive as
+  `playAndRecord`, mode `default`, with only `allowBluetoothHFP` and
+  `defaultToSpeaker`. This supports recorder input and start/stop cues; when no
+  accessory is active, cues use the built-in speaker rather than the receiver.
+- HoldType does not force a preferred input or call the transient speaker-port
+  override. iOS owns user route selection. Immediately before retained capture
+  begins, HoldType freezes the active input port UID, port type, and selected
+  input data-source ID when iOS exposes one for the attempt.
+- P4D does not enable `mixWithOthers`, `duckOthers`,
+  `interruptSpokenAudioAndMixWithOthers`, `allowBluetoothA2DP`, `allowAirPlay`,
+  `overrideMutedMicrophoneInterruption`, or the preference that suppresses
+  system-alert interruptions. It also leaves iOS 26 high-quality Bluetooth
+  recording and far-field input for a later availability-gated physical-device
+  decision.
+- HFP/AirPods input is eligible. During retained capture or its tail, a missing,
+  muted, or changed frozen input stops the attempt under the existing
+  valid-partial policy. An output-only route change may continue only when the
+  same frozen input tuple remains present and unmuted, the recorder still
+  reports active capture, and its input format, sample rate, channel count, and
+  I/O status remain valid. Any uncertainty or recorder/format failure stops
+  under the valid-partial policy. Route callbacks are serialized through the
+  process owner and rejected when their attempt token is stale.
+- HoldType observes the stable iOS 17 interruption, route-change, input-mute,
+  media-services-lost, and media-services-reset surfaces behind an adapter.
+  Interruption end never auto-resumes, even when iOS suggests resume. Media
+  services lost during arming cancels the attempt and retires its token. During
+  retained capture it immediately retires audio objects and the token, then
+  descriptor-validates the bytes already written: a valid partial of at least
+  300 milliseconds enters recovery, a short or invalid partial is removed, and
+  uncertain validation or removal preserves the exact source as blocked local
+  recovery. During finalization it preserves the current source or Pending
+  checkpoint and starts no provider. Media reset clears stale audio objects and
+  reconstructs them only for a later explicit Start.
+- Haptics and system sounds during recording remain disabled. Enabled boundary
+  haptics occur before retained capture or after recorder stop. The start cue
+  must finish or hit a two-second watchdog before recording begins; failure or
+  timeout stops its player and may continue only after scene, route, permission,
+  and attempt-token revalidation. The success stop cue plays only after the
+  recorder is closed. Cancel or interruption plays no success cue.
+- Session activation occurs only after the complete ordered preflight.
+  Deactivation first stops every recorder/player, then uses
+  `notifyOthersOnDeactivation` on every terminal path. HoldType does not promise
+  that the Ring/Silent switch suppresses enabled cues; the Voice & Recording cue
+  toggle is the reliable product control.
+- Finalization acquires at most one named `UIApplication` background assertion
+  before backgrounding can occur. Local recorder close, source completion,
+  protected-copy, and Pending-journal work have one ten-second monotonic
+  watchdog and the system expiration is an earlier deadline. The assertion is
+  always ended. Expiration preserves the exact source or Pending checkpoint,
+  starts no provider, and resumes only through foreground reconciliation. This
+  assertion never keeps the microphone alive and P4 declares no audio
+  background mode.
 
 ### P4 Foreground Lifecycle
 
@@ -126,9 +203,11 @@ microphone activity or losing completed recordings.
     any recorder or audio I/O already being prepared, deactivates
     `AVAudioSession`, retires the attempt token, rejects late callbacks, and
     returns inactive without retained capture or provider work;
-  - listening or a still-cancellable tail stops immediately; a valid partial is
-    protected as `awaitingRecovery` and is never uploaded automatically, while
-    an invalid partial is removed;
+  - listening or a still-cancellable tail stops immediately. A valid partial is
+    protected without automatic upload: source-only active/finalizing/completed
+    truth presents Recover Recording or Discard, while a successfully journaled
+    `awaitingRecovery` owner presents Retry or Discard. An invalid partial enters
+    cleanup-only discarding state;
   - already-stopped finalization may use only bounded system-granted execution
     to finish protecting local audio, but it never starts a new provider dispatch
     after the app is no longer foreground-active;
@@ -136,13 +215,22 @@ microphone activity or losing completed recordings.
     while iOS permits its bounded foreground transport. Suspension or process
     loss preserves explicit Retry-or-Discard recovery and never causes an
     automatic replay.
-- Returning to foreground reconciles durable truth and presents Retry or
-  Discard. It never restarts capture or provider work automatically.
-- Interruption, input-route loss or change, media-services reset, microphone
+- Returning to foreground reconciles durable truth and chooses the exact action
+  matrix rather than treating every journal as Retry. A positive-byte active,
+  finalizing, or completed source without Pending presents Recover Recording or
+  confirmed Discard. Preparing state with empty Pending inventory has the same
+  actions; exact resumable staging/final audio without a journal presents
+  Recover Recording only. A preparing source plus matching journal whose final
+  audio is directory-durably absent also presents Recover Recording only. A valid
+  `readyForTranscription` or `awaitingRecovery` Pending with valid audio presents
+  Retry or confirmed Discard; later Pending phases retain their Saving,
+  cancellation, or local-recovery actions. Foreground reconciliation never
+  restarts capture or provider work automatically.
+- Interruption, input-route loss or change, media-services lost, microphone
   revocation, and input mute use the same visible stop-and-recover policy during
   retained capture. An output-only route notification does not fail an attempt
-  when the active input remains unchanged and usable. Media-services reset
-  rebuilds audio objects only for a later explicit Start.
+  only when the complete continuation proof above remains true. Media-services
+  reset rebuilds audio objects only for a later explicit Start.
 
 ## Quick Session hypothesis
 
@@ -177,13 +265,16 @@ HoldType uses four distinct actions and never labels them all `Stop`:
   provider chain. In Quick Session, the armed session may return to `ready`
   after that attempt reaches a terminal result and time remains.
 - `Cancel Utterance` is available during `listening` and the still-cancellable
-  recording tail. It removes only the unfinished current artifact. In one-shot
-  mode it returns to idle; in Quick Session it returns to `ready` while time
-  remains. Once a completed artifact is journaled, this action is unavailable.
+  recording tail. It moves only the unfinished current artifact through durable
+  cleanup-only discarding state. In one-shot mode it returns to idle; in Quick
+  Session it returns to `ready` while time remains. Once a completed artifact is
+  journaled, this action is unavailable.
 - `Stop Voice Session` exists only for Quick Session. In `ready` it disarms
   immediately. During `listening` it stops capture and ends the session; a
-  valid partial is finalized only into Recover-or-Discard state and is not
-  uploaded automatically, while an invalid partial is removed. If an utterance
+  valid partial reaches only provider-free durable recovery: a source presents
+  Recover Recording or Discard, while an `awaitingRecovery` Pending presents
+  Retry or Discard. It is not uploaded automatically, and an invalid partial
+  enters discarding cleanup. If an utterance
   was already finalizing because of `Finish Utterance`, Stop disarms the
   session but lets that finalization/provider handoff continue. During
   `processing`, Stop ends the armed microphone/audio state but does not cancel
@@ -219,17 +310,35 @@ Full Access, none of these extension-to-app commands is available.
   destination confirmation, Pending-audio removal, or journal retirement
   presents `Saving Result` and `Retry Saving Result`. Provider work is already
   complete, so Cancel Processing is unavailable and Retry Saving resumes the
-  last local checkpoint without repeating it. `Recover Recording` appears only
-  when the coordinator proves that no accepted destination or ambiguous mutation
-  exists; that explicit action moves the exact Pending owner to Retry-or-Discard
-  without another provider request. Once a destination exists, local retirement
-  failure can retry only the exact remaining cleanup checkpoints.
+  last local checkpoint without repeating it. For an `outputDelivery` Pending
+  owner, `Recover Recording` appears only when the coordinator proves that no
+  accepted destination or ambiguous mutation exists; that explicit action moves
+  the exact Pending owner to Retry-or-Discard without another provider request.
+  Once a destination exists, local retirement failure can retry only the exact
+  remaining cleanup checkpoints.
 - While a new result is in `Saving Result`, Voice may also display the preceding
   confirmed, unexpired Latest Result. The new accepted bytes do not become
   Latest until atomic replacement is durably confirmed. A failed invisible
   replacement preserves the prior result; an uncertain replacement blocks Clear
   or another replacement until reconciled. A discarded, expired, or tombstoned
   predecessor is never restored as prior text.
+- A valid positive-byte `active-v1`, `finalizing-v1`, or `completed-v1` source
+  presents `Recover Recording` and confirmed `Discard`. Preparing state has both
+  actions only with empty Pending inventory. Recover Recording finishes the
+  source-to-Pending checkpoint as `awaitingRecovery` and starts no provider.
+- Valid resumable preparing state with exact staging/final audio but no journal
+  presents `Recover Recording` only. Discard is unavailable while any matching
+  or ambiguous Pending destination remains. Unknown or malformed source state
+  is preserved and presents a local recovery problem rather than a destructive
+  action.
+- A fresh exact zero-byte `active-v1` source presents confirmed `Discard` only;
+  it has no valid recording to Recover. The same exact source may be cleaned up
+  automatically only after the bounded one-hour rule.
+- A valid `preparing-pending-v1` source with a matching Pending journal but
+  directory-durably absent final audio presents `Recover Recording` only. The
+  action recreates and validates the exact protected audio, confirms the same
+  journal phase, and still starts no provider; ordinary Retry remains
+  unavailable until that local repair is durable.
 - Recoverable pending audio presents `Retry` and confirmed `Discard`. A new
   Start remains unavailable until one of those actions reaches a durable result.
 - Result-ready presents selectable final text, Copy, Share, Use in Practice,
@@ -456,13 +565,19 @@ session as inactive, and must not label setup-dependent behavior as ready.
 - Too-short, empty, missing, corrupt, or unsupported audio is not uploaded.
 - If journaling fails, HoldType preserves the protected artifact where possible,
   reports local recovery failure, and does not start provider work.
-- If the app is suspended after recording, the pending journal remains the
-  source of truth; relaunch offers explicit recovery rather than auto-upload.
+- If the app is suspended after recording, the furthest durable source or
+  Pending checkpoint remains authoritative. Source-only positive-byte active,
+  finalizing, completed, or empty-inventory preparing state offers Recover
+  Recording or Discard. Fresh zero-byte active is Discard-only. Preparing state
+  with exact resumable Pending audio offers Recover Recording only; a valid
+  `awaitingRecovery` Pending offers Retry or Discard. None auto-uploads.
 - An interruption or Quick Session expiry during `listening` stops capture. A
-  valid minimum-duration partial artifact is finalized and journaled for an
-  explicit Recover or Discard choice, but is not uploaded automatically. An
-  invalid/too-short partial is removed. The terminal outcome is `interrupted`
-  for the actual lifecycle interruption and `expired` for the Quick Session
+  valid minimum-duration partial first becomes a recoverable source and, only
+  if bounded local handoff completes, an `awaitingRecovery` Pending. The former
+  presents Recover Recording or Discard; the latter presents Retry or Discard.
+  An invalid/too-short partial enters cleanup-only discarding state. The
+  terminal outcome is `interrupted` for the actual lifecycle interruption and
+  `expired` for the Quick Session
   deadline; recovery actions remain separate from that reason.
 - Quick Session expiry in `ready` simply disarms the session. Expiry in
   `processing` stops audio and preserves the active provider/pending state;
