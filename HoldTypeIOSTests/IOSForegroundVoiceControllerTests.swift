@@ -125,12 +125,13 @@ struct IOSForegroundVoiceControllerTests {
             ),
             VoiceOperationCase(
                 observation: voiceObservation(
-                    recovery: .savingResult
+                    recovery: .savingResult,
+                    stage: .postProcessing
                 ),
                 action: .retrySavingResult,
                 operation: .retrySavingResult,
                 phase: .processing,
-                stage: .outputDelivery,
+                stage: .postProcessing,
                 actions: []
             ),
             VoiceOperationCase(
@@ -238,6 +239,28 @@ struct IOSForegroundVoiceControllerTests {
                 == .priorAvailableWhileSaving
         )
 
+        fixture.sendProgress(.processing(.postProcessing), at: 0)
+        #expect(controller.presentation.stage == .postProcessing)
+        #expect(
+            controller.presentation.availableActions
+                == [.cancelProcessing]
+        )
+
+        fixture.sendProgress(.processing(.outputDelivery), at: 0)
+        #expect(controller.presentation.stage == .outputDelivery)
+        #expect(controller.presentation.availableActions.isEmpty)
+        let outputDelivery = controller.presentation
+
+        fixture.sendProgress(.listening, at: 0)
+        fixture.sendProgress(.finalizing, at: 0)
+        fixture.sendProgress(.processing(.transcription), at: 0)
+        fixture.sendProgress(.processing(.postProcessing), at: 0)
+        fixture.sendProgress(
+            .processing(.recordingFinalization),
+            at: 0
+        )
+        #expect(controller.presentation == outputDelivery)
+
         fixture.resolveRun(
             at: 0,
             with: IOSForegroundVoiceResolution(
@@ -337,27 +360,48 @@ struct IOSForegroundVoiceControllerTests {
                 action: .cancelStart,
                 phase: .arming,
                 activeStage: nil,
+                resolutionRecovery: .pendingRetryOrDiscard,
                 terminalRecovery: .none,
                 terminalStage: nil,
-                terminalOutcome: nil
+                resolutionOutcome: .recoverableFailure,
+                terminalOutcome: nil,
+                terminalFailure: nil
             ),
             VoiceCancellationCase(
                 progress: .listening,
                 action: .cancelUtterance,
                 phase: .listening,
                 activeStage: nil,
+                resolutionRecovery: .pendingRetryOrDiscard,
                 terminalRecovery: .none,
                 terminalStage: nil,
-                terminalOutcome: nil
+                resolutionOutcome: .recoverableFailure,
+                terminalOutcome: nil,
+                terminalFailure: nil
             ),
             VoiceCancellationCase(
                 progress: .processing(.transcription),
                 action: .cancelProcessing,
                 phase: .processing,
                 activeStage: .transcription,
+                resolutionRecovery: .pendingRetryOrDiscard,
                 terminalRecovery: .pendingRetryOrDiscard,
                 terminalStage: .postProcessing,
-                terminalOutcome: .recoverableFailure
+                resolutionOutcome: nil,
+                terminalOutcome: .recoverableFailure,
+                terminalFailure: .operationFailed
+            ),
+            VoiceCancellationCase(
+                progress: .processing(.postProcessing),
+                action: .cancelProcessing,
+                phase: .processing,
+                activeStage: .postProcessing,
+                resolutionRecovery: .savingResult,
+                terminalRecovery: .savingResult,
+                terminalStage: .postProcessing,
+                resolutionOutcome: .recoverableFailure,
+                terminalOutcome: nil,
+                terminalFailure: .operationFailed
             ),
         ]
 
@@ -402,11 +446,12 @@ struct IOSForegroundVoiceControllerTests {
                 at: 0,
                 with: IOSForegroundVoiceResolution(
                     observation: voiceObservation(
-                        recovery: scenario.terminalRecovery,
-                        latest: .priorAvailableWhileSaving
+                        recovery: scenario.resolutionRecovery,
+                        stage: .postProcessing,
+                        latest: .available
                     ),
                     stage: .postProcessing,
-                    outcome: scenario.terminalOutcome,
+                    outcome: scenario.resolutionOutcome,
                     failure: .operationFailed
                 )
             )
@@ -421,6 +466,18 @@ struct IOSForegroundVoiceControllerTests {
             #expect(
                 controller.presentation.outcome
                     == scenario.terminalOutcome
+            )
+            #expect(
+                controller.presentation.failure
+                    == scenario.terminalFailure
+            )
+            #expect(
+                controller.presentation.recovery
+                    == scenario.terminalRecovery
+            )
+            #expect(
+                controller.presentation.latestAvailability
+                    == .priorAvailableWhileSaving
             )
             #expect(fixture.cancellationAuthorities.count == 1)
         }
@@ -477,9 +534,9 @@ struct IOSForegroundVoiceControllerTests {
             ),
             VoiceTerminalCase(
                 recovery: .savingResult,
-                reportedStage: .transcription,
-                outcome: .recoverableFailure,
-                expectedStage: .outputDelivery
+                reportedStage: .postProcessing,
+                outcome: nil,
+                expectedStage: .postProcessing
             ),
             VoiceTerminalCase(
                 recovery: .localCheckpoint(.postProcessing),
@@ -496,7 +553,7 @@ struct IOSForegroundVoiceControllerTests {
             VoiceTerminalCase(
                 recovery: .blocked,
                 reportedStage: .transcription,
-                outcome: .recoverableFailure,
+                outcome: nil,
                 expectedStage: nil
             ),
             VoiceTerminalCase(
@@ -618,17 +675,19 @@ struct IOSForegroundVoiceControllerTests {
             ),
             VoiceActionCase(
                 observation: voiceObservation(
-                    recovery: .pendingRetryOrDiscard
+                    recovery: .pendingRetryOrDiscard,
+                    stage: .transcription
                 ),
                 actions: [.retryPending, .discard],
-                stage: nil
+                stage: .transcription
             ),
             VoiceActionCase(
                 observation: voiceObservation(
-                    recovery: .savingResult
+                    recovery: .savingResult,
+                    stage: .postProcessing
                 ),
                 actions: [.retrySavingResult],
-                stage: .outputDelivery
+                stage: .postProcessing
             ),
             VoiceActionCase(
                 observation: voiceObservation(
@@ -670,6 +729,12 @@ struct IOSForegroundVoiceControllerTests {
                     == testCase.actions
             )
             #expect(controller.presentation.stage == testCase.stage)
+            #expect(
+                controller.presentation.outcome
+                    == activationOutcome(
+                        for: testCase.observation.recovery
+                    )
+            )
         }
     }
 
@@ -855,15 +920,18 @@ private struct VoiceCancellationCase {
     let action: IOSForegroundVoiceAction
     let phase: VoiceWorkPhase
     let activeStage: VoiceAttemptStage?
+    let resolutionRecovery: IOSForegroundVoiceRecovery
     let terminalRecovery: IOSForegroundVoiceRecovery
     let terminalStage: VoiceAttemptStage?
+    let resolutionOutcome: VoiceAttemptOutcome?
     let terminalOutcome: VoiceAttemptOutcome?
+    let terminalFailure: IOSForegroundVoiceFailure?
 }
 
 private struct VoiceTerminalCase {
     let recovery: IOSForegroundVoiceRecovery
     let reportedStage: VoiceAttemptStage
-    let outcome: VoiceAttemptOutcome
+    let outcome: VoiceAttemptOutcome?
     let expectedStage: VoiceAttemptStage?
 }
 
@@ -997,15 +1065,33 @@ private final class IOSForegroundVoiceClientFixture {
 private func voiceObservation(
     setup: IOSForegroundVoiceSetup = .ready,
     recovery: IOSForegroundVoiceRecovery = .none,
+    stage: VoiceAttemptStage? = nil,
     latest: IOSForegroundVoiceLatestAvailability = .absent,
     translationAvailable: Bool = false
 ) -> IOSForegroundVoiceObservation {
     IOSForegroundVoiceObservation(
         setup: setup,
         recovery: recovery,
+        stage: stage,
         latestAvailability: latest,
         translationAvailable: translationAvailable
     )
+}
+
+private func activationOutcome(
+    for recovery: IOSForegroundVoiceRecovery
+) -> VoiceAttemptOutcome? {
+    switch recovery {
+    case .pendingRetryOrDiscard, .localCheckpoint:
+        return .recoverableFailure
+    case .none,
+         .captureRecoverOrDiscard,
+         .captureRecoverOnly,
+         .captureDiscardOnly,
+         .savingResult,
+         .blocked:
+        return nil
+    }
 }
 
 @MainActor

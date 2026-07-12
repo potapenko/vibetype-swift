@@ -89,17 +89,20 @@ struct IOSForegroundVoicePresentation: Equatable, Sendable {
 struct IOSForegroundVoiceObservation: Equatable, Sendable {
     let setup: IOSForegroundVoiceSetup
     let recovery: IOSForegroundVoiceRecovery
+    let stage: VoiceAttemptStage?
     let latestAvailability: IOSForegroundVoiceLatestAvailability
     let translationAvailable: Bool
 
     init(
         setup: IOSForegroundVoiceSetup,
         recovery: IOSForegroundVoiceRecovery,
+        stage: VoiceAttemptStage? = nil,
         latestAvailability: IOSForegroundVoiceLatestAvailability,
         translationAvailable: Bool = false
     ) {
         self.setup = setup
         self.recovery = recovery
+        self.stage = stage
         self.latestAvailability = latestAvailability
         self.translationAvailable = translationAvailable
     }
@@ -194,11 +197,17 @@ final class IOSForegroundVoiceController {
     private var activeBaselineLatestAvailability:
         IOSForegroundVoiceLatestAvailability?
     @ObservationIgnored
+    private var activeOperation: IOSForegroundVoiceOperation?
+    @ObservationIgnored
+    private var activeProgressPosition: ProgressPosition?
+    @ObservationIgnored
     private var presentationRevision: UInt64 = 0
     @ObservationIgnored
     private var nextAuthorityValue: UInt64 = 0
     @ObservationIgnored
     private var cancellationRequested = false
+    @ObservationIgnored
+    private var cancellationKind: CancellationKind?
     @ObservationIgnored
     private var finishRequested = false
 
@@ -249,8 +258,10 @@ final class IOSForegroundVoiceController {
             self.activeWork = nil
             self.apply(
                 observation,
-                stage: nil,
-                outcome: nil,
+                stage: observation.stage,
+                outcome: self.activationOutcome(
+                    for: observation.recovery
+                ),
                 failure: nil
             )
         }
@@ -286,8 +297,10 @@ final class IOSForegroundVoiceController {
             begin(.retryLocalCheckpoint)
         case .finishUtterance:
             finishCurrentUtterance()
-        case .cancelStart, .cancelUtterance, .cancelProcessing:
-            cancelCurrentOperation()
+        case .cancelStart, .cancelUtterance:
+            cancelCurrentOperation(kind: .ordinary)
+        case .cancelProcessing:
+            cancelCurrentOperation(kind: .processing)
         }
         return .accepted
     }
@@ -298,11 +311,17 @@ final class IOSForegroundVoiceController {
         let authority = IOSForegroundVoiceAuthority(value: nextSerial())
         activeAuthority = authority
         activeBaselineLatestAvailability = presentation.latestAvailability
+        activeOperation = operation
         activeWork = .primary(authority)
         cancellationRequested = false
+        cancellationKind = nil
         finishRequested = false
 
         let initial = initialPresentation(for: operation)
+        activeProgressPosition = initialProgressPosition(
+            for: operation,
+            presentation: initial
+        )
         publish(
             phase: initial.phase,
             stage: initial.stage,
@@ -355,12 +374,13 @@ final class IOSForegroundVoiceController {
         )
     }
 
-    private func cancelCurrentOperation() {
+    private func cancelCurrentOperation(kind: CancellationKind) {
         guard !cancellationRequested,
               case .primary? = activeWork else {
             return
         }
         cancellationRequested = true
+        cancellationKind = kind
         publish(
             phase: presentation.phase,
             stage: presentation.stage,
@@ -379,26 +399,17 @@ final class IOSForegroundVoiceController {
     ) {
         guard activeWork == .primary(authority),
               activeAuthority == authority,
-              !cancellationRequested else {
+              !cancellationRequested,
+              let projection = progressProjection(for: progress),
+              let activeProgressPosition,
+              projection.position.rawValue
+                > activeProgressPosition.rawValue else {
             return
         }
-
-        let phase: VoiceWorkPhase
-        let stage: VoiceAttemptStage?
-        switch progress {
-        case .listening:
-            phase = .listening
-            stage = nil
-        case .finalizing:
-            phase = .finalizing
-            stage = .recordingFinalization
-        case .processing(let reportedStage):
-            phase = .processing
-            stage = reportedStage
-        }
+        self.activeProgressPosition = projection.position
         publish(
-            phase: phase,
-            stage: stage,
+            phase: projection.phase,
+            stage: projection.stage,
             outcome: presentation.outcome,
             setup: presentation.setup,
             failure: nil,
@@ -415,37 +426,35 @@ final class IOSForegroundVoiceController {
               activeAuthority == authority else {
             return
         }
-        let wasCancelled = cancellationRequested
-        let observation: IOSForegroundVoiceObservation
-        let outcome: VoiceAttemptOutcome?
-        let failure: IOSForegroundVoiceFailure?
-        if wasCancelled, resolution.outcome == .resultReady {
-            observation = IOSForegroundVoiceObservation(
-                setup: presentation.setup,
-                recovery: .blocked,
-                latestAvailability:
-                    activeBaselineLatestAvailability
-                    ?? presentation.latestAvailability,
-                translationAvailable: false
+        let projection: TerminalProjection
+        if let cancellationKind {
+            projection = cancelledProjection(
+                resolution,
+                kind: cancellationKind
             )
-            outcome = nil
-            failure = .localRecovery
         } else {
-            observation = resolution.observation
-            outcome = resolution.outcome
-            failure = resolution.failure
+            projection = TerminalProjection(
+                observation: resolution.observation,
+                stage: resolution.stage
+                    ?? resolution.observation.stage,
+                outcome: resolution.outcome,
+                failure: resolution.failure
+            )
         }
         activeTask = nil
         activeWork = nil
         activeAuthority = nil
         activeBaselineLatestAvailability = nil
+        activeOperation = nil
+        activeProgressPosition = nil
         cancellationRequested = false
+        cancellationKind = nil
         finishRequested = false
         apply(
-            observation,
-            stage: resolution.stage,
-            outcome: outcome,
-            failure: failure
+            projection.observation,
+            stage: projection.stage,
+            outcome: projection.outcome,
+            failure: projection.failure
         )
     }
 
@@ -523,7 +532,8 @@ final class IOSForegroundVoiceController {
                     ? [.cancelUtterance]
                     : [.finishUtterance, .cancelUtterance]
             case .processing:
-                guard stage == .transcription
+                guard processingCancellationIsAvailable,
+                      stage == .transcription
                         || stage == .postProcessing else {
                     return []
                 }
@@ -569,7 +579,7 @@ final class IOSForegroundVoiceController {
         case .recoverRecording, .discard:
             (.finalizing, .recordingFinalization)
         case .retrySavingResult:
-            (.processing, .outputDelivery)
+            (.processing, presentation.stage)
         case .retryLocalCheckpoint:
             (.processing, nil)
         }
@@ -592,10 +602,239 @@ final class IOSForegroundVoiceController {
              .pendingRetryOrDiscard:
             return reportedStage
         case .savingResult:
-            return .outputDelivery
+            return reportedStage
         case .localCheckpoint(let stage):
             return stage
         case .none, .blocked:
+            return nil
+        }
+    }
+
+    private func activationOutcome(
+        for recovery: IOSForegroundVoiceRecovery
+    ) -> VoiceAttemptOutcome? {
+        switch recovery {
+        case .pendingRetryOrDiscard, .localCheckpoint:
+            return .recoverableFailure
+        case .none,
+             .captureRecoverOrDiscard,
+             .captureRecoverOnly,
+             .captureDiscardOnly,
+             .savingResult,
+             .blocked:
+            return nil
+        }
+    }
+
+    private func cancelledProjection(
+        _ resolution: IOSForegroundVoiceResolution,
+        kind: CancellationKind
+    ) -> TerminalProjection {
+        let latest = activeBaselineLatestAvailability
+            ?? presentation.latestAvailability
+        if resolution.outcome == .resultReady {
+            return TerminalProjection(
+                observation: IOSForegroundVoiceObservation(
+                    setup: presentation.setup,
+                    recovery: .blocked,
+                    latestAvailability: latest
+                ),
+                stage: nil,
+                outcome: nil,
+                failure: .localRecovery
+            )
+        }
+
+        switch kind {
+        case .ordinary:
+            return TerminalProjection(
+                observation: IOSForegroundVoiceObservation(
+                    setup: resolution.observation.setup,
+                    recovery: .none,
+                    latestAvailability: latest,
+                    translationAvailable:
+                        resolution.observation.translationAvailable
+                ),
+                stage: nil,
+                outcome: nil,
+                failure: nil
+            )
+        case .processing:
+            return cancelledProcessingProjection(
+                resolution,
+                latestAvailability: latest
+            )
+        }
+    }
+
+    private func cancelledProcessingProjection(
+        _ resolution: IOSForegroundVoiceResolution,
+        latestAvailability: IOSForegroundVoiceLatestAvailability
+    ) -> TerminalProjection {
+        let reportedStage = resolution.stage
+            ?? resolution.observation.stage
+        let setup = resolution.observation.setup
+        let translationAvailable =
+            resolution.observation.translationAvailable
+
+        switch resolution.observation.recovery {
+        case .pendingRetryOrDiscard:
+            return TerminalProjection(
+                observation: IOSForegroundVoiceObservation(
+                    setup: setup,
+                    recovery: .pendingRetryOrDiscard,
+                    stage: reportedStage,
+                    latestAvailability: latestAvailability,
+                    translationAvailable: translationAvailable
+                ),
+                stage: reportedStage,
+                outcome: .recoverableFailure,
+                failure: resolution.failure
+            )
+        case .localCheckpoint(let retainedStage):
+            return TerminalProjection(
+                observation: IOSForegroundVoiceObservation(
+                    setup: setup,
+                    recovery: .localCheckpoint(retainedStage),
+                    stage: retainedStage,
+                    latestAvailability: latestAvailability,
+                    translationAvailable: translationAvailable
+                ),
+                stage: retainedStage,
+                outcome: .recoverableFailure,
+                failure: resolution.failure
+            )
+        case .savingResult:
+            return TerminalProjection(
+                observation: IOSForegroundVoiceObservation(
+                    setup: setup,
+                    recovery: .savingResult,
+                    stage: reportedStage,
+                    latestAvailability: latestAvailability,
+                    translationAvailable: translationAvailable
+                ),
+                stage: reportedStage,
+                outcome: nil,
+                failure: resolution.failure
+            )
+        case .blocked:
+            return TerminalProjection(
+                observation: IOSForegroundVoiceObservation(
+                    setup: setup,
+                    recovery: .blocked,
+                    latestAvailability: latestAvailability,
+                    translationAvailable: translationAvailable
+                ),
+                stage: nil,
+                outcome: nil,
+                failure: resolution.failure ?? .localRecovery
+            )
+        case .none:
+            return TerminalProjection(
+                observation: IOSForegroundVoiceObservation(
+                    setup: setup,
+                    recovery: .none,
+                    latestAvailability: latestAvailability,
+                    translationAvailable: translationAvailable
+                ),
+                stage: nil,
+                outcome: nil,
+                failure: nil
+            )
+        case .captureRecoverOrDiscard,
+             .captureRecoverOnly,
+             .captureDiscardOnly:
+            return TerminalProjection(
+                observation: IOSForegroundVoiceObservation(
+                    setup: setup,
+                    recovery: .blocked,
+                    latestAvailability: latestAvailability,
+                    translationAvailable: translationAvailable
+                ),
+                stage: nil,
+                outcome: nil,
+                failure: .localRecovery
+            )
+        }
+    }
+
+    private var processingCancellationIsAvailable: Bool {
+        guard let activeOperation else { return false }
+        switch activeOperation {
+        case .start, .retryPending, .retryLocalCheckpoint:
+            return true
+        case .recoverRecording, .discard, .retrySavingResult:
+            return false
+        }
+    }
+
+    private func initialProgressPosition(
+        for operation: IOSForegroundVoiceOperation,
+        presentation: (phase: VoiceWorkPhase, stage: VoiceAttemptStage?)
+    ) -> ProgressPosition {
+        if operation == .retrySavingResult {
+            return presentation.stage == .outputDelivery
+                ? .outputDelivery
+                : .postProcessing
+        }
+
+        switch presentation.phase {
+        case .arming:
+            return .arming
+        case .listening:
+            return .listening
+        case .finalizing:
+            return .finalizing
+        case .processing:
+            return progressPosition(for: presentation.stage)
+                ?? .finalizing
+        case .inactive, .ready:
+            return .arming
+        }
+    }
+
+    private func progressProjection(
+        for progress: IOSForegroundVoiceProgress
+    ) -> ProgressProjection? {
+        switch progress {
+        case .listening:
+            return ProgressProjection(
+                position: .listening,
+                phase: .listening,
+                stage: nil
+            )
+        case .finalizing:
+            return ProgressProjection(
+                position: .finalizing,
+                phase: .finalizing,
+                stage: .recordingFinalization
+            )
+        case .processing(let stage):
+            guard let position = progressPosition(for: stage),
+                  stage != .recordingFinalization else {
+                return nil
+            }
+            return ProgressProjection(
+                position: position,
+                phase: .processing,
+                stage: stage
+            )
+        }
+    }
+
+    private func progressPosition(
+        for stage: VoiceAttemptStage?
+    ) -> ProgressPosition? {
+        switch stage {
+        case .recordingFinalization:
+            return .finalizing
+        case .transcription:
+            return .transcription
+        case .postProcessing:
+            return .postProcessing
+        case .outputDelivery:
+            return .outputDelivery
+        case nil:
             return nil
         }
     }
@@ -608,6 +847,33 @@ final class IOSForegroundVoiceController {
     private enum ActiveWork: Equatable {
         case activation(UInt64)
         case primary(IOSForegroundVoiceAuthority)
+    }
+
+    private enum CancellationKind {
+        case ordinary
+        case processing
+    }
+
+    private enum ProgressPosition: Int {
+        case arming
+        case listening
+        case finalizing
+        case transcription
+        case postProcessing
+        case outputDelivery
+    }
+
+    private struct ProgressProjection {
+        let position: ProgressPosition
+        let phase: VoiceWorkPhase
+        let stage: VoiceAttemptStage?
+    }
+
+    private struct TerminalProjection {
+        let observation: IOSForegroundVoiceObservation
+        let stage: VoiceAttemptStage?
+        let outcome: VoiceAttemptOutcome?
+        let failure: IOSForegroundVoiceFailure?
     }
 }
 
