@@ -407,6 +407,10 @@ protocol IOSPendingRecordingPOSIXAdapter: Sendable {
         name: String,
         maximumByteCount: Int
     ) -> IOSPendingRecordingPOSIXResult<[UInt8]>
+    func removeExtendedAttribute(
+        fileDescriptor: Int32,
+        name: String
+    ) -> IOSPendingRecordingPOSIXResult<Void>
     func setProtectionClass(fileDescriptor: Int32, protectionClass: Int32)
         -> IOSPendingRecordingPOSIXResult<Void>
     func protectionClass(fileDescriptor: Int32)
@@ -427,6 +431,13 @@ protocol IOSPendingRecordingPOSIXAdapter: Sendable {
 }
 
 extension IOSPendingRecordingPOSIXAdapter {
+    func removeExtendedAttribute(
+        fileDescriptor: Int32,
+        name: String
+    ) -> IOSPendingRecordingPOSIXResult<Void> {
+        .failure(ENOTSUP)
+    }
+
     func readAt(
         fileDescriptor: Int32,
         buffer: UnsafeMutableRawPointer,
@@ -603,6 +614,16 @@ struct DarwinIOSPendingRecordingPOSIXAdapter: IOSPendingRecordingPOSIXAdapter {
         }
         guard result >= 0 else { return .failure(errno) }
         return .success(Array(bytes.prefix(result)))
+    }
+
+    func removeExtendedAttribute(
+        fileDescriptor: Int32,
+        name: String
+    ) -> IOSPendingRecordingPOSIXResult<Void> {
+        let result = name.withCString {
+            Darwin.fremovexattr(fileDescriptor, $0, 0)
+        }
+        return result == 0 ? .success(()) : .failure(errno)
     }
 
     func setProtectionClass(
@@ -1047,10 +1068,10 @@ final class FoundationIOSPendingRecordingAudioFileSystem:
     private static let audioMarkerName =
         "com.holdtype.ios.pending-recording-audio"
     private static let audioMarkerValue = Array("v1".utf8)
-    private static let completeProtectionClass: Int32 = 1
-    private static let backupExclusionAttributeName =
+    static let completeProtectionClass: Int32 = 1
+    static let backupExclusionAttributeName =
         "com.apple.metadata:com_apple_backup_excludeItem"
-    private static let backupExclusionAttributeValue: [UInt8] = [
+    static let backupExclusionAttributeValue: [UInt8] = [
         0x62, 0x70, 0x6C, 0x69, 0x73, 0x74, 0x30, 0x30,
         0x5F, 0x10, 0x11, 0x63, 0x6F, 0x6D, 0x2E, 0x61,
         0x70, 0x70, 0x6C, 0x65, 0x2E, 0x62, 0x61, 0x63,

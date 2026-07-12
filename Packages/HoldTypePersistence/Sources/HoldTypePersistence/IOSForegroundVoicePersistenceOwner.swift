@@ -45,12 +45,14 @@ extension IOSForegroundVoiceTranscriptionDispatch:
 public struct IOSForegroundVoicePersistenceOwner: Sendable {
     private let pendingRecordingStore: IOSPendingRecordingStore
     private let acceptedOutputPersistence: IOSForegroundVoicePersistence
+    private let captureSourceOwner: IOSForegroundVoiceCaptureSourceOwner?
 
     public init(applicationSupportDirectoryURL: URL) {
         let registry = IOSAcceptedHistoryCoordinatorProcessContextRegistry
             .shared
         let context = registry.context(for: applicationSupportDirectoryURL)
         pendingRecordingStore = context.pendingRecordingStore
+        captureSourceOwner = context.foregroundVoiceCaptureSourceOwner
         acceptedOutputPersistence = IOSForegroundVoicePersistence(
             applicationSupportDirectoryURL: applicationSupportDirectoryURL,
             registry: registry,
@@ -64,6 +66,33 @@ public struct IOSForegroundVoicePersistenceOwner: Sendable {
     ) {
         self.pendingRecordingStore = pendingRecordingStore
         self.acceptedOutputPersistence = acceptedOutputPersistence
+        captureSourceOwner = nil
+    }
+
+    public func createCapture(
+        attemptID: UUID,
+        outputIntent: DictationOutputIntent
+    ) async throws -> IOSForegroundVoiceCaptureSourceLease {
+        guard let captureSourceOwner else {
+            throw IOSForegroundVoiceCaptureSourceError.namespaceUnavailable
+        }
+        return try await captureSourceOwner.createCapture(
+            attemptID: attemptID,
+            outputIntent: outputIntent
+        )
+    }
+
+    public func reconcileCaptureSourcesAtLaunch() async
+        -> IOSForegroundVoiceCaptureRecoveryObservation {
+        guard let captureSourceOwner else {
+            return IOSForegroundVoiceCaptureRecoveryObservation(
+                status: .blockedUnknown,
+                examinedEntryCount: 0,
+                removedEntryCount: 0,
+                removedLogicalByteCount: 0
+            )
+        }
+        return await captureSourceOwner.reconcileCaptureSourcesAtLaunch()
     }
 
     public func prepare(

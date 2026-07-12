@@ -2564,7 +2564,7 @@ private final class BlockingSecondPendingRecordingMediaValidator:
     }
 }
 
-private final class SimulatedPendingRecordingPOSIXAdapter:
+final class SimulatedPendingRecordingPOSIXAdapter:
     IOSPendingRecordingPOSIXAdapter,
     @unchecked Sendable {
     private final class Node {
@@ -2709,6 +2709,25 @@ private final class SimulatedPendingRecordingPOSIXAdapter:
             return node
         }
 
+        func captureDirectory(create: Bool) -> Node? {
+            var node = applicationSupportNode
+            for name in ["HoldType", "Recordings", "Capture"] {
+                if let child = node.children[name] {
+                    node = child
+                } else if create {
+                    let child = makeNode(
+                        kind: .directory,
+                        mode: S_IFDIR | mode_t(0o700)
+                    )
+                    node.children[name] = child
+                    node = child
+                } else {
+                    return nil
+                }
+            }
+            return node
+        }
+
         func popFailure(_ operation: String) -> Int32? {
             guard var values = failures[operation], !values.isEmpty else {
                 return nil
@@ -2783,6 +2802,144 @@ private final class SimulatedPendingRecordingPOSIXAdapter:
     var didUseTransientPreadReplacement: Bool {
         lock.withLock { state.didUseTransientPreadReplacement }
     }
+    var captureNames: [String] {
+        lock.withLock {
+            state.captureDirectory(create: false)?.children.keys.sorted() ?? []
+        }
+    }
+    var captureBytes: [UInt8]? {
+        lock.withLock {
+            state.captureDirectory(create: false)?.children.first(where: {
+                $0.key.hasPrefix("capture-v1-")
+            })?.value.bytes
+        }
+    }
+    var capturePhase: [UInt8]? {
+        captureAttribute(named: "com.holdtype.ios.capture-source-phase")
+    }
+    var captureModificationSeconds: Int64? {
+        lock.withLock {
+            state.captureDirectory(create: false)?.children.first(where: {
+                $0.key.hasPrefix("capture-v1-")
+            }).map { Int64($0.value.version) }
+        }
+    }
+    var captureCreationIntent: [UInt8]? {
+        lock.withLock {
+            state.captureDirectory(create: false)?.extendedAttributes[
+                "com.holdtype.ios.capture-source-creation-intent"
+            ]
+        }
+    }
+
+    func captureAttribute(named name: String) -> [UInt8]? {
+        lock.withLock {
+            state.captureDirectory(create: false)?.children.first(where: {
+                $0.key.hasPrefix("capture-v1-")
+            })?.value.extendedAttributes[name]
+        }
+    }
+
+    func writeCaptureBytes(_ bytes: [UInt8]) {
+        lock.withLock {
+            guard let node = state.captureDirectory(create: false)?.children
+                .first(where: { $0.key.hasPrefix("capture-v1-") })?.value else {
+                return
+            }
+            node.bytes = bytes
+            node.version += 1
+        }
+    }
+
+    func replaceCapturePath(with bytes: [UInt8]) {
+        lock.withLock {
+            guard let capture = state.captureDirectory(create: false),
+                  let entry = capture.children.first(where: {
+                      $0.key.hasPrefix("capture-v1-")
+                  }) else {
+                return
+            }
+            capture.children[entry.key] = state.makeNode(
+                kind: .file,
+                mode: S_IFREG | mode_t(0o600),
+                bytes: bytes
+            )
+        }
+    }
+
+    func setCaptureMode(_ mode: mode_t) {
+        lock.withLock {
+            guard let node = state.captureDirectory(create: false)?.children
+                .first(where: { $0.key.hasPrefix("capture-v1-") })?.value else {
+                return
+            }
+            node.mode = S_IFREG | mode
+        }
+    }
+
+    func setCaptureAttribute(named name: String, value: [UInt8]?) {
+        lock.withLock {
+            guard let node = state.captureDirectory(create: false)?.children
+                .first(where: { $0.key.hasPrefix("capture-v1-") })?.value else {
+                return
+            }
+            node.extendedAttributes[name] = value
+        }
+    }
+
+    func setCaptureNamespaceAttribute(named name: String, value: [UInt8]?) {
+        lock.withLock {
+            guard let capture = state.captureDirectory(create: true) else { return }
+            capture.extendedAttributes[name] = value
+        }
+    }
+
+    func movePublishedCaptureToHiddenName(
+        attemptID: UUID,
+        format: IOSPendingRecordingAudioFormat
+    ) {
+        lock.withLock {
+            guard let capture = state.captureDirectory(create: false) else { return }
+            let suffix = format == .m4a ? "m4a" : "wav"
+            let uuid = attemptID.uuidString.lowercased()
+            let finalName = "capture-v1-\(uuid).\(suffix)"
+            let hiddenName = ".capture-source-creating-v1-\(uuid).\(suffix)"
+            guard let node = capture.children.removeValue(forKey: finalName) else {
+                return
+            }
+            capture.children[hiddenName] = node
+        }
+    }
+
+    func replaceCaptureNamespace() {
+        lock.withLock {
+            guard let holdType = state.applicationSupportNode.children["HoldType"],
+                  let recordings = holdType.children["Recordings"] else {
+                return
+            }
+            recordings.children["Capture"] = state.makeNode(
+                kind: .directory,
+                mode: S_IFDIR | mode_t(0o700)
+            )
+        }
+    }
+
+    func installRecreatedCapturePath(
+        attemptID: UUID,
+        format: IOSPendingRecordingAudioFormat,
+        bytes: [UInt8]
+    ) {
+        lock.withLock {
+            guard let capture = state.captureDirectory(create: false) else { return }
+            let suffix = format == .m4a ? "m4a" : "wav"
+            let name = "capture-v1-\(attemptID.uuidString.lowercased()).\(suffix)"
+            capture.children[name] = state.makeNode(
+                kind: .file,
+                mode: S_IFREG | mode_t(0o600),
+                bytes: bytes
+            )
+        }
+    }
 
     func transientlyReplacePublishedPathDuringNextPread(
         with bytes: [UInt8]
@@ -2792,6 +2949,10 @@ private final class SimulatedPendingRecordingPOSIXAdapter:
 
     func failNext(_ operation: String, errors: [Int32]) {
         lock.withLock { state.failures[operation] = errors }
+    }
+
+    func resetEvents() {
+        lock.withLock { state.events.removeAll(keepingCapacity: true) }
     }
 
     func failNextUnlinkAfterCommit(with errorCode: Int32) {
@@ -2970,6 +3131,12 @@ private final class SimulatedPendingRecordingPOSIXAdapter:
                     return .failure(ENOENT)
                 }
                 return .success(Self.makeStatus(pending))
+            case state.applicationSupportPath
+                + "/HoldType/Recordings/Capture":
+                guard let capture = state.captureDirectory(create: false) else {
+                    return .failure(ENOENT)
+                }
+                return .success(Self.makeStatus(capture))
             default:
                 return .failure(ENOENT)
             }
@@ -3191,6 +3358,9 @@ private final class SimulatedPendingRecordingPOSIXAdapter:
             if flags & XATTR_CREATE != 0, node.extendedAttributes[name] != nil {
                 return .failure(EEXIST)
             }
+            if flags & XATTR_REPLACE != 0, node.extendedAttributes[name] == nil {
+                return .failure(ENOATTR)
+            }
             node.extendedAttributes[name] = value
             return .success(())
         }
@@ -3209,6 +3379,25 @@ private final class SimulatedPendingRecordingPOSIXAdapter:
             }
             guard value.count <= maximumByteCount else { return .failure(ERANGE) }
             return .success(value)
+        }
+    }
+
+    func removeExtendedAttribute(
+        fileDescriptor: Int32,
+        name: String
+    ) -> IOSPendingRecordingPOSIXResult<Void> {
+        lock.withLock {
+            state.events.append("removexattr:\(name)")
+            if let failure = state.popFailure("removeXattr") {
+                return .failure(failure)
+            }
+            guard let node = state.descriptors[fileDescriptor]?.node else {
+                return .failure(EBADF)
+            }
+            guard node.extendedAttributes.removeValue(forKey: name) != nil else {
+                return .failure(ENOATTR)
+            }
+            return .success(())
         }
     }
 
@@ -3357,6 +3546,7 @@ private final class SimulatedPendingRecordingPOSIXAdapter:
         value.st_size = off_t(node.bytes.count)
         value.st_mtimespec = timespec(tv_sec: node.version, tv_nsec: 0)
         value.st_ctimespec = timespec(tv_sec: node.version, tv_nsec: 0)
+        value.st_gen = 1
         return value
     }
 

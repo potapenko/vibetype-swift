@@ -86,6 +86,8 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
     let pendingRecordingStoreIdentity: IOSPendingRecordingStoreIdentity
     let pendingRecordingMediaValidationWorkerGate:
         AudioToolboxMediaValidationWorkerGate
+    let foregroundVoiceCaptureSourceOwner:
+        IOSForegroundVoiceCaptureSourceOwner
     let failedHistoryMutationInterlock: IOSFailedHistoryMutationInterlock
     let policyStore: IOSHistoryPolicyStore
     let pendingRecordingStore: IOSPendingRecordingStore
@@ -168,6 +170,13 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
         self.pendingRecordingStoreIdentity = pendingRecordingStoreIdentity
         self.pendingRecordingMediaValidationWorkerGate =
             pendingRecordingMediaValidationWorkerGate
+        foregroundVoiceCaptureSourceOwner =
+            IOSForegroundVoiceCaptureSourceOwner(
+                applicationSupportDirectoryURL:
+                    applicationSupportDirectoryURL,
+                mediaValidationWorkerGate:
+                    pendingRecordingMediaValidationWorkerGate
+            )
         self.failedHistoryMutationInterlock =
             failedHistoryMutationInterlock
         ownerIdentity = capabilityOwnerIdentity
