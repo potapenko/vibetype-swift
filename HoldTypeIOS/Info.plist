@@ -4,5 +4,7 @@
 <dict>
     <key>HoldTypeApplicationIdentifierAccessGroup</key>
     <string>$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>HoldType uses the microphone to record speech you choose to transcribe.</string>
 </dict>
 </plist>
