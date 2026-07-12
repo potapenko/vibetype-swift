@@ -432,7 +432,7 @@ final class IOSForegroundVoiceController {
             failure = .localRecovery
         } else {
             observation = resolution.observation
-            outcome = wasCancelled ? nil : resolution.outcome
+            outcome = resolution.outcome
             failure = resolution.failure
         }
         activeTask = nil

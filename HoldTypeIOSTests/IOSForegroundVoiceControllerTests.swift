@@ -338,7 +338,8 @@ struct IOSForegroundVoiceControllerTests {
                 phase: .arming,
                 activeStage: nil,
                 terminalRecovery: .none,
-                terminalStage: nil
+                terminalStage: nil,
+                terminalOutcome: nil
             ),
             VoiceCancellationCase(
                 progress: .listening,
@@ -346,7 +347,8 @@ struct IOSForegroundVoiceControllerTests {
                 phase: .listening,
                 activeStage: nil,
                 terminalRecovery: .none,
-                terminalStage: nil
+                terminalStage: nil,
+                terminalOutcome: nil
             ),
             VoiceCancellationCase(
                 progress: .processing(.transcription),
@@ -354,7 +356,8 @@ struct IOSForegroundVoiceControllerTests {
                 phase: .processing,
                 activeStage: .transcription,
                 terminalRecovery: .pendingRetryOrDiscard,
-                terminalStage: .postProcessing
+                terminalStage: .postProcessing,
+                terminalOutcome: .recoverableFailure
             ),
         ]
 
@@ -403,7 +406,7 @@ struct IOSForegroundVoiceControllerTests {
                         latest: .priorAvailableWhileSaving
                     ),
                     stage: .postProcessing,
-                    outcome: .interrupted,
+                    outcome: scenario.terminalOutcome,
                     failure: .operationFailed
                 )
             )
@@ -415,7 +418,10 @@ struct IOSForegroundVoiceControllerTests {
                 controller.presentation.stage
                     == scenario.terminalStage
             )
-            #expect(controller.presentation.outcome == nil)
+            #expect(
+                controller.presentation.outcome
+                    == scenario.terminalOutcome
+            )
             #expect(fixture.cancellationAuthorities.count == 1)
         }
     }
@@ -851,6 +857,7 @@ private struct VoiceCancellationCase {
     let activeStage: VoiceAttemptStage?
     let terminalRecovery: IOSForegroundVoiceRecovery
     let terminalStage: VoiceAttemptStage?
+    let terminalOutcome: VoiceAttemptOutcome?
 }
 
 private struct VoiceTerminalCase {
