@@ -433,13 +433,7 @@ final class IOSForegroundVoiceController {
                 kind: cancellationKind
             )
         } else {
-            projection = TerminalProjection(
-                observation: resolution.observation,
-                stage: resolution.stage
-                    ?? resolution.observation.stage,
-                outcome: resolution.outcome,
-                failure: resolution.failure
-            )
+            projection = terminalProjection(for: resolution)
         }
         activeTask = nil
         activeWork = nil
@@ -624,6 +618,45 @@ final class IOSForegroundVoiceController {
              .blocked:
             return nil
         }
+    }
+
+    private func terminalProjection(
+        for resolution: IOSForegroundVoiceResolution
+    ) -> TerminalProjection {
+        let reportedStage = resolution.stage
+            ?? resolution.observation.stage
+        let outcome: VoiceAttemptOutcome?
+        let failure: IOSForegroundVoiceFailure?
+
+        switch resolution.observation.recovery {
+        case .pendingRetryOrDiscard, .localCheckpoint:
+            outcome = .recoverableFailure
+            failure = resolution.failure
+        case .savingResult, .blocked:
+            outcome = nil
+            failure = resolution.failure
+        case .captureRecoverOrDiscard,
+             .captureRecoverOnly,
+             .captureDiscardOnly:
+            outcome = nil
+            failure = resolution.failure
+        case .none:
+            if resolution.outcome == .recoverableFailure {
+                outcome = nil
+            } else {
+                outcome = resolution.outcome
+            }
+            failure = outcome == .resultReady
+                ? nil
+                : resolution.failure
+        }
+
+        return TerminalProjection(
+            observation: resolution.observation,
+            stage: reportedStage,
+            outcome: outcome,
+            failure: failure
+        )
     }
 
     private func cancelledProjection(

@@ -523,44 +523,56 @@ struct IOSForegroundVoiceControllerTests {
         #expect(controller.presentation.availableActions.isEmpty)
     }
 
-    @Test func terminalRecoveryPublishesOnlyCanonicalStage()
+    @Test func terminalRecoveryRejectsHostileOutcomeCombinations()
         async throws {
         let cases = [
             VoiceTerminalCase(
                 recovery: .pendingRetryOrDiscard,
                 reportedStage: .postProcessing,
-                outcome: .recoverableFailure,
-                expectedStage: .postProcessing
+                inputOutcome: .resultReady,
+                expectedStage: .postProcessing,
+                expectedOutcome: .recoverableFailure,
+                expectedActions: [.retryPending, .discard]
             ),
             VoiceTerminalCase(
                 recovery: .savingResult,
                 reportedStage: .postProcessing,
-                outcome: nil,
-                expectedStage: .postProcessing
+                inputOutcome: nil,
+                expectedStage: .postProcessing,
+                expectedOutcome: nil,
+                expectedActions: [.retrySavingResult]
             ),
             VoiceTerminalCase(
                 recovery: .localCheckpoint(.postProcessing),
                 reportedStage: .transcription,
-                outcome: .recoverableFailure,
-                expectedStage: .postProcessing
+                inputOutcome: .resultReady,
+                expectedStage: .postProcessing,
+                expectedOutcome: .recoverableFailure,
+                expectedActions: [.retryLocalCheckpoint]
             ),
             VoiceTerminalCase(
                 recovery: .captureRecoverOrDiscard,
                 reportedStage: .recordingFinalization,
-                outcome: .recoverableFailure,
-                expectedStage: .recordingFinalization
+                inputOutcome: .recoverableFailure,
+                expectedStage: .recordingFinalization,
+                expectedOutcome: nil,
+                expectedActions: [.recoverRecording, .discard]
             ),
             VoiceTerminalCase(
                 recovery: .blocked,
                 reportedStage: .transcription,
-                outcome: nil,
-                expectedStage: nil
+                inputOutcome: .resultReady,
+                expectedStage: nil,
+                expectedOutcome: nil,
+                expectedActions: []
             ),
             VoiceTerminalCase(
                 recovery: .savingResult,
                 reportedStage: .transcription,
-                outcome: .resultReady,
-                expectedStage: nil
+                inputOutcome: .resultReady,
+                expectedStage: .transcription,
+                expectedOutcome: nil,
+                expectedActions: [.retrySavingResult]
             ),
         ]
 
@@ -585,7 +597,7 @@ struct IOSForegroundVoiceControllerTests {
                         recovery: testCase.recovery
                     ),
                     stage: testCase.reportedStage,
-                    outcome: testCase.outcome,
+                    outcome: testCase.inputOutcome,
                     failure: .operationFailed
                 )
             )
@@ -596,6 +608,15 @@ struct IOSForegroundVoiceControllerTests {
             #expect(
                 controller.presentation.stage
                     == testCase.expectedStage
+            )
+            #expect(
+                controller.presentation.outcome
+                    == testCase.expectedOutcome
+            )
+            #expect(controller.presentation.recovery == testCase.recovery)
+            #expect(
+                controller.presentation.availableActions
+                    == testCase.expectedActions
             )
         }
     }
@@ -931,8 +952,10 @@ private struct VoiceCancellationCase {
 private struct VoiceTerminalCase {
     let recovery: IOSForegroundVoiceRecovery
     let reportedStage: VoiceAttemptStage
-    let outcome: VoiceAttemptOutcome?
+    let inputOutcome: VoiceAttemptOutcome?
     let expectedStage: VoiceAttemptStage?
+    let expectedOutcome: VoiceAttemptOutcome?
+    let expectedActions: [IOSForegroundVoiceAction]
 }
 
 private struct VoiceActionCase {
