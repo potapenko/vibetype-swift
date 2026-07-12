@@ -51,7 +51,10 @@ class PageProbe(HTMLParser):
             self.metadata.append(attributes)
         elif tag == "a" and "data-locale-link" in attributes:
             self.language_links.append(attributes)
-        elif tag == "a" and "header-social-link" in (attributes.get("class") or "").split():
+        elif tag == "a" and (
+            "header-patreon-link" in (attributes.get("class") or "").split()
+            or "header-github-link" in (attributes.get("class") or "").split()
+        ):
             self.header_social_links.append(attributes)
         elif tag == "a" and "data-lightbox-link" in attributes:
             self.lightbox_links.append(attributes)
@@ -158,7 +161,6 @@ class BuildSiteTests(unittest.TestCase):
                 self.assertEqual(
                     [link["href"] for link in probe.header_social_links],
                     [
-                        "https://x.com/potapenko",
                         "https://www.patreon.com/c/playphraseme",
                         "https://github.com/holdtype/holdtype-swift",
                     ],
@@ -189,9 +191,19 @@ class BuildSiteTests(unittest.TestCase):
                 self.assertEqual(metadata["twitter:description"], metadata["description"])
                 self.assertEqual(metadata["og:url"], canonical_url)
                 self.assertEqual(metadata["og:locale"], open_graph_locale)
+                self.assertEqual(metadata["og:image"], build_site.SOCIAL_PREVIEW_URL)
+                self.assertEqual(metadata["og:image:secure_url"], build_site.SOCIAL_PREVIEW_URL)
+                self.assertEqual(metadata["og:image:type"], "image/png")
+                self.assertEqual(metadata["og:image:width"], "1200")
+                self.assertEqual(metadata["og:image:height"], "630")
+                self.assertTrue(metadata["og:image:alt"])
+                self.assertEqual(metadata["twitter:card"], "summary_large_image")
+                self.assertEqual(metadata["twitter:image"], build_site.SOCIAL_PREVIEW_URL)
+                self.assertEqual(metadata["twitter:image:alt"], metadata["og:image:alt"])
 
                 self.assertNotIn("data-i18n", rendered)
                 self.assertNotIn("data-token-ref", rendered)
+                self.assertNotIn("data-site-og-image", rendered)
                 self.assertNotIn("data-locale-config", rendered)
                 self.assertIn("data-language-suggestion-text", rendered)
 
@@ -246,6 +258,31 @@ class BuildSiteTests(unittest.TestCase):
                 (output / "robots.txt").read_text(encoding="utf-8"),
                 "User-agent: *\nAllow: /\nSitemap: https://holdtype.app/sitemap.xml\n",
             )
+            self.assertEqual(
+                build_site.read_png_dimensions(
+                    output / "assets" / build_site.SOCIAL_PREVIEW_FILENAME
+                ),
+                build_site.SOCIAL_PREVIEW_DIMENSIONS,
+            )
+
+    def test_requires_exact_social_preview_asset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = self.copied_source(root)
+            preview = source / "assets" / build_site.SOCIAL_PREVIEW_FILENAME
+            preview.unlink()
+
+            with self.assertRaisesRegex(build_site.SiteBuildError, "required website source"):
+                build_site.build_site(source_dir=source, output_dir=root / "missing-output")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = self.copied_source(root)
+            preview = source / "assets" / build_site.SOCIAL_PREVIEW_FILENAME
+            shutil.copyfile(source / "assets" / "app-icon.png", preview)
+
+            with self.assertRaisesRegex(build_site.SiteBuildError, "must be 1200x630"):
+                build_site.build_site(source_dir=source, output_dir=root / "wrong-size-output")
 
     def test_rejects_missing_translation_key(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -65,6 +65,11 @@ is no separate `/en/` page.
 - Website localization does not imply app localization. The shipped app UI and
   product screenshots remain English, and localized copy must not claim or
   suggest that the app interface is available in the page language.
+- Every locale uses the same English launch artwork for social-link previews.
+  Its accessible description is localized and explicitly identifies the words
+  shown in English rather than implying that the artwork itself is translated.
+- On phone-width viewports, the five honesty cards stack vertically and each
+  card occupies the full available content width.
 
 ## Invariants
 
@@ -76,8 +81,14 @@ is no separate `/en/` page.
   enhancement is unavailable.
 - Translation does not change commands, URLs, product names, pricing meaning,
   privacy promises, or the boundary that users supply their own OpenAI API key.
+- A product-copy change that changes meaning ships with semantically equivalent
+  updates in every supported locale. Matching JSON keys without updating the
+  translated message is not a complete localization.
 - Pricing examples describe the count as messages or dictations without
   characterizing their length, speed, or typical size in any locale.
+- The shared social image is a 1200 × 630 PNG published at the same absolute
+  HTTPS URL on every locale route. Open Graph exposes its type, dimensions, and
+  localized alternative text; X/Twitter uses the large-image card.
 - GitHub Pages publication remains a complete artifact containing the landing
   routes, the existing `appcast.xml`, and every release-notes page referenced
   by the appcast. A website-only publish must not regenerate, remove, or alter
@@ -102,7 +113,8 @@ is no separate `/en/` page.
 - Each locale page has a self-referencing canonical URL, reciprocal `hreflang`
   links for all ten locales, and an `x-default` link to `/`.
 - Titles, descriptions, social-sharing metadata, accessible image text, and
-  other language-bearing metadata are localized. The sitemap contains every
+  other language-bearing metadata are localized. The social image itself is
+  intentionally shared English campaign artwork. The sitemap contains every
   canonical locale URL.
 - The only persisted locale state is the user's explicit language choice in
   local browser storage; it contains no account, location, or personal data.
@@ -111,7 +123,8 @@ is no separate `/en/` page.
 
 - Static artifact checks verify the exact route set, complete locale keys,
   localized metadata, canonical and reciprocal `hreflang` links, sitemap
-  entries, and Arabic direction.
+  entries, Arabic direction, the shared social-image URL, its exact PNG
+  dimensions, and large-card metadata.
 - Browser QA verifies direct-route precedence, root-only suggestions, browser
   locale matching, explicit-choice persistence, keyboard-accessible switching,
   and storage-failure fallback.

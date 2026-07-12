@@ -1,15 +1,15 @@
 {
   "locale": "de",
   "meta": {
-    "title": "{brand.holdType} — Sprich den ganzen Gedanken aus",
-    "description": "{brand.holdType} ist die Spracheingabe für {brand.macOS} für lange Prompts, Nachrichten, Dokumente und Notizen. Verwende deinen eigenen API-Schlüssel von {brand.openAI} – ohne {brand.holdType}-Konto oder -Abonnement.",
-    "socialImageAlt": "App-Symbol von {brand.holdType}"
+    "title": "{brand.holdType} — der ehrlichste „Klon“ von Wispr Flow",
+    "description": "{brand.holdType} ist der ehrlichste „Klon“ von Wispr Flow: natives Diktieren unter {brand.macOS} mit deinem API-Schlüssel von {brand.openAI}, ohne {brand.holdType}-Abo und ohne verpflichtenden Überarbeitungsschritt.",
+    "socialImageAlt": "Social-Media-Vorschau von {brand.holdType} mit dem englischen Text „Brand-New, Blazing-Fast, Native Mac Dictation Tool“"
   },
   "common": {
     "skipToContent": "Zum Inhalt springen",
     "brandHomeAria": "{brand.holdType}-Startseite",
     "primaryNavigationAria": "Hauptnavigation",
-    "downloadForMacOS": "Für {brand.macOS} herunterladen"
+    "downloadForMacOS": "Kostenlos für {brand.macOS} herunterladen"
   },
   "localeUi": {
     "switcherLabel": "Sprache",
@@ -29,43 +29,42 @@
     "faq": "FAQ"
   },
   "hero": {
-    "title": "Sprich den ganzen Gedanken aus.",
-    "lede": "{brand.holdType} setzt ihn dort ein, wo du gerade arbeitest.",
-    "support": "Lange Prompts, Nachrichten, Dokumente und Notizen – direkt in die {brand.mac}-App gesprochen, in der du gerade arbeitest. {brand.holdType} verwendet deinen API-Schlüssel von {brand.openAI} und setzt den übernommenen Text in den meisten {brand.mac}-Apps am Cursor ein.",
+    "title": "Der ehrlichste „Klon“ von Wispr Flow.",
+    "lede": "Kein Konto. Volle Kontrolle über deine Diktate. Du zahlst OpenAI, nicht {brand.holdType}.",
     "qualification": "Kostenlose App · API-Nutzung von {brand.openAI} wird separat berechnet · {fact.minimumOS}",
     "price": {
-      "aria": "Selbst {pricing.dailyDictations} Diktate pro Tag kosten in diesem Beispiel für intensive Nutzung nur etwa {pricing.dailyPrice}.",
-      "kicker": "Selbst {pricing.dailyDictations} Diktate pro Tag",
+      "aria": "Zum derzeit geschätzten Transkriptionstarif kosten {pricing.dailyDictations} Diktate etwa {pricing.dailyPrice}.",
+      "kicker": "{pricing.dailyDictations} Diktate",
       "value": "≈ {pricing.dailyPrice}",
-      "suffix": "bei intensiver Nutzung"
+      "suffix": "zum derzeit geschätzten Tarif"
     },
     "demo": {
-      "editorIllustration": "Illustration von {brand.holdType}",
-      "documentTitle": "Projektstatus",
+      "editorIllustration": "Ein vollkommen realistischer Startup-Plan",
+      "documentTitle": "Mit SaaS 1 Mio. $ verdienen",
       "toolbarSample": "Aa  ···",
-      "intro": "Hier ist eine Zusammenfassung der Fortschritte und nächsten Schritte.",
-      "sectionTitle": "Zusammenfassung",
-      "listeningBody": "Halte {keyboard.rightCommand} gedrückt und sprich ganz natürlich.",
-      "transcribingBody": "Der übernommene Text wird vorbereitet…",
-      "insertedBody": "Wir haben die neueste Version letzte Woche veröffentlicht. Das Feedback war positiv. Als Nächstes wollen wir den Einstieg verbessern und den Schreibfluss einfach halten.",
+      "intro": "Ein konservatives erstes Etappenziel.",
+      "sectionTitle": "Umsetzungsplan",
+      "listeningBody": "Halte {keyboard.rightCommand} gedrückt und diktiere den einfachen Teil.",
+      "transcribingBody": "Der Startup-Plan wird transkribiert…",
+      "insertedBody": "Ein kleines SaaS bauen, Product-Market-Fit finden, 1 Mio. $ ARR erreichen und den Supportaufwand auf weniger als zehn Minuten pro Woche begrenzen. Kein Marketingbudget.",
       "status": {
         "listening": "Hört zu",
         "transcribing": "Wird transkribiert",
-        "inserted": "Eingefügt"
+        "inserted": "Plan eingefügt. Ganz einfach."
       },
-      "caption": "Illustrierter Ablauf: {brand.holdType} hört zu, transkribiert und fügt den Text anschließend in einen allgemeinen Editor ein. Keine aufgezeichnete Demo."
+      "caption": "Illustrierter Ablauf von {brand.holdType}, keine aufgezeichnete Demo. Codex hat nicht wirklich 1 Mio. $ verdient. Noch nicht."
     }
   },
   "workflow": {
-    "title": "Mach deine Stimme zu Text – genau dort, wo du bist.",
+    "title": "Taste gedrückt halten. Sprechen. Loslassen. Das Transkript erscheint an der Cursorposition.",
     "steps": {
       "hold": {
         "title": "Gedrückt halten",
-        "body": "Halte {keyboard.rightCommand} gedrückt"
+        "body": "Halte {keyboard.rightCommand} dort gedrückt, wo du Text eingeben kannst"
       },
       "speak": {
         "title": "Sprechen",
-        "body": "Sprich den Gedanken vollständig aus"
+        "body": "Diktiere den gewünschten Text"
       },
       "release": {
         "title": "Loslassen",
@@ -74,39 +73,39 @@
       "inserted": {
         "artLabel": "Text",
         "title": "Eingefügt",
-        "body": "Der Text erscheint am Cursor"
+        "body": "Das Transkript erscheint an der Cursorposition"
       }
     }
   },
   "reasons": {
-    "a11yTitle": "Warum {brand.holdType}",
+    "a11yTitle": "Was „ehrlich“ bei {brand.holdType} bedeutet",
     "subscription": {
-      "title": "Kein Abo, an das du denken musst",
-      "body": "{brand.holdType} verlangt keine monatliche Gebühr. {brand.openAI} zieht die API-Nutzung von deinem {brand.openAIPlatform}-Konto ab, sobald Anfragen gestellt werden."
+      "title": "Dein OpenAI-Schlüssel. Direkte Abrechnung.",
+      "body": "{brand.openAI} belastet das über deinen Schlüssel verbundene {brand.openAIPlatform}-Konto. {brand.holdType} erhebt keine monatliche Gebühr."
     },
     "model": {
-      "title": "Standardmäßig {model.gpt4oTranscribe}",
+      "title": "Modell {model.gpt4oTranscribe}",
       "body": "Laut {brand.openAI} bietet das Modell weniger Wortfehler, bessere Spracherkennung und höhere Genauigkeit als die ursprünglichen {model.whisper}-Modelle."
     },
     "openAI": {
       "title": "Kein verpflichtender zweiter Durchlauf",
-      "body": "Standardmäßig kommt das Transkript ohne zweiten Modelldurchlauf zurück. Aktiviere die Korrektur nur, wenn du sie brauchst."
+      "body": "Standardmäßig wird das Transkript ohne einen zweiten Modelldurchlauf zurückgegeben. Die Korrektur aktivierst du nur, wenn du sie möchtest."
     }
   },
   "useCases": {
-    "title": "Für Texte, die beim Tippen oft kürzer werden.",
-    "intro": "{brand.holdType} ist für vollständige Gedanken gemacht – egal, ob sie für einen Coding-Agenten, eine Nachricht oder ein Dokument bestimmt sind.",
+    "title": "Eine Diktier-App. Keine KI-Schreibplattform.",
+    "intro": "{brand.holdType} erledigt drei praktische Aufgaben: Text am Cursor, Übersetzung auf Wunsch und Schreibhilfen für Namen und Fachbegriffe.",
     "aiPrompts": {
-      "title": "Lange KI-Prompts",
-      "body": "Gib {brand.codex}, {brand.claude} oder {brand.chatGPT} den Kontext, den man leicht auslässt, wenn ein Prompt Zeile für Zeile getippt werden muss."
+      "title": "Diktieren, wo du arbeitest",
+      "body": "Diktiere Prompts direkt in {brand.codex}, {brand.claude} oder {brand.chatGPT}. Kein Zwischeneditor und kein verpflichtender Überarbeitungsschritt."
     },
     "everyday": {
-      "title": "Texte für jeden Tag",
-      "body": "Diktiere E-Mails, Rezensionen, Dokumentation, Chats und Notizen, ohne den Entwurf durch einen anderen Editor zu bewegen."
+      "title": "Kein Zwischeneditor",
+      "body": "Diktiere E-Mails, Rezensionen, Dokumentation, Chats und Notizen direkt an der Cursorposition."
     },
     "bilingual": {
-      "title": "Zweisprachig arbeiten",
-      "body": "Sprich in der Sprache, in der der Gedanke ganz natürlich kommt, und füge bei einer angeforderten Übersetzung anschließend die konfigurierte Zielsprache ein."
+      "title": "Übersetzung auf Wunsch",
+      "body": "Nutze das Übersetzungskürzel, wenn du es brauchst. Beim normalen Diktieren wird keine Übersetzungsanfrage gesendet."
     }
   },
   "features": {
@@ -114,8 +113,8 @@
     "appUiLanguageNote": "Die aktuelle {brand.holdType}-App und die Produkt-Screenshots verwenden eine englische Benutzeroberfläche.",
     "translation": {
       "label": "Sprache und Vokabular",
-      "title": "Sprich ganz natürlich. Füge es passend zu deiner aktuellen Arbeit ein.",
-      "body1": "Eine Übersetzung wird nur auf Anfrage ausgeführt. Wähle eine Zielsprache und verwende {keyboard.translationShortcut}, um in einem Schritt zu transkribieren und zu übersetzen.",
+      "title": "Nur auf Wunsch übersetzen.",
+      "body1": "Wähle eine Zielsprache und verwende {keyboard.translationShortcut}. Die Übersetzung wird nach der Transkription als separate Textanfrage ausgeführt.",
       "body2": "Einträge in {appUi.localDictionary} ergänzen die Transkriptionsanfrage um Schreibweisen für Namen, Projektbegriffe und Dateinamen.",
       "imageAlt": "{appUi.translation}-Einstellungen von {brand.holdType} mit Übersetzungs-Kurzbefehl und Auswahl der Zielsprache",
       "caption": "Echte {appUi.translation}-Einstellungen von {brand.holdType}. Wische auf dem Smartphone den fokussierten Ausschnitt horizontal, um ihn anzusehen.",
@@ -124,38 +123,38 @@
     "menu": {
       "imageAlt": "Menüleisten-Popover von {brand.holdType} mit Aktionen zum Transkribieren, Übersetzen, {appUi.pasteLastResult}, Öffnen des Verlaufs und der Einstellungen sowie zum Beenden",
       "imageCaption": "Echte Steuerelemente der Menüleiste einschließlich Wiederherstellung über {appUi.lastResult}.",
-      "label": "Immer griffbereit",
-      "title": "Starte, übersetze, stelle wieder her und passe Einstellungen direkt über die Menüleiste an.",
+      "label": "Wiederherstellung und Kontrolle",
+      "title": "Das Transkript bleibt erhalten, wenn das Einfügen fehlschlägt.",
       "body1": "Falls das Einfügen fehlschlägt, bleibt das übernommene Transkript als {appUi.lastResult} verfügbar. Füge es mit {keyboard.pasteShortcut} ein, ohne die Zwischenablage von {brand.macOS} zu ersetzen.",
-      "body2": "Die optionale Korrektur durch {brand.openAI} ist standardmäßig deaktiviert. Die lokale typografische Bereinigung kann weiterhin ohne eine weitere Modellanfrage ausgeführt werden."
+      "body2": "Die modellbasierte Korrektur durch {brand.openAI} ist standardmäßig deaktiviert. Diktieren, Übersetzen, Wiederherstellung, Verlauf und Einstellungen sind in der Menüleiste gebündelt."
     }
   },
   "privacy": {
-    "label": "Kosten und Datenfluss",
-    "title": "Klarheit darüber, was lokal bleibt – und was an {brand.openAI} geht.",
-    "intro": "{brand.holdType} hat kein Kontosystem, kein Produkt-Backend, keine Telemetrie, keine Analysefunktionen und keine Cloud-Synchronisierung. Die Transkription selbst ist eine API-Anfrage an {brand.openAI}, die mit dem von dir konfigurierten Schlüssel gestellt wird.",
+    "label": "Kein HoldType-Konto und kein Backend",
+    "title": "Dein Mac → {brand.openAI} → dein Cursor.",
+    "intro": "{brand.holdType} hat kein Kontosystem, kein Produkt-Backend, keine Telemetrie, keine Analysefunktionen und keine Cloud-Synchronisierung. Audio geht mit dem von dir angegebenen API-Schlüssel direkt an {brand.openAI}.",
     "flow": {
-      "aria": "Datenfluss von {brand.holdType}",
+      "aria": "Der Datenweg von {brand.holdType} ist klar ausgewiesen",
       "microphone": "Mikrofon",
       "holdType": "{brand.holdType}",
       "openAI": "Transkription durch {brand.openAI}",
       "activeApp": "Aktive App"
     },
     "dataPath": {
-      "title": "Der Weg deiner Daten",
+      "title": "Die Grenzen sind klar",
       "items": {
-        "apiKey": "Der API-Schlüssel wird lokal in {brand.macOSKeychain} gespeichert.",
-        "audio": "Audio wird zur Transkription an {brand.openAI} gesendet.",
-        "optionalTextRequests": "Optionale Korrektur und Übersetzung sind separate Textanfragen.",
-        "failedAudio": "Verarbeitetes Audio wird standardmäßig nicht aufbewahrt. Bei behebbaren Fehlern kann eine begrenzte Audiomenge nur für die aktuelle Sitzung für {appUi.retry} erhalten bleiben.",
-        "recordingCache": "Die optionale Aufbewahrung im Aufnahme-Cache erfolgt lokal und wird vom Benutzer gesteuert."
+        "apiKey": "Dein API-Schlüssel bleibt im {brand.macOSKeychain}.",
+        "audio": "Dein Mac → {brand.openAI} → dein Cursor.",
+        "optionalTextRequests": "Der Überarbeitungsschritt ist optional. Eine Übersetzung läuft nur auf Wunsch.",
+        "failedAudio": "Bei behebbaren Fehlern kann eine begrenzte Audiomenge nur für die aktuelle Sitzung für {appUi.retry} erhalten bleiben; abgeschlossenes Audio wird standardmäßig nicht gespeichert.",
+        "recordingCache": "HoldType läuft nur auf dem Mac. Die App gibt sich nicht als Cloud-Plattform für Teams aus; die optionale Aufbewahrung im Aufnahme-Cache bleibt lokal."
       }
     },
     "billing": {
-      "title": "Bezahle für die Nutzung, nicht für den Zugang",
-      "body": "{brand.holdType} hat kein Abonnement. {brand.openAI} zieht die tatsächliche API-Nutzung von dem über deinen Schlüssel verbundenen {brand.openAIPlatform}-Konto ab; {brand.holdType} erhebt keine monatliche Gebühr.",
-      "exampleTitle": "{pricing.dailyDictations} Nachrichten. Etwa {pricing.dailyPrice}.",
-      "exampleBody": "{pricing.dailyDictations} Nachrichten ergeben insgesamt etwa {pricing.recordedMinutes} Minuten aufgenommene Sprache. Wiederholst du diese tägliche Menge {pricing.daysInMonth} Tage lang, liegen die geschätzten Transkriptionskosten bei etwa {pricing.monthlyPrice}.",
+      "title": "Die Abrechnung ist nachvollziehbar",
+      "body": "{brand.holdType} verwendet den von dir angegebenen Schlüssel. {brand.openAI} belastet das verbundene {brand.openAIPlatform}-Konto; {brand.holdType} erhebt keine monatliche Gebühr und zählt Diktate nicht über ein eigenes Produktkonto.",
+      "exampleTitle": "{pricing.dailyDictations} Diktate. Etwa {pricing.dailyPrice}.",
+      "exampleBody": "{pricing.dailyDictations} Diktate entsprechen ungefähr {pricing.recordedMinutes} Minuten aufgenommener Sprache. Wiederholst du diese Menge {pricing.daysInMonth} Tage lang, liegen die geschätzten Transkriptionskosten bei etwa {pricing.monthlyPrice}.",
       "note": "Der Bildschirm {appUi.billing} zeigt eine lokale Schätzung erfolgreicher Audiotranskriptionen. Er ist keine Rechnung von {brand.openAI} und berücksichtigt keine Korrektur- oder Übersetzungsanfragen.",
       "pricingLink": "Preise der API von {brand.openAI}",
       "imageAlt": "{appUi.billing}-Einstellungen von {brand.holdType} mit einer lokalen Schätzung der Transkriptionsnutzung",
@@ -167,10 +166,10 @@
     "imageAlt": "Ein Schreibtischmikrofon, das bei der Entwicklung und beim Testen von {brand.holdType} verwendet wurde",
     "imageCaption": "Spezielle Aufnahmehardware ist nicht erforderlich.",
     "label": "Warum ich {brand.holdType} entwickelt habe",
-    "title": "Die Tippgeschwindigkeit war nicht das Problem.",
-    "body1": "Das Problem war, wie oft ein langer Prompt, eine Rezension oder eine Erklärung schon kürzer wurde, bevor ich mit dem Tippen fertig war. Beim Sprechen fiel es leichter, den ganzen Gedanken festzuhalten.",
-    "body2": "Ich habe Abonnement-Tools und Apps ausprobiert, bei denen man zwischen lokalen und Cloud-Modellen wählt. Sie lösen unterschiedliche Probleme. Bei meiner täglichen Arbeit lieferte mir die Transkription von {brand.openAI} am häufigsten ein erstes Ergebnis, dem ich vertraute.",
-    "body3": "Ich wollte eine schlankere Lösung: einen Anbieter, eine sinnvolle Standardeinstellung, direkte API-Abrechnung und kein Produktabonnement, an das ich denken muss. {brand.holdType} wird mit demselben sprachbasierten Arbeitsablauf entwickelt und getestet, den es unterstützen soll."
+    "title": "Ich wollte ein Diktier-Tool. Nicht den ganzen Bullshit.",
+    "body1": "Ich wollte wissen, wer mir die Rechnung stellt und warum jedes Transkript von einem zweiten Modell umgeschrieben werden musste. Ich wollte keine weitere Blackbox zwischen meiner Stimme und dem Cursor.",
+    "body2": "In meiner täglichen Arbeit lieferte die Transkription von {brand.openAI} am häufigsten ein erstes Ergebnis, dem ich vertraute. Der optionale Überarbeitungsschritt bleibt aus, bis ich ihn einschalte.",
+    "body3": "{brand.holdType} ist die native Swift-App, die ich dafür gebaut habe: dein API-Schlüssel, direkte Abrechnung durch OpenAI, kein Produktkonto und keine monatliche Gebühr."
   },
   "install": {
     "label": "Erste Schritte",
@@ -196,7 +195,7 @@
   },
   "apiKeyGuide": {
     "label": "API-Schlüssel sind neu für dich?",
-    "title": "Erstelle deinen in wenigen Minuten.",
+    "title": "Erstelle einen API-Schlüssel und füge ihn anschließend in den Einstellungen hinzu.",
     "intro": "Ein API-Schlüssel ist ein privater Zugangsnachweis, mit dem {brand.holdType} Audio über dein {brand.openAIPlatform}-Konto zur Transkription senden kann. Er ist unabhängig von deiner Anmeldung und deinem Abonnement bei {brand.chatGPT}.",
     "steps": {
       "openPage": {
@@ -306,12 +305,11 @@
     }
   },
   "finalCta": {
-    "title": "Sprich den Gedanken aus. Behalte den Kontext.",
-    "body": "Kostenlose App · Kein {brand.holdType}-Abonnement · Direkte Abrechnung der {brand.openAI}-Nutzung · {fact.minimumOS}"
+    "title": "Volle Kontrolle über deine Diktate.",
+    "body": "Kostenlose App · Dein API-Schlüssel von {brand.openAI} · Kein {brand.holdType}-Abo · {fact.minimumOS}"
   },
   "footer": {
-    "description": "Native Spracheingabe für {brand.macOS}. Quellcode unter {license.fsl11} mit einer künftigen {license.mit}-Lizenz verfügbar.",
-    "twitterLink": "@potapenko auf {brand.twitter} folgen",
+    "description": "Native Diktierfunktion für {brand.macOS}. Quellcode unter {license.fsl11} mit einer künftigen {license.mit}-Lizenz verfügbar.",
     "patreonLink": "Unterstütze {brand.holdType} auf {brand.patreon}",
     "sourceLink": "Quellcode auf {brand.github} ansehen"
   },

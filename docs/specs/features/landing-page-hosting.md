@@ -9,6 +9,7 @@ that already uses GitHub Pages.
 ## Scope
 
 - the static files under `website/`;
+- the landing page's Open Graph and social-link preview asset;
 - a DigitalOcean App Platform static-site deployment from this repository;
 - GitHub Pages deployment of the existing update metadata;
 - the existing Sparkle `appcast.xml` and versioned release-notes pages;
@@ -20,18 +21,17 @@ that already uses GitHub Pages.
   App Platform's static-site service, managed HTTPS, and CDN.
 - `www.holdtype.app` redirects to the canonical apex domain.
 - The first viewport may position HoldType as the most honest Wispr Flow
-  "clone" when the same viewport immediately defines that claim: text returns
-  to the active cursor, model-based correction is optional and off by default,
-  the user supplies the OpenAI Platform API key, and OpenAI rather than HoldType
-  bills API usage.
+  "clone" when the same viewport immediately grounds `full control` through no
+  HoldType account and direct OpenAI billing. Cursor handoff, API-key routing,
+  and translation details remain in the product contract below rather than a
+  separate gray explanatory paragraph in the hero.
 - The hero presents one action: the free macOS download. Source inspection
   remains available in the footer, and the hero does not repeat product claims
   as a separate row of proof chips.
-- The primary navigation includes adjacent compact Patreon and GitHub links,
-  with Patreon positioned to the left of GitHub. Both use the same neutral icon
-  treatment, have localized accessible names, and show localized text in the
-  expanded mobile navigation. Patreon opens the creator support page at
-  `https://www.patreon.com/c/playphraseme`.
+- The primary navigation includes adjacent compact Patreon and GitHub icons,
+  with Patreon positioned to the left of GitHub. Both have localized accessible
+  names, and the expanded mobile navigation shows their link text. Patreon
+  opens `https://www.patreon.com/c/playphraseme`.
 - The landing page must turn `honest` into a visible product contract rather
   than leaving it as praise. The contract covers the billing source, the
   default transcription model, optional rewrite pass, explicit Mac-to-OpenAI
@@ -42,20 +42,31 @@ that already uses GitHub Pages.
   an unmeasured HoldType-specific speed or accuracy result. The exact model
   name must not also appear in metadata, hero copy, founder copy, the final
   call to action, or the footer.
+- The second-card heading renders the API model identifier verbatim as
+  `gpt-4o-transcribe`. Localization must not replace its hyphens, change its
+  case, or turn it into a display name.
 - The hero editor illustration uses a dry, self-ironic fictional plan to build
   a small SaaS and reach `$1M ARR`. Its caption explicitly identifies the scene
   as an illustration rather than a recorded demo and does not imply that Codex
-  produced that business result. The listening and transcribing labels,
-  animation states, outer hero, calls to action, and pricing sticker remain
-  unchanged when this sample copy changes.
+  produced that business result. The editor-toolbar label describes the startup
+  plan without naming HoldType, stays on one line, and truncates with an
+  ellipsis when space runs out. The document title appears only in the editor
+  body and is not duplicated in the toolbar. The listening and transcribing
+  labels, animation states, outer hero, calls to action, and pricing sticker
+  remain unchanged when this sample copy changes.
 - Product copy may describe the request path, billing boundary, native
   implementation, and documented advantages of the default transcription
   model over OpenAI's original Whisper models. It must not claim that HoldType
   is the fastest or most accurate dictation product, publish a comparative
   speed multiplier, or attribute an undocumented recognition model to a
-  competitor without a dated, reproducible evidence package.
+  competitor without a dated, reproducible evidence package. The social
+  preview may use the approved non-comparative launch line `BLAZING-FAST`; it
+  must not turn that line into a benchmark, multiplier, or `fastest` claim.
 - The generated pages remain usable at the DigitalOcean technical hostname and
   at the custom-domain routes without a server-side application runtime.
+- Shared links render the approved English HoldType launch creative as a
+  1200 × 630 Open Graph image. Open Graph and X/Twitter point to its canonical
+  HTTPS URL, expose accurate image metadata, and use localized alternative text.
 - Download links continue to use the stable GitHub latest-release URL.
 - The Homebrew Copy button copies the complete project-tap installation block.
 - The hero may present 100 dictations as about `$0.10` at the current
@@ -80,8 +91,14 @@ that already uses GitHub Pages.
 - Every release-notes URL referenced by the published appcast remains reachable
   after later website or app releases.
 - A push to the configured production branch automatically deploys landing-page
-  changes. An explicit publish command can request a bounded rebuild and verify
-  the resulting page without storing a DigitalOcean token in the repository.
+  changes through DigitalOcean. Routine website pushes do not start a GitHub
+  Pages workflow. An explicit publish command can request a bounded rebuild and
+  verify the resulting page without storing a DigitalOcean token in the
+  repository.
+- GitHub Pages is published automatically only by the release workflow so the
+  Sparkle appcast and versioned release notes stay current. A separate manual
+  Pages maintenance workflow can restore the complete Pages artifact without
+  cutting a new app release.
 - The explicit publish command synchronizes the committed `.do/app.yaml` with
   the existing DigitalOcean app before deploying the latest source. A stale
   server-side build command must not publish the source template in place of
@@ -94,14 +111,17 @@ that already uses GitHub Pages.
 - A Pages deployment remains a complete artifact: landing files, appcast, and
   all release notes referenced by that appcast are deployed together so the
   existing update channel remains self-contained.
-- A website-only deployment must source the appcast from the latest stable
-  GitHub Release rather than regenerate update metadata.
+- A manual Pages maintenance deployment must source the appcast from the latest
+  stable GitHub Release rather than regenerate update metadata.
 - A release deployment must use the newly generated signed appcast and the
   same release-notes content published in the GitHub Release.
 - Website documentation and local QA files are not part of the public artifact.
 - The production artifact contains every supported locale route plus
   `sitemap.xml`; published HTML contains generated locale identity and no source
   `data-i18n` markers.
+- The production artifact contains `assets/holdtype-social-preview.png` as an
+  exact 1200 × 630 PNG. Every locale emits the same absolute image URL, Open
+  Graph structured image fields, and an X/Twitter large-image card.
 - Pages deployments are serialized so a website publish cannot race a release
   publish and leave a partial artifact live.
 - GitHub Pages must not retain `holdtype.app` as its custom domain after the DNS
@@ -135,6 +155,8 @@ that already uses GitHub Pages.
 - If App Spec synchronization fails, any locale route is missing, the sitemap
   is missing, or the root still contains source localization markers, the
   publish command fails instead of reporting a healthy landing deployment.
+- If the social-preview asset is missing, is not a PNG, or is not exactly
+  1200 × 630, the static-site build fails before publication.
 - If the DigitalOcean technical hostname does not return the expected landing
   marker, custom-domain setup and DNS cutover stop.
 - If the third-party tutorial is removed, blocked, or outdated, the official
@@ -149,6 +171,8 @@ that already uses GitHub Pages.
 
 - The public product root is `https://holdtype.app/`; the App Platform technical
   hostname remains a non-canonical deployment and diagnostic route.
+- The canonical social-preview URL is
+  `https://holdtype.app/assets/holdtype-social-preview.png` for every locale.
 - The existing update-feed route remains
   `https://holdtype.github.io/holdtype-swift/appcast.xml` until a separate
   updater migration changes the shipped `SUFeedURL`.
@@ -158,13 +182,17 @@ that already uses GitHub Pages.
 
 ## Verification mapping
 
-- Workflow checks verify that both website and release publishes construct the
-  same complete Pages artifact.
+- Workflow checks verify that manual Pages maintenance and release publication
+  both construct the same complete Pages artifact, while routine landing pushes
+  remain DigitalOcean-only.
 - App Platform configuration checks verify a static-site component sourced from
   `website/`, the production branch, and automatic deployments.
 - Publish-script checks verify bounded App Spec synchronization, all generated
   locale routes, sitemap content, expected-site markers, and the absence of
   embedded credentials.
+- Static-site tests verify the social asset's file type and dimensions, Open
+  Graph structured fields, matching X/Twitter metadata, and localized image
+  descriptions on all ten routes.
 - Artifact tests verify the public-file allowlist, exact appcast copy, and
   reconstruction of every referenced release-notes file.
 - Runtime verification checks the deployed root page, current appcast, current

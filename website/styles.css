@@ -227,7 +227,8 @@ h3 {
   color: var(--text);
 }
 
-.site-nav a.header-social-link {
+.site-nav a.header-patreon-link,
+.site-nav a.header-github-link {
   width: 32px;
   height: 32px;
   display: inline-flex;
@@ -237,18 +238,21 @@ h3 {
   border-radius: 999px;
 }
 
-.site-nav a.header-social-link:hover {
+.site-nav a.header-patreon-link:hover,
+.site-nav a.header-github-link:hover {
   background: var(--surface-soft);
 }
 
-.header-social-icon {
+.header-patreon-link svg,
+.header-github-link svg {
   width: 18px;
   height: 18px;
   display: block;
   fill: currentColor;
 }
 
-.header-social-text {
+.header-patreon-text,
+.header-github-text {
   display: none;
 }
 
@@ -502,14 +506,6 @@ h3 {
   line-height: 1.16;
 }
 
-.hero-support {
-  max-width: 570px;
-  margin-bottom: 32px;
-  color: var(--text-soft);
-  font-size: 1.1rem;
-  line-height: 1.65;
-}
-
 .hero-actions {
   display: flex;
   align-items: center;
@@ -598,7 +594,8 @@ h3 {
 .editor-toolbar {
   height: 54px;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 18px;
   align-items: center;
   padding: 0 18px;
   border-bottom: 1px solid var(--line);
@@ -608,16 +605,15 @@ h3 {
 }
 
 .editor-window-label {
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-faint);
   font-size: 0.68rem;
   font-weight: 620;
   letter-spacing: 0.03em;
+  text-overflow: ellipsis;
   text-transform: uppercase;
-}
-
-.editor-toolbar-title {
-  color: var(--text-soft);
-  font-weight: 560;
+  white-space: nowrap;
 }
 
 .editor-tools {
@@ -1875,7 +1871,8 @@ body.has-image-lightbox {
     border-bottom: 0;
   }
 
-  .js .site-nav .header-social-link {
+  .js .site-nav .header-patreon-link,
+  .js .site-nav .header-github-link {
     width: 100%;
     height: auto;
     justify-content: flex-start;
@@ -1883,7 +1880,8 @@ body.has-image-lightbox {
     border-radius: 0;
   }
 
-  .js .site-nav .header-social-text {
+  .js .site-nav .header-patreon-text,
+  .js .site-nav .header-github-text {
     display: inline;
   }
 
@@ -2019,8 +2017,10 @@ body.has-image-lightbox {
 
   .reason-grid article,
   .reason-grid article:first-child,
-  .reason-grid article:last-child {
-    grid-column: auto;
+  .reason-grid article:last-child,
+  .reason-grid article:nth-child(4),
+  .reason-grid article:nth-child(5) {
+    grid-column: 1 / -1;
     margin-top: 0;
     padding: 28px 0;
     border-top: 1px solid var(--line);
@@ -2162,10 +2162,6 @@ body.has-image-lightbox {
     font-size: 1.75rem;
   }
 
-  .hero-support {
-    font-size: 1rem;
-  }
-
   .hero-price-sticker {
     top: -26px;
     inset-inline-end: -4px;
@@ -2202,10 +2198,6 @@ body.has-image-lightbox {
 
   .editor-toolbar {
     grid-template-columns: 1fr auto;
-  }
-
-  .editor-toolbar-title {
-    display: none;
   }
 
   .editor-body {

@@ -11,7 +11,7 @@
       "direction": "ltr"
     },
     "model.gpt4oTranscribe": {
-      "value": "GPT-4o Transcribe",
+      "value": "gpt-4o-transcribe",
       "translate": false,
       "direction": "ltr"
     },
@@ -52,11 +52,6 @@
     },
     "brand.github": {
       "value": "GitHub",
-      "translate": false,
-      "direction": "ltr"
-    },
-    "brand.twitter": {
-      "value": "Twitter",
       "translate": false,
       "direction": "ltr"
     },
@@ -228,9 +223,6 @@
     },
     "sourceRepository": {
       "href": "https://github.com/holdtype/holdtype-swift"
-    },
-    "twitter": {
-      "href": "https://x.com/potapenko"
     },
     "patreon": {
       "href": "https://www.patreon.com/c/playphraseme"

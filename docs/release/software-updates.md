@@ -161,10 +161,11 @@ The CI release job should make the manual flow reproducible:
 
 The tracked release workflow is `.github/workflows/release.yml`. It runs on
 `v*` tags and uses `macos-26` runners so the project can build with the current
-Xcode 26 toolchain. `.github/workflows/pages.yml` republishes the same complete
-Pages artifact after landing changes or an explicit manual dispatch. The two
-workflows share the `holdtype-publication` concurrency queue so releases and
-website publishes cannot race each other.
+Xcode 26 toolchain. `.github/workflows/pages.yml` is a manual recovery workflow
+that republishes the same complete Pages artifact from the latest stable
+release. Routine landing-page pushes are deployed by DigitalOcean and do not
+start GitHub Pages. The two GitHub workflows share the `holdtype-publication`
+concurrency queue so a manual recovery cannot race a release.
 
 The tracked scripts are:
 

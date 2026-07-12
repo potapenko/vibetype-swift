@@ -19,7 +19,7 @@ from typing import Any
 
 
 DEFAULT_APP_NAME = "holdtype"
-DEFAULT_MARKER = "Speak the whole thought."
+DEFAULT_MARKER = 'data-site-locale="en"'
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_APP_SPEC = REPOSITORY_ROOT / ".do" / "app.yaml"
 LOCALE_ROUTES = (

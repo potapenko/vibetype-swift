@@ -3,7 +3,7 @@
   "meta": {
     "title": "{brand.holdType} — самый честный «клон» Wispr Flow",
     "description": "{brand.holdType} — самый честный «клон» Wispr Flow: нативная диктовка для {brand.macOS} с вашим API-ключом {brand.openAI}, без подписки {brand.holdType} и обязательного переписывания текста.",
-    "socialImageAlt": "Значок приложения {brand.holdType}"
+    "socialImageAlt": "Изображение для соцсетей {brand.holdType} с английскими надписями «Brand-New», «Blazing-Fast» и «Native Mac Dictation Tool»"
   },
   "common": {
     "skipToContent": "Перейти к содержанию",
@@ -30,8 +30,7 @@
   },
   "hero": {
     "title": "Самый честный «клон» Wispr Flow.",
-    "lede": "Без аккаунта. Без обязательного переписывания текста. Вы платите OpenAI, а не {brand.holdType}.",
-    "support": "{brand.holdType} отправляет аудио напрямую с вашего {brand.mac} в {brand.openAI} по вашему API-ключу, а затем возвращает текст к курсору в большинстве приложений для {brand.mac}. Перевод запускается только по вашей команде.",
+    "lede": "Без аккаунта. Полный контроль над диктовкой. Вы платите OpenAI, а не {brand.holdType}.",
     "qualification": "Бесплатное приложение · Использование API {brand.openAI} оплачивается отдельно · {fact.minimumOS}",
     "price": {
       "aria": "При текущем расчётном тарифе {pricing.dailyDictations} диктовок стоят примерно {pricing.dailyPrice}.",
@@ -40,7 +39,7 @@
       "suffix": "по текущему расчётному тарифу"
     },
     "demo": {
-      "editorIllustration": "Совершенно реалистичный стартап-план {brand.holdType}",
+      "editorIllustration": "Совершенно реалистичный стартап-план",
       "documentTitle": "Заработать $1 млн на SaaS",
       "toolbarSample": "Aa  ···",
       "intro": "Консервативная первая цель.",
@@ -85,7 +84,7 @@
       "body": "{brand.openAI} списывает стоимость API с учётной записи {brand.openAIPlatform}, связанной с вашим ключом. {brand.holdType} не берёт ежемесячную плату."
     },
     "model": {
-      "title": "{model.gpt4oTranscribe} по умолчанию",
+      "title": "Модель {model.gpt4oTranscribe}",
       "body": "По данным {brand.openAI}, эта модель делает меньше ошибок и точнее распознаёт речь на разных языках, чем исходные модели {model.whisper}."
     },
     "openAI": {
@@ -167,7 +166,7 @@
     "imageAlt": "Настольный микрофон, который использовался при разработке и тестировании {brand.holdType}",
     "imageCaption": "Специальное оборудование для записи не требуется.",
     "label": "Почему я создал {brand.holdType}",
-    "title": "Я хотел Wispr Flow. Но не хотел всего этого булшита.",
+    "title": "Я хотел инструмент для диктовки. А не весь этот булшит.",
     "body1": "Я хотел понимать, кто выставляет счёт и зачем каждый текст обязательно переписывать второй моделью. Мне не нужен был ещё один чёрный ящик между голосом и курсором.",
     "body2": "В моей работе расшифровка {brand.openAI} чаще всего давала результат, которому я доверял с первой попытки. Дополнительное переписывание остаётся выключенным, пока я сам его не включу.",
     "body3": "{brand.holdType} — нативное приложение на Swift, которое я сделал для этой схемы: свой API-ключ, прямая оплата OpenAI, без аккаунта продукта и ежемесячной платы."
@@ -306,12 +305,11 @@
     }
   },
   "finalCta": {
-    "title": "Диктовка полностью под вашим контролем.",
+    "title": "Полный контроль над диктовкой.",
     "body": "Бесплатное приложение · Ваш ключ {brand.openAI} · Без подписки {brand.holdType} · {fact.minimumOS}"
   },
   "footer": {
     "description": "Нативная диктовка для {brand.macOS}. Исходный код доступен по лицензии {license.fsl11} с последующим переходом на {license.mit}.",
-    "twitterLink": "Подписаться на @potapenko в {brand.twitter}",
     "patreonLink": "Поддержать {brand.holdType} на {brand.patreon}",
     "sourceLink": "Посмотреть исходный код на {brand.github}"
   },

@@ -36,7 +36,7 @@ Recommended positioning line:
 
 Supporting line:
 
-> No account. No mandatory rewrite pass. You pay OpenAI, not HoldType.
+> No account. Full control over your dictation. You pay OpenAI, not HoldType.
 
 ## Role Of Each Surface
 
@@ -76,11 +76,11 @@ Goal: explain the outcome, platform, and commercial boundary within five
 seconds.
 
 - Headline: `The most honest Wispr Flow "clone".`
-- Supporting copy: `No account. No mandatory rewrite pass. You pay
+- Supporting copy: `No account. Full control over your dictation. You pay
   OpenAI, not HoldType.`
-- Supporting copy explains that text returns to the cursor, the user's OpenAI
-  key is used directly, and translation runs only when requested. Do not repeat
-  these claims in a separate proof-chip row.
+- Do not add a second explanatory paragraph below that line. Cursor handoff,
+  API-key routing, and translation details belong in the product contract
+  below rather than the hero.
 - Primary CTA: `Download free for macOS`.
 - Source inspection remains in the footer rather than the hero.
 - Qualification: `Free app · OpenAI API usage billed separately · macOS 14+`.
@@ -103,7 +103,7 @@ Present this section under `What "honest" means here`:
 
 1. **The bill has a source:** OpenAI deducts API usage from the Platform account
    connected through the user's key; HoldType adds no monthly fee.
-2. **The model has a name:** GPT-4o Transcribe is the default. OpenAI documents
+2. **The model has an ID:** `gpt-4o-transcribe` is the default. OpenAI documents
    better word error rate, language recognition, and accuracy than its original
    Whisper models in the
    [model documentation](https://developers.openai.com/api/docs/models/gpt-4o-transcribe).
@@ -161,7 +161,7 @@ that optional correction and translation are separate.
 
 Keep the story specific and short:
 
-- open with `I wanted Wispr Flow. I didn't want the bullshit.`;
+- open with `I wanted a dictation tool. Not all the bullshit.`;
 - explain the concrete frustration: another product account, opaque billing,
   and a mandatory rewrite pipeline between voice and cursor;
 - answer it with the user's API key, direct OpenAI billing, optional correction,
@@ -235,7 +235,7 @@ Priority 2:
 
 - a factual comparison page with dated sources;
 - a privacy/data-flow graphic;
-- an Open Graph image and small brand kit;
+- a small brand kit (the 1200 × 630 Open Graph image now ships with the landing);
 - a decision on English-only versus localized landing pages.
 
 ## Claims Policy
@@ -244,7 +244,10 @@ Do not publish `3x faster`, `5x faster`, `99% accurate`, `perfect`, `private`,
 or `works in every app` without a documented HoldType-specific method and the
 necessary qualifications.
 
-The landing page may name GPT-4o Transcribe once in the honesty contract and
+The launch social preview uses the approved qualitative line `BLAZING-FAST`.
+Do not repurpose it as a comparative benchmark, multiplier, or `fastest` claim.
+
+The landing page may name `gpt-4o-transcribe` once in the honesty contract and
 repeat OpenAI's documented comparison with its original Whisper models. Keep
 the comparison attributable to OpenAI and do not turn it into an unmeasured
 HoldType-specific speed or accuracy claim. Do not claim that a competitor uses

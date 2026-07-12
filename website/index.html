@@ -32,17 +32,29 @@
       data-i18n-attrs="content:meta.description"
     >
     <meta property="og:url" content="https://holdtype.app/" data-locale-canonical-content>
-    <meta property="og:image" content="https://holdtype.app/assets/app-icon.png">
-    <meta property="og:image:alt" content="HoldType app icon" data-i18n-attrs="content:meta.socialImageAlt">
-    <meta name="twitter:card" content="summary">
+    <meta property="og:image" content="https://holdtype.app/assets/holdtype-social-preview.png" data-site-og-image>
+    <meta property="og:image:secure_url" content="https://holdtype.app/assets/holdtype-social-preview.png" data-site-og-image>
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta
+      property="og:image:alt"
+      content="HoldType social preview with the words “Brand-New, Blazing-Fast, Native Mac Dictation Tool”"
+      data-i18n-attrs="content:meta.socialImageAlt"
+    >
+    <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="HoldType — The most honest Wispr Flow “clone”" data-i18n-attrs="content:meta.title">
     <meta
       name="twitter:description"
       content="HoldType is the most honest Wispr Flow “clone”: native macOS dictation with your OpenAI API key, no HoldType subscription, and no mandatory rewrite pass."
       data-i18n-attrs="content:meta.description"
     >
-    <meta name="twitter:image" content="https://holdtype.app/assets/app-icon.png">
-    <meta name="twitter:image:alt" content="HoldType app icon" data-i18n-attrs="content:meta.socialImageAlt">
+    <meta name="twitter:image" content="https://holdtype.app/assets/holdtype-social-preview.png" data-site-og-image>
+    <meta
+      name="twitter:image:alt"
+      content="HoldType social preview with the words “Brand-New, Blazing-Fast, Native Mac Dictation Tool”"
+      data-i18n-attrs="content:meta.socialImageAlt"
+    >
     <link rel="icon" type="image/png" href="assets/app-icon.png">
     <link rel="preload" as="image" href="assets/indicator-listening.png">
     <link rel="preload" as="image" href="assets/indicator-transcribing.png">
@@ -94,40 +106,28 @@
           <a href="#privacy" data-i18n="header.privacy">Privacy</a>
           <a href="#faq" data-i18n="header.faq">FAQ</a>
           <a
-            class="header-social-link"
-            href="https://x.com/potapenko"
-            aria-label="Follow @potapenko on Twitter"
-            data-link-ref="twitter"
-            data-i18n-attrs="aria-label:footer.twitterLink"
-          >
-            <svg class="header-social-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M21.6 7.1v.6c0 6.1-4.6 13.1-13.1 13.1-2.6 0-5-.8-7-2.1h1.1c2.2 0 4.1-.7 5.7-2-2 0-3.7-1.4-4.3-3.2.3 0 .6.1.9.1.4 0 .8-.1 1.2-.2-2.1-.4-3.7-2.3-3.7-4.5v-.1c.6.3 1.3.6 2.1.6A4.6 4.6 0 0 1 3.1 3.2a13 13 0 0 0 9.5 4.8 4.6 4.6 0 0 1 7.8-4.2 9 9 0 0 0 2.9-1.1 4.6 4.6 0 0 1-2 2.5c.9-.1 1.7-.3 2.6-.7a9.8 9.8 0 0 1-2.3 2.6Z"/>
-            </svg>
-            <span class="header-social-text" data-i18n="footer.twitterLink">Follow @potapenko on Twitter</span>
-          </a>
-          <a
-            class="header-social-link"
+            class="header-patreon-link"
             href="https://www.patreon.com/c/playphraseme"
             aria-label="Support HoldType on Patreon"
             data-link-ref="patreon"
             data-i18n-attrs="aria-label:footer.patreonLink"
           >
-            <svg class="header-social-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M3 3h4v18H3V3Zm12.5 0a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13Z"/>
             </svg>
-            <span class="header-social-text" data-i18n="footer.patreonLink">Support HoldType on Patreon</span>
+            <span class="header-patreon-text" data-i18n="footer.patreonLink">Support HoldType on Patreon</span>
           </a>
           <a
-            class="header-social-link"
+            class="header-github-link"
             href="https://github.com/holdtype/holdtype-swift"
             aria-label="Inspect the source on GitHub"
             data-link-ref="sourceRepository"
             data-i18n-attrs="aria-label:footer.sourceLink"
           >
-            <svg class="header-social-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 1C5.923 1 1 5.923 1 12c0 4.867 3.149 8.979 7.521 10.436.55.096.756-.233.756-.522 0-.262-.013-1.128-.013-2.049-3.059.665-3.704-1.298-3.704-1.298-.5-1.27-1.221-1.608-1.221-1.608-.998-.682.075-.668.075-.668 1.104.078 1.685 1.133 1.685 1.133.981 1.681 2.573 1.195 3.2.914.099-.71.384-1.195.698-1.469-2.442-.278-5.01-1.221-5.01-5.436 0-1.2.428-2.181 1.132-2.95-.114-.278-.491-1.397.107-2.912 0 0 .923-.296 3.024 1.127A10.52 10.52 0 0 1 12 6.821a10.52 10.52 0 0 1 2.753.37c2.1-1.423 3.022-1.127 3.022-1.127.6 1.515.223 2.634.109 2.912.705.769 1.13 1.75 1.13 2.95 0 4.225-2.572 5.155-5.022 5.428.394.34.746 1.01.746 2.037 0 1.47-.013 2.653-.013 3.014 0 .292.2.623.762.518C19.858 20.974 23 16.865 23 12c0-6.077-4.923-11-11-11Z"/>
             </svg>
-            <span class="header-social-text" data-i18n="footer.sourceLink">Inspect the source on GitHub</span>
+            <span class="header-github-text" data-i18n="footer.sourceLink">Inspect the source on GitHub</span>
           </a>
           <a
             class="mobile-download"
@@ -197,12 +197,7 @@
         <div class="container hero-layout">
           <div class="hero-copy">
             <h1 id="hero-title" data-i18n="hero.title">The most honest Wispr Flow “clone”.</h1>
-            <p class="hero-lede" data-i18n="hero.lede">No account. No mandatory rewrite pass. You pay OpenAI, not HoldType.</p>
-            <p class="hero-support" data-i18n="hero.support">
-              HoldType sends audio directly from your Mac to OpenAI using your API
-              key, then returns the text to the cursor in most Mac apps. Translation
-              runs only when you ask for it.
-            </p>
+            <p class="hero-lede" data-i18n="hero.lede">No account. Full control over your dictation. You pay OpenAI, not HoldType.</p>
             <div class="hero-actions">
               <a
                 class="button"
@@ -230,8 +225,7 @@
             </div>
             <div class="editor-window" aria-hidden="true">
               <div class="editor-toolbar" aria-hidden="true">
-                <span class="editor-window-label" data-i18n="hero.demo.editorIllustration">A perfectly realistic HoldType startup plan</span>
-                <span class="editor-toolbar-title" data-i18n="hero.demo.documentTitle">Make $1M with SaaS</span>
+                <span class="editor-window-label" data-i18n="hero.demo.editorIllustration">A perfectly realistic startup plan</span>
                 <span class="editor-tools" data-i18n="hero.demo.toolbarSample">Aa&nbsp;&nbsp; ···</span>
               </div>
               <div class="editor-body">
@@ -336,7 +330,7 @@
             </article>
             <article>
               <p class="reason-number" aria-hidden="true">02</p>
-              <h3 data-i18n="reasons.model.title">GPT-4o Transcribe by default</h3>
+              <h3 data-i18n="reasons.model.title">gpt-4o-transcribe model</h3>
               <p data-i18n="reasons.model.body">
                 OpenAI reports fewer word errors, better language recognition, and
                 higher accuracy than its original Whisper models.
@@ -615,7 +609,7 @@
           </figure>
           <div class="founder-copy">
             <p class="section-label" data-i18n="founder.label">Why I built HoldType</p>
-            <h2 id="founder-title" data-i18n="founder.title">I wanted Wispr Flow. I didn’t want the bullshit.</h2>
+            <h2 id="founder-title" data-i18n="founder.title">I wanted a dictation tool. Not all the bullshit.</h2>
             <p data-i18n="founder.body1">
               I wanted to know who charged me and why every transcript had to be
               rewritten by a second model. I did not want another black box between
@@ -888,7 +882,7 @@ open -a HoldType</code></pre>
       <section class="final-cta" aria-labelledby="final-cta-title">
         <div class="container download-panel">
           <div>
-            <h2 id="final-cta-title" data-i18n="finalCta.title">Your dictation. Fully under your control.</h2>
+            <h2 id="final-cta-title" data-i18n="finalCta.title">Full control over your dictation.</h2>
             <p data-i18n="finalCta.body">Free app · Your OpenAI API key · No HoldType subscription · macOS 14+</p>
           </div>
           <a

@@ -3,7 +3,7 @@
   "meta": {
     "title": "{brand.holdType} — The most honest Wispr Flow “clone”",
     "description": "{brand.holdType} is the most honest Wispr Flow “clone”: native {brand.macOS} dictation with your {brand.openAI} API key, no {brand.holdType} subscription, and no mandatory rewrite pass.",
-    "socialImageAlt": "{brand.holdType} app icon"
+    "socialImageAlt": "{brand.holdType} social preview with the words “Brand-New, Blazing-Fast, Native Mac Dictation Tool”"
   },
   "common": {
     "skipToContent": "Skip to content",
@@ -30,8 +30,7 @@
   },
   "hero": {
     "title": "The most honest Wispr Flow “clone”.",
-    "lede": "No account. No mandatory rewrite pass. You pay OpenAI, not {brand.holdType}.",
-    "support": "{brand.holdType} sends audio directly from your {brand.mac} to {brand.openAI} using your API key, then returns the text to the cursor in most {brand.mac} apps. Translation runs only when you ask for it.",
+    "lede": "No account. Full control over your dictation. You pay OpenAI, not {brand.holdType}.",
     "qualification": "Free app · {brand.openAI} API usage billed separately · {fact.minimumOS}",
     "price": {
       "aria": "At the current estimated transcription rate, {pricing.dailyDictations} dictations cost about {pricing.dailyPrice}.",
@@ -40,7 +39,7 @@
       "suffix": "at the current estimated rate"
     },
     "demo": {
-      "editorIllustration": "A perfectly realistic {brand.holdType} startup plan",
+      "editorIllustration": "A perfectly realistic startup plan",
       "documentTitle": "Make $1M with SaaS",
       "toolbarSample": "Aa  ···",
       "intro": "A conservative first milestone.",
@@ -85,7 +84,7 @@
       "body": "{brand.openAI} charges the {brand.openAIPlatform} account connected through your key. {brand.holdType} adds no monthly fee."
     },
     "model": {
-      "title": "{model.gpt4oTranscribe} by default",
+      "title": "{model.gpt4oTranscribe} model",
       "body": "{brand.openAI} reports fewer word errors, better language recognition, and higher accuracy than its original {model.whisper} models."
     },
     "openAI": {
@@ -167,7 +166,7 @@
     "imageAlt": "A desk microphone used while building and testing {brand.holdType}",
     "imageCaption": "Special recording hardware is not required.",
     "label": "Why I built {brand.holdType}",
-    "title": "I wanted Wispr Flow. I didn’t want the bullshit.",
+    "title": "I wanted a dictation tool. Not all the bullshit.",
     "body1": "I wanted to know who charged me and why every transcript had to be rewritten by a second model. I did not want another black box between my voice and the cursor.",
     "body2": "In my daily work, {brand.openAI} transcription gave me the first pass I trusted most often. The optional rewrite pass stays off unless I turn it on.",
     "body3": "{brand.holdType} is the native Swift app I built for that: your API key, direct OpenAI billing, no product account, and no monthly fee."
@@ -306,12 +305,11 @@
     }
   },
   "finalCta": {
-    "title": "Your dictation. Fully under your control.",
+    "title": "Full control over your dictation.",
     "body": "Free app · Your {brand.openAI} API key · No {brand.holdType} subscription · {fact.minimumOS}"
   },
   "footer": {
     "description": "Native {brand.macOS} dictation. Source-available under {license.fsl11} with an {license.mit} future license.",
-    "twitterLink": "Follow @potapenko on {brand.twitter}",
     "patreonLink": "Support {brand.holdType} on {brand.patreon}",
     "sourceLink": "Inspect the source on {brand.github}"
   },

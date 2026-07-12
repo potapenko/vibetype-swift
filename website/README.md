@@ -40,7 +40,9 @@ is stored locally in the browser and can always be changed from the header.
 Edit shared facts and trusted links in `i18n/site.json`, locale metadata in
 `i18n/locales.json`, and copy in the corresponding locale catalog. The builder
 fails on missing or extra keys, placeholder drift, raw catalog HTML, unsafe
-output directories, and unexpected locale routes.
+output directories, unexpected locale routes, or a missing or incorrectly sized
+social-preview image. Every route uses the same English 1200 × 630 launch
+artwork while its Open Graph and X/Twitter alternative text stays localized.
 
 ## Hosting
 
@@ -51,9 +53,11 @@ enabled. The canonical App Platform configuration is `.do/app.yaml`.
 
 GitHub Pages remains the canonical host for the Sparkle appcast and versioned
 release notes at <https://holdtype.github.io/holdtype-swift/>. The Pages and
-release workflows still build one complete Pages artifact so a website change
-or app release cannot erase update metadata. Do not point the shipped update
-feed at `holdtype.app` as part of a landing-only deployment.
+release workflows still build one complete Pages artifact so publication cannot
+erase update metadata. The release workflow updates Pages when a new app version
+ships; the standalone Pages workflow is manual recovery only. Routine website
+pushes deploy through DigitalOcean without starting GitHub Pages. Do not point
+the shipped update feed at `holdtype.app` as part of a landing-only deployment.
 
 `README.md`, `design-qa.md`, the generator, and the source catalogs are
 repository inputs or documentation and are deliberately excluded from public
@@ -162,24 +166,27 @@ text links. Shadows are reserved for the hero editor and real product windows.
   16px page gutters, and full-width primary CTAs.
 
 The first viewport leads with `The most honest Wispr Flow "clone".` It must
-immediately explain the provocation through text returning to the active
-cursor, the user's OpenAI Platform API key, direct OpenAI billing, no HoldType
-subscription, and no mandatory model rewrite. The hero has one action: the free
-macOS download. Source inspection remains in the footer, and there is no
-separate proof-chip row. No unsupported metric, comparative speed claim, or
-undocumented claim about Wispr Flow's internal model is permitted above the
-fold.
+immediately ground `Full control over your dictation` through no HoldType
+account and direct OpenAI billing. Cursor handoff, API-key routing, and
+translation details appear below; the hero has no separate gray explanatory
+paragraph. The hero has one action: the free macOS download. Source inspection
+remains in the footer, and there is no separate proof-chip row. No unsupported
+metric, comparative speed claim, or undocumented claim about Wispr Flow's
+internal model is permitted above the fold.
 
 The code-native editor uses a dry, self-ironic fictional plan to build a tiny
 SaaS and reach `$1M ARR`; the interface presents the request as if it were
 ordinary. Its caption still identifies the scene as an illustration rather
 than a recorded demo and makes no claim that Codex produced the business
-result. The usage-cost badge remains visually secondary and must not present
-100 as a usage cap, guaranteed maximum, or typical day.
+result. The toolbar label stays unbranded and on one line, using an ellipsis
+rather than wrapping when space is tight. The document title appears only in
+the editor body instead of being repeated in the toolbar. The usage-cost badge
+remains visually secondary and must not present 100 as a usage cap, guaranteed
+maximum, or typical day.
 
 ### Page anatomy
 
-1. Sticky brand/navigation header with Patreon and GitHub icon links plus a
+1. Sticky brand/navigation header with compact Patreon and GitHub icons plus a
    GitHub Releases CTA.
 2. Split hero with the code-native editor illustration and real indicator art.
 3. Hold → speak → release → inserted workflow rail.
@@ -203,6 +210,7 @@ Original repository assets are not modified.
 | Landing asset | Repository source | Treatment |
 | --- | --- | --- |
 | `app-icon.png` | `docs/readme-assets/app-icon.png` | Copied unchanged |
+| `holdtype-social-preview.png` | Approved English launch creative and canonical HoldType icon | Image-generated for the wide composition and exported as an exact 1200 × 630 PNG |
 | `indicator-listening.png` | `HoldType/Assets.xcassets/ActivityRecordingIndicatorLight.imageset/ActivityRecordingIndicatorLight@2x.png` | Copied unchanged |
 | `indicator-transcribing.png` | `HoldType/Assets.xcassets/ActivityTranscribingIndicatorLight.imageset/ActivityTranscribingIndicatorLight@2x.png` | Copied unchanged |
 | `menu-popover.png` | `docs/readme-assets/menu-popover.png` | Copied unchanged |
@@ -221,9 +229,11 @@ UI states were redrawn or retouched.
 ## Product-copy boundaries
 
 - HoldType is a native macOS app for macOS 14 or newer.
-- The exact transcription-model name appears at most once in subdued secondary
-  copy. It is not used in metadata, headlines, hero lead or support copy, proof
-  chips, section headings, founder copy, the final CTA, or the footer.
+- The exact API model identifier `gpt-4o-transcribe` appears at most once in
+  subdued secondary copy. Its hyphens and lowercase spelling stay verbatim in
+  every locale. It is not used in metadata, headlines, hero lead or support
+  copy, proof chips, section headings, founder copy, the final CTA, or the
+  footer.
 - Model-based correction is optional and off by default. Local typography
   cleanup may still run without another model request.
 - It inserts accepted text in **most** Mac apps; it does not claim universal

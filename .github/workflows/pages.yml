@@ -1,13 +1,6 @@
-name: Pages
+name: Pages maintenance
 
 on:
-  push:
-    branches:
-      - master
-    paths:
-      - "website/**"
-      - "scripts/release/prepare_pages_artifact.py"
-      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -21,7 +14,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Publish landing page and update feed
+    name: Republish landing snapshot and update feed
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -29,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download latest stable appcast
         id: latest-release
@@ -73,16 +66,16 @@ jobs:
             --timeout 60
 
       - name: Configure Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: public
 
       - name: Deploy site and appcast to Pages
         id: deploy-pages
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
       - name: Verify published site and update feed
         env:
@@ -107,7 +100,7 @@ jobs:
             --retry-max-time 180 \
             "${page_url}?deployment=${GITHUB_SHA}" \
             --output "$published_index"
-          grep -F "Speak the whole thought." "$published_index"
+          grep -F 'data-site-locale="en"' "$published_index"
           scripts/release/verify_published_release.py \
             --repository "$GITHUB_REPOSITORY" \
             --version "$VERSION" \
