@@ -27,10 +27,61 @@ struct IOSAcceptedOutputDeliveryJournalTests {
                 == IOSAcceptedOutputDeliveryWireCodec.historyFields
         )
         #expect(object["schemaVersion"] as? Int == 1)
+        #expect(object["failedRetryID"] == nil)
         #expect(object["deliveryID"] as? String == record.deliveryID.uuidString.lowercased())
         #expect(object["publicationGeneration"] as? Int == 0)
         #expect(historyObject["state"] as? String == "pending")
         #expect(try IOSAcceptedOutputDeliveryWireCodec.decode(data) == record)
+    }
+
+    @Test func canonicalV2RequiresFailedRetryProvenanceAndRoundTrips() throws {
+        let retryID = UUID(uuidString: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")!
+        let record = try journalRecord(failedRetryID: retryID)
+
+        let data = try IOSAcceptedOutputDeliveryWireCodec.encode(record)
+        let object = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        #expect(
+            Set(object.keys)
+                == IOSAcceptedOutputDeliveryWireCodec.failedRetryFields
+        )
+        #expect(object["schemaVersion"] as? Int == 2)
+        #expect(
+            object["failedRetryID"] as? String
+                == retryID.uuidString.lowercased()
+        )
+        #expect(try IOSAcceptedOutputDeliveryWireCodec.decode(data) == record)
+
+        for replacement in [
+            NSNull(),
+            retryID.uuidString.uppercased(),
+            1,
+        ] as [Any] {
+            var invalid = object
+            invalid["failedRetryID"] = replacement
+            #expect(throws: IOSAcceptedOutputDeliveryError.invalidRecord) {
+                try IOSAcceptedOutputDeliveryWireCodec.decode(
+                    JSONSerialization.data(withJSONObject: invalid)
+                )
+            }
+        }
+
+        var missing = object
+        missing.removeValue(forKey: "failedRetryID")
+        #expect(throws: IOSAcceptedOutputDeliveryError.invalidRecord) {
+            try IOSAcceptedOutputDeliveryWireCodec.decode(
+                JSONSerialization.data(withJSONObject: missing)
+            )
+        }
+
+        var mislabeledV1 = object
+        mislabeledV1["schemaVersion"] = 1
+        #expect(throws: IOSAcceptedOutputDeliveryError.invalidRecord) {
+            try IOSAcceptedOutputDeliveryWireCodec.decode(
+                JSONSerialization.data(withJSONObject: mislabeledV1)
+            )
+        }
     }
 
     @Test func everyHistoryStateAndExplicitNullRoundTrips() throws {
@@ -81,7 +132,7 @@ struct IOSAcceptedOutputDeliveryJournalTests {
         var object = try #require(
             JSONSerialization.jsonObject(with: data) as? [String: Any]
         )
-        object["schemaVersion"] = 2
+        object["schemaVersion"] = 3
         object["futureField"] = "future"
         object.removeValue(forKey: "acceptedText")
 
@@ -99,7 +150,7 @@ struct IOSAcceptedOutputDeliveryJournalTests {
         var object = try #require(
             JSONSerialization.jsonObject(with: data) as? [String: Any]
         )
-        object["schemaVersion"] = 2
+        object["schemaVersion"] = 3
         object["futureField"] = "future"
         #expect(object.count == 17)
 
@@ -530,6 +581,7 @@ private func journalRecord(
     preparation: IOSAcceptedOutputDeliveryPreparation? = nil,
     revision: Int64 = 1,
     publicationGeneration: Int64 = 0,
+    failedRetryID: UUID? = nil,
     historyWrite: IOSAcceptedOutputHistoryWrite? = nil
 ) throws -> IOSAcceptedOutputDeliveryRecord {
     let preparation = try preparation ?? journalPreparation()
@@ -540,6 +592,7 @@ private func journalRecord(
         sessionID: preparation.sessionID,
         attemptID: preparation.attemptID,
         transcriptID: preparation.transcriptID,
+        failedRetryID: failedRetryID,
         acceptedText: preparation.acceptedText,
         outputIntent: preparation.outputIntent,
         createdAt: createdAt,

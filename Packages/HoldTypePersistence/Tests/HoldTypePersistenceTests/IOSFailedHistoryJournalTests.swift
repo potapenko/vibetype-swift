@@ -337,7 +337,7 @@ struct IOSFailedHistoryJournalTests {
             retryCount: 1,
             retryOperation: failedHistoryTestRetryOperation(index: 5)
         )
-        let cleanup = try (1...5).map {
+        let cleanup = try (1...4).map {
             try failedHistoryTestAudioCleanup(index: $0)
         }
         let envelope = try IOSFailedHistoryEnvelope(

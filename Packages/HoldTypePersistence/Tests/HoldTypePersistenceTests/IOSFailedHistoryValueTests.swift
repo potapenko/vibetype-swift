@@ -321,6 +321,73 @@ struct IOSFailedHistoryValueTests {
         }
     }
 
+    @Test func envelopeAcceptsFourCleanupTombstonesWithOneActiveRetry()
+        throws {
+        let retrying = try failedHistoryTestEntry(
+            index: 50,
+            retryCount: 1,
+            retryOperation: failedHistoryTestRetryOperation(index: 50)
+        )
+        let cleanup = try (1...4).map {
+            try failedHistoryTestAudioCleanup(index: $0)
+        }
+
+        let envelope = try IOSFailedHistoryEnvelope(
+            revision: 1,
+            entries: [retrying],
+            audioCleanup: cleanup
+        )
+
+        #expect(envelope.audioCleanup.count == 4)
+        #expect(envelope.entries.first?.retryOperation != nil)
+    }
+
+    @Test func envelopeRejectsFiveCleanupTombstonesWithOneActiveRetry()
+        throws {
+        let retrying = try failedHistoryTestEntry(
+            index: 50,
+            retryCount: 1,
+            retryOperation: failedHistoryTestRetryOperation(index: 50)
+        )
+        let cleanup = try (1...5).map {
+            try failedHistoryTestAudioCleanup(index: $0)
+        }
+
+        #expect(throws: IOSFailedHistoryError.invalidRecord) {
+            _ = try IOSFailedHistoryEnvelope(
+                revision: 1,
+                entries: [retrying],
+                audioCleanup: cleanup
+            )
+        }
+    }
+
+    @Test func envelopeAllowsFiveCleanupTombstonesAfterRetryEnds() throws {
+        let cleanup = try (1...5).map {
+            try failedHistoryTestAudioCleanup(index: $0)
+        }
+        let cancelled = try failedHistoryTestEntry(
+            index: 50,
+            retryCount: 1
+        )
+        let failed = try failedHistoryTestEntry(
+            index: 51,
+            failureCategory: .timedOut,
+            retryCount: 1
+        )
+
+        _ = try IOSFailedHistoryEnvelope(
+            revision: 1,
+            entries: [cancelled],
+            audioCleanup: cleanup
+        )
+        _ = try IOSFailedHistoryEnvelope(
+            revision: 1,
+            entries: [failed],
+            audioCleanup: cleanup
+        )
+    }
+
     @Test func envelopeAllowsOnePendingJournalRetirementEntry() throws {
         let ready = try failedHistoryTestEntry(index: 1)
         let pending = try failedHistoryTestEntry(

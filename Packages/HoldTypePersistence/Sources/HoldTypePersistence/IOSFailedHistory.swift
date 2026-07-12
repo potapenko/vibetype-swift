@@ -255,6 +255,9 @@ struct IOSFailedHistoryEnvelope: Equatable, Sendable {
         let cleanupAudioIdentifiers = audioCleanup.map(\.audioRelativeIdentifier)
         let allAttemptIDs = entryAttemptIDs + cleanupAttemptIDs
         let allAudioIdentifiers = entryAudioIdentifiers + cleanupAudioIdentifiers
+        let activeRetryCount = entries.lazy.filter {
+            $0.retryOperation != nil
+        }.count
 
         guard revision >= 1,
               entries.count <= IOSFailedHistoryValidation.maximumEntryCount,
@@ -268,7 +271,9 @@ struct IOSFailedHistoryEnvelope: Equatable, Sendable {
               entries.lazy.filter({
                   $0.ownershipState == .pendingJournalRetirement
               }).count <= 1,
-              entries.lazy.filter({ $0.retryOperation != nil }).count <= 1 else {
+              activeRetryCount <= 1,
+              audioCleanup.count + activeRetryCount
+                <= IOSFailedHistoryValidation.maximumAudioCleanupCount else {
             throw IOSFailedHistoryError.invalidRecord
         }
 

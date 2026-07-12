@@ -36,6 +36,21 @@ struct IOSAcceptedHistoryPendingReplacementWork: Equatable, Sendable {
     let ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity
     let preparation: IOSAcceptedOutputDeliveryPreparation
     let phase: IOSAcceptedHistoryPendingReplacementPhase
+    let failedRetryReceipt:
+        IOSFailedHistoryRetryAcceptingOutputReceipt?
+
+    init(
+        ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity,
+        preparation: IOSAcceptedOutputDeliveryPreparation,
+        phase: IOSAcceptedHistoryPendingReplacementPhase,
+        failedRetryReceipt:
+            IOSFailedHistoryRetryAcceptingOutputReceipt? = nil
+    ) {
+        self.ownerIdentity = ownerIdentity
+        self.preparation = preparation
+        self.phase = phase
+        self.failedRetryReceipt = failedRetryReceipt
+    }
 
     func replacingPhase(
         _ phase: IOSAcceptedHistoryPendingReplacementPhase
@@ -43,7 +58,24 @@ struct IOSAcceptedHistoryPendingReplacementWork: Equatable, Sendable {
         Self(
             ownerIdentity: ownerIdentity,
             preparation: preparation,
-            phase: phase
+            phase: phase,
+            failedRetryReceipt: failedRetryReceipt
+        )
+    }
+
+    func refreshingFailedRetryReceipt(
+        _ receipt: IOSFailedHistoryRetryAcceptingOutputReceipt
+    ) -> Self? {
+        guard let current = failedRetryReceipt,
+              current.relationKey == receipt.relationKey,
+              preparation == receipt.frozenSlotProof.preparation else {
+            return nil
+        }
+        return Self(
+            ownerIdentity: ownerIdentity,
+            preparation: preparation,
+            phase: phase,
+            failedRetryReceipt: receipt
         )
     }
 }
@@ -88,9 +120,22 @@ extension IOSAcceptedHistoryCoordinator {
         replacementState: IOSAcceptedHistoryPendingReplacementOperationState,
         operationLeaseAuthorization:
             IOSPersistenceOperationLeaseAuthorization,
-        ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity
+        ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit? = nil
     ) async throws -> IOSAcceptedOutputDeliveryAcceptance {
         var work = initialWork
+
+        switch (work.failedRetryReceipt, failedRetryPermit) {
+        case (.none, .none):
+            break
+        case (.some(let receipt), .some(let permit))
+            where receipt == permit.acceptingOutputReceipt
+                && permit.provesActiveRelation():
+            break
+        case (.none, .some), (.some, .none), (.some, .some):
+            throw IOSAcceptedOutputDeliveryError.commitUncertain
+        }
 
         while true {
             do {
@@ -107,7 +152,12 @@ extension IOSAcceptedHistoryCoordinator {
             case .acceptingReplacement:
                 do {
                     let acceptance = try await deliveryStore
-                        .acceptForHistoryCoordinator(work.preparation)
+                        .acceptForHistoryCoordinator(
+                            work.preparation,
+                            operationLeaseAuthorization:
+                                operationLeaseAuthorization,
+                            failedRetryPermit: failedRetryPermit
+                        )
                     await replacementState.clear()
                     return acceptance
                 } catch IOSAcceptedOutputDeliveryError
@@ -145,7 +195,10 @@ extension IOSAcceptedHistoryCoordinator {
                                 expected:
                                     IOSAcceptedOutputDeliveryExpectation(
                                         record: record
-                                    )
+                                    ),
+                                operationLeaseAuthorization:
+                                    operationLeaseAuthorization,
+                                failedRetryPermit: failedRetryPermit
                             )
                         switch try await outboxStore.classifyDeliveryAbsence(
                             authorization: authorization,
@@ -160,7 +213,8 @@ extension IOSAcceptedHistoryCoordinator {
                                         outboxAbsenceAuthorization:
                                             absenceAuthorization,
                                         operationLeaseAuthorization:
-                                            operationLeaseAuthorization
+                                            operationLeaseAuthorization,
+                                        failedRetryPermit: failedRetryPermit
                                     )
                                 await replacementState.clear()
                                 return acceptance
@@ -186,7 +240,10 @@ extension IOSAcceptedHistoryCoordinator {
                                 expected:
                                     IOSAcceptedOutputDeliveryExpectation(
                                         record: record
-                                    )
+                                    ),
+                                operationLeaseAuthorization:
+                                    operationLeaseAuthorization,
+                                failedRetryPermit: failedRetryPermit
                             )
                         work = work.replacingPhase(
                             .deliveryAuthorized(authorization)
@@ -257,7 +314,10 @@ extension IOSAcceptedHistoryCoordinator {
                     let reservation = try await deliveryStore
                         .reservePendingHistoryTransfer(
                             authorization: authorization,
-                            policyReceipt: refreshedPolicyReceipt
+                            policyReceipt: refreshedPolicyReceipt,
+                            operationLeaseAuthorization:
+                                operationLeaseAuthorization,
+                            failedRetryPermit: failedRetryPermit
                         )
                     work = work.replacingPhase(
                         .transferReserved(reservation)
@@ -283,13 +343,19 @@ extension IOSAcceptedHistoryCoordinator {
                     await replacementState.store(work)
                 } catch IOSAcceptedHistoryOutboxError.expired {
                     try? await deliveryStore.releasePendingHistoryTransfer(
-                        reservation
+                        reservation,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization,
+                        failedRetryPermit: failedRetryPermit
                     )
                     work = work.replacingPhase(.acceptingReplacement)
                     await replacementState.store(work)
                 } catch IOSAcceptedHistoryOutboxError.stalePolicyGeneration {
                     try? await deliveryStore.releasePendingHistoryTransfer(
-                        reservation
+                        reservation,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization,
+                        failedRetryPermit: failedRetryPermit
                     )
                     work = work.replacingPhase(
                         .deliveryAuthorized(
@@ -299,7 +365,10 @@ extension IOSAcceptedHistoryCoordinator {
                     await replacementState.store(work)
                 } catch IOSAcceptedHistoryOutboxError.compareAndSwapFailed {
                     try? await deliveryStore.releasePendingHistoryTransfer(
-                        reservation
+                        reservation,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization,
+                        failedRetryPermit: failedRetryPermit
                     )
                     work = work.replacingPhase(
                         .deliveryAuthorized(
@@ -316,23 +385,34 @@ extension IOSAcceptedHistoryCoordinator {
                         reservation: reservation,
                         ownershipProof: IOSAcceptedOutputHistoryOwnershipProof(
                             outboxReceipt: outboxReceipt
-                        )
+                        ),
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization,
+                        failedRetryPermit: failedRetryPermit
                     )
                     await replacementState.clear()
                     return IOSAcceptedOutputDeliveryAcceptance(
                         record: record,
-                        provenance: .freshCurrentProcess
+                        provenance: work.failedRetryReceipt.map {
+                            .failedRetry($0.relationKey)
+                        } ?? .freshCurrentProcess
                     )
                 } catch IOSAcceptedOutputDeliveryError.expired {
                     try? await deliveryStore.releasePendingHistoryTransfer(
-                        reservation
+                        reservation,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization,
+                        failedRetryPermit: failedRetryPermit
                     )
                     work = work.replacingPhase(.acceptingReplacement)
                     await replacementState.store(work)
                 } catch IOSAcceptedOutputDeliveryError
                     .compareAndSwapFailed {
                     try? await deliveryStore.releasePendingHistoryTransfer(
-                        reservation
+                        reservation,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization,
+                        failedRetryPermit: failedRetryPermit
                     )
                     work = work.replacingPhase(.acceptingReplacement)
                     await replacementState.store(work)
@@ -345,7 +425,10 @@ extension IOSAcceptedHistoryCoordinator {
                 do {
                     _ = try await deliveryStore.cancelHistoryWrite(
                         authorization: authorization,
-                        policyInvalidationReceipt: invalidationReceipt
+                        policyInvalidationReceipt: invalidationReceipt,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization,
+                        failedRetryPermit: failedRetryPermit
                     )
                     work = work.replacingPhase(.acceptingReplacement)
                     await replacementState.store(work)

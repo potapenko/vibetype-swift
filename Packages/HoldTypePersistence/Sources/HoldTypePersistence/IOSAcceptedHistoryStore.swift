@@ -34,10 +34,12 @@ fileprivate struct IOSAcceptedHistoryCandidate: Equatable, Sendable {
     let origin: IOSAcceptedHistoryCandidateOrigin
     let entry: IOSAcceptedHistoryEntry
     let expiresAt: Date
+    let permitsExpiredRetryRecovery: Bool
 
     init(
         delivery: IOSAcceptedOutputDeliveryAuthorization,
-        policy: IOSHistoryPolicyReceipt
+        policy: IOSHistoryPolicyReceipt,
+        permitsExpiredRetryRecovery: Bool = false
     ) throws {
         let record = delivery.record
         guard let marker = record.historyWrite,
@@ -60,6 +62,7 @@ fileprivate struct IOSAcceptedHistoryCandidate: Equatable, Sendable {
             durationMilliseconds: marker.durationMilliseconds
         )
         expiresAt = record.expiresAt
+        self.permitsExpiredRetryRecovery = permitsExpiredRetryRecovery
     }
 
     init(
@@ -76,6 +79,7 @@ fileprivate struct IOSAcceptedHistoryCandidate: Equatable, Sendable {
         origin = .outbox(outbox)
         entry = try Self.entry(from: confirmed)
         expiresAt = confirmed.expiresAt
+        permitsExpiredRetryRecovery = false
     }
 
     func matches(
@@ -366,6 +370,42 @@ actor IOSAcceptedHistoryStore {
         let candidate = try IOSAcceptedHistoryCandidate(
             delivery: delivery,
             policy: policy
+        )
+        return try decideUpsert(candidate)
+    }
+
+    /// Retry-only absent-row provenance. Ordinary `.pending` delivery recovery
+    /// remains confirmation-only; this path is available solely while the
+    /// exact failed `acceptingOutput` relation and lease are still valid.
+    func decideFailedRetryReplay(
+        delivery: IOSAcceptedOutputDeliveryAuthorization,
+        policy: IOSHistoryPolicyReceipt,
+        deliveryPermit: IOSFailedHistoryRetryDeliveryPermit
+    ) throws -> IOSAcceptedHistoryRowReceipt {
+        try requireOwners(delivery, policy)
+        let acceptingOutputReceipt = deliveryPermit.acceptingOutputReceipt
+        let preparation = acceptingOutputReceipt.frozenSlotProof.preparation
+        guard deliveryPermit.provesActiveRelation(),
+              acceptingOutputReceipt.ownerIdentity
+                == capabilityOwnerIdentity,
+              acceptingOutputReceipt.repositoryBinding.physicalRootIdentity
+                != nil,
+              delivery.storeIdentity
+                == acceptingOutputReceipt.deliveryStoreIdentity,
+              delivery.record.hasExactFailedRetryAcceptance(
+                as: preparation,
+                retryID: acceptingOutputReceipt.retryOperation.retryID
+              ),
+              delivery.record.historyWrite?.state == .pending,
+              policy.state
+                == preparation.historyCapture?.policyReceipt.state else {
+            throw IOSAcceptedHistoryError.compareAndSwapFailed
+        }
+        try requireNoPruneUncertainty()
+        let candidate = try IOSAcceptedHistoryCandidate(
+            delivery: delivery,
+            policy: policy,
+            permitsExpiredRetryRecovery: true
         )
         return try decideUpsert(candidate)
     }
@@ -1096,7 +1136,9 @@ private extension IOSAcceptedHistoryStore {
         case .live:
             return
         case .expired:
-            throw IOSAcceptedHistoryError.expired
+            guard candidate.permitsExpiredRetryRecovery else {
+                throw IOSAcceptedHistoryError.expired
+            }
         case .clockRollbackAmbiguous:
             throw IOSAcceptedHistoryError.clockRollbackAmbiguous
         }

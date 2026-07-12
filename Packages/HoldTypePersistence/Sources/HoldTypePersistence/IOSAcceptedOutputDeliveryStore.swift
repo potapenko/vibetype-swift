@@ -13,6 +13,7 @@ struct IOSAcceptedOutputDeliveryGuardedBaselineEvidence: Sendable {
 enum IOSAcceptedOutputDeliveryAcceptanceProvenance: Equatable, Sendable {
     case freshCurrentProcess
     case preexisting
+    case failedRetry(IOSFailedHistoryRetryDeliveryRelationKey)
 }
 
 enum IOSAcceptedOutputHistoryDeliveryDisposition: Equatable, Sendable {
@@ -35,6 +36,116 @@ extension IOSAcceptedOutputHistoryDeliveryDisposition:
 
 struct IOSAcceptedOutputDeliveryStoreIdentity: Equatable, Sendable {
     private let value = UUID()
+}
+
+private final class IOSFailedHistoryRetryDeliveryPermitAuthority:
+    @unchecked Sendable {
+    private let interlock: IOSFailedHistoryMutationInterlock
+    private let operationGateBinding: IOSPersistenceOperationGateBinding
+    private let deliveryStoreIdentity:
+        IOSAcceptedOutputDeliveryStoreIdentity
+    private let ownerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity
+
+    init(
+        interlock: IOSFailedHistoryMutationInterlock,
+        operationGateBinding: IOSPersistenceOperationGateBinding,
+        deliveryStoreIdentity: IOSAcceptedOutputDeliveryStoreIdentity,
+        ownerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity
+    ) {
+        self.interlock = interlock
+        self.operationGateBinding = operationGateBinding
+        self.deliveryStoreIdentity = deliveryStoreIdentity
+        self.ownerIdentity = ownerIdentity
+    }
+
+    func permits(
+        _ receipt: IOSFailedHistoryRetryAcceptingOutputReceipt,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) -> Bool {
+        operationGateBinding.proves(operationLeaseAuthorization)
+            && receipt.deliveryStoreIdentity == deliveryStoreIdentity
+            && receipt.ownerIdentity == ownerIdentity
+            && receipt.operationLeaseAuthorization.provesSameActiveLease(
+                as: operationLeaseAuthorization
+            )
+            && interlock.permitsRetryDeliveryRelation(
+                receipt.relationKey,
+                freezeReservation:
+                    receipt.frozenSlotProof.freezeReservation,
+                operationLeaseAuthorization:
+                    operationLeaseAuthorization
+            )
+    }
+}
+
+/// Delivery-store-minted authority for the one active failed-Retry relation.
+/// The raw relation key remains an identity only; it cannot bypass mutation
+/// admission without this exact store, owner, root gate, receipt, and lease.
+struct IOSFailedHistoryRetryDeliveryPermit: Sendable {
+    let acceptingOutputReceipt:
+        IOSFailedHistoryRetryAcceptingOutputReceipt
+    let operationLeaseAuthorization:
+        IOSPersistenceOperationLeaseAuthorization
+    private let authority: IOSFailedHistoryRetryDeliveryPermitAuthority
+
+    fileprivate init(
+        acceptingOutputReceipt:
+            IOSFailedHistoryRetryAcceptingOutputReceipt,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization,
+        authority: IOSFailedHistoryRetryDeliveryPermitAuthority
+    ) {
+        self.acceptingOutputReceipt = acceptingOutputReceipt
+        self.operationLeaseAuthorization = operationLeaseAuthorization
+        self.authority = authority
+    }
+
+    var relationKey: IOSFailedHistoryRetryDeliveryRelationKey {
+        acceptingOutputReceipt.relationKey
+    }
+
+    func provesActiveRelation() -> Bool {
+        authority.permits(
+            acceptingOutputReceipt,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+    }
+}
+
+extension IOSFailedHistoryRetryDeliveryPermit:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String {
+        "IOSFailedHistoryRetryDeliveryPermit(redacted)"
+    }
+    var debugDescription: String { description }
+    var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+private final class IOSAcceptedOutputFailedRelationInterlockBinding:
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var interlock: IOSFailedHistoryMutationInterlock?
+
+    init(_ interlock: IOSFailedHistoryMutationInterlock? = nil) {
+        self.interlock = interlock
+    }
+
+    func bind(_ interlock: IOSFailedHistoryMutationInterlock) -> Bool {
+        lock.withLock {
+            if let current = self.interlock {
+                return current === interlock
+            }
+            self.interlock = interlock
+            return true
+        }
+    }
+
+    func current() -> IOSFailedHistoryMutationInterlock? {
+        lock.withLock { interlock }
+    }
 }
 
 enum IOSAcceptedOutputPendingHistoryTransferClaimResult: Equatable {
@@ -513,6 +624,8 @@ public actor IOSAcceptedOutputDeliveryStore {
         IOSAcceptedHistoryOutboxStoreIdentity
     private nonisolated let operationGateBinding:
         IOSPersistenceOperationGateBinding
+    private nonisolated let failedRelationInterlockBinding:
+        IOSAcceptedOutputFailedRelationInterlockBinding
     private let now: @Sendable () -> Date
     private let monotonicNowNanoseconds: @Sendable () -> UInt64
 
@@ -538,6 +651,8 @@ public actor IOSAcceptedOutputDeliveryStore {
         capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity =
             IOSAcceptedHistoryCapabilityOwnerIdentity(),
         operationGateIdentity: IOSPersistenceOperationGateIdentity? = nil,
+        failedHistoryMutationInterlock:
+            IOSFailedHistoryMutationInterlock? = nil,
         repositoryGuard:
             IOSAcceptedHistoryCoordinatorRepositoryGuard? = nil
     ) {
@@ -553,6 +668,10 @@ public actor IOSAcceptedOutputDeliveryStore {
         operationGateBinding = IOSPersistenceOperationGateBinding(
             identity: operationGateIdentity
         )
+        failedRelationInterlockBinding =
+            IOSAcceptedOutputFailedRelationInterlockBinding(
+                failedHistoryMutationInterlock
+            )
     }
 
     init(
@@ -567,7 +686,9 @@ public actor IOSAcceptedOutputDeliveryStore {
             IOSAcceptedHistoryOutboxStoreIdentity(),
         capabilityOwnerIdentity: IOSAcceptedHistoryCapabilityOwnerIdentity =
             IOSAcceptedHistoryCapabilityOwnerIdentity(),
-        operationGateIdentity: IOSPersistenceOperationGateIdentity? = nil
+        operationGateIdentity: IOSPersistenceOperationGateIdentity? = nil,
+        failedHistoryMutationInterlock:
+            IOSFailedHistoryMutationInterlock? = nil
     ) {
         self.journal = journal
         self.storeIdentity = storeIdentity
@@ -578,12 +699,56 @@ public actor IOSAcceptedOutputDeliveryStore {
         operationGateBinding = IOSPersistenceOperationGateBinding(
             identity: operationGateIdentity
         )
+        failedRelationInterlockBinding =
+            IOSAcceptedOutputFailedRelationInterlockBinding(
+                failedHistoryMutationInterlock
+            )
     }
 
     nonisolated func bindOperationGateIdentity(
         _ identity: IOSPersistenceOperationGateIdentity
     ) -> Bool {
         operationGateBinding.bind(identity)
+    }
+
+    nonisolated func bindFailedHistoryMutationInterlock(
+        _ interlock: IOSFailedHistoryMutationInterlock
+    ) -> Bool {
+        failedRelationInterlockBinding.bind(interlock)
+    }
+
+    func authorizeFailedRetryDeliveryPermit(
+        acceptingOutputReceipt:
+            IOSFailedHistoryRetryAcceptingOutputReceipt,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) throws -> IOSFailedHistoryRetryDeliveryPermit {
+        guard let interlock = failedRelationInterlockBinding.current(),
+              acceptingOutputReceipt.deliveryStoreIdentity == storeIdentity,
+              acceptingOutputReceipt.ownerIdentity
+                == capabilityOwnerIdentity,
+              acceptingOutputReceipt.frozenSlotProof.deliveryStoreIdentity
+                == storeIdentity,
+              acceptingOutputReceipt.operationLeaseAuthorization
+                .provesSameActiveLease(
+                    as: operationLeaseAuthorization
+                ) else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        let permit = IOSFailedHistoryRetryDeliveryPermit(
+            acceptingOutputReceipt: acceptingOutputReceipt,
+            operationLeaseAuthorization: operationLeaseAuthorization,
+            authority: IOSFailedHistoryRetryDeliveryPermitAuthority(
+                interlock: interlock,
+                operationGateBinding: operationGateBinding,
+                deliveryStoreIdentity: storeIdentity,
+                ownerIdentity: capabilityOwnerIdentity
+            )
+        )
+        guard permit.provesActiveRelation() else {
+            throw IOSAcceptedOutputDeliveryError.commitUncertain
+        }
+        return permit
     }
 
     /// Commits a newly accepted transcript or atomically replaces the previous
@@ -599,8 +764,18 @@ public actor IOSAcceptedOutputDeliveryStore {
         outboxAbsenceAuthorization:
             IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization? = nil,
         operationLeaseAuthorization:
-            IOSPersistenceOperationLeaseAuthorization? = nil
+            IOSPersistenceOperationLeaseAuthorization? = nil,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit? = nil
     ) throws -> IOSAcceptedOutputDeliveryAcceptance {
+        try requireFailedRetryRelationDisposition(
+            failedRetryPermit,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        try requireFailedRetryPreparation(
+            preparation,
+            permit: failedRetryPermit
+        )
         if outboxAbsenceAuthorization != nil {
             guard let operationLeaseAuthorization,
                   operationGateBinding.proves(
@@ -618,14 +793,16 @@ public actor IOSAcceptedOutputDeliveryStore {
             return try reconcileAcceptance(
                 uncertainAcceptanceIntent,
                 outboxAbsenceAuthorization: outboxAbsenceAuthorization,
-                operationLeaseAuthorization: operationLeaseAuthorization
+                operationLeaseAuthorization: operationLeaseAuthorization,
+                failedRetryPermit: failedRetryPermit
             )
         }
         try requireNoUncertainHistoryMutation()
         return try performAccept(
             preparation,
             outboxAbsenceAuthorization: outboxAbsenceAuthorization,
-            operationLeaseAuthorization: operationLeaseAuthorization
+            operationLeaseAuthorization: operationLeaseAuthorization,
+            failedRetryPermit: failedRetryPermit
         )
     }
 
@@ -648,10 +825,26 @@ public actor IOSAcceptedOutputDeliveryStore {
     func replacePendingHistory(
         with preparation: IOSAcceptedOutputDeliveryPreparation,
         reservation: IOSAcceptedOutputPendingHistoryTransferReservation,
-        ownershipProof: IOSAcceptedOutputHistoryOwnershipProof
+        ownershipProof: IOSAcceptedOutputHistoryOwnershipProof,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization? = nil,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit? = nil
     ) throws -> IOSAcceptedOutputDeliveryRecord {
+        try requireFailedRetryRelationDisposition(
+            failedRetryPermit,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        try requireFailedRetryPreparation(
+            preparation,
+            permit: failedRetryPermit
+        )
         try requirePreparationOwner(preparation)
         let authorization = reservation.authorization
+        try requireFailedRetryFrozenPredecessor(
+            authorization.record,
+            permit: failedRetryPermit
+        )
         guard authorization.storeIdentity == storeIdentity,
               authorization.capabilityOwnerIdentity == capabilityOwnerIdentity,
               reservation.storeIdentity == storeIdentity,
@@ -679,7 +872,9 @@ public actor IOSAcceptedOutputDeliveryStore {
         do {
             return try performAccept(
                 preparation,
-                pendingHistoryReplacement: operation
+                pendingHistoryReplacement: operation,
+                operationLeaseAuthorization: operationLeaseAuthorization,
+                failedRetryPermit: failedRetryPermit
             ).record
         } catch IOSAcceptedOutputDeliveryError.expired {
             clearPendingHistoryTransferReservation(reservation)
@@ -700,6 +895,327 @@ public actor IOSAcceptedOutputDeliveryStore {
         try requireNoUncertainAcceptance()
         guard let snapshot = try journal.load() else { return nil }
         return observation(for: snapshot.record)
+    }
+
+    func freezeFailedRetrySlot(
+        preparation: IOSAcceptedOutputDeliveryPreparation,
+        dispatchReceipt: IOSFailedHistoryRetryDispatchReceipt,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) throws -> IOSAcceptedOutputDeliveryFrozenSlotProof {
+        guard operationGateBinding.proves(operationLeaseAuthorization),
+              dispatchReceipt.ownerIdentity == capabilityOwnerIdentity,
+              dispatchReceipt.retryOperation.state == .providerDispatched,
+              preparation.deliveryID
+                == dispatchReceipt.retryOperation.deliveryID,
+              preparation.sessionID
+                == dispatchReceipt.retryOperation.sessionID,
+              preparation.attemptID == dispatchReceipt.row.attemptID,
+              preparation.transcriptID
+                == dispatchReceipt.retryOperation.transcriptID else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
+        try requirePreparationOwner(preparation)
+        try requireNoUncertainHistoryMutation()
+        guard let interlock = failedRelationInterlockBinding.current() else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        let operation = dispatchReceipt.retryOperation
+        let relationKey = IOSFailedHistoryRetryDeliveryRelationKey(
+            retryID: operation.retryID,
+            deliveryID: operation.deliveryID,
+            sessionID: operation.sessionID,
+            attemptID: dispatchReceipt.row.attemptID,
+            transcriptID: operation.transcriptID,
+            failedStoreIdentity: dispatchReceipt.failedStoreIdentity,
+            deliveryStoreIdentity: storeIdentity,
+            ownerIdentity: capabilityOwnerIdentity,
+            repositoryBinding: dispatchReceipt.repositoryBinding
+        )
+        guard let freezeReservation = interlock.reserveRetryDeliveryFreeze(
+            relationKey,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        ) else {
+            throw IOSAcceptedOutputDeliveryError.commitUncertain
+        }
+        do {
+            let frozenSlot: IOSAcceptedOutputDeliveryFrozenSlot
+            if let current = try journal.load() {
+                guard current.record.failedRetryIdentityMatchCount(
+                    with: preparation
+                ) == 0 else {
+                    throw IOSAcceptedOutputDeliveryError.identityCollision
+                }
+                frozenSlot = .existing(current)
+            } else {
+                frozenSlot = .missing
+            }
+            guard let proof = IOSAcceptedOutputDeliveryFrozenSlotProof(
+                mint: IOSAcceptedOutputDeliveryFrozenSlotProofMint(),
+                frozenSlot: frozenSlot,
+                preparation: preparation,
+                retryingRow: dispatchReceipt.row,
+                retryOperation: operation,
+                freezeReservation: freezeReservation,
+                deliveryStoreIdentity: storeIdentity,
+                ownerIdentity: capabilityOwnerIdentity,
+                repositoryBinding: dispatchReceipt.repositoryBinding,
+                operationLeaseAuthorization: operationLeaseAuthorization
+            ) else {
+                throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+            }
+            return proof
+        } catch {
+            _ = interlock.clearRetryDeliveryFreeze(freezeReservation)
+            throw error
+        }
+    }
+
+    func refreshFailedRetryFrozenSlotProof(
+        from receipt: IOSFailedHistoryRetryAcceptingOutputReceipt,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) throws -> IOSAcceptedOutputDeliveryFrozenSlotProof {
+        guard receipt.deliveryStoreIdentity == storeIdentity,
+              receipt.ownerIdentity == capabilityOwnerIdentity,
+              receipt.frozenSlotProof.deliveryStoreIdentity
+                == storeIdentity else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        return try refreshFailedRetryFrozenSlotProof(
+            retainedProof: receipt.frozenSlotProof,
+            relationKey: receipt.relationKey,
+            repositoryBinding: receipt.repositoryBinding,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+    }
+
+    func refreshFailedRetryFrozenSlotProof(
+        from retainedProof: IOSAcceptedOutputDeliveryFrozenSlotProof,
+        dispatchReceipt: IOSFailedHistoryRetryDispatchReceipt,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) throws -> IOSAcceptedOutputDeliveryFrozenSlotProof {
+        guard retainedProof.deliveryStoreIdentity == storeIdentity,
+              retainedProof.ownerIdentity == capabilityOwnerIdentity,
+              retainedProof.retryingRow == dispatchReceipt.row,
+              retainedProof.retryOperation
+                == dispatchReceipt.retryOperation,
+              retainedProof.repositoryBinding
+                == dispatchReceipt.repositoryBinding else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        let operation = dispatchReceipt.retryOperation
+        let relationKey = IOSFailedHistoryRetryDeliveryRelationKey(
+            retryID: operation.retryID,
+            deliveryID: operation.deliveryID,
+            sessionID: operation.sessionID,
+            attemptID: dispatchReceipt.row.attemptID,
+            transcriptID: operation.transcriptID,
+            failedStoreIdentity: dispatchReceipt.failedStoreIdentity,
+            deliveryStoreIdentity: storeIdentity,
+            ownerIdentity: capabilityOwnerIdentity,
+            repositoryBinding: dispatchReceipt.repositoryBinding
+        )
+        return try refreshFailedRetryFrozenSlotProof(
+            retainedProof: retainedProof,
+            relationKey: relationKey,
+            repositoryBinding: dispatchReceipt.repositoryBinding,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+    }
+
+    private func refreshFailedRetryFrozenSlotProof(
+        retainedProof: IOSAcceptedOutputDeliveryFrozenSlotProof,
+        relationKey: IOSFailedHistoryRetryDeliveryRelationKey,
+        repositoryBinding:
+            IOSAcceptedHistoryCoordinatorRepositoryBinding,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) throws -> IOSAcceptedOutputDeliveryFrozenSlotProof {
+        guard operationGateBinding.proves(operationLeaseAuthorization),
+              relationKey.deliveryStoreIdentity == storeIdentity,
+              relationKey.ownerIdentity == capabilityOwnerIdentity,
+              relationKey.repositoryBinding == repositoryBinding,
+              retainedProof.freezeReservation.relationKey
+                == relationKey,
+              let interlock = failedRelationInterlockBinding.current(),
+              let refreshedReservation = interlock
+                .refreshRetryDeliveryFreeze(
+                    retainedProof.freezeReservation,
+                    operationLeaseAuthorization:
+                        operationLeaseAuthorization
+                ) else {
+            throw IOSAcceptedOutputDeliveryError.commitUncertain
+        }
+        try requireNoUncertainHistoryMutationExceptAcceptance()
+        let current = try journal.load()
+        let currentIsAccepted = current?.record
+            .hasExactFailedRetryAcceptance(
+                as: retainedProof.preparation,
+                retryID: relationKey.retryID
+            ) == true
+        let predecessorIsUnchanged: Bool = switch (
+            retainedProof.frozenSlot,
+            current
+        ) {
+        case (.missing, .none):
+            true
+        case (.existing(let predecessor), .some(let observed)):
+            predecessor == observed
+                || isFailedRetryFrozenPredecessorLineage(
+                    observed.record,
+                    predecessor: predecessor.record
+                )
+        case (.missing, .some), (.existing, .none):
+            false
+        }
+        guard currentIsAccepted || predecessorIsUnchanged else {
+            throw IOSAcceptedOutputDeliveryError.commitUncertain
+        }
+        guard let refreshed = IOSAcceptedOutputDeliveryFrozenSlotProof(
+            mint: IOSAcceptedOutputDeliveryFrozenSlotProofMint(),
+            frozenSlot: retainedProof.frozenSlot,
+            preparation: retainedProof.preparation,
+            retryingRow: retainedProof.retryingRow,
+            retryOperation: retainedProof.retryOperation,
+            freezeReservation: refreshedReservation,
+            deliveryStoreIdentity: storeIdentity,
+            ownerIdentity: capabilityOwnerIdentity,
+            repositoryBinding: repositoryBinding,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        ) else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        return refreshed
+    }
+
+    @discardableResult
+    func releaseFailedRetryFrozenSlotReservation(
+        _ proof: IOSAcceptedOutputDeliveryFrozenSlotProof,
+        dispatchReceipt: IOSFailedHistoryRetryDispatchReceipt,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) throws -> Bool {
+        guard operationGateBinding.proves(operationLeaseAuthorization),
+              proof.deliveryStoreIdentity == storeIdentity,
+              proof.ownerIdentity == capabilityOwnerIdentity,
+              proof.retryingRow == dispatchReceipt.row,
+              proof.retryOperation == dispatchReceipt.retryOperation,
+              proof.repositoryBinding == dispatchReceipt.repositoryBinding,
+              proof.freezeReservation.relationKey.failedStoreIdentity
+                == dispatchReceipt.failedStoreIdentity,
+              let interlock = failedRelationInterlockBinding.current() else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        return interlock.clearRetryDeliveryFreeze(
+            proof.freezeReservation
+        )
+    }
+
+    func confirmFailedRetryTerminalDelivery(
+        acceptingOutputReceipt:
+            IOSFailedHistoryRetryAcceptingOutputReceipt,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) throws -> IOSFailedHistoryRetryTerminalDeliveryProof {
+        guard operationGateBinding.proves(operationLeaseAuthorization),
+              acceptingOutputReceipt.deliveryStoreIdentity == storeIdentity,
+              acceptingOutputReceipt.ownerIdentity
+                == capabilityOwnerIdentity else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        _ = try authorizeFailedRetryDeliveryPermit(
+            acceptingOutputReceipt: acceptingOutputReceipt,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        try requireNoUncertainHistoryMutation()
+        let current = try requireCurrentSnapshot()
+        guard current.record.hasExactFailedRetryAcceptance(
+            as: acceptingOutputReceipt.frozenSlotProof.preparation,
+            retryID: acceptingOutputReceipt.retryOperation.retryID
+        ), current.record.historyWrite?.state == .committed
+            || current.record.historyWrite?.state == .cancelled else {
+            throw IOSAcceptedOutputDeliveryError.invalidTransition
+        }
+        let confirmed = try confirmIdentical(current)
+        let authorization = IOSAcceptedOutputDeliveryAuthorization(
+            snapshot: confirmed,
+            storeIdentity: storeIdentity,
+            capabilityOwnerIdentity: capabilityOwnerIdentity
+        )
+        guard let proof = IOSFailedHistoryRetryTerminalDeliveryProof(
+            mint: IOSFailedHistoryRetryTerminalDeliveryProofMint(),
+            acceptingOutputReceipt: acceptingOutputReceipt,
+            deliveryAuthorization: authorization,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        ) else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        return proof
+    }
+
+    func acceptFailedRetry(
+        _ preparation: IOSAcceptedOutputDeliveryPreparation,
+        acceptingOutputReceipt:
+            IOSFailedHistoryRetryAcceptingOutputReceipt,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization,
+        outboxAbsenceAuthorization:
+            IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization? = nil
+    ) throws -> IOSAcceptedOutputDeliveryAcceptance {
+        guard operationGateBinding.proves(operationLeaseAuthorization),
+              acceptingOutputReceipt.deliveryStoreIdentity == storeIdentity,
+              acceptingOutputReceipt.ownerIdentity
+                == capabilityOwnerIdentity,
+              preparation
+                == acceptingOutputReceipt.frozenSlotProof.preparation else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+        let failedRetryPermit = try authorizeFailedRetryDeliveryPermit(
+            acceptingOutputReceipt: acceptingOutputReceipt,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        let current = try journal.load()
+        let currentIsAccepted = current?.record
+            .hasExactFailedRetryAcceptance(
+                as: preparation,
+                retryID: acceptingOutputReceipt.retryOperation.retryID
+            ) == true
+        let predecessorIsUnchanged: Bool = switch (
+            acceptingOutputReceipt.frozenSlotProof.frozenSlot,
+            current
+        ) {
+        case (.missing, .none):
+            true
+        case (.existing(let predecessor), .some(let observed)):
+            predecessor == observed
+                || isFailedRetryFrozenPredecessorLineage(
+                    observed.record,
+                    predecessor: predecessor.record
+                )
+        case (.missing, .some), (.existing, .none):
+            false
+        }
+        guard currentIsAccepted || predecessorIsUnchanged else {
+            if let current,
+               current.record.failedRetryIdentityMatchCount(
+                   with: preparation
+               ) > 0 {
+                throw IOSAcceptedOutputDeliveryError.identityCollision
+            }
+            throw IOSAcceptedOutputDeliveryError.commitUncertain
+        }
+        return try acceptForHistoryCoordinator(
+            preparation,
+            outboxAbsenceAuthorization: outboxAbsenceAuthorization,
+            operationLeaseAuthorization: operationLeaseAuthorization,
+            failedRetryPermit: failedRetryPermit
+        )
     }
 
     /// Narrow coordinator read used only to reconcile a retained acceptance
@@ -738,10 +1254,16 @@ public actor IOSAcceptedOutputDeliveryStore {
     /// Performs the mandatory identical durability-confirmation rewrite before
     /// an idempotent History upsert may use the accepted payload.
     func authorizePendingHistoryWrite(
-        expected: IOSAcceptedOutputDeliveryExpectation
+        expected: IOSAcceptedOutputDeliveryExpectation,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization? = nil,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit? = nil
     ) throws -> IOSAcceptedOutputDeliveryAuthorization {
         let authorization = try confirmActiveHistoryRecovery(
-            expected: expected
+            expected: expected,
+            operationLeaseAuthorization: operationLeaseAuthorization,
+            failedRetryPermit: failedRetryPermit
         )
         guard authorization.record.historyWrite?.state.isPendingDecision
                 == true else {
@@ -754,8 +1276,20 @@ public actor IOSAcceptedOutputDeliveryStore {
     /// crosses the outbox await boundary for this exact delivery.
     func reservePendingHistoryTransfer(
         authorization: IOSAcceptedOutputDeliveryAuthorization,
-        policyReceipt: IOSHistoryPolicyReceipt
+        policyReceipt: IOSHistoryPolicyReceipt,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization? = nil,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit? = nil
     ) throws -> IOSAcceptedOutputPendingHistoryTransferReservation {
+        try requireFailedRetryRelationDisposition(
+            failedRetryPermit,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        try requireFailedRetryFrozenPredecessor(
+            authorization.record,
+            permit: failedRetryPermit
+        )
         guard authorization.storeIdentity == storeIdentity,
               authorization.capabilityOwnerIdentity == capabilityOwnerIdentity,
               policyReceipt.capabilityOwnerIdentity
@@ -801,8 +1335,20 @@ public actor IOSAcceptedOutputDeliveryStore {
     }
 
     func releasePendingHistoryTransfer(
-        _ reservation: IOSAcceptedOutputPendingHistoryTransferReservation
+        _ reservation: IOSAcceptedOutputPendingHistoryTransferReservation,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization? = nil,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit? = nil
     ) throws {
+        try requireFailedRetryRelationDisposition(
+            failedRetryPermit,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        try requireFailedRetryFrozenPredecessor(
+            reservation.authorization.record,
+            permit: failedRetryPermit
+        )
         guard reservation.storeIdentity == storeIdentity,
               pendingHistoryTransferReservation == reservation,
               uncertainPendingHistoryReplacement == nil else {
@@ -818,6 +1364,10 @@ public actor IOSAcceptedOutputDeliveryStore {
     func reserveBridgePublication(
         authorization: IOSAcceptedOutputDeliveryAuthorization
     ) throws -> IOSAcceptedOutputBridgePublicationReservation {
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
         guard authorization.storeIdentity == storeIdentity,
               authorization.capabilityOwnerIdentity
                 == capabilityOwnerIdentity else {
@@ -852,6 +1402,10 @@ public actor IOSAcceptedOutputDeliveryStore {
     func releaseBridgePublication(
         _ reservation: IOSAcceptedOutputBridgePublicationReservation
     ) throws {
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
         guard reservation.storeIdentity == storeIdentity,
               pendingBridgePublicationReservation == reservation else {
             throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
@@ -862,11 +1416,26 @@ public actor IOSAcceptedOutputDeliveryStore {
     /// Reconstructs physical delivery authority without interpreting the
     /// History marker. Every active marker state uses the same strict rewrite.
     func confirmActiveHistoryRecovery(
-        expected: IOSAcceptedOutputDeliveryExpectation
+        expected: IOSAcceptedOutputDeliveryExpectation,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization? = nil,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit? = nil
     ) throws -> IOSAcceptedOutputDeliveryAuthorization {
+        try requireFailedRetryRelationDisposition(
+            failedRetryPermit,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
         try requireNoUncertainHistoryMutation()
         let snapshot = try requireSnapshot(expected: expected)
-        try requireActive(snapshot.record)
+        try requireFailedRetryRelatedRecord(
+            snapshot.record,
+            permit: failedRetryPermit
+        )
+        try requireActiveHistoryRecovery(
+            snapshot.record,
+            failedRetryPermit: failedRetryPermit
+        )
         guard snapshot.record.deliveryState != .discarded else {
             throw IOSAcceptedOutputDeliveryError.invalidTransition
         }
@@ -882,7 +1451,10 @@ public actor IOSAcceptedOutputDeliveryStore {
             snapshot.record,
             expected: snapshot
         )
-        try requireActive(confirmed.record)
+        try requireActiveHistoryRecovery(
+            confirmed.record,
+            failedRetryPermit: failedRetryPermit
+        )
         guard confirmed.record.deliveryState != .discarded else {
             throw IOSAcceptedOutputDeliveryError.invalidTransition
         }
@@ -897,8 +1469,16 @@ public actor IOSAcceptedOutputDeliveryStore {
     /// Reconfirms only the exact retained source while an acceptance commit is
     /// uncertain. A visible intended replacement never needs terminal authority.
     func confirmActiveHistoryRecoveryDuringAcceptance(
-        expected: IOSAcceptedOutputDeliveryExpectation
+        expected: IOSAcceptedOutputDeliveryExpectation,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization? = nil,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit? = nil
     ) throws -> IOSAcceptedOutputDeliveryAuthorization {
+        try requireFailedRetryRelationDisposition(
+            failedRetryPermit,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
         try requireNoUncertainHistoryMutationExceptAcceptance()
         let retainedSource: IOSAcceptedOutputDeliveryJournalSnapshot?
         if let intent = uncertainAcceptanceIntent {
@@ -912,12 +1492,19 @@ public actor IOSAcceptedOutputDeliveryStore {
         }
 
         let snapshot = try requireSnapshot(expected: expected)
+        try requireFailedRetryRelatedRecord(
+            snapshot.record,
+            permit: failedRetryPermit
+        )
         if let retainedSource,
            snapshot != retainedSource,
            snapshot.record != retainedSource.record {
             throw IOSAcceptedOutputDeliveryError.commitUncertain
         }
-        try requireActive(snapshot.record)
+        try requireActiveHistoryRecovery(
+            snapshot.record,
+            failedRetryPermit: failedRetryPermit
+        )
         guard snapshot.record.deliveryState != .discarded else {
             throw IOSAcceptedOutputDeliveryError.invalidTransition
         }
@@ -933,7 +1520,10 @@ public actor IOSAcceptedOutputDeliveryStore {
             snapshot.record,
             expected: snapshot
         )
-        try requireActive(confirmed.record)
+        try requireActiveHistoryRecovery(
+            confirmed.record,
+            failedRetryPermit: failedRetryPermit
+        )
         guard confirmed.record.deliveryState != .discarded else {
             throw IOSAcceptedOutputDeliveryError.invalidTransition
         }
@@ -958,6 +1548,10 @@ public actor IOSAcceptedOutputDeliveryStore {
     func confirmMatchingHistoryDelivery(
         membership: IOSAcceptedHistoryOutboxReceipt
     ) throws -> IOSAcceptedOutputHistoryDeliveryDisposition {
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
         guard membership.deliveryStoreIdentity == storeIdentity,
               membership.storeIdentity == outboxStoreIdentity,
               membership.capabilityOwnerIdentity
@@ -1003,8 +1597,20 @@ public actor IOSAcceptedOutputDeliveryStore {
     /// Records the exact durable History decision for this delivery.
     func commitHistoryWrite(
         authorization: IOSAcceptedOutputDeliveryAuthorization,
-        rowReceipt: IOSAcceptedHistoryRowReceipt
+        rowReceipt: IOSAcceptedHistoryRowReceipt,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization? = nil,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit? = nil
     ) throws -> IOSAcceptedOutputDeliveryRecord {
+        try requireFailedRetryRelationDisposition(
+            failedRetryPermit,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        try requireFailedRetryAcceptedRecord(
+            authorization.record,
+            permit: failedRetryPermit
+        )
         return try transitionHistoryWrite(
             .commit(authorization, rowReceipt)
         )
@@ -1012,8 +1618,20 @@ public actor IOSAcceptedOutputDeliveryStore {
 
     func cancelHistoryWrite(
         authorization: IOSAcceptedOutputDeliveryAuthorization,
-        policyInvalidationReceipt: IOSHistoryPolicyReceipt
+        policyInvalidationReceipt: IOSHistoryPolicyReceipt,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization? = nil,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit? = nil
     ) throws -> IOSAcceptedOutputDeliveryRecord {
+        try requireFailedRetryRelationDisposition(
+            failedRetryPermit,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        try requireFailedRetryRelatedRecord(
+            authorization.record,
+            permit: failedRetryPermit
+        )
         return try transitionHistoryWrite(
             .cancel(authorization, policyInvalidationReceipt)
         )
@@ -1022,6 +1640,10 @@ public actor IOSAcceptedOutputDeliveryStore {
     public func disableKeepLatestResult(
         expected: IOSAcceptedOutputDeliveryExpectation
     ) throws -> IOSAcceptedOutputDeliveryRecord {
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
         try requireNoUncertainHistoryMutation()
         let snapshot = try requireCurrentSnapshot()
         try requireActive(snapshot.record)
@@ -1088,12 +1710,20 @@ public actor IOSAcceptedOutputDeliveryStore {
         operationLeaseAuthorization:
             IOSPersistenceOperationLeaseAuthorization?
     ) throws -> IOSAcceptedOutputDeliveryRemovalResult {
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
         try requireNoUncertainHistoryMutation()
         guard let snapshot = try journal.load() else { return .alreadyAbsent }
 
         if snapshot.record.deliveryState == .discarded {
             guard expected.matches(snapshot.record)
-                    || isImmediateRetry(snapshot.record, after: expected) else {
+                    || isImmediateRetry(
+                        snapshot.record,
+                        after: expected,
+                        allowsDiscardedProvenanceClear: true
+                    ) else {
                 throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
             }
             try requireBridgeRevoked(snapshot.record)
@@ -1147,6 +1777,7 @@ public actor IOSAcceptedOutputDeliveryStore {
             acceptedText: .some(nil),
             deliveryState: .discarded,
             automaticInsertionPreferenceEnabled: false,
+            failedRetryID: .some(nil),
             historyWrite: .some(nil)
         )
         let committed = try commit(tombstone, replacing: snapshot)
@@ -1159,6 +1790,10 @@ public actor IOSAcceptedOutputDeliveryStore {
         authorization: IOSAcceptedOutputDeliveryAuthorization,
         ownershipProof: IOSAcceptedOutputHistoryOwnershipProof
     ) throws -> IOSAcceptedOutputDeliveryRemovalResult {
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
         guard authorization.storeIdentity == storeIdentity,
               authorization.capabilityOwnerIdentity == capabilityOwnerIdentity,
               ownershipProof.capabilityOwnerIdentity
@@ -1186,7 +1821,8 @@ public actor IOSAcceptedOutputDeliveryStore {
                 snapshot.record,
                 after: IOSAcceptedOutputDeliveryExpectation(
                     record: authorization.record
-                )
+                ),
+                allowsDiscardedProvenanceClear: true
             ) else {
                 throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
             }
@@ -1229,6 +1865,7 @@ public actor IOSAcceptedOutputDeliveryStore {
             acceptedText: .some(nil),
             deliveryState: .discarded,
             automaticInsertionPreferenceEnabled: false,
+            failedRetryID: .some(nil),
             historyWrite: .some(nil)
         )
         let intent = UncertainPendingHistoryClear(
@@ -1270,6 +1907,10 @@ public actor IOSAcceptedOutputDeliveryStore {
     func observeExpiredHistoryAbandonment(
         expected: IOSAcceptedOutputDeliveryExpectation
     ) throws -> IOSAcceptedOutputDeliveryExpiredObservationResult {
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
         try requireNoUncertainHistoryMutation()
         guard let snapshot = try journal.load() else { return .alreadyAbsent }
         guard expected.matches(snapshot.record) else {
@@ -1295,6 +1936,10 @@ public actor IOSAcceptedOutputDeliveryStore {
     func confirmExpiredHistoryAbandonment(
         observation: IOSAcceptedOutputDeliveryExpiredObservation
     ) throws -> IOSAcceptedOutputDeliveryExpiredRemovalPreparation {
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
         guard observation.storeIdentity == storeIdentity else {
             throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
         }
@@ -1316,6 +1961,10 @@ public actor IOSAcceptedOutputDeliveryStore {
     func isExpiredHistoryAbandonmentComplete(
         observation: IOSAcceptedOutputDeliveryExpiredObservation
     ) throws -> Bool {
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
         guard observation.storeIdentity == storeIdentity else {
             throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
         }
@@ -1330,6 +1979,10 @@ public actor IOSAcceptedOutputDeliveryStore {
     func continueExpiredHistoryAbandonment(
         authorization: IOSAcceptedOutputDeliveryExpiredRemovalAuthorization
     ) throws -> IOSAcceptedOutputDeliveryRemovalResult {
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
         guard authorization.storeIdentity == storeIdentity else {
             throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
         }
@@ -1352,6 +2005,10 @@ public actor IOSAcceptedOutputDeliveryStore {
     @discardableResult
     public func performStagingMaintenance()
         throws -> IOSAcceptedOutputDeliveryMaintenanceReport {
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
         try requireNoUncertainAcceptance()
         return IOSAcceptedOutputDeliveryMaintenanceReport(
             try journal.performStagingMaintenance(now: now())
@@ -1362,6 +2019,10 @@ public actor IOSAcceptedOutputDeliveryStore {
     /// no unexpired app-group projection remains.
     public func discardUnreadableLocalResult()
         throws -> IOSAcceptedOutputDeliveryRemovalResult {
+        try requireFailedRetryRelationDisposition(
+            nil,
+            operationLeaseAuthorization: nil
+        )
         try requireNoUncertainHistoryMutation()
         guard try journal.loadOpaque() != nil else { return .alreadyAbsent }
         throw IOSAcceptedOutputDeliveryError.bridgeRevocationRequired
@@ -1369,6 +2030,128 @@ public actor IOSAcceptedOutputDeliveryStore {
 }
 
 private extension IOSAcceptedOutputDeliveryStore {
+    func requireFailedRetryRelationDisposition(
+        _ permit: IOSFailedHistoryRetryDeliveryPermit?,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization?
+    ) throws {
+        guard let interlock = failedRelationInterlockBinding.current() else {
+            guard permit == nil else {
+                throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+            }
+            return
+        }
+        guard interlock.hasRetryDeliveryProtection else {
+            guard permit == nil else {
+                throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+            }
+            return
+        }
+        guard let permit,
+              let operationLeaseAuthorization,
+              permit.operationLeaseAuthorization.provesSameActiveLease(
+                  as: operationLeaseAuthorization
+              ),
+              permit.acceptingOutputReceipt.deliveryStoreIdentity
+                == storeIdentity,
+              permit.acceptingOutputReceipt.ownerIdentity
+                == capabilityOwnerIdentity,
+              permit.provesActiveRelation() else {
+            throw IOSAcceptedOutputDeliveryError.commitUncertain
+        }
+    }
+
+    func requireFailedRetryPreparation(
+        _ preparation: IOSAcceptedOutputDeliveryPreparation,
+        permit: IOSFailedHistoryRetryDeliveryPermit?
+    ) throws {
+        guard let permit else { return }
+        guard preparation
+                == permit.acceptingOutputReceipt.frozenSlotProof.preparation
+        else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+    }
+
+    func requireFailedRetryAcceptedRecord(
+        _ record: IOSAcceptedOutputDeliveryRecord,
+        permit: IOSFailedHistoryRetryDeliveryPermit?
+    ) throws {
+        guard let permit else { return }
+        guard record.hasExactFailedRetryAcceptance(
+            as: permit.acceptingOutputReceipt.frozenSlotProof.preparation,
+            retryID: permit.acceptingOutputReceipt.retryOperation.retryID
+        ) else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+    }
+
+    func requireFailedRetryFrozenPredecessor(
+        _ record: IOSAcceptedOutputDeliveryRecord,
+        permit: IOSFailedHistoryRetryDeliveryPermit?
+    ) throws {
+        guard let permit else { return }
+        guard case .existing(let predecessor) = permit
+                .acceptingOutputReceipt.frozenSlotProof.frozenSlot,
+              isFailedRetryFrozenPredecessorLineage(
+                  record,
+                  predecessor: predecessor.record
+              ) else {
+            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+        }
+    }
+
+    func isFailedRetryFrozenPredecessorLineage(
+        _ record: IOSAcceptedOutputDeliveryRecord,
+        predecessor: IOSAcceptedOutputDeliveryRecord
+    ) -> Bool {
+        if record == predecessor { return true }
+        let nextRevision = predecessor.revision.addingReportingOverflow(1)
+        guard !nextRevision.overflow,
+              record.revision == nextRevision.partialValue,
+              record.deliveryID == predecessor.deliveryID,
+              record.sessionID == predecessor.sessionID,
+              record.attemptID == predecessor.attemptID,
+              record.transcriptID == predecessor.transcriptID,
+              record.failedRetryID == predecessor.failedRetryID,
+              IOSAcceptedOutputDeliveryValidation.optionalBytesEqual(
+                  record.acceptedText,
+                  predecessor.acceptedText
+              ),
+              record.outputIntent == predecessor.outputIntent,
+              record.createdAt == predecessor.createdAt,
+              record.updatedAt >= predecessor.updatedAt,
+              record.expiresAt == predecessor.expiresAt,
+              record.deliveryState == predecessor.deliveryState,
+              record.automaticInsertionPreferenceEnabled
+                == predecessor.automaticInsertionPreferenceEnabled,
+              record.keepLatestResult == predecessor.keepLatestResult,
+              record.publicationGeneration
+                == predecessor.publicationGeneration,
+              let previousHistory = predecessor.historyWrite,
+              previousHistory.state.isPendingDecision,
+              let currentHistory = record.historyWrite,
+              currentHistory.state == .cancelled,
+              currentHistory.hasSameMetadata(as: previousHistory) else {
+            return false
+        }
+        return true
+    }
+
+    func requireFailedRetryRelatedRecord(
+        _ record: IOSAcceptedOutputDeliveryRecord,
+        permit: IOSFailedHistoryRetryDeliveryPermit?
+    ) throws {
+        guard let permit else { return }
+        if record.hasExactFailedRetryAcceptance(
+            as: permit.acceptingOutputReceipt.frozenSlotProof.preparation,
+            retryID: permit.acceptingOutputReceipt.retryOperation.retryID
+        ) {
+            return
+        }
+        try requireFailedRetryFrozenPredecessor(record, permit: permit)
+    }
+
     func requirePreparationOwner(
         _ preparation: IOSAcceptedOutputDeliveryPreparation
     ) throws {
@@ -1386,17 +2169,39 @@ private extension IOSAcceptedOutputDeliveryStore {
         outboxAbsenceAuthorization:
             IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization? = nil,
         operationLeaseAuthorization:
-            IOSPersistenceOperationLeaseAuthorization? = nil
+            IOSPersistenceOperationLeaseAuthorization? = nil,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit? = nil
     ) throws -> IOSAcceptedOutputDeliveryAcceptance {
+        try requireFailedRetryRelationDisposition(
+            failedRetryPermit,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        try requireFailedRetryPreparation(
+            preparation,
+            permit: failedRetryPermit
+        )
         let timestamp = try IOSAcceptedOutputDeliveryTimestampCodec
             .canonicalDate(from: now())
+        let acceptanceProvenance: IOSAcceptedOutputDeliveryAcceptanceProvenance =
+            failedRetryPermit.map {
+                .failedRetry($0.relationKey)
+            } ?? .freshCurrentProcess
         let newRecord = try makeInitialRecord(
             preparation,
             createdAt: timestamp,
-            marksReplayableReplacement: pendingHistoryReplacement != nil
+            failedRetryID: failedRetryPermit?.relationKey.retryID,
+            marksReplayableReplacement:
+                pendingHistoryReplacement != nil
+                    && failedRetryPermit == nil
         )
 
         guard let current = try journal.load() else {
+            if let failedRetryPermit,
+               case .existing = failedRetryPermit.acceptingOutputReceipt
+                .frozenSlotProof.frozenSlot {
+                throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+            }
             guard pendingHistoryReplacement == nil else {
                 throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
             }
@@ -1405,20 +2210,27 @@ private extension IOSAcceptedOutputDeliveryStore {
                     newRecord,
                     source: .missing,
                     preparation: preparation,
-                    provenance: .freshCurrentProcess
+                    provenance: acceptanceProvenance
                 )
                 clearTransientState(for: nil)
                 return IOSAcceptedOutputDeliveryAcceptance(
                     record: created.record,
-                    provenance: .freshCurrentProcess
+                    provenance: acceptanceProvenance
                 )
             } catch IOSAcceptedOutputDeliveryError.slotOccupied {
                 return try reconcileAcceptanceConflict(
                     preparation,
-                    otherwise: .slotOccupied
+                    otherwise: .slotOccupied,
+                    provenance: acceptanceProvenance,
+                    failedRetryPermit: failedRetryPermit
                 )
             }
         }
+
+        try requireFailedRetryRelatedRecord(
+            current.record,
+            permit: failedRetryPermit
+        )
 
         if let pendingHistoryReplacement {
             let authorization = pendingHistoryReplacement.authorization
@@ -1444,14 +2256,19 @@ private extension IOSAcceptedOutputDeliveryStore {
             }
         }
 
-        if current.record.hasSameAcceptance(as: preparation) {
+        if current.record.hasSameAcceptance(
+            as: preparation,
+            failedRetryID: failedRetryPermit?.relationKey.retryID
+        ) {
             return try reconcileSameAcceptance(
                 preparation,
                 snapshot: current,
                 temporalState: currentTemporalState,
                 recordsOrdinaryAcceptanceUncertainty:
                     pendingHistoryReplacement == nil,
-                provenance: .preexisting
+                provenance: failedRetryPermit.map {
+                    .failedRetry($0.relationKey)
+                } ?? .preexisting
             )
         }
         if current.record.collides(with: preparation) {
@@ -1492,14 +2309,14 @@ private extension IOSAcceptedOutputDeliveryStore {
                 clearTransientState(for: current.record.deliveryID)
                 return IOSAcceptedOutputDeliveryAcceptance(
                     record: replaced.record,
-                    provenance: .freshCurrentProcess
+                    provenance: acceptanceProvenance
                 )
             } catch IOSAcceptedOutputDeliveryError.compareAndSwapFailed {
                 return IOSAcceptedOutputDeliveryAcceptance(
                     record: try reconcilePendingHistoryReplacementConflict(
                         intent
                     ),
-                    provenance: .freshCurrentProcess
+                    provenance: acceptanceProvenance
                 )
             }
         }
@@ -1509,17 +2326,19 @@ private extension IOSAcceptedOutputDeliveryStore {
                 newRecord,
                 source: .existing(current),
                 preparation: preparation,
-                provenance: .freshCurrentProcess
+                provenance: acceptanceProvenance
             )
             clearTransientState(for: current.record.deliveryID)
             return IOSAcceptedOutputDeliveryAcceptance(
                 record: replaced.record,
-                provenance: .freshCurrentProcess
+                provenance: acceptanceProvenance
             )
         } catch IOSAcceptedOutputDeliveryError.compareAndSwapFailed {
             return try reconcileAcceptanceConflict(
                 preparation,
-                otherwise: .compareAndSwapFailed
+                otherwise: .compareAndSwapFailed,
+                provenance: acceptanceProvenance,
+                failedRetryPermit: failedRetryPermit
             )
         }
     }
@@ -1529,8 +2348,18 @@ private extension IOSAcceptedOutputDeliveryStore {
         outboxAbsenceAuthorization:
             IOSAcceptedHistoryOutboxDeliveryAbsenceAuthorization?,
         operationLeaseAuthorization:
-            IOSPersistenceOperationLeaseAuthorization?
+            IOSPersistenceOperationLeaseAuthorization?,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit?
     ) throws -> IOSAcceptedOutputDeliveryAcceptance {
+        try requireFailedRetryRelationDisposition(
+            failedRetryPermit,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        try requireFailedRetryPreparation(
+            intent.preparation,
+            permit: failedRetryPermit
+        )
         let current = try journal.load()
         let sourceStillCurrent: Bool = switch (intent.source, current) {
         case (.missing, .none): true
@@ -1673,17 +2502,36 @@ private extension IOSAcceptedOutputDeliveryStore {
 
     func reconcileAcceptanceConflict(
         _ preparation: IOSAcceptedOutputDeliveryPreparation,
-        otherwise error: IOSAcceptedOutputDeliveryError
+        otherwise error: IOSAcceptedOutputDeliveryError,
+        provenance: IOSAcceptedOutputDeliveryAcceptanceProvenance = .preexisting,
+        failedRetryPermit: IOSFailedHistoryRetryDeliveryPermit? = nil
     ) throws -> IOSAcceptedOutputDeliveryAcceptance {
         guard let current = try journal.load() else { throw error }
         let currentTemporalState = temporalState(for: current.record)
-        if current.record.hasSameAcceptance(as: preparation) {
+        if let failedRetryPermit {
+            guard current.record.hasExactFailedRetryAcceptance(
+                as: preparation,
+                retryID: failedRetryPermit.acceptingOutputReceipt
+                    .retryOperation.retryID
+            ) else {
+                if current.record.failedRetryIdentityMatchCount(
+                    with: preparation
+                ) > 0 {
+                    throw IOSAcceptedOutputDeliveryError.identityCollision
+                }
+                throw error
+            }
+        }
+        if current.record.hasSameAcceptance(
+            as: preparation,
+            failedRetryID: failedRetryPermit?.relationKey.retryID
+        ) {
             return try reconcileSameAcceptance(
                 preparation,
                 snapshot: current,
                 temporalState: currentTemporalState,
                 recordsOrdinaryAcceptanceUncertainty: true,
-                provenance: .preexisting
+                provenance: provenance
             )
         }
         if current.record.collides(with: preparation) {
@@ -1810,11 +2658,19 @@ private extension IOSAcceptedOutputDeliveryStore {
         recordsOrdinaryAcceptanceUncertainty: Bool,
         provenance: IOSAcceptedOutputDeliveryAcceptanceProvenance
     ) throws -> IOSAcceptedOutputDeliveryAcceptance {
+        let protectedFailedRetryID: UUID? = switch provenance {
+        case .failedRetry(let relationKey): relationKey.retryID
+        case .freshCurrentProcess, .preexisting: nil
+        }
         switch temporalState {
         case .active:
             break
         case .expired:
-            throw IOSAcceptedOutputDeliveryError.expired
+            guard snapshot.record.failedRetryID
+                    == protectedFailedRetryID,
+                  protectedFailedRetryID != nil else {
+                throw IOSAcceptedOutputDeliveryError.expired
+            }
         case .rollbackAmbiguous:
             throw IOSAcceptedOutputDeliveryError.clockRollbackAmbiguous
         }
@@ -1857,7 +2713,14 @@ private extension IOSAcceptedOutputDeliveryStore {
             confirmed = try confirmIdentical(snapshot)
         }
         pruneMonotonicDeadlines(keeping: confirmed.record.deliveryID)
-        try requireActive(confirmed.record)
+        if protectedFailedRetryID == nil {
+            try requireActive(confirmed.record)
+        } else {
+            guard confirmed.record.failedRetryID
+                    == protectedFailedRetryID else {
+                throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
+            }
+        }
         return IOSAcceptedOutputDeliveryAcceptance(
             record: confirmed.record,
             provenance: provenance
@@ -1930,6 +2793,28 @@ private extension IOSAcceptedOutputDeliveryStore {
             return
         case .expired:
             throw IOSAcceptedOutputDeliveryError.expired
+        case .rollbackAmbiguous:
+            throw IOSAcceptedOutputDeliveryError.clockRollbackAmbiguous
+        }
+    }
+
+    func requireActiveHistoryRecovery(
+        _ record: IOSAcceptedOutputDeliveryRecord,
+        failedRetryPermit: IOSFailedHistoryRetryDeliveryPermit?
+    ) throws {
+        switch temporalState(for: record) {
+        case .active:
+            return
+        case .expired:
+            guard let failedRetryPermit,
+                  record.hasExactFailedRetryAcceptance(
+                    as: failedRetryPermit.acceptingOutputReceipt
+                        .frozenSlotProof.preparation,
+                    retryID: failedRetryPermit.acceptingOutputReceipt
+                        .retryOperation.retryID
+                  ) else {
+                throw IOSAcceptedOutputDeliveryError.expired
+            }
         case .rollbackAmbiguous:
             throw IOSAcceptedOutputDeliveryError.clockRollbackAmbiguous
         }
@@ -2082,7 +2967,10 @@ private extension IOSAcceptedOutputDeliveryStore {
 
         let authorization = operation.authorization
         if current == authorization.snapshot {
-            try requireActive(current.record)
+            let mutationDate = try historyTransitionMutationDate(
+                for: current.record,
+                authorization: authorization.record
+            )
             guard let historyWrite = current.record.historyWrite,
                   historyWrite.state.isPendingDecision else {
                 throw IOSAcceptedOutputDeliveryError.invalidTransition
@@ -2090,7 +2978,7 @@ private extension IOSAcceptedOutputDeliveryStore {
             let intended = try record(
                 replacing: current.record,
                 revision: try nextRevision(after: current.record.revision),
-                updatedAt: try mutationNow(for: current.record),
+                updatedAt: mutationDate,
                 historyWrite: try historyWrite.replacingState(
                     operation.targetState
                 )
@@ -2142,11 +3030,16 @@ private extension IOSAcceptedOutputDeliveryStore {
             throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
         }
 
-        do {
+        switch temporalState(for: intent.intended) {
+        case .active:
             _ = try mutationNow(for: intent.intended)
-        } catch IOSAcceptedOutputDeliveryError.expired {
-            uncertainHistoryTransition = nil
-            throw IOSAcceptedOutputDeliveryError.expired
+        case .expired:
+            guard intent.intended.failedRetryID != nil else {
+                uncertainHistoryTransition = nil
+                throw IOSAcceptedOutputDeliveryError.expired
+            }
+        case .rollbackAmbiguous:
+            throw IOSAcceptedOutputDeliveryError.clockRollbackAmbiguous
         }
         return try publishHistoryTransition(
             intent,
@@ -2225,6 +3118,7 @@ private extension IOSAcceptedOutputDeliveryStore {
     func makeInitialRecord(
         _ preparation: IOSAcceptedOutputDeliveryPreparation,
         createdAt: Date,
+        failedRetryID: UUID? = nil,
         marksReplayableReplacement: Bool = false
     ) throws -> IOSAcceptedOutputDeliveryRecord {
         let createdMilliseconds = try IOSAcceptedOutputDeliveryTimestampCodec
@@ -2251,6 +3145,7 @@ private extension IOSAcceptedOutputDeliveryStore {
                 sessionID: preparation.sessionID,
                 attemptID: preparation.attemptID,
                 transcriptID: preparation.transcriptID,
+                failedRetryID: failedRetryID,
                 acceptedText: preparation.acceptedText,
                 outputIntent: preparation.outputIntent,
                 createdAt: createdAt,
@@ -2276,6 +3171,7 @@ private extension IOSAcceptedOutputDeliveryStore {
         deliveryState: IOSAcceptedOutputDeliveryState? = nil,
         automaticInsertionPreferenceEnabled: Bool? = nil,
         keepLatestResult: Bool? = nil,
+        failedRetryID: UUID?? = nil,
         historyWrite: IOSAcceptedOutputHistoryWrite?? = nil
     ) throws -> IOSAcceptedOutputDeliveryRecord {
         try IOSAcceptedOutputDeliveryRecord(
@@ -2284,6 +3180,7 @@ private extension IOSAcceptedOutputDeliveryStore {
             sessionID: old.sessionID,
             attemptID: old.attemptID,
             transcriptID: old.transcriptID,
+            failedRetryID: failedRetryID ?? old.failedRetryID,
             acceptedText: acceptedText ?? old.acceptedText,
             outputIntent: old.outputIntent,
             createdAt: old.createdAt,
@@ -2312,6 +3209,24 @@ private extension IOSAcceptedOutputDeliveryStore {
             throw IOSAcceptedOutputDeliveryError.expired
         }
         return timestamp
+    }
+
+    func historyTransitionMutationDate(
+        for record: IOSAcceptedOutputDeliveryRecord,
+        authorization: IOSAcceptedOutputDeliveryRecord
+    ) throws -> Date {
+        switch temporalState(for: record) {
+        case .active:
+            return try mutationNow(for: record)
+        case .expired:
+            guard let failedRetryID = record.failedRetryID,
+                  authorization.failedRetryID == failedRetryID else {
+                throw IOSAcceptedOutputDeliveryError.expired
+            }
+            return record.expiresAt
+        case .rollbackAmbiguous:
+            throw IOSAcceptedOutputDeliveryError.clockRollbackAmbiguous
+        }
     }
 
     func nextRevision(after revision: Int64) throws -> Int64 {
@@ -2399,9 +3314,18 @@ private extension IOSAcceptedOutputDeliveryStore {
 
     func isImmediateRetry(
         _ record: IOSAcceptedOutputDeliveryRecord,
-        after expected: IOSAcceptedOutputDeliveryExpectation
+        after expected: IOSAcceptedOutputDeliveryExpectation,
+        allowsDiscardedProvenanceClear: Bool = false
     ) -> Bool {
-        guard expected.matchesIdentity(record) else { return false }
+        let provenanceMatches = expected.failedRetryID
+            == record.failedRetryID
+            || (allowsDiscardedProvenanceClear
+                && expected.failedRetryID != nil
+                && record.failedRetryID == nil
+                && record.deliveryState == .discarded)
+        guard expected.matchesIdentity(record), provenanceMatches else {
+            return false
+        }
         let next = expected.revision.addingReportingOverflow(1)
         return !next.overflow && record.revision == next.partialValue
     }

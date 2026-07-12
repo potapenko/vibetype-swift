@@ -131,6 +131,8 @@ final class FailedHistoryFakeFileSystem:
     var persistentReplaceFailure: Failure?
     var replaceFailureAfterSuccessfulReplaces:
         (remaining: Int, failure: Failure)?
+    var persistentReplaceFailureAfterSuccessfulReplaces:
+        (remaining: Int, failure: Failure)?
     var maintenanceError: IOSStrictProtectedRecordFileSystemError?
     var maintenanceReport = IOSStrictProtectedRecordMaintenanceReport.empty
     private(set) var events: [String] = []
@@ -186,6 +188,15 @@ final class FailedHistoryFakeFileSystem:
             }
             scheduled.remaining -= 1
             replaceFailureAfterSuccessfulReplaces = scheduled
+        }
+        if var scheduled = persistentReplaceFailureAfterSuccessfulReplaces {
+            if scheduled.remaining == 0 {
+                persistentReplaceFailureAfterSuccessfulReplaces = nil
+                persistentReplaceFailure = scheduled.failure
+            } else {
+                scheduled.remaining -= 1
+                persistentReplaceFailureAfterSuccessfulReplaces = scheduled
+            }
         }
         if let failure = replaceFailure {
             replaceFailure = nil

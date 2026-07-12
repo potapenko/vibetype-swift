@@ -1053,6 +1053,47 @@ actor IOSFailedHistoryRetryLiveOwnerState {
         return true
     }
 
+    /// Retires only the exact provider completion whose Store receipt proves
+    /// the matching Retry delivery is terminal and its failed row has moved to
+    /// durable audio-cleanup ownership.
+    @discardableResult
+    func consumeProviderSuccess(
+        using receipt: IOSFailedHistoryRetrySuccessReceipt
+    ) -> Bool {
+        let completion = receipt.providerCompletionClaim
+        guard receipt.operationLeaseAuthorization.provesActiveLease(),
+              receipt.durableSnapshot.envelope.audioCleanup.contains(
+                receipt.tombstone
+              ),
+              (receipt.terminalDeliveryProof.deliveryAuthorization.record
+                .historyWrite?.state == .committed
+                || receipt.terminalDeliveryProof.deliveryAuthorization.record
+                    .historyWrite?.state == .cancelled),
+              completion.liveOwnerToken.retryOperation
+                == receipt.authorization.acceptingOutputReceipt
+                    .authorization.providerDispatchedOperation,
+              completion.liveOwnerToken.failedStoreIdentity
+                == receipt.failedStoreIdentity,
+              completion.liveOwnerToken.ownerIdentity
+                == receipt.ownerIdentity,
+              completion.liveOwnerToken.repositoryBinding
+                == receipt.repositoryBinding,
+              retainedProviderCompletionClaim == completion,
+              case .provider(let registration) = phase,
+              completion.belongs(to: registration),
+              registration.consumeTerminal(
+                  kind: .completion,
+                  epoch: completion.terminalEpoch
+              ) else {
+            return false
+        }
+        retainedProviderCancellationClaim = nil
+        retainedProviderCompletionClaim = nil
+        retainedProviderTerminalOwner = nil
+        phase = .idle
+        return true
+    }
+
     /// Retires only an exact provider cancellation whose Store receipt proves
     /// that the matching durable retry operation is already absent.
     @discardableResult

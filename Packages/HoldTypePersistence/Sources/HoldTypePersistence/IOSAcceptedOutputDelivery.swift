@@ -194,6 +194,7 @@ public struct IOSAcceptedOutputDeliveryRecord: Sendable {
     public let sessionID: UUID
     public let attemptID: UUID
     public let transcriptID: UUID
+    let failedRetryID: UUID?
     public let acceptedText: String?
     public let outputIntent: DictationOutputIntent
     public let createdAt: Date
@@ -211,6 +212,7 @@ public struct IOSAcceptedOutputDeliveryRecord: Sendable {
         sessionID: UUID,
         attemptID: UUID,
         transcriptID: UUID,
+        failedRetryID: UUID? = nil,
         acceptedText: String?,
         outputIntent: DictationOutputIntent,
         createdAt: Date,
@@ -244,6 +246,7 @@ public struct IOSAcceptedOutputDeliveryRecord: Sendable {
         switch deliveryState {
         case .discarded:
             guard acceptedText == nil,
+                  failedRetryID == nil,
                   !automaticInsertionPreferenceEnabled,
                   historyWrite == nil else {
                 throw IOSAcceptedOutputDeliveryError.invalidRecord
@@ -270,6 +273,7 @@ public struct IOSAcceptedOutputDeliveryRecord: Sendable {
         self.sessionID = sessionID
         self.attemptID = attemptID
         self.transcriptID = transcriptID
+        self.failedRetryID = failedRetryID
         self.acceptedText = acceptedText
         self.outputIntent = outputIntent
         self.createdAt = createdAt
@@ -284,9 +288,11 @@ public struct IOSAcceptedOutputDeliveryRecord: Sendable {
     }
 
     func hasSameAcceptance(
-        as preparation: IOSAcceptedOutputDeliveryPreparation
+        as preparation: IOSAcceptedOutputDeliveryPreparation,
+        failedRetryID expectedFailedRetryID: UUID? = nil
     ) -> Bool {
         guard deliveryState != .discarded,
+              failedRetryID == expectedFailedRetryID,
               deliveryID == preparation.deliveryID,
               sessionID == preparation.sessionID,
               attemptID == preparation.attemptID,
@@ -317,6 +323,44 @@ public struct IOSAcceptedOutputDeliveryRecord: Sendable {
             || (attemptID == preparation.attemptID
                 && transcriptID == preparation.transcriptID)
     }
+
+    func failedRetryIdentityMatchCount(
+        with preparation: IOSAcceptedOutputDeliveryPreparation
+    ) -> Int {
+        var count = 0
+        if deliveryID == preparation.deliveryID { count += 1 }
+        if sessionID == preparation.sessionID { count += 1 }
+        if attemptID == preparation.attemptID { count += 1 }
+        if transcriptID == preparation.transcriptID { count += 1 }
+        return count
+    }
+
+    func hasExactFailedRetryAcceptance(
+        as preparation: IOSAcceptedOutputDeliveryPreparation,
+        retryID: UUID
+    ) -> Bool {
+        guard failedRetryIdentityMatchCount(with: preparation) == 4,
+              failedRetryID == retryID,
+              deliveryState == .pending,
+              publicationGeneration == 0,
+              acceptedText.map({
+                  IOSAcceptedOutputDeliveryValidation.bytesEqual(
+                      $0,
+                      preparation.acceptedText
+                  )
+              }) == true,
+              outputIntent == preparation.outputIntent,
+              !automaticInsertionPreferenceEnabled,
+              !preparation.automaticInsertionPreferenceEnabled,
+              keepLatestResult == preparation.keepLatestResult,
+              let currentHistory = historyWrite,
+              let preparedHistory = preparation.historyWrite,
+              currentHistory.state != .pendingReplacement,
+              currentHistory.hasSameMetadata(as: preparedHistory) else {
+            return false
+        }
+        return true
+    }
 }
 
 extension IOSAcceptedOutputDeliveryRecord: Equatable {
@@ -329,6 +373,7 @@ extension IOSAcceptedOutputDeliveryRecord: Equatable {
             && lhs.sessionID == rhs.sessionID
             && lhs.attemptID == rhs.attemptID
             && lhs.transcriptID == rhs.transcriptID
+            && lhs.failedRetryID == rhs.failedRetryID
             && IOSAcceptedOutputDeliveryValidation.optionalBytesEqual(
                 lhs.acceptedText,
                 rhs.acceptedText
@@ -351,6 +396,7 @@ public struct IOSAcceptedOutputDeliveryExpectation: Equatable, Sendable {
     public let sessionID: UUID
     public let attemptID: UUID
     public let transcriptID: UUID
+    let failedRetryID: UUID?
     public let revision: Int64
 
     public init(record: IOSAcceptedOutputDeliveryRecord) {
@@ -358,6 +404,7 @@ public struct IOSAcceptedOutputDeliveryExpectation: Equatable, Sendable {
         sessionID = record.sessionID
         attemptID = record.attemptID
         transcriptID = record.transcriptID
+        failedRetryID = record.failedRetryID
         revision = record.revision
     }
 

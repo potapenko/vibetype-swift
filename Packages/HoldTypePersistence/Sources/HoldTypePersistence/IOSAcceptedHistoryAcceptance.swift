@@ -125,6 +125,11 @@ enum IOSAcceptedHistoryAcceptanceWork: Equatable, Sendable {
         IOSAcceptedOutputDeliveryPreparation,
         IOSAcceptedHistoryAcceptancePhase
     )
+    case failedRetry(
+        IOSAcceptedOutputDeliveryPreparation,
+        IOSFailedHistoryRetryAcceptingOutputReceipt,
+        IOSAcceptedHistoryAcceptancePhase
+    )
     case relaunched(IOSAcceptedHistoryAcceptancePhase)
     case replayableReplacement(IOSAcceptedHistoryAcceptancePhase)
 
@@ -132,6 +137,7 @@ enum IOSAcceptedHistoryAcceptanceWork: Equatable, Sendable {
         switch self {
         case .fresh(_, let phase),
              .preexisting(_, let phase),
+             .failedRetry(_, _, let phase),
              .relaunched(let phase),
              .replayableReplacement(let phase):
             phase
@@ -141,7 +147,8 @@ enum IOSAcceptedHistoryAcceptanceWork: Equatable, Sendable {
     var acceptedPreparation: IOSAcceptedOutputDeliveryPreparation? {
         switch self {
         case .fresh(let preparation, _),
-             .preexisting(let preparation, _):
+             .preexisting(let preparation, _),
+             .failedRetry(let preparation, _, _):
             preparation
         case .relaunched, .replayableReplacement:
             nil
@@ -149,13 +156,18 @@ enum IOSAcceptedHistoryAcceptanceWork: Equatable, Sendable {
     }
 
     var freshPreparation: IOSAcceptedOutputDeliveryPreparation? {
-        guard case .fresh(let preparation, _) = self else { return nil }
-        return preparation
+        switch self {
+        case .fresh(let preparation, _),
+             .failedRetry(let preparation, _, _):
+            preparation
+        case .preexisting, .relaunched, .replayableReplacement:
+            nil
+        }
     }
 
     var mayInsertAbsentHistoryRow: Bool {
         switch self {
-        case .fresh, .replayableReplacement:
+        case .fresh, .failedRetry, .replayableReplacement:
             true
         case .preexisting, .relaunched:
             false
@@ -170,6 +182,25 @@ enum IOSAcceptedHistoryAcceptanceWork: Equatable, Sendable {
         return phase.deliveryRecord.hasSameAcceptance(as: preparation)
     }
 
+    var failedRetryReceipt:
+        IOSFailedHistoryRetryAcceptingOutputReceipt? {
+        guard case .failedRetry(_, let receipt, _) = self else {
+            return nil
+        }
+        return receipt
+    }
+
+    func refreshingFailedRetryReceipt(
+        _ receipt: IOSFailedHistoryRetryAcceptingOutputReceipt
+    ) -> Self? {
+        guard case .failedRetry(let preparation, let current, let phase) = self,
+              current.relationKey == receipt.relationKey,
+              preparation == receipt.frozenSlotProof.preparation else {
+            return nil
+        }
+        return .failedRetry(preparation, receipt, phase)
+    }
+
     func replacingPhase(
         _ phase: IOSAcceptedHistoryAcceptancePhase
     ) -> Self {
@@ -177,6 +208,8 @@ enum IOSAcceptedHistoryAcceptanceWork: Equatable, Sendable {
         case .fresh(let preparation, _): .fresh(preparation, phase)
         case .preexisting(let preparation, _):
             .preexisting(preparation, phase)
+        case .failedRetry(let preparation, let receipt, _):
+            .failedRetry(preparation, receipt, phase)
         case .relaunched: .relaunched(phase)
         case .replayableReplacement: .replayableReplacement(phase)
         }
@@ -693,9 +726,267 @@ extension IOSAcceptedHistoryCoordinator {
             }
         }
     }
+
+    static func acceptFailedRetryWithinLease(
+        preparation: IOSAcceptedOutputDeliveryPreparation,
+        acceptingOutputReceipt:
+            IOSFailedHistoryRetryAcceptingOutputReceipt,
+        policyStore: IOSHistoryPolicyStore,
+        acceptedHistoryStore: IOSAcceptedHistoryStore,
+        outboxStore: IOSAcceptedHistoryOutboxStore,
+        deliveryStore: IOSAcceptedOutputDeliveryStore,
+        acceptanceState: IOSAcceptedHistoryAcceptanceOperationState,
+        pendingReplacementState:
+            IOSAcceptedHistoryPendingReplacementOperationState,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization,
+        ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity
+    ) async throws -> IOSAcceptedHistoryAcceptanceResult {
+        try validateHistoryPreparation(
+            preparation: preparation,
+            ownerIdentity: ownerIdentity
+        )
+        guard preparation
+                == acceptingOutputReceipt.frozenSlotProof.preparation,
+              acceptingOutputReceipt.ownerIdentity == ownerIdentity else {
+            throw IOSAcceptedOutputDeliveryError.invalidPreparation
+        }
+        let failedRetryPermit = try await deliveryStore
+            .authorizeFailedRetryDeliveryPermit(
+                acceptingOutputReceipt: acceptingOutputReceipt,
+                operationLeaseAuthorization:
+                    operationLeaseAuthorization
+            )
+        let result: IOSAcceptedHistoryAcceptanceResult
+
+        if let retainedWork = await acceptanceState.current() {
+            guard let retained = retainedWork.refreshingFailedRetryReceipt(
+                acceptingOutputReceipt
+            ), retained.mayResume(with: preparation),
+                  await pendingReplacementState.current() == nil else {
+                throw IOSAcceptedOutputDeliveryError.commitUncertain
+            }
+            await acceptanceState.store(retained)
+            result = await resume(
+                retained,
+                policyStore: policyStore,
+                acceptedHistoryStore: acceptedHistoryStore,
+                deliveryStore: deliveryStore,
+                acceptanceState: acceptanceState,
+                operationLeaseAuthorization:
+                    operationLeaseAuthorization,
+                failedRetryPermit: failedRetryPermit
+            ).result
+        } else {
+            let acceptance: IOSAcceptedOutputDeliveryAcceptance
+            if let replacement = await pendingReplacementState.current() {
+                guard let replacement = replacement
+                    .refreshingFailedRetryReceipt(
+                        acceptingOutputReceipt
+                    ) else {
+                    throw IOSAcceptedOutputDeliveryError.commitUncertain
+                }
+                await pendingReplacementState.store(replacement)
+                acceptance = try await resumePendingReplacement(
+                    replacement,
+                    policyStore: policyStore,
+                    outboxStore: outboxStore,
+                    deliveryStore: deliveryStore,
+                    replacementState: pendingReplacementState,
+                    operationLeaseAuthorization:
+                        operationLeaseAuthorization,
+                    ownerIdentity: ownerIdentity,
+                    failedRetryPermit: failedRetryPermit
+                )
+            } else {
+                do {
+                    acceptance = try await deliveryStore.acceptFailedRetry(
+                        preparation,
+                        acceptingOutputReceipt: acceptingOutputReceipt,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization
+                    )
+                } catch IOSAcceptedOutputDeliveryError
+                    .historyTransferRequired {
+                    switch try await resolveFailedRetryHistoryTransferRequirement(
+                        preparation: preparation,
+                        acceptingOutputReceipt: acceptingOutputReceipt,
+                        outboxStore: outboxStore,
+                        deliveryStore: deliveryStore,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization,
+                        failedRetryPermit: failedRetryPermit
+                    ) {
+                    case .accepted(let resolved):
+                        acceptance = resolved
+                    case .pendingDecision:
+                        let replacement =
+                            IOSAcceptedHistoryPendingReplacementWork(
+                                ownerIdentity: ownerIdentity,
+                                preparation: preparation,
+                                phase: .observingCurrentDelivery,
+                                failedRetryReceipt:
+                                    acceptingOutputReceipt
+                            )
+                        await pendingReplacementState.store(replacement)
+                        acceptance = try await resumePendingReplacement(
+                            replacement,
+                            policyStore: policyStore,
+                            outboxStore: outboxStore,
+                            deliveryStore: deliveryStore,
+                            replacementState: pendingReplacementState,
+                            operationLeaseAuthorization:
+                                operationLeaseAuthorization,
+                            ownerIdentity: ownerIdentity,
+                            failedRetryPermit: failedRetryPermit
+                        )
+                    }
+                }
+            }
+
+            if let resolution = terminalResolution(for: acceptance.record) {
+                result = IOSAcceptedHistoryAcceptanceResult(
+                    deliveryRecord: acceptance.record,
+                    resolution: resolution
+                )
+            } else {
+                let work = IOSAcceptedHistoryAcceptanceWork.failedRetry(
+                    preparation,
+                    acceptingOutputReceipt,
+                    .deliveryAccepted(acceptance.record)
+                )
+                await acceptanceState.store(work)
+                result = await resume(
+                    work,
+                    policyStore: policyStore,
+                    acceptedHistoryStore: acceptedHistoryStore,
+                    deliveryStore: deliveryStore,
+                    acceptanceState: acceptanceState,
+                    operationLeaseAuthorization:
+                        operationLeaseAuthorization,
+                    failedRetryPermit: failedRetryPermit
+                ).result
+            }
+        }
+        if result.resolution != .pendingLocalRecovery {
+            await acceptanceState.clear()
+        }
+        return result
+    }
 }
 
 private extension IOSAcceptedHistoryCoordinator {
+    static func resolveFailedRetryHistoryTransferRequirement(
+        preparation: IOSAcceptedOutputDeliveryPreparation,
+        acceptingOutputReceipt:
+            IOSFailedHistoryRetryAcceptingOutputReceipt,
+        outboxStore: IOSAcceptedHistoryOutboxStore,
+        deliveryStore: IOSAcceptedOutputDeliveryStore,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization,
+        failedRetryPermit: IOSFailedHistoryRetryDeliveryPermit
+    ) async throws -> IOSAcceptedHistoryTransferRequirementResolution {
+        guard let observation = try await deliveryStore
+            .loadForHistoryCoordinatorDuringAcceptance() else {
+            return .accepted(
+                try await deliveryStore.acceptFailedRetry(
+                    preparation,
+                    acceptingOutputReceipt: acceptingOutputReceipt,
+                    operationLeaseAuthorization:
+                        operationLeaseAuthorization
+                )
+            )
+        }
+
+        switch observation {
+        case .expired:
+            return .accepted(
+                try await deliveryStore.acceptFailedRetry(
+                    preparation,
+                    acceptingOutputReceipt: acceptingOutputReceipt,
+                    operationLeaseAuthorization:
+                        operationLeaseAuthorization
+                )
+            )
+        case .clockRollbackAmbiguous:
+            throw IOSAcceptedOutputDeliveryError.clockRollbackAmbiguous
+        case .active(let record):
+            if record.hasExactFailedRetryAcceptance(
+                as: preparation,
+                retryID: acceptingOutputReceipt.retryOperation.retryID
+            ) {
+                return .accepted(
+                    try await deliveryStore.acceptFailedRetry(
+                        preparation,
+                        acceptingOutputReceipt: acceptingOutputReceipt,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization
+                    )
+                )
+            }
+            if record.failedRetryIdentityMatchCount(with: preparation) > 0 {
+                throw IOSAcceptedOutputDeliveryError.identityCollision
+            }
+            guard record.deliveryState != .discarded,
+                  let marker = record.historyWrite else {
+                return .accepted(
+                    try await deliveryStore.acceptFailedRetry(
+                        preparation,
+                        acceptingOutputReceipt: acceptingOutputReceipt,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization
+                    )
+                )
+            }
+            guard !marker.state.isPendingDecision else {
+                return .pendingDecision
+            }
+
+            let authorization: IOSAcceptedOutputDeliveryAuthorization
+            do {
+                authorization = try await deliveryStore
+                    .confirmActiveHistoryRecoveryDuringAcceptance(
+                        expected: IOSAcceptedOutputDeliveryExpectation(
+                            record: record
+                        ),
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization,
+                        failedRetryPermit:
+                            failedRetryPermit
+                    )
+            } catch IOSAcceptedOutputDeliveryError.expired {
+                return .accepted(
+                    try await deliveryStore.acceptFailedRetry(
+                        preparation,
+                        acceptingOutputReceipt: acceptingOutputReceipt,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization
+                    )
+                )
+            }
+
+            switch try await outboxStore.classifyDeliveryAbsence(
+                authorization: authorization,
+                operationLeaseAuthorization: operationLeaseAuthorization
+            ) {
+            case .absent(let absenceAuthorization):
+                return .accepted(
+                    try await deliveryStore.acceptFailedRetry(
+                        preparation,
+                        acceptingOutputReceipt: acceptingOutputReceipt,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization,
+                        outboxAbsenceAuthorization: absenceAuthorization
+                    )
+                )
+            case .matching:
+                throw IOSAcceptedOutputDeliveryError.historyTransferRequired
+            case .collision:
+                throw IOSAcceptedOutputDeliveryError.identityCollision
+            }
+        }
+    }
+
     static func resolveHistoryTransferRequirement(
         preparation: IOSAcceptedOutputDeliveryPreparation,
         outboxStore: IOSAcceptedHistoryOutboxStore,
@@ -792,6 +1083,11 @@ private extension IOSAcceptedHistoryCoordinator {
         switch acceptance.provenance {
         case .freshCurrentProcess:
             return .fresh(preparation, phase)
+        case .failedRetry:
+            // Only the exact Retry entry point can attach the failed receipt.
+            // A generic caller cannot widen absent-row replay from provenance
+            // carried by the delivery store alone.
+            return .preexisting(preparation, phase)
         case .preexisting:
             if acceptance.record.historyWrite?.state
                 .mayReplayAbsentHistoryRow == true {
@@ -830,9 +1126,24 @@ private extension IOSAcceptedHistoryCoordinator {
         policyStore: IOSHistoryPolicyStore,
         acceptedHistoryStore: IOSAcceptedHistoryStore,
         deliveryStore: IOSAcceptedOutputDeliveryStore,
-        acceptanceState: IOSAcceptedHistoryAcceptanceOperationState
+        acceptanceState: IOSAcceptedHistoryAcceptanceOperationState,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization? = nil,
+        failedRetryPermit:
+            IOSFailedHistoryRetryDeliveryPermit? = nil
     ) async -> IOSAcceptedHistoryResumeOutcome {
         var work = initialWork
+
+        switch (work.failedRetryReceipt, failedRetryPermit) {
+        case (.none, .none):
+            break
+        case (.some(let receipt), .some(let permit))
+            where receipt == permit.acceptingOutputReceipt
+                && permit.provesActiveRelation():
+            break
+        case (.none, .some), (.some, .none), (.some, .some):
+            return pendingOutcome(for: work)
+        }
 
         while true {
             switch work.phase {
@@ -842,7 +1153,11 @@ private extension IOSAcceptedHistoryCoordinator {
                         .authorizePendingHistoryWrite(
                             expected: IOSAcceptedOutputDeliveryExpectation(
                                 record: record
-                            )
+                            ),
+                            operationLeaseAuthorization:
+                                operationLeaseAuthorization,
+                            failedRetryPermit:
+                                failedRetryPermit
                         )
                     work = work.replacingPhase(
                         .deliveryAuthorized(authorization)
@@ -901,6 +1216,18 @@ private extension IOSAcceptedHistoryCoordinator {
                             .decideReplayableReplacement(
                                 delivery: authorization,
                                 policy: policyReceipt
+                            )
+                    } else if let failedRetryReceipt = work.failedRetryReceipt {
+                        guard let failedRetryPermit,
+                              failedRetryPermit.acceptingOutputReceipt
+                                == failedRetryReceipt else {
+                            throw IOSAcceptedHistoryError.compareAndSwapFailed
+                        }
+                        rowReceipt = try await acceptedHistoryStore
+                            .decideFailedRetryReplay(
+                                delivery: authorization,
+                                policy: policyReceipt,
+                                deliveryPermit: failedRetryPermit
                             )
                     } else if work.mayInsertAbsentHistoryRow {
                         rowReceipt = try await acceptedHistoryStore.decideUpsert(
@@ -962,7 +1289,11 @@ private extension IOSAcceptedHistoryCoordinator {
                 do {
                     let committed = try await deliveryStore.commitHistoryWrite(
                         authorization: authorization,
-                        rowReceipt: rowReceipt
+                        rowReceipt: rowReceipt,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization,
+                        failedRetryPermit:
+                            failedRetryPermit
                     )
                     return IOSAcceptedHistoryResumeOutcome(
                         result: IOSAcceptedHistoryAcceptanceResult(
@@ -989,7 +1320,11 @@ private extension IOSAcceptedHistoryCoordinator {
                 do {
                     let cancelled = try await deliveryStore.cancelHistoryWrite(
                         authorization: authorization,
-                        policyInvalidationReceipt: invalidationReceipt
+                        policyInvalidationReceipt: invalidationReceipt,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization,
+                        failedRetryPermit:
+                            failedRetryPermit
                     )
                     return IOSAcceptedHistoryResumeOutcome(
                         result: IOSAcceptedHistoryAcceptanceResult(

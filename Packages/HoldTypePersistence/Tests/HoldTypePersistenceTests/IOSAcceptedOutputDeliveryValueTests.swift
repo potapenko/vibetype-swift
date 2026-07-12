@@ -153,6 +153,44 @@ struct IOSAcceptedOutputDeliveryValueTests {
         #expect(!advanced.hasSameAcceptance(as: changedMetadata))
     }
 
+    @Test func failedRetryProvenanceIsExactAndCannotSurviveDiscard() throws {
+        let retryID = UUID()
+        let otherRetryID = UUID()
+        let preparation = try makePreparation()
+        let tagged = try makeRecord(
+            from: preparation,
+            failedRetryID: retryID
+        )
+        let other = try makeRecord(
+            from: preparation,
+            failedRetryID: otherRetryID
+        )
+
+        #expect(tagged != other)
+        #expect(!tagged.hasSameAcceptance(as: preparation))
+        #expect(
+            tagged.hasSameAcceptance(
+                as: preparation,
+                failedRetryID: retryID
+            )
+        )
+        #expect(
+            IOSAcceptedOutputDeliveryExpectation(record: tagged)
+                != IOSAcceptedOutputDeliveryExpectation(record: other)
+        )
+
+        #expect(throws: IOSAcceptedOutputDeliveryError.invalidRecord) {
+            try makeRecord(
+                from: preparation,
+                acceptedText: nil,
+                deliveryState: .discarded,
+                automaticInsertionPreferenceEnabled: false,
+                failedRetryID: retryID,
+                historyWrite: .some(nil)
+            )
+        }
+    }
+
     @Test func publicPreparationConsumesOpaqueHistoryCaptureAndRedactsIt() async throws {
         let state = try IOSHistoryPolicyState(
             revision: 1,
@@ -476,6 +514,7 @@ private func makeRecord(
     automaticInsertionPreferenceEnabled: Bool? = nil,
     keepLatestResult: Bool? = nil,
     publicationGeneration: Int64 = 0,
+    failedRetryID: UUID? = nil,
     historyWrite: IOSAcceptedOutputHistoryWrite?? = nil
 ) throws -> IOSAcceptedOutputDeliveryRecord {
     try IOSAcceptedOutputDeliveryRecord(
@@ -484,6 +523,7 @@ private func makeRecord(
         sessionID: preparation.sessionID,
         attemptID: preparation.attemptID,
         transcriptID: preparation.transcriptID,
+        failedRetryID: failedRetryID,
         acceptedText: acceptedText == "accepted text"
             ? preparation.acceptedText
             : acceptedText,

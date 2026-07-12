@@ -191,6 +191,8 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
             storeIdentity: deliveryStoreIdentity,
             outboxStoreIdentity: outboxStoreIdentity,
             capabilityOwnerIdentity: capabilityOwnerIdentity,
+            failedHistoryMutationInterlock:
+                failedHistoryMutationInterlock,
             repositoryGuard: repositoryGuard
         )
         baselineRecoveryState = IOSAcceptedHistoryBaselineRecoveryState()
@@ -234,13 +236,18 @@ final class IOSAcceptedHistoryCoordinatorProcessContext: Sendable {
             outboxStore.bindOperationGateIdentity(operationGate.identity)
         let deliveryGateBindingAccepted =
             deliveryStore.bindOperationGateIdentity(operationGate.identity)
+        let deliveryFailedInterlockBindingAccepted =
+            deliveryStore.bindFailedHistoryMutationInterlock(
+                failedHistoryMutationInterlock
+            )
         if !pendingGateBindingAccepted
             || !pendingFailedBindingAccepted
             || !failedGateBindingAccepted
             || !failedRetryStateBindingAccepted
             || !retryProviderBindingAccepted
             || !outboxGateBindingAccepted
-            || !deliveryGateBindingAccepted {
+            || !deliveryGateBindingAccepted
+            || !deliveryFailedInterlockBindingAccepted {
             repositoryIdentityState.markConflicted()
         }
     }
@@ -784,7 +791,7 @@ public struct IOSAcceptedOutputHistoryCapture: Equatable, Sendable {
     let ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity
     let historyWrite: IOSAcceptedOutputHistoryWrite?
 
-    fileprivate init(
+    init(
         policyReceipt: IOSHistoryPolicyReceipt,
         ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity,
         historyWrite: IOSAcceptedOutputHistoryWrite?
@@ -917,6 +924,10 @@ public actor IOSAcceptedHistoryCoordinator {
             outboxStore.bindOperationGateIdentity(operationGate.identity)
         let deliveryGateBindingAccepted =
             deliveryStore.bindOperationGateIdentity(operationGate.identity)
+        let deliveryFailedInterlockBindingAccepted =
+            deliveryStore.bindFailedHistoryMutationInterlock(
+                failedHistoryStore.mutationInterlock
+            )
         self.policyStore = policyStore
         self.pendingRecordingStore = pendingRecordingStore
         self.acceptedHistoryStore = acceptedHistoryStore
@@ -946,6 +957,7 @@ public actor IOSAcceptedHistoryCoordinator {
             || !failedRetryStateBindingAccepted
             || !outboxGateBindingAccepted
             || !deliveryGateBindingAccepted
+            || !deliveryFailedInterlockBindingAccepted
             || (pendingRecordingStore.map {
                 $0.capabilityOwnerIdentity != capabilityOwnerIdentity
             } ?? false)
@@ -1035,6 +1047,10 @@ public actor IOSAcceptedHistoryCoordinator {
             outboxStore.bindOperationGateIdentity(operationGate.identity)
         let deliveryGateBindingAccepted =
             deliveryStore.bindOperationGateIdentity(operationGate.identity)
+        let deliveryFailedInterlockBindingAccepted =
+            deliveryStore.bindFailedHistoryMutationInterlock(
+                failedHistoryStore.mutationInterlock
+            )
         self.policyStore = policyStore
         self.pendingRecordingStore = pendingRecordingStore
         self.acceptedHistoryStore = acceptedHistoryStore
@@ -1062,6 +1078,7 @@ public actor IOSAcceptedHistoryCoordinator {
             || !failedRetryStateBindingAccepted
             || !outboxGateBindingAccepted
             || !deliveryGateBindingAccepted
+            || !deliveryFailedInterlockBindingAccepted
             || (pendingRecordingStore.map {
                 $0.capabilityOwnerIdentity != capabilityOwnerIdentity
             } ?? false)

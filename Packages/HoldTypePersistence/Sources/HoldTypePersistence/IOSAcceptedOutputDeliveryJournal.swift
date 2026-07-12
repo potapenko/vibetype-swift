@@ -209,7 +209,7 @@ struct FoundationIOSAcceptedOutputDeliveryJournalRepository:
 }
 
 enum IOSAcceptedOutputDeliveryWireCodec {
-    static let supportedSchemaVersion: Int64 = 1
+    static let supportedSchemaVersions: Set<Int64> = [1, 2]
     static let fields: Set<String> = [
         "schemaVersion",
         "revision",
@@ -228,6 +228,7 @@ enum IOSAcceptedOutputDeliveryWireCodec {
         "publicationGeneration",
         "historyWrite",
     ]
+    static let failedRetryFields = fields.union(["failedRetryID"])
     static let historyFields: Set<String> = [
         "state",
         "policyGeneration",
@@ -242,7 +243,7 @@ enum IOSAcceptedOutputDeliveryWireCodec {
         let data: Data
         do {
             data = try encoder.encode(
-                IOSAcceptedOutputDeliveryWireV1(record: record)
+                IOSAcceptedOutputDeliveryWireRecord(record: record)
             )
         } catch {
             throw IOSAcceptedOutputDeliveryError.writeFailed
@@ -291,10 +292,12 @@ enum IOSAcceptedOutputDeliveryWireCodec {
             throw IOSAcceptedOutputDeliveryError.invalidRecord
         }
         let reader = IOSAcceptedOutputDeliveryObjectReader(object: object)
-        guard try reader.integer64("schemaVersion") == supportedSchemaVersion else {
+        let schemaVersion = try reader.integer64("schemaVersion")
+        guard supportedSchemaVersions.contains(schemaVersion) else {
             throw IOSAcceptedOutputDeliveryError.unsupportedSchemaVersion
         }
-        guard Set(object.keys) == fields else {
+        let expectedFields = schemaVersion == 1 ? fields : failedRetryFields
+        guard Set(object.keys) == expectedFields else {
             throw IOSAcceptedOutputDeliveryError.invalidRecord
         }
 
@@ -345,6 +348,9 @@ enum IOSAcceptedOutputDeliveryWireCodec {
                 sessionID: canonicalUUID(reader.string("sessionID")),
                 attemptID: canonicalUUID(reader.string("attemptID")),
                 transcriptID: canonicalUUID(reader.string("transcriptID")),
+                failedRetryID: schemaVersion == 2
+                    ? canonicalUUID(reader.string("failedRetryID"))
+                    : nil,
                 acceptedText: reader.nullableString("acceptedText"),
                 outputIntent: decodeOutputIntent(reader.string("outputIntent")),
                 createdAt: IOSAcceptedOutputDeliveryTimestampCodec.date(
@@ -481,13 +487,14 @@ private struct IOSAcceptedOutputDeliveryObjectReader {
     }
 }
 
-private struct IOSAcceptedOutputDeliveryWireV1: Encodable {
-    let schemaVersion = 1
+private struct IOSAcceptedOutputDeliveryWireRecord: Encodable {
+    let schemaVersion: Int
     let revision: Int64
     let deliveryID: String
     let sessionID: String
     let attemptID: String
     let transcriptID: String
+    let failedRetryID: String?
     let acceptedText: String?
     let outputIntent: String
     let createdAt: String
@@ -500,11 +507,13 @@ private struct IOSAcceptedOutputDeliveryWireV1: Encodable {
     private let historyWrite: HistoryWrite?
 
     init(record: IOSAcceptedOutputDeliveryRecord) throws {
+        schemaVersion = record.failedRetryID == nil ? 1 : 2
         revision = record.revision
         deliveryID = record.deliveryID.uuidString.lowercased()
         sessionID = record.sessionID.uuidString.lowercased()
         attemptID = record.attemptID.uuidString.lowercased()
         transcriptID = record.transcriptID.uuidString.lowercased()
+        failedRetryID = record.failedRetryID?.uuidString.lowercased()
         acceptedText = record.acceptedText
         outputIntent = record.outputIntent.rawValue
         createdAt = try IOSAcceptedOutputDeliveryTimestampCodec.string(
@@ -537,6 +546,12 @@ private struct IOSAcceptedOutputDeliveryWireV1: Encodable {
         try container.encode(sessionID, forKey: .sessionID)
         try container.encode(attemptID, forKey: .attemptID)
         try container.encode(transcriptID, forKey: .transcriptID)
+        if schemaVersion == 2 {
+            try container.encode(
+                failedRetryID,
+                forKey: .failedRetryID
+            )
+        }
         if let acceptedText {
             try container.encode(acceptedText, forKey: .acceptedText)
         } else {
@@ -631,6 +646,7 @@ private struct IOSAcceptedOutputDeliveryWireV1: Encodable {
         case sessionID
         case attemptID
         case transcriptID
+        case failedRetryID
         case acceptedText
         case outputIntent
         case createdAt

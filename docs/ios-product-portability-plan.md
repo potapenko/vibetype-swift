@@ -1188,7 +1188,18 @@ Provider-completion uncertainty retains the exact root owner and Store claim,
 while an unclaimed successful output returns the row to retryable state without
 persisting text. Final evidence lives in
 `docs/qa/runs/ios-failed-history-retry-provider-outcomes-2026-07-12.md`.
-C4.4C accepted-output handoff is next.
+C4.4C is complete. A successful Retry now reserves the exact delivery slot
+before publishing `acceptingOutput`, blocks incompatible failed and delivery
+mutations through one shared interlock, and writes strict version-2 Retry
+provenance only through a store-minted permit. Exact acceptance and terminal
+History recovery remain valid after delivery expiry, while ordinary
+publication and mutation do not. Durable terminal delivery then removes the
+failed row and consumes its reserved audio-cleanup slot without deleting audio
+inline. Commit uncertainty, relaunch-safe capabilities, predecessor lineage,
+and concurrent acceptance are fail-closed and provider-free. Final evidence
+lives in
+`docs/qa/runs/ios-failed-history-retry-accepted-output-handoff-2026-07-12.md`.
+C4.4D process-loss recovery is next.
 
 No History toggle, Clear History action, first-use disclosure, Recording Cache,
 App Group publication, or keyboard dependency is exposed by C4.0 alone.
@@ -1430,8 +1441,13 @@ stage-aware timeout/error mapping, bounded adapter drain, late-result rejection,
 exact durable failure recovery, and non-authoritative Usage attempt are verified
 in
 `docs/qa/runs/ios-failed-history-retry-provider-outcomes-2026-07-12.md`.
-C4.4C and C4.4D next complete accepted-output handoff and recovery; C4.5 adds
-provider-free lifecycle recovery and the public redacted app boundary. The
+C4.4C is complete: its pre-relation slot freeze, shared failed/delivery
+interlock, strict Retry provenance, exact accepted-output and terminal-History
+handoff, post-expiry local completion, and row-to-cleanup success are verified
+in
+`docs/qa/runs/ios-failed-history-retry-accepted-output-handoff-2026-07-12.md`.
+C4.4D next completes process-loss recovery; C4.5 adds provider-free lifecycle
+recovery and the public redacted app boundary. The
 independent recording-cache and directional App Group bridge flows remain later
 work and do not enter the keyboard early. Until
 the full C4 chain is complete, the shipping app does not expose a partial

@@ -78,7 +78,8 @@ conflict.
 Strict construction and decode reject impossible cross-field combinations.
 Publication generation is only `0` or `1`; `confirmedInserted` and
 `submittedUnverified` require generation `1`; and `discarded` requires null
-text, false insertion preference, and null History state. History state moves
+text, null failed-Retry provenance, false insertion preference, and null
+History state. History state moves
 only from `pending` or `pendingReplacement` to `committed` or `cancelled`; the
 mutation API rejects a stale callback that tries to recreate unresolved work.
 Insertion terminal states are writable only by the
@@ -122,6 +123,29 @@ year `0001...9999`, and no leap second. Implementations must not use the
 week-based `YYYY` date pattern. The decoder validates schema version before
 applying the version-1 key allowlist, so a future version remains a distinct
 unsupported value rather than malformed version-1 data.
+
+## Strict Version-2 Failed-Retry Provenance
+
+Version `2` adds exactly one seventeenth root field, `failedRetryID`, to the
+version-1 shape. It is a required, non-null, canonical lowercase UUID. The
+writer emits version `2` only for a delivery created through the store-minted
+failed-Retry permit; ordinary delivery records remain version `1` and decode
+with `failedRetryID: nil`. A version-2 record with a missing, null,
+non-canonical, or wrong-typed value is invalid.
+
+The value is immutable acceptance provenance, not caller input. It must equal
+the exact durable Retry operation's `retryID`, participates in record and
+expectation equality, and survives History-marker transitions. A generic
+acceptance cannot adopt or replay a tagged record, and an untagged
+identity/byte-exact record cannot prove failed-Retry acceptance. Discard clears
+the value before writing the tombstone; a discarded record carrying it is
+invalid and is never encoded.
+
+Version dispatch accepts only `1` and `2`. A new binary continues to read the
+existing strict 16-field version-1 shape. A binary that predates version `2`
+preserves a 17-field version-2 file as unsupported instead of mutating it, so a
+release that can write failed-Retry provenance is no-downgrade until the tagged
+delivery is retired.
 
 `acceptedText` is a non-empty string in every state except `discarded`, where
 it is exactly `null`. `IOSAcceptedOutputDeliveryPreparation` is the iOS
@@ -201,10 +225,11 @@ An otherwise-identical acceptance replay carrying `false` applies that same
 one-way revocation; a replay carrying `true` never restores a current `false`.
 The captured insertion preference never grants authorization, and live settings
 or runtime gates may always revoke publication. A discarded tombstone has
-`acceptedText: null`, `automaticInsertionPreferenceEnabled: false`, and
-`historyWrite: null`. Publication is legal only for an unexpired `pending`
-delivery. Completing or cancelling History changes only its nested state. An
-idempotent operation changes no bytes.
+`acceptedText: null`, `failedRetryID: nil`,
+`automaticInsertionPreferenceEnabled: false`, and `historyWrite: null`.
+Publication is legal only for an unexpired `pending` delivery. Completing or
+cancelling History changes only its nested state. An idempotent operation
+changes no bytes.
 
 The decoder accepts only UTF-8 JSON without a byte-order mark, duplicate keys,
 unknown keys, missing keys, numeric aliases, non-canonical UUIDs or dates, or
@@ -215,10 +240,11 @@ members, no arrays, at most 65 total values, decoded key length 64 UTF-8 bytes,
 decoded value-string length 131,072 UTF-8 bytes, and number-token length 20
 bytes. After `schemaVersion: 1` is confirmed, the exact version-1 shape is 16
 root members, five History members, 21 total object members, and 22 total
+values. Version `2` has 17 root members, 22 total object members, and 23 total
 values. This bounded headroom lets an ordinary future schema remain the typed
-unsupported-version case before the version-1 allowlist is applied. Malformed,
-oversized, and future-version source bytes are preserved and block automatic
-replacement.
+unsupported-version case before either version allowlist is applied.
+Malformed, oversized, and future-version source bytes are preserved and block
+automatic replacement.
 
 The public value and errors redact text and metadata from app-owned
 `description`, `debugDescription`, `CustomReflectable`, logs, assertions, and
@@ -626,6 +652,10 @@ Release evidence for any build that can write `pendingReplacement` must also
 enforce the no-downgrade policy above. Compatibility with an older binary is
 not certified by the 24-hour lifetime because that binary cannot parse the
 marker to reach expiry cleanup.
+
+Release evidence for a build that can write version-2 failed-Retry provenance
+must likewise prove version-1 backward decode, strict version-2 round-trip and
+allowlisting, and preservation by a pre-version-2 binary.
 
 ## Downstream Conformance Verification
 

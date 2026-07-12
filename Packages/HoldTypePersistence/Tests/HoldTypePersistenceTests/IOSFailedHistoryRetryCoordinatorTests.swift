@@ -214,6 +214,31 @@ struct IOSFailedHistoryRetryCoordinatorTests {
         }
     }
 
+    @Test func durableOutboxHeadBlocksRetryBeforeReservation() async throws {
+        let fixture = try RetryCoordinatorFixture()
+        let original = try await fixture.prepareReadyFailure()
+        try await fixture.prepareOutboxHead()
+
+        await #expect(
+            throws: IOSAcceptedHistoryCoordinatorError.localRecoveryPending
+        ) {
+            _ = try await fixture.coordinator.prepareFailedHistoryRetry(
+                attemptID: original.attemptID,
+                setup: try retryCoordinatorSetup()
+            )
+        }
+
+        let retained = try #require(
+            try await fixture.context.failedHistoryStore.load()
+        )
+        #expect(retained.entries == [original])
+        #expect(retained.entries.first?.retryOperation == nil)
+        #expect(
+            await fixture.context.failedHistoryRetryState.hasLiveOwner()
+                == false
+        )
+    }
+
     @Test func exactCancellationMakesTheSameRowRetryableAgain()
         async throws {
         let fixture = try RetryCoordinatorFixture()
@@ -667,6 +692,375 @@ struct IOSFailedHistoryRetryCoordinatorTests {
         #expect(fixture.audioExists(for: retained))
     }
 
+    @Test func acceptedProviderOutputCommitsExactDeliveryHistoryAndCleanup()
+        async throws {
+        let fixture = try RetryCoordinatorFixture()
+        let original = try await fixture.prepareReadyFailure()
+        let handoff = try await fixture.coordinator.prepareFailedHistoryRetry(
+            attemptID: original.attemptID,
+            setup: try retryCoordinatorSetup()
+        )
+        let provider = RetryCoordinatorPipelineProvider(
+            transcription: .success("secret accepted retry result")
+        )
+        let usage = RetryCoordinatorUsageRecorder()
+        var output: IOSFailedHistoryRetryAcceptedProviderOutput?
+        do {
+            let execution = try await handoff.executePipeline(
+                IOSFailedHistoryRetryPipeline(
+                    provider: provider,
+                    usageRecorder: usage
+                )
+            )
+            guard case .accepted(let accepted) = execution else {
+                Issue.record("A valid provider result must be accepted.")
+                return
+            }
+            output = accepted
+        }
+
+        let retryOperation: IOSFailedHistoryRetryOperation
+        do {
+            let accepted = try #require(output)
+            retryOperation = accepted.dispatchReceipt.retryOperation
+            let firstResolution = try await accepted.accept()
+            if firstResolution != .committed {
+                let phase = await fixture.context.acceptanceState.current()?
+                    .phase
+                let phaseName = switch phase {
+                case .deliveryAccepted: "deliveryAccepted"
+                case .deliveryAuthorized: "deliveryAuthorized"
+                case .policyConfirmed: "policyConfirmed"
+                case .rowDecided: "rowDecided"
+                case .policyRevalidated: "policyRevalidated"
+                case .invalidationConfirmed: "invalidationConfirmed"
+                case .abandoningExpired: "abandoningExpired"
+                case .confirmingExpired: "confirmingExpired"
+                case .removingExpired: "removingExpired"
+                case nil: "none"
+                }
+                Issue.record("Retry acceptance stopped at \(phaseName).")
+            }
+            #expect(firstResolution == .committed)
+            #expect(try await accepted.accept() == .committed)
+        }
+
+        guard case .active(let delivery)? = try await fixture.context
+            .deliveryStore.load() else {
+            Issue.record("Retry success must commit one active delivery.")
+            return
+        }
+        #expect(delivery.deliveryID == retryOperation.deliveryID)
+        #expect(delivery.sessionID == retryOperation.sessionID)
+        #expect(delivery.attemptID == original.attemptID)
+        #expect(delivery.transcriptID == retryOperation.transcriptID)
+        #expect(delivery.acceptedText == "secret accepted retry result")
+        #expect(delivery.outputIntent == .standard)
+        #expect(!delivery.automaticInsertionPreferenceEnabled)
+        #expect(delivery.keepLatestResult)
+        #expect(delivery.publicationGeneration == 0)
+        #expect(delivery.historyWrite?.state == .committed)
+
+        let history = try #require(
+            try await fixture.context.acceptedHistoryStore.load()
+        )
+        #expect(history.entries.count == 1)
+        #expect(history.entries.first?.deliveryID == retryOperation.deliveryID)
+        #expect(history.entries.first?.transcriptID == retryOperation.transcriptID)
+        #expect(
+            history.entries.first?.acceptedText
+                == "secret accepted retry result"
+        )
+
+        let failed = try #require(
+            try await fixture.context.failedHistoryStore.load()
+        )
+        let tombstone = try #require(failed.audioCleanup.first)
+        #expect(failed.entries.isEmpty)
+        #expect(failed.audioCleanup.count == 1)
+        #expect(tombstone.attemptID == original.attemptID)
+        #expect(tombstone.policyGeneration == original.policyGeneration)
+        #expect(
+            tombstone.audioRelativeIdentifier
+                == original.audioRelativeIdentifier
+        )
+        #expect(tombstone.byteCount == original.byteCount)
+        #expect(fixture.audioExists(for: original))
+        #expect(await provider.transcriptionCallCount() == 1)
+        #expect(await usage.callCount() == 1)
+        #expect(
+            await fixture.context.failedHistoryRetryState.hasLiveOwner()
+                == false
+        )
+
+        output = nil
+        try await Task.sleep(for: .milliseconds(50))
+        let afterDeinit = try #require(
+            try await fixture.context.failedHistoryStore.load()
+        )
+        #expect(afterDeinit == failed)
+        #expect(await provider.transcriptionCallCount() == 1)
+    }
+
+    @Test func acceptedProviderOutputPreservesDisabledKeepLatest()
+        async throws {
+        let fixture = try RetryCoordinatorFixture()
+        let original = try await fixture.prepareReadyFailure()
+        let handoff = try await fixture.coordinator.prepareFailedHistoryRetry(
+            attemptID: original.attemptID,
+            setup: try retryCoordinatorSetup(keepLatestResult: false)
+        )
+        let provider = RetryCoordinatorPipelineProvider(
+            transcription: .success("accepted without latest result")
+        )
+        let execution = try await handoff.executePipeline(
+            IOSFailedHistoryRetryPipeline(
+                provider: provider,
+                usageRecorder: RetryCoordinatorUsageRecorder()
+            )
+        )
+        guard case .accepted(let output) = execution else {
+            Issue.record("A valid provider result must be accepted.")
+            return
+        }
+
+        #expect(try await output.accept() == .committed)
+        guard case .active(let delivery)? = try await fixture.context
+            .deliveryStore.load() else {
+            Issue.record("Retry success must commit one active delivery.")
+            return
+        }
+        #expect(!delivery.keepLatestResult)
+        #expect(!delivery.automaticInsertionPreferenceEnabled)
+        #expect(delivery.historyWrite?.state == .committed)
+        #expect(await provider.transcriptionCallCount() == 1)
+        #expect(
+            try await fixture.context.failedHistoryStore.load()?
+                .audioCleanup.count == 1
+        )
+    }
+
+    @Test func acceptedRetryTransfersTheExactPendingPredecessor()
+        async throws {
+        let fixture = try RetryCoordinatorFixture()
+        let original = try await fixture.prepareReadyFailure()
+        let predecessor = try await fixture.preparePendingDeliveryPredecessor()
+        let handoff = try await fixture.coordinator.prepareFailedHistoryRetry(
+            attemptID: original.attemptID,
+            setup: try retryCoordinatorSetup()
+        )
+        let provider = RetryCoordinatorPipelineProvider(
+            transcription: .success("accepted after predecessor transfer")
+        )
+        let execution = try await handoff.executePipeline(
+            IOSFailedHistoryRetryPipeline(
+                provider: provider,
+                usageRecorder: RetryCoordinatorUsageRecorder()
+            )
+        )
+        guard case .accepted(let output) = execution else {
+            Issue.record("A valid provider result must be accepted.")
+            return
+        }
+
+        #expect(try await output.accept() == .committed)
+        let outbox = try #require(
+            try await fixture.context.outboxStore.load()
+        )
+        #expect(outbox.entries.count == 1)
+        #expect(outbox.entries.first?.deliveryID == predecessor.deliveryID)
+        guard case .active(let current)? = try await fixture.context
+            .deliveryStore.load() else {
+            Issue.record("Retry replacement must remain active.")
+            return
+        }
+        #expect(current.deliveryID == output.dispatchReceipt.retryOperation.deliveryID)
+        #expect(current.historyWrite?.state == .committed)
+        #expect(
+            try await fixture.context.failedHistoryStore.load()?
+                .audioCleanup.count == 1
+        )
+        #expect(await provider.transcriptionCallCount() == 1)
+    }
+
+    @Test func concurrentAcceptedProviderOutputWaitersShareOneSuccess()
+        async throws {
+        let fixture = try RetryCoordinatorFixture()
+        let original = try await fixture.prepareReadyFailure()
+        let handoff = try await fixture.coordinator.prepareFailedHistoryRetry(
+            attemptID: original.attemptID,
+            setup: try retryCoordinatorSetup()
+        )
+        let provider = RetryCoordinatorPipelineProvider(
+            transcription: .success("one shared accepted result")
+        )
+        let execution = try await handoff.executePipeline(
+            IOSFailedHistoryRetryPipeline(
+                provider: provider,
+                usageRecorder: RetryCoordinatorUsageRecorder()
+            )
+        )
+        guard case .accepted(let output) = execution else {
+            Issue.record("A valid provider result must be accepted.")
+            return
+        }
+
+        async let first = output.accept()
+        async let second = output.accept()
+        let firstResolution = try await first
+        let secondResolution = try await second
+
+        #expect(firstResolution == .committed)
+        #expect(secondResolution == .committed)
+        #expect(await provider.transcriptionCallCount() == 1)
+        #expect(
+            try await fixture.context.failedHistoryStore.load()?
+                .audioCleanup.count == 1
+        )
+    }
+
+    @Test func retainedFrozenProofResumesPersistentAcceptingUncertainty()
+        async throws {
+        let fixture = try RetryCoordinatorUncertaintyFixture()
+        let original = try await fixture.prepareReadyFailure()
+        let handoff = try await fixture.coordinator.prepareFailedHistoryRetry(
+            attemptID: original.attemptID,
+            setup: try retryCoordinatorSetup()
+        )
+        let provider = RetryCoordinatorPipelineProvider(
+            transcription: .success("accepted after accepting uncertainty")
+        )
+        let execution = try await handoff.executePipeline(
+            IOSFailedHistoryRetryPipeline(
+                provider: provider,
+                usageRecorder: RetryCoordinatorUsageRecorder()
+            )
+        )
+        guard case .accepted(let output) = execution else {
+            Issue.record("A valid provider result must be accepted.")
+            return
+        }
+        fixture.failedFileSystem.persistentReplaceFailure = .init(
+            error: .commitUncertain,
+            commitBeforeThrowing: false
+        )
+
+        await #expect(throws: IOSFailedHistoryError.commitUncertain) {
+            _ = try await output.accept()
+        }
+        #expect(fixture.mutationInterlock.hasRetryDeliveryRelation)
+        #expect(await fixture.retryState.hasLiveOwner())
+
+        fixture.failedFileSystem.persistentReplaceFailure = nil
+        #expect(try await output.accept() == .committed)
+        #expect(await provider.transcriptionCallCount() == 1)
+        #expect(
+            try await fixture.failedHistoryStore.load()?
+                .audioCleanup.count == 1
+        )
+        #expect(!fixture.mutationInterlock.hasRetryDeliveryRelation)
+        #expect(await fixture.retryState.hasLiveOwner() == false)
+    }
+
+    @Test func retainedSuccessPhaseResumesPersistentCommitUncertainty()
+        async throws {
+        let fixture = try RetryCoordinatorUncertaintyFixture()
+        let original = try await fixture.prepareReadyFailure()
+        let handoff = try await fixture.coordinator.prepareFailedHistoryRetry(
+            attemptID: original.attemptID,
+            setup: try retryCoordinatorSetup()
+        )
+        let provider = RetryCoordinatorPipelineProvider(
+            transcription: .success("accepted after success uncertainty")
+        )
+        let execution = try await handoff.executePipeline(
+            IOSFailedHistoryRetryPipeline(
+                provider: provider,
+                usageRecorder: RetryCoordinatorUsageRecorder()
+            )
+        )
+        guard case .accepted(let output) = execution else {
+            Issue.record("A valid provider result must be accepted.")
+            return
+        }
+        fixture.failedFileSystem
+            .persistentReplaceFailureAfterSuccessfulReplaces = (
+                remaining: 1,
+                failure: .init(
+                    error: .commitUncertain,
+                    commitBeforeThrowing: false
+                )
+            )
+
+        let firstResolution: IOSAcceptedHistoryAcceptanceResolution
+        do {
+            firstResolution = try await output.accept()
+        } catch {
+            Issue.record("Initial retained-success acceptance threw.")
+            throw error
+        }
+        #expect(firstResolution == .pendingLocalRecovery)
+        #expect(fixture.mutationInterlock.hasRetryDeliveryRelation)
+        #expect(await fixture.retryState.hasLiveOwner())
+
+        fixture.failedFileSystem.persistentReplaceFailure = nil
+        fixture.failedFileSystem
+            .persistentReplaceFailureAfterSuccessfulReplaces = nil
+        let recoveredResolution: IOSAcceptedHistoryAcceptanceResolution
+        do {
+            recoveredResolution = try await output.accept()
+        } catch {
+            Issue.record("Retained success recovery threw.")
+            throw error
+        }
+        #expect(recoveredResolution == .committed)
+        #expect(await provider.transcriptionCallCount() == 1)
+        #expect(
+            try await fixture.failedHistoryStore.load()?
+                .audioCleanup.count == 1
+        )
+        #expect(!fixture.mutationInterlock.hasRetryDeliveryRelation)
+        #expect(await fixture.retryState.hasLiveOwner() == false)
+    }
+
+    @Test func definiteAcceptingFailureDropsOnlyTheFrozenCheckpoint()
+        async throws {
+        let fixture = try RetryCoordinatorUncertaintyFixture()
+        let original = try await fixture.prepareReadyFailure()
+        let handoff = try await fixture.coordinator.prepareFailedHistoryRetry(
+            attemptID: original.attemptID,
+            setup: try retryCoordinatorSetup()
+        )
+        let provider = RetryCoordinatorPipelineProvider(
+            transcription: .success("accepted after protected-data retry")
+        )
+        let execution = try await handoff.executePipeline(
+            IOSFailedHistoryRetryPipeline(
+                provider: provider,
+                usageRecorder: RetryCoordinatorUsageRecorder()
+            )
+        )
+        guard case .accepted(let output) = execution else {
+            Issue.record("A valid provider result must be accepted.")
+            return
+        }
+        fixture.failedFileSystem.replaceFailure = .init(
+            error: .protectedDataUnavailable,
+            commitBeforeThrowing: false
+        )
+
+        await #expect(throws: IOSFailedHistoryError.dataProtectionUnavailable) {
+            _ = try await output.accept()
+        }
+        #expect(!fixture.mutationInterlock.hasRetryDeliveryRelation)
+        #expect(await fixture.retryState.hasLiveOwner())
+
+        #expect(try await output.accept() == .committed)
+        #expect(await provider.transcriptionCallCount() == 1)
+        #expect(!fixture.mutationInterlock.hasRetryDeliveryRelation)
+        #expect(await fixture.retryState.hasLiveOwner() == false)
+    }
+
     @Test func retryEntrypointResumesRetainedProviderFailure()
         async throws {
         let fixture = try RetryCoordinatorUncertaintyFixture()
@@ -830,6 +1224,58 @@ private final class RetryCoordinatorFixture: @unchecked Sendable {
             try await context.failedHistoryStore.load()
         )
         return try #require(envelope.entries.first)
+    }
+
+    func prepareOutboxHead() async throws {
+        let capture = try await coordinator.capture(
+            transcriptionModel: "outbox-model",
+            transcriptionLanguageCode: "en",
+            durationMilliseconds: 500
+        )
+        let preparation = try IOSAcceptedOutputDeliveryPreparation(
+            deliveryID: UUID(),
+            sessionID: UUID(),
+            attemptID: UUID(),
+            transcriptID: UUID(),
+            rawAcceptedText: "retained predecessor",
+            outputIntent: .standard,
+            automaticInsertionPreferenceEnabled: false,
+            keepLatestResult: true,
+            historyCapture: capture
+        )
+        let record = try await context.deliveryStore.accept(preparation)
+        let authorization = try await context.deliveryStore
+            .authorizePendingHistoryWrite(
+                expected: IOSAcceptedOutputDeliveryExpectation(
+                    record: record
+                )
+            )
+        _ = try await context.outboxStore.transferForTesting(
+            delivery: authorization,
+            policy: capture.policyReceipt
+        )
+    }
+
+    func preparePendingDeliveryPredecessor()
+        async throws -> IOSAcceptedOutputDeliveryRecord {
+        let capture = try await coordinator.capture(
+            transcriptionModel: "predecessor-model",
+            transcriptionLanguageCode: "en",
+            durationMilliseconds: 750
+        )
+        return try await context.deliveryStore.accept(
+            IOSAcceptedOutputDeliveryPreparation(
+                deliveryID: UUID(),
+                sessionID: UUID(),
+                attemptID: UUID(),
+                transcriptID: UUID(),
+                rawAcceptedText: "pending predecessor",
+                outputIntent: .standard,
+                automaticInsertionPreferenceEnabled: false,
+                keepLatestResult: true,
+                historyCapture: capture
+            )
+        )
     }
 
     func prepareReadyPending() async throws -> IOSPendingRecording {
@@ -1044,6 +1490,7 @@ private actor RetryCoordinatorPipelineProvider:
         IOSFailedHistoryRetryProviderTextOutcome
     private let correctionOutcome: IOSFailedHistoryRetryProviderTextOutcome
     private let translationOutcome: IOSFailedHistoryRetryProviderTextOutcome
+    private var storedTranscriptionCallCount = 0
 
     init(
         transcription: IOSFailedHistoryRetryProviderTextOutcome,
@@ -1060,6 +1507,7 @@ private actor RetryCoordinatorPipelineProvider:
     func transcribe(
         _ request: IOSFailedHistoryRetryTranscriptionRequest
     ) async -> IOSFailedHistoryRetryProviderTextOutcome {
+        storedTranscriptionCallCount += 1
         guard (try? await request.audio.read(
             atOffset: 0,
             maximumByteCount: 64
@@ -1081,6 +1529,10 @@ private actor RetryCoordinatorPipelineProvider:
     ) async -> IOSFailedHistoryRetryProviderTextOutcome {
         _ = request
         return translationOutcome
+    }
+
+    func transcriptionCallCount() -> Int {
+        storedTranscriptionCallCount
     }
 }
 

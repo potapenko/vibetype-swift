@@ -562,6 +562,13 @@ identity. They remain distinct for both Standard and Translation Retry. This is
 the sole failed-row Retry exception to the ordinary PendingRecording rule that
 an accepted delivery's transcript ID equals its pending transcription ID.
 
+The delivery identity compared by Retry is exactly `deliveryID`, `sessionID`,
+the failed row's `attemptID`, and `transcriptID`. `retryID` and
+`transcriptionID` are not delivery identities. A partial collision means that
+at least one, but not all four, of those delivery identities match. A complete
+identity match is accepted only through the exact Retry relation and never by
+an ordinary ID lookup.
+
 Before reservation, the coordinator freezes the current valid transcription
 configuration, a fresh `TranscriptionPromptComposition`, Text Correction and
 local post-processing configuration, any required Translation configuration,
@@ -573,6 +580,18 @@ failed row. The coordinator also proves that no Pending provider owner is live
 and that fewer than five audio-cleanup tombstones exist. A full tombstone queue,
 invalid setup, retry-count overflow, stale policy, or failed audio validation
 changes no row field and issues no provider authority.
+
+Retry admission also requires the accepted-History outbox to have no durable
+head. A retained head is reconciled by the ordinary outbox worker before the
+user retries again; Retry never spends a provider request and then waits on an
+outbox worker that its own live-owner relation excludes.
+
+The free tombstone slot is a durable reservation, not a point-in-time hint.
+While any row has a retry operation, every unrelated failed-row mutation that
+could append a tombstone is blocked. A valid envelope therefore always
+satisfies `audioCleanup.count + activeRetryCount <= 5`, where
+`activeRetryCount` is zero or one. Only exact Retry success may consume that
+reserved slot; cancellation or failure releases it by clearing the operation.
 
 The durable transitions are ordered:
 
@@ -656,6 +675,27 @@ the failed row and audio. A matching delivery enters only the exact local
 success-recovery path below. A caller-provided delivery ID or unrelated-record
 assertion is never absence proof.
 
+The frozen predecessor is not copied into failed History and no text-derived
+digest is added there. Its durable proof is the combination of the strict
+`acceptingOutput` relation and the rule that every compatible delivery mutation
+must first prove that relation absent. The transition observes the whole
+delivery snapshot under the root lease before publishing `acceptingOutput`;
+after that publication, the exact unchanged wholly unrelated snapshot is the
+predecessor. After relaunch, a wholly unrelated record is classified as that
+predecessor only after both stores are read under the same interlock and no
+compatible mutation has crossed the relation. A binary or repository path that
+cannot prove this enforcement, including downgrade or foreign-root access,
+fails closed rather than treating the record as a predecessor.
+
+Likewise, accepted text is never duplicated into failed History. In the live
+process, a matching Retry delivery is byte-compared with the one retained
+accepted-output preparation. After process loss, the store-minted durable
+relation, all four delivery identities, the exact output intent, automatic
+insertion disabled, frozen Keep Latest preference, matching History metadata,
+and strict delivery-store lineage together are the replay proof that the
+delivery came from that Retry branch. No caller-reconstructed text or
+preparation can supply this proof.
+
 After the requested Transcription or Translation produces accepted text, the
 coordinator reacquires the root gate and sets `acceptingOutput`. That durable
 transition freezes the exact current delivery slot as either missing or one
@@ -668,6 +708,46 @@ to consume this relation. Delivery commit is the provider-replay boundary.
 Accepted-output uncertainty is resumed or confirmed with the same preparation
 in process; it never triggers a second provider request.
 
+Slot observation and interlock activation have no await-sized race. While the
+delivery actor owns the observation, it mints an opaque freeze reservation and
+installs it in the shared interlock before returning the proof. That
+reservation blocks ordinary delivery and failed-store mutations even though
+the failed row is still `providerDispatched`. The exact accepting authorization
+upgrades the same reservation ID to the durable relation before its CAS. A
+definitive pre-commit failure releases only that exact reservation; commit
+uncertainty or a visible `acceptingOutput` outcome retains it. A raw relation
+key cannot mint, refresh, upgrade, or clear either phase.
+
+The raw relation key is identity, not bearer authority. The delivery store
+mints a redacted permit bound to the exact accepting receipt, delivery-store
+identity, owner, root-gate lease and live interlock. Every permitted mutation
+also proves that its target is the exact accepted Retry, the frozen predecessor,
+or the predecessor's exact pending-to-cancelled History transition. The permit
+cannot replace a substituted wholly unrelated current slot. Absent-row History
+replay rechecks the same live permit at the moment of the row decision.
+
+The accepted delivery persists that origin as strict wire version `2` with one
+required canonical `failedRetryID` equal to the operation's exact `retryID`.
+Ordinary version-1 acceptance always has nil provenance and cannot reconstruct
+or adopt the tagged relation, even when all four identities and accepted bytes
+match. The tag participates in record and expectation equality, survives
+terminal History transitions, and is cleared only when the delivery becomes a
+discarded tombstone after relation protection permits it.
+
+All validation that may definitively reject the provider result occurs before
+`acceptingOutput`. Once that state is durable, a local preparation, delivery,
+History, or repository error retains exact local recovery and never converts
+back into provider work. Only the explicit missing/frozen-predecessor recovery
+branch may clear an interrupted `acceptingOutput` operation while keeping the
+row and audio.
+
+Within the live process, an uncertain accepting transition retains its exact
+frozen-slot proof, and an uncertain terminal success retains its exact success
+phase. Bounded retries refresh those capabilities under a new root lease and
+resume only the same mutation. A definitive pre-boundary failure with no live
+relation discards the frozen checkpoint so the already-completed provider
+result may safely freeze the slot again; it does not call the provider again.
+
 The failed row remains `acceptingOutput` until the matching delivery's History
 marker is terminal: `committed` after an exact retained-or-not-retained row
 decision, or `cancelled` by exact newer-policy authority. In particular, an
@@ -676,6 +756,12 @@ combined durable failed-row/delivery relation is store-minted replay provenance
 for exactly one matching absent-row History decision; it grants no authority
 for an unrelated delivery, row, generation, or caller reconstruction. Existing
 `pendingReplacement` recovery keeps its narrower replacement provenance.
+
+An otherwise identity-matching Retry delivery with `pendingReplacement`, a
+missing History marker, `discarded` delivery state, automatic insertion
+enabled, incompatible output intent or Keep Latest preference, or mismatched
+History metadata is not success proof. It is a collision and preserves both
+stores for exact recovery or diagnosis.
 
 Only a matching durability-confirmed delivery, terminal History marker, and
 the exact failed-row relation may atomically remove the failed row and append
@@ -699,6 +785,15 @@ output fails closed rather than losing the only durable success proof. After
 process loss, a matching delivery therefore still proves success; confirmed
 absence or a wholly unrelated frozen predecessor is safe only because every
 compatible mutation enforces this interlock.
+
+While the exact relation is live, the delivery's 24-hour expiry is suspended
+only for proof-bound local completion: exact acceptance replay, pending History
+authorization, the one absent-row Retry decision, terminal marker CAS,
+terminal confirmation, and row-to-tombstone success. It never re-enables
+bridge publication, automatic insertion, ordinary reads, replacement, or
+removal. Post-expiry History mutation clamps `updatedAt` to the existing
+`expiresAt` so the immutable TTL contract remains valid. Once the relation is
+retired, normal expiry semantics resume.
 
 A live external provider owner blocks a Clear, Disable, or state-changing
 Enable before the policy boundary. Once provider work has ended and

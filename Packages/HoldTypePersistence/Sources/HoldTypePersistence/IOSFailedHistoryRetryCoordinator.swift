@@ -120,8 +120,8 @@ extension IOSFailedHistoryRetryProviderInvocation:
     var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
-/// The sole successful C4.4B provider output. Dropping it before C4.4C claims
-/// local acceptance converts the exact completed Retry back into the prior
+/// The sole successful provider output. Dropping it before local acceptance
+/// claims the result converts the exact completed Retry back into the prior
 /// recoverable failed row; it never leaves a completed live owner wedged.
 final class IOSFailedHistoryRetryAcceptedProviderOutput:
     @unchecked Sendable {
@@ -131,6 +131,8 @@ final class IOSFailedHistoryRetryAcceptedProviderOutput:
     let setup: IOSFailedHistoryRetrySetupSnapshot
 
     private let terminalRelay: IOSFailedHistoryRetryCancellationRelay
+    private let acceptanceLock = NSLock()
+    private var acceptanceClaimed = false
 
     fileprivate init(
         transcript: AcceptedTranscript,
@@ -146,8 +148,25 @@ final class IOSFailedHistoryRetryAcceptedProviderOutput:
         self.terminalRelay = terminalRelay
     }
 
+    func accept()
+        async throws -> IOSAcceptedHistoryAcceptanceResolution {
+        acceptanceLock.withLock {
+            acceptanceClaimed = true
+        }
+        return try await terminalRelay.completeProviderAcceptance(
+            transcript: transcript,
+            claim: completionClaim,
+            setup: setup
+        )
+    }
+
     deinit {
-        terminalRelay.requestProviderOutputAbandonment()
+        let shouldAbandon = acceptanceLock.withLock {
+            !acceptanceClaimed
+        }
+        if shouldAbandon {
+            terminalRelay.requestProviderOutputAbandonment()
+        }
     }
 }
 
@@ -387,11 +406,55 @@ private actor IOSFailedHistoryRetryCancellationRelay:
         let task: Task<Void, Error>
     }
 
+    private enum AcceptanceProgress: Sendable {
+        case pending(
+            IOSFailedHistoryRetryAcceptingOutputReceipt
+        )
+        case completed(
+            IOSFailedHistoryRetrySuccessReceipt,
+            IOSAcceptedHistoryAcceptanceResolution
+        )
+    }
+
+    private struct AcceptanceInFlight: Sendable {
+        let id: UUID
+        let task: Task<AcceptanceProgress, Error>
+    }
+
+    private final class AcceptanceCheckpointState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var frozenProof:
+            IOSAcceptedOutputDeliveryFrozenSlotProof?
+
+        func loadFrozenProof()
+            -> IOSAcceptedOutputDeliveryFrozenSlotProof? {
+            lock.withLock { frozenProof }
+        }
+
+        func storeFrozenProof(
+            _ proof: IOSAcceptedOutputDeliveryFrozenSlotProof
+        ) {
+            lock.withLock { frozenProof = proof }
+        }
+
+        func clear() {
+            lock.withLock { frozenProof = nil }
+        }
+    }
+
     private let dispatchReceipt: IOSFailedHistoryRetryDispatchReceipt
     private let registration: IOSFailedHistoryRetryProviderRegistration
     private let retryState: IOSFailedHistoryRetryLiveOwnerState
     private let operationGate: IOSPersistenceOperationGate
     private let failedStore: IOSFailedHistoryStore
+    private let policyStore: IOSHistoryPolicyStore
+    private let acceptedHistoryStore: IOSAcceptedHistoryStore
+    private let outboxStore: IOSAcceptedHistoryOutboxStore
+    private let deliveryStore: IOSAcceptedOutputDeliveryStore
+    private let acceptanceState: IOSAcceptedHistoryAcceptanceOperationState
+    private let pendingReplacementState:
+        IOSAcceptedHistoryPendingReplacementOperationState
+    private let ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity
     private let repositoryIdentityState:
         IOSAcceptedHistoryCoordinatorRepositoryIdentityState
     private let repositoryRegistration:
@@ -408,9 +471,22 @@ private actor IOSFailedHistoryRetryCancellationRelay:
         IOSFailedHistoryRetryProviderCompletionClaim?
     private var providerFailureDisposition:
         IOSFailedHistoryRetryFailureDisposition?
+    private var providerAcceptanceTranscript: AcceptedTranscript?
+    private var providerAcceptanceClaim:
+        IOSFailedHistoryRetryProviderCompletionClaim?
+    private var providerAcceptanceSetup:
+        IOSFailedHistoryRetrySetupSnapshot?
+    private var providerAcceptanceReceipt:
+        IOSFailedHistoryRetryAcceptingOutputReceipt?
+    private var providerAcceptanceInFlight: AcceptanceInFlight?
+    private var providerAcceptanceResolution:
+        IOSAcceptedHistoryAcceptanceResolution?
+    private let providerAcceptanceCheckpointState =
+        AcceptanceCheckpointState()
     private var cancellationCompleted = false
     private var providerCompletionClaimed = false
     private var providerFailureCompleted = false
+    private var providerAcceptanceCompleted = false
     private var audioInvalidations: [@Sendable () -> Void]
 
     init(
@@ -419,6 +495,14 @@ private actor IOSFailedHistoryRetryCancellationRelay:
         retryState: IOSFailedHistoryRetryLiveOwnerState,
         operationGate: IOSPersistenceOperationGate,
         failedStore: IOSFailedHistoryStore,
+        policyStore: IOSHistoryPolicyStore,
+        acceptedHistoryStore: IOSAcceptedHistoryStore,
+        outboxStore: IOSAcceptedHistoryOutboxStore,
+        deliveryStore: IOSAcceptedOutputDeliveryStore,
+        acceptanceState: IOSAcceptedHistoryAcceptanceOperationState,
+        pendingReplacementState:
+            IOSAcceptedHistoryPendingReplacementOperationState,
+        ownerIdentity: IOSAcceptedHistoryCoordinatorOwnerIdentity,
         repositoryIdentityState:
             IOSAcceptedHistoryCoordinatorRepositoryIdentityState,
         repositoryRegistration:
@@ -430,6 +514,13 @@ private actor IOSFailedHistoryRetryCancellationRelay:
         self.retryState = retryState
         self.operationGate = operationGate
         self.failedStore = failedStore
+        self.policyStore = policyStore
+        self.acceptedHistoryStore = acceptedHistoryStore
+        self.outboxStore = outboxStore
+        self.deliveryStore = deliveryStore
+        self.acceptanceState = acceptanceState
+        self.pendingReplacementState = pendingReplacementState
+        self.ownerIdentity = ownerIdentity
         self.repositoryIdentityState = repositoryIdentityState
         self.repositoryRegistration = repositoryRegistration
         audioInvalidations = [audioInvalidation]
@@ -452,7 +543,7 @@ private actor IOSFailedHistoryRetryCancellationRelay:
         Task.detached { [self] in
             for _ in 0..<3 {
                 do {
-                    try await recoverProviderFailure()
+                    try await recoverProviderCompletion()
                     return
                 } catch {
                     await Task.yield()
@@ -507,6 +598,7 @@ private actor IOSFailedHistoryRetryCancellationRelay:
     ) async throws {
         guard providerCompletionClaimed,
               !cancellationCompleted,
+              providerAcceptanceClaim == nil,
               !providerFailureCompleted else {
             if providerFailureCompleted { return }
             throw IOSFailedHistoryError.invalidTransition
@@ -526,6 +618,36 @@ private actor IOSFailedHistoryRetryCancellationRelay:
             providerFailureDisposition = disposition
         }
         try await awaitProviderFailureWork()
+    }
+
+    func completeProviderAcceptance(
+        transcript: AcceptedTranscript,
+        claim: IOSFailedHistoryRetryProviderCompletionClaim,
+        setup: IOSFailedHistoryRetrySetupSnapshot
+    ) async throws -> IOSAcceptedHistoryAcceptanceResolution {
+        guard providerCompletionClaimed,
+              !cancellationCompleted,
+              !providerFailureCompleted,
+              providerFailureClaim == nil,
+              providerFailureDisposition == nil else {
+            throw IOSFailedHistoryError.invalidTransition
+        }
+        if let providerAcceptanceClaim {
+            guard providerAcceptanceClaim == claim,
+                  providerAcceptanceTranscript == transcript,
+                  providerAcceptanceSetup == setup else {
+                throw IOSFailedHistoryError.invalidTransition
+            }
+        } else {
+            providerAcceptanceClaim = claim
+            providerAcceptanceTranscript = transcript
+            providerAcceptanceSetup = setup
+        }
+        if providerAcceptanceCompleted,
+           let providerAcceptanceResolution {
+            return providerAcceptanceResolution
+        }
+        return try await awaitProviderAcceptanceWork()
     }
 
     func cancel() async throws {
@@ -574,6 +696,14 @@ private actor IOSFailedHistoryRetryCancellationRelay:
         return work
     }
 
+    private func recoverProviderCompletion() async throws {
+        if providerAcceptanceClaim != nil {
+            _ = try await awaitProviderAcceptanceWork()
+            return
+        }
+        try await recoverProviderFailure()
+    }
+
     private func recoverProviderFailure() async throws {
         guard providerCompletionClaimed,
               providerFailureClaim != nil,
@@ -586,6 +716,7 @@ private actor IOSFailedHistoryRetryCancellationRelay:
 
     private func abandonProviderOutput() async throws {
         guard providerCompletionClaimed,
+              providerAcceptanceClaim == nil,
               !providerFailureCompleted else {
             return
         }
@@ -610,6 +741,55 @@ private actor IOSFailedHistoryRetryCancellationRelay:
             }
             throw error
         }
+    }
+
+    private func awaitProviderAcceptanceWork()
+        async throws -> IOSAcceptedHistoryAcceptanceResolution {
+        let work = providerAcceptanceWork()
+        do {
+            let progress = try await work.task.value
+            if providerAcceptanceCompleted,
+               let providerAcceptanceResolution {
+                return providerAcceptanceResolution
+            }
+            if providerAcceptanceInFlight?.id == work.id {
+                providerAcceptanceInFlight = nil
+            }
+            switch progress {
+            case .pending(let receipt):
+                if providerAcceptanceReceipt == nil {
+                    providerAcceptanceReceipt = receipt
+                }
+                return .pendingLocalRecovery
+            case .completed(let receipt, let resolution):
+                _ = receipt
+                providerAcceptanceReceipt = nil
+                providerAcceptanceResolution = resolution
+                providerAcceptanceCompleted = true
+                return resolution
+            }
+        } catch {
+            if providerAcceptanceInFlight?.id == work.id {
+                providerAcceptanceInFlight = nil
+            }
+            throw error
+        }
+    }
+
+    private func providerAcceptanceWork() -> AcceptanceInFlight {
+        if let providerAcceptanceInFlight {
+            return providerAcceptanceInFlight
+        }
+        let id = UUID()
+        let retainedReceipt = providerAcceptanceReceipt
+        let task = Task.detached { [self] in
+            try await performProviderAcceptance(
+                retainedReceipt: retainedReceipt
+            )
+        }
+        let work = AcceptanceInFlight(id: id, task: task)
+        providerAcceptanceInFlight = work
+        return work
     }
 
     private func providerFailureWork() -> InFlight {
@@ -669,6 +849,196 @@ private actor IOSFailedHistoryRetryCancellationRelay:
         } catch {
             cancellationClaimTask = nil
             throw error
+        }
+    }
+
+    private func performProviderAcceptance(
+        retainedReceipt: IOSFailedHistoryRetryAcceptingOutputReceipt?
+    ) async throws -> AcceptanceProgress {
+        guard let transcript = providerAcceptanceTranscript,
+              let claim = providerAcceptanceClaim,
+              let setup = providerAcceptanceSetup else {
+            throw IOSFailedHistoryError.invalidTransition
+        }
+        let operationGate = operationGate
+        let dispatchReceipt = dispatchReceipt
+        let retryState = retryState
+        let failedStore = failedStore
+        let policyStore = policyStore
+        let acceptedHistoryStore = acceptedHistoryStore
+        let outboxStore = outboxStore
+        let deliveryStore = deliveryStore
+        let acceptanceState = acceptanceState
+        let pendingReplacementState = pendingReplacementState
+        let ownerIdentity = ownerIdentity
+        let repositoryIdentityState = repositoryIdentityState
+        let repositoryRegistration = repositoryRegistration
+        let acceptanceCheckpointState =
+            providerAcceptanceCheckpointState
+
+        do {
+            return try await operationGate.perform { lease in
+                let repositoryBinding = repositoryRegistration?.revalidate()
+                guard !repositoryIdentityState.isConflicted else {
+                    throw IOSAcceptedHistoryCoordinatorError
+                        .repositoryIdentityConflict
+                }
+
+                let policyReceipt = dispatchReceipt.authorization
+                    .reservationReceipt.authorization.policyReceipt
+                let historyWrite = try IOSAcceptedOutputHistoryWrite(
+                    policyGeneration: dispatchReceipt.row.policyGeneration,
+                    transcriptionModel:
+                        dispatchReceipt.row.transcriptionModel,
+                    transcriptionLanguageCode:
+                        dispatchReceipt.row.transcriptionLanguageCode,
+                    durationMilliseconds:
+                        dispatchReceipt.row.durationMilliseconds
+                )
+                let capture = IOSAcceptedOutputHistoryCapture(
+                    policyReceipt: policyReceipt,
+                    ownerIdentity: ownerIdentity,
+                    historyWrite: historyWrite
+                )
+                let preparation = try IOSAcceptedOutputDeliveryPreparation(
+                    deliveryID: dispatchReceipt.retryOperation.deliveryID,
+                    sessionID: dispatchReceipt.retryOperation.sessionID,
+                    attemptID: dispatchReceipt.row.attemptID,
+                    transcriptID: dispatchReceipt.retryOperation.transcriptID,
+                    rawAcceptedText: transcript.text,
+                    outputIntent: dispatchReceipt.row.outputIntent,
+                    automaticInsertionPreferenceEnabled: false,
+                    keepLatestResult: setup.keepLatestResult,
+                    historyCapture: capture
+                )
+
+                var acceptingReceipt:
+                    IOSFailedHistoryRetryAcceptingOutputReceipt?
+                var frozenProofForAttempt:
+                    IOSAcceptedOutputDeliveryFrozenSlotProof?
+                do {
+                    let frozenProof: IOSAcceptedOutputDeliveryFrozenSlotProof
+                    if let retainedReceipt {
+                        frozenProof = try await deliveryStore
+                            .refreshFailedRetryFrozenSlotProof(
+                                from: retainedReceipt,
+                                operationLeaseAuthorization: lease
+                            )
+                    } else if let retainedProof = acceptanceCheckpointState
+                        .loadFrozenProof() {
+                        frozenProof = try await deliveryStore
+                            .refreshFailedRetryFrozenSlotProof(
+                                from: retainedProof,
+                                dispatchReceipt: dispatchReceipt,
+                                operationLeaseAuthorization: lease
+                            )
+                    } else {
+                        frozenProof = try await deliveryStore
+                            .freezeFailedRetrySlot(
+                                preparation: preparation,
+                                dispatchReceipt: dispatchReceipt,
+                                operationLeaseAuthorization: lease
+                            )
+                    }
+                    frozenProofForAttempt = frozenProof
+                    acceptanceCheckpointState.storeFrozenProof(frozenProof)
+                    if let retainedReceipt,
+                       let refreshed = try await failedStore
+                        .refreshRetryAcceptingOutputReceiptForRetainedSuccess(
+                            from: retainedReceipt,
+                            frozenSlotProof: frozenProof,
+                            operationLeaseAuthorization: lease
+                        ) {
+                        acceptingReceipt = refreshed
+                    } else {
+                        acceptingReceipt = try await
+                            IOSAcceptedHistoryCoordinator
+                                .commitExactRetryAcceptingOutput(
+                                    dispatchReceipt: dispatchReceipt,
+                                    providerCompletionClaim: claim,
+                                    frozenSlotProof: frozenProof,
+                                    failedStore: failedStore,
+                                    operationLeaseAuthorization: lease
+                                )
+                    }
+
+                    guard let acceptingReceipt else {
+                        throw IOSFailedHistoryError.invalidTransition
+                    }
+                    let acceptance = try await IOSAcceptedHistoryCoordinator
+                        .acceptFailedRetryWithinLease(
+                            preparation: preparation,
+                            acceptingOutputReceipt: acceptingReceipt,
+                            policyStore: policyStore,
+                            acceptedHistoryStore: acceptedHistoryStore,
+                            outboxStore: outboxStore,
+                            deliveryStore: deliveryStore,
+                            acceptanceState: acceptanceState,
+                            pendingReplacementState:
+                                pendingReplacementState,
+                            operationLeaseAuthorization: lease,
+                            ownerIdentity: ownerIdentity
+                        )
+                    guard acceptance.resolution
+                            != .pendingLocalRecovery else {
+                        return .pending(acceptingReceipt)
+                    }
+                    let terminalProof = try await deliveryStore
+                        .confirmFailedRetryTerminalDelivery(
+                            acceptingOutputReceipt: acceptingReceipt,
+                            operationLeaseAuthorization: lease
+                        )
+                    if let repositoryBinding {
+                        _ = repositoryRegistration?.revalidate(
+                            expectedBinding: repositoryBinding
+                        )
+                    }
+                    guard !repositoryIdentityState.isConflicted else {
+                        return .pending(acceptingReceipt)
+                    }
+                    let successReceipt = try await
+                        IOSAcceptedHistoryCoordinator.commitExactRetrySuccess(
+                            acceptingOutputReceipt: acceptingReceipt,
+                            terminalDeliveryProof: terminalProof,
+                            failedStore: failedStore,
+                            operationLeaseAuthorization: lease
+                        )
+                    guard await retryState.consumeProviderSuccess(
+                        using: successReceipt
+                    ) else {
+                        throw IOSAcceptedHistoryCoordinatorError
+                            .localRecoveryPending
+                    }
+                    acceptanceCheckpointState.clear()
+                    return .completed(
+                        successReceipt,
+                        acceptance.resolution
+                    )
+                } catch {
+                    if let acceptingReceipt {
+                        return .pending(acceptingReceipt)
+                    }
+                    if let frozenProofForAttempt {
+                        _ = try? await deliveryStore
+                            .releaseFailedRetryFrozenSlotReservation(
+                                frozenProofForAttempt,
+                                dispatchReceipt: dispatchReceipt,
+                                operationLeaseAuthorization: lease
+                            )
+                    }
+                    if !failedStore.mutationInterlock
+                        .hasRetryDeliveryProtection {
+                        acceptanceCheckpointState.clear()
+                    }
+                    throw error
+                }
+            }
+        } catch IOSPersistenceOperationGate.AcquisitionError
+            .cancelledBeforeLease {
+            throw IOSAcceptedHistoryCoordinatorError.cancelledBeforeOperation
+        } catch IOSPersistenceOperationGate.AcquisitionError
+            .reentrantOperation {
+            throw IOSAcceptedHistoryCoordinatorError.reentrantOperation
         }
     }
 
@@ -801,7 +1171,9 @@ extension IOSAcceptedHistoryCoordinator {
             throw IOSAcceptedHistoryCoordinatorError.localRecoveryPending
         }
         let policyStore = policyStore
+        let acceptedHistoryStore = acceptedHistoryStore
         let failedStore = failedHistoryStore
+        let outboxStore = outboxStore
         let retryState = failedHistoryRetryState
         let operationGate = operationGate
         let baselineRecoveryState = baselineRecoveryState
@@ -815,6 +1187,7 @@ extension IOSAcceptedHistoryCoordinator {
         let deliveryStore = deliveryStore
         let repositoryIdentityState = repositoryIdentityState
         let repositoryRegistration = repositoryRegistration
+        let ownerIdentity = ownerIdentity
         let transcriptionConfiguration = setup.transcriptionConfiguration
 
         // A previous provider completion may have exhausted its bounded local
@@ -858,6 +1231,14 @@ extension IOSAcceptedHistoryCoordinator {
                           await deliveryStore
                             .hasRetainedHistoryWorkForPolicyCutover()
                             == false else {
+                        throw IOSAcceptedHistoryCoordinatorError
+                            .localRecoveryPending
+                    }
+                    guard try await outboxStore.observeHead() == nil else {
+                        // A durable predecessor transfer must be reconciled
+                        // before provider dispatch. Once Retry owns the failed
+                        // relation, the ordinary outbox worker is deliberately
+                        // excluded and could no longer drain this head.
                         throw IOSAcceptedHistoryCoordinatorError
                             .localRecoveryPending
                     }
@@ -993,6 +1374,13 @@ extension IOSAcceptedHistoryCoordinator {
                         retryState: retryState,
                         operationGate: operationGate,
                         failedStore: failedStore,
+                        policyStore: policyStore,
+                        acceptedHistoryStore: acceptedHistoryStore,
+                        outboxStore: outboxStore,
+                        deliveryStore: deliveryStore,
+                        acceptanceState: acceptanceState,
+                        pendingReplacementState: pendingReplacementState,
+                        ownerIdentity: ownerIdentity,
                         repositoryIdentityState: repositoryIdentityState,
                         repositoryRegistration: repositoryRegistration,
                         audioInvalidation: { audioSource.invalidate() }
@@ -1280,6 +1668,100 @@ extension IOSAcceptedHistoryCoordinator {
                         throw IOSFailedHistoryError.commitUncertain
                     }
                     return try await failedStore.commitRetryFailure(
+                        using: refreshed
+                    )
+                }
+            }
+        }
+    }
+
+    fileprivate static func commitExactRetryAcceptingOutput(
+        dispatchReceipt: IOSFailedHistoryRetryDispatchReceipt,
+        providerCompletionClaim:
+            IOSFailedHistoryRetryProviderCompletionClaim,
+        frozenSlotProof: IOSAcceptedOutputDeliveryFrozenSlotProof,
+        failedStore: IOSFailedHistoryStore,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSFailedHistoryRetryAcceptingOutputReceipt {
+        let preparation = try await failedStore.prepareRetryAcceptingOutput(
+            using: dispatchReceipt,
+            providerCompletionClaim: providerCompletionClaim,
+            frozenSlotProof: frozenSlotProof,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        switch preparation {
+        case .completed(let receipt):
+            return receipt
+        case .commit(let authorization):
+            do {
+                return try await failedStore.commitRetryAcceptingOutput(
+                    using: authorization
+                )
+            } catch IOSFailedHistoryError.commitUncertain {
+                let retained = try await failedStore
+                    .prepareRetryAcceptingOutput(
+                        using: dispatchReceipt,
+                        providerCompletionClaim: providerCompletionClaim,
+                        frozenSlotProof: frozenSlotProof,
+                        operationLeaseAuthorization:
+                            operationLeaseAuthorization
+                    )
+                switch retained {
+                case .completed(let receipt):
+                    return receipt
+                case .commit(let refreshed):
+                    guard refreshed.identifiesSameAcceptance(
+                        as: authorization
+                    ) else {
+                        throw IOSFailedHistoryError.commitUncertain
+                    }
+                    return try await failedStore.commitRetryAcceptingOutput(
+                        using: refreshed
+                    )
+                }
+            }
+        }
+    }
+
+    fileprivate static func commitExactRetrySuccess(
+        acceptingOutputReceipt:
+            IOSFailedHistoryRetryAcceptingOutputReceipt,
+        terminalDeliveryProof: IOSFailedHistoryRetryTerminalDeliveryProof,
+        failedStore: IOSFailedHistoryStore,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSFailedHistoryRetrySuccessReceipt {
+        let preparation = try await failedStore.prepareRetrySuccess(
+            using: acceptingOutputReceipt,
+            terminalDeliveryProof: terminalDeliveryProof,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        switch preparation {
+        case .completed(let receipt):
+            return receipt
+        case .commit(let authorization):
+            do {
+                return try await failedStore.commitRetrySuccess(
+                    using: authorization
+                )
+            } catch IOSFailedHistoryError.commitUncertain {
+                let retained = try await failedStore.prepareRetrySuccess(
+                    using: acceptingOutputReceipt,
+                    terminalDeliveryProof: terminalDeliveryProof,
+                    operationLeaseAuthorization:
+                        operationLeaseAuthorization
+                )
+                switch retained {
+                case .completed(let receipt):
+                    return receipt
+                case .commit(let refreshed):
+                    guard refreshed.identifiesSameSuccess(
+                        as: authorization
+                    ) else {
+                        throw IOSFailedHistoryError.commitUncertain
+                    }
+                    return try await failedStore.commitRetrySuccess(
                         using: refreshed
                     )
                 }
