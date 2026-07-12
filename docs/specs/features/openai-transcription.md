@@ -265,6 +265,14 @@ runtime request value still does not own its scratch-file lifecycle.
   model, optional language, frozen prompt composition, and bounded offset reads.
   It exposes no URL, path, `FileHandle`, raw descriptor, attempt identity, or
   durable storage identifier.
+- The neutral request accepts only `m4a` or `wav`, a positive duration shorter
+  than five minutes, and a positive byte count below the existing 25,000,000-
+  byte exclusive limit. Invalid metadata fails before scratch creation or a
+  source read.
+- Every reader call has a nonnegative offset and a positive requested size no
+  larger than 64 KiB. A reader that returns more bytes than requested, returns
+  early EOF before the declared byte count, or returns data after the declared
+  boundary fails as changed or unreadable audio rather than reaching OpenAI.
 - Multipart preparation reads directly from that reader into the existing
   protected multipart scratch body in chunks no larger than 64 KiB. It validates
   positive size below 25,000,000 bytes, exact declared-byte completion, empty

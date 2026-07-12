@@ -20,6 +20,18 @@ public extension OpenAITranscriptionServing {
     func cancelActiveTranscription() {}
 }
 
+public protocol OpenAIReaderTranscriptionServing: Sendable {
+    func transcribe(
+        _ request: OpenAIReaderTranscriptionRequest,
+        credential: OpenAICredential
+    ) async throws -> String
+    func cancelActiveTranscription()
+}
+
+public extension OpenAIReaderTranscriptionServing {
+    func cancelActiveTranscription() {}
+}
+
 protocol URLLoading: Sendable {
     func loadData(for request: URLRequest) async throws -> (Data, URLResponse)
 }
@@ -28,7 +40,10 @@ protocol TranscriptionTimeoutSleeping: Sendable {
     func sleep(seconds: TimeInterval) async throws
 }
 
-public struct OpenAITranscriptionService: OpenAITranscriptionServing, Sendable {
+public struct OpenAITranscriptionService:
+    OpenAITranscriptionServing,
+    OpenAIReaderTranscriptionServing,
+    Sendable {
     static let defaultRequestTimeout: TimeInterval = 60
 
     private let requestBuilder: OpenAITranscriptionRequestBuilder
@@ -71,6 +86,25 @@ public struct OpenAITranscriptionService: OpenAITranscriptionServing, Sendable {
     ) async throws -> String {
         let cleanupRegistration = requestBuilder.makeCleanupRegistration()
         defer { cleanupRegistration.requestCleanup() }
+
+        let (data, response) = try await loadWithTimeout(
+            request,
+            cleanupRegistration: cleanupRegistration,
+            credential: credential
+        )
+        try validateHTTPResponse(response)
+        return try parseTranscript(from: data, promptComposition: request.promptComposition)
+    }
+
+    public func transcribe(
+        _ request: OpenAIReaderTranscriptionRequest,
+        credential: OpenAICredential
+    ) async throws -> String {
+        let cleanupRegistration = requestBuilder.makeCleanupRegistration()
+        defer {
+            request.invalidateReader()
+            cleanupRegistration.requestCleanup()
+        }
 
         let (data, response) = try await loadWithTimeout(
             request,
@@ -128,6 +162,49 @@ public struct OpenAITranscriptionService: OpenAITranscriptionServing, Sendable {
         }
     }
 
+    private func loadWithTimeout(
+        _ transcriptionRequest: OpenAIReaderTranscriptionRequest,
+        cleanupRegistration: OpenAITranscriptionMultipartCleanupRegistration,
+        credential: OpenAICredential
+    ) async throws -> (Data, URLResponse) {
+        do {
+            return try await requestTaskCoordinator.perform {
+                let preparation = try await requestBuilder.makePreparation(
+                    transcriptionRequest,
+                    cleanupRegistration: cleanupRegistration
+                )
+                defer { cleanupRegistration.requestCleanup() }
+                let preparedUpload = try await preparation.prepareRequest()
+                var request = preparedUpload.request
+                request.timeoutInterval = requestTimeout
+                request.setValue(
+                    "Bearer \(credential.apiKey)",
+                    forHTTPHeaderField: "Authorization"
+                )
+                try Task.checkCancellation()
+                return try await urlUploader.uploadData(
+                    for: request,
+                    body: preparedUpload.body
+                )
+            } deadline: {
+                try await timeoutSleeper.sleep(seconds: requestTimeout)
+                throw OpenAITranscriptionServiceError.timedOut
+            }
+        } catch let error as OpenAITranscriptionServiceError {
+            throw error
+        } catch let error as OpenAITranscriptionRequestBuilderError {
+            throw Self.mapRequestBuilderError(error)
+        } catch let error as OpenAIFileUploadTransportError {
+            throw Self.mapUploadTransportError(error)
+        } catch let error as URLError {
+            throw Self.mapURLError(error)
+        } catch is CancellationError {
+            throw OpenAITranscriptionServiceError.cancelled
+        } catch {
+            throw OpenAITranscriptionServiceError.networkFailure
+        }
+    }
+
     private static func mapRequestBuilderError(
         _ error: OpenAITranscriptionRequestBuilderError
     ) -> OpenAITranscriptionServiceError {
@@ -142,7 +219,10 @@ public struct OpenAITranscriptionService: OpenAITranscriptionServing, Sendable {
              .unreadableAudioFile,
              .audioFileChanged,
              .audioFileTooLarge,
-             .invalidCustomLanguageCode:
+             .invalidCustomLanguageCode,
+             .audioReaderAlreadyConsumed,
+             .audioReaderChanged,
+             .audioReaderUnreadable:
             return .invalidRecording(error)
         }
     }
@@ -467,6 +547,12 @@ private extension OpenAITranscriptionRequestBuilderError {
             return "The transcription request could not be prepared."
         case .invalidCustomLanguageCode:
             return "Use a two- or three-letter custom language code."
+        case .audioReaderAlreadyConsumed:
+            return "The recording is no longer available for this request."
+        case .audioReaderChanged:
+            return "The recording changed while the request was being prepared."
+        case .audioReaderUnreadable:
+            return "The recording could not be read."
         }
     }
 
@@ -494,6 +580,12 @@ private extension OpenAITranscriptionRequestBuilderError {
             return "invalid_multipart_boundary"
         case .invalidCustomLanguageCode:
             return "invalid_language_code"
+        case .audioReaderAlreadyConsumed:
+            return "audio_reader_consumed"
+        case .audioReaderChanged:
+            return "changed_audio"
+        case .audioReaderUnreadable:
+            return "unreadable_audio"
         }
     }
 }

@@ -129,6 +129,77 @@ nonisolated struct OpenAITranscriptionRequestBuilder: Sendable {
         }
     }
 
+    func makePreparation(
+        _ transcriptionRequest: OpenAIReaderTranscriptionRequest,
+        cleanupRegistration: OpenAITranscriptionMultipartCleanupRegistration
+    ) async throws -> OpenAIReaderTranscriptionMultipartPreparation {
+        try Task.checkCancellation()
+        let supportedFile = Self.supportedAudioFile(for: transcriptionRequest.format)
+        let boundary = boundaryProvider()
+        guard Self.isSafeBoundary(boundary) else {
+            throw OpenAITranscriptionRequestBuilderError.invalidMultipartBoundary
+        }
+
+        let sizes = try validatedSizes(
+            supportedFile: supportedFile,
+            transcriptionRequest: transcriptionRequest,
+            boundary: boundary,
+            audioByteCount: transcriptionRequest.byteCount
+        )
+        try Task.checkCancellation()
+        let multipartStrings = makeMultipartStrings(
+            supportedFile: supportedFile,
+            transcriptionRequest: transcriptionRequest,
+            boundary: boundary
+        )
+
+        let reader: OpenAITranscriptionAudioReaderLease
+        do {
+            reader = try transcriptionRequest.claimReader()
+        } catch {
+            throw OpenAITranscriptionRequestBuilderError.audioReaderAlreadyConsumed
+        }
+
+        var scratch: (any OpenAITranscriptionScratchFile)?
+        do {
+            let bodyFileURL = scratchDirectoryURL.appendingPathComponent(
+                OpenAIMultipartScratchNamespace.v1FileName(for: UUID()),
+                isDirectory: false
+            )
+            scratch = try fileSystem.createScratchFile(at: bodyFileURL)
+            let preparation = OpenAIReaderTranscriptionMultipartPreparation(
+                endpointURL: endpointURL,
+                boundary: boundary,
+                reader: reader,
+                scratch: try required(scratch),
+                prefix: Data(multipartStrings.prefix.utf8),
+                suffix: Data(multipartStrings.suffix.utf8),
+                audioByteCount: transcriptionRequest.byteCount,
+                expectedBodyByteCount: sizes.bodyByteCount
+            )
+            cleanupRegistration.install {
+                preparation.cleanup()
+            }
+            try Task.checkCancellation()
+            return preparation
+        } catch is CancellationError {
+            reader.retire()
+            scratch?.unlinkIfOwned()
+            scratch?.close()
+            throw CancellationError()
+        } catch let error as OpenAITranscriptionRequestBuilderError {
+            reader.retire()
+            scratch?.unlinkIfOwned()
+            scratch?.close()
+            throw error
+        } catch {
+            reader.retire()
+            scratch?.unlinkIfOwned()
+            scratch?.close()
+            throw OpenAITranscriptionRequestBuilderError.multipartBodyUnavailable
+        }
+    }
+
     private func makeMultipartStrings(
         supportedFile: SupportedAudioFile,
         transcriptionRequest: AudioTranscriptionRequest,
@@ -152,9 +223,69 @@ nonisolated struct OpenAITranscriptionRequestBuilder: Sendable {
         return (prefix, "\r\n--\(boundary)--\r\n")
     }
 
+    private func makeMultipartStrings(
+        supportedFile: SupportedAudioFile,
+        transcriptionRequest: OpenAIReaderTranscriptionRequest,
+        boundary: String
+    ) -> (prefix: String, suffix: String) {
+        var prefix = ""
+        prefix.appendFormField(name: "model", value: transcriptionRequest.model, boundary: boundary)
+        prefix.appendFormField(name: "response_format", value: "json", boundary: boundary)
+        if let languageCode = transcriptionRequest.languageCode {
+            prefix.appendFormField(name: "language", value: languageCode, boundary: boundary)
+        }
+        if let prompt = transcriptionRequest.promptComposition.providerPrompt {
+            prefix.appendFormField(name: "prompt", value: prompt, boundary: boundary)
+        }
+        prefix.appendFileFieldHeader(
+            name: "file",
+            fileName: supportedFile.controlledFileName,
+            contentType: supportedFile.contentType,
+            boundary: boundary
+        )
+        return (prefix, "\r\n--\(boundary)--\r\n")
+    }
+
     private func validatedSizes(
         supportedFile: SupportedAudioFile,
         transcriptionRequest: AudioTranscriptionRequest,
+        boundary: String,
+        audioByteCount: Int64
+    ) throws -> (metadataByteCount: Int64, bodyByteCount: Int64) {
+        var metadata: Int64 = 0
+        try addFormFieldSize(name: "model", value: transcriptionRequest.model, boundary: boundary, to: &metadata)
+        try addFormFieldSize(name: "response_format", value: "json", boundary: boundary, to: &metadata)
+        if let language = transcriptionRequest.languageCode {
+            try addFormFieldSize(name: "language", value: language, boundary: boundary, to: &metadata)
+        }
+        if let prompt = transcriptionRequest.promptComposition.providerPrompt {
+            try addFormFieldSize(name: "prompt", value: prompt, boundary: boundary, to: &metadata)
+        }
+        for value in [
+            "--", boundary,
+            "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"",
+            supportedFile.controlledFileName,
+            "\"\r\nContent-Type: ", supportedFile.contentType,
+            "\r\n\r\n\r\n--", boundary, "--\r\n",
+        ] {
+            try addUTF8Size(value, to: &metadata)
+        }
+        guard metadata <= Self.maximumMetadataByteCount else {
+            throw OpenAITranscriptionRequestBuilderError.multipartMetadataTooLarge(
+                byteCount: metadata,
+                maximum: Self.maximumMetadataByteCount
+            )
+        }
+        let body = metadata.addingReportingOverflow(audioByteCount)
+        guard !body.overflow else {
+            throw OpenAITranscriptionRequestBuilderError.multipartBodyTooLarge
+        }
+        return (metadata, body.partialValue)
+    }
+
+    private func validatedSizes(
+        supportedFile: SupportedAudioFile,
+        transcriptionRequest: OpenAIReaderTranscriptionRequest,
         boundary: String,
         audioByteCount: Int64
     ) throws -> (metadataByteCount: Int64, bodyByteCount: Int64) {
@@ -227,6 +358,23 @@ nonisolated struct OpenAITranscriptionRequestBuilder: Sendable {
         "m4a": SupportedAudioFile(controlledFileName: "recording.m4a", contentType: "audio/mp4"),
         "wav": SupportedAudioFile(controlledFileName: "recording.wav", contentType: "audio/wav"),
     ]
+
+    private static func supportedAudioFile(
+        for format: OpenAIReaderTranscriptionRequest.AudioFormat
+    ) -> SupportedAudioFile {
+        switch format {
+        case .m4a:
+            SupportedAudioFile(
+                controlledFileName: "recording.m4a",
+                contentType: "audio/mp4"
+            )
+        case .wav:
+            SupportedAudioFile(
+                controlledFileName: "recording.wav",
+                contentType: "audio/wav"
+            )
+        }
+    }
 }
 
 nonisolated final class OpenAITranscriptionMultipartCleanupRegistration: @unchecked Sendable {
@@ -401,6 +549,156 @@ nonisolated struct OpenAITranscriptionMultipartPreparation: Sendable {
     }
 }
 
+nonisolated struct OpenAIReaderTranscriptionMultipartPreparation: Sendable {
+    let bodyFileURL: URL
+    private let endpointURL: URL
+    private let boundary: String
+    private let reader: OpenAITranscriptionAudioReaderLease
+    private let scratch: any OpenAITranscriptionScratchFile
+    private let prefix: Data
+    private let suffix: Data
+    private let audioByteCount: Int64
+    private let expectedBodyByteCount: Int64
+
+    init(
+        endpointURL: URL,
+        boundary: String,
+        reader: OpenAITranscriptionAudioReaderLease,
+        scratch: any OpenAITranscriptionScratchFile,
+        prefix: Data,
+        suffix: Data,
+        audioByteCount: Int64,
+        expectedBodyByteCount: Int64
+    ) {
+        self.endpointURL = endpointURL
+        self.boundary = boundary
+        self.reader = reader
+        self.scratch = scratch
+        bodyFileURL = scratch.fileURL
+        self.prefix = prefix
+        self.suffix = suffix
+        self.audioByteCount = audioByteCount
+        self.expectedBodyByteCount = expectedBodyByteCount
+    }
+
+    func prepareRequest() async throws -> OpenAITranscriptionPreparedMultipartUpload {
+        defer { reader.retire() }
+        do {
+            try Task.checkCancellation()
+            try scratch.writeAll(prefix)
+            try Task.checkCancellation()
+            var audioCount: Int64 = 0
+            while audioCount < audioByteCount {
+                try Task.checkCancellation()
+                let remaining = audioByteCount - audioCount
+                let requested = min(
+                    OpenAITranscriptionRequestBuilder.maximumAudioReadByteCount,
+                    Int(remaining)
+                )
+                let chunk = try await readAudio(
+                    atOffset: audioCount,
+                    maximumByteCount: requested
+                )
+                try Task.checkCancellation()
+                guard !chunk.isEmpty else {
+                    throw OpenAITranscriptionAudioReaderError.invalidRead
+                }
+                let addition = audioCount.addingReportingOverflow(Int64(chunk.count))
+                guard !addition.overflow, addition.partialValue <= audioByteCount else {
+                    throw OpenAITranscriptionAudioReaderError.invalidRead
+                }
+                audioCount = addition.partialValue
+                try scratch.writeAll(chunk)
+                try Task.checkCancellation()
+                await Task.yield()
+            }
+
+            let trailingByte = try await readAudio(
+                atOffset: audioByteCount,
+                maximumByteCount: 1
+            )
+            try Task.checkCancellation()
+            guard trailingByte.isEmpty else {
+                throw OpenAITranscriptionAudioReaderError.invalidRead
+            }
+            try scratch.writeAll(suffix)
+            try Task.checkCancellation()
+            try scratch.synchronizeAndValidate(expectedByteCount: expectedBodyByteCount)
+            try Task.checkCancellation()
+            let uploadBody = try scratch.pinFinalizedUploadArtifact(
+                expectedByteCount: expectedBodyByteCount
+            )
+            try Task.checkCancellation()
+            scratch.close()
+
+            var request = URLRequest(url: endpointURL)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue(
+                "multipart/form-data; boundary=\(boundary)",
+                forHTTPHeaderField: "Content-Type"
+            )
+            request.setValue(String(expectedBodyByteCount), forHTTPHeaderField: "Content-Length")
+            try Task.checkCancellation()
+            return OpenAITranscriptionPreparedMultipartUpload(
+                request: request,
+                body: uploadBody
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch OpenAITranscriptionAudioReaderError.invalidRead {
+            throw OpenAITranscriptionRequestBuilderError.audioReaderChanged
+        } catch OpenAITranscriptionAudioReaderError.alreadyConsumed {
+            throw OpenAITranscriptionRequestBuilderError.audioReaderAlreadyConsumed
+        } catch let error as OpenAITranscriptionRequestBuilderError {
+            throw error
+        } catch {
+            throw OpenAITranscriptionRequestBuilderError.multipartBodyUnavailable
+        }
+    }
+
+    private func readAudio(
+        atOffset offset: Int64,
+        maximumByteCount: Int
+    ) async throws -> Data {
+        do {
+            return try await reader.read(
+                atOffset: offset,
+                maximumByteCount: maximumByteCount
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch OpenAITranscriptionAudioReaderError.invalidRead {
+            throw OpenAITranscriptionRequestBuilderError.audioReaderChanged
+        } catch OpenAITranscriptionAudioReaderError.alreadyConsumed {
+            throw OpenAITranscriptionRequestBuilderError.audioReaderAlreadyConsumed
+        } catch {
+            throw OpenAITranscriptionRequestBuilderError.audioReaderUnreadable
+        }
+    }
+
+    func cleanup() {
+        reader.retire()
+        scratch.unlinkIfOwned()
+        scratch.close()
+    }
+}
+
+nonisolated extension OpenAIReaderTranscriptionMultipartPreparation:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    var description: String { "OpenAIReaderTranscriptionMultipartPreparation(<redacted>)" }
+    var debugDescription: String { description }
+    var customMirror: Mirror {
+        Mirror(
+            self,
+            children: [(label: String?, value: Any)](),
+            displayStyle: .struct
+        )
+    }
+}
+
 nonisolated extension OpenAITranscriptionMultipartPreparation:
     CustomStringConvertible,
     CustomDebugStringConvertible,
@@ -432,6 +730,9 @@ public nonisolated enum OpenAITranscriptionRequestBuilderError:
     case multipartBodyUnavailable
     case invalidMultipartBoundary
     case invalidCustomLanguageCode(String)
+    case audioReaderAlreadyConsumed
+    case audioReaderChanged
+    case audioReaderUnreadable
 
     public var errorDescription: String? {
         switch self {
@@ -445,6 +746,12 @@ public nonisolated enum OpenAITranscriptionRequestBuilderError:
         case .multipartBodyTooLarge, .multipartBodyUnavailable, .invalidMultipartBoundary:
             "The transcription request could not be prepared."
         case .invalidCustomLanguageCode: "Use a two- or three-letter custom language code."
+        case .audioReaderAlreadyConsumed:
+            "The recording reader is no longer available."
+        case .audioReaderChanged:
+            "The recording changed while the request was being prepared."
+        case .audioReaderUnreadable:
+            "The recording could not be read."
         }
     }
 }
