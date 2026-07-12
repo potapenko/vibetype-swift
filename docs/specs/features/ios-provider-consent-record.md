@@ -134,6 +134,27 @@ consent.
   repository/root unavailability, process-gate closure, duplicate completion,
   or physical-root mismatch makes matching output ineligible. There is no
   validation-to-result-consumption window.
+- The containing-app stage executor prepares one cancellable task behind a
+  closed launch permit before registration. Registration installs cancellation
+  first; the atomic launch operation may then release that exact task. Losing
+  consent before launch never invokes the provider operation. Losing it after
+  launch cancels the task, completes the caller without waiting for a
+  non-cooperative late result, and makes that late result ineligible.
+- Before result consumption, the containing-app adapter normalizes provider
+  success or failure into one payload-minimized `Sendable` stage outcome. A raw
+  `Error`, provider response, URL response, credential, prompt, audio reader,
+  path, storage capability, or provider task never crosses the synchronous
+  consent-consumption closure or appears in the returned authorization outcome.
+- Result consumption performs only one synchronous, non-suspending handoff
+  while the consent fence is held. Transcription, optional correction, and
+  Translation each obtain their own registration and one-shot result
+  authorization. The consumed normalized outcome is returned exactly once;
+  authorization loss returns no provider payload.
+- Pending, accepted-output, usage, or other local persistence runs
+  asynchronously only after successful result consumption and outside the
+  consent fence. Local mutation failure or uncertainty retains provider-free
+  recovery work and never reuses the consumed result authorization or repeats
+  provider work in the same process.
 - Provider acceptance does not replace microphone or credential preflight. All
   three gates must independently succeed in their specified order.
 - A request already received by OpenAI cannot be recalled. Withdrawal cancels
@@ -199,6 +220,11 @@ consent.
   duplicate result, reset, disclosure update, another scene, root alias/root
   substitution, same-root accepted-file withdrawal/corruption/deletion or
   unavailability, cancellation, and non-cooperative late completion.
+- Test the containing-app executor for a closed pre-launch permit, cancellation
+  before launch and during result handoff, discarded late completion,
+  normalized thrown failure, exactly-once consumption, all three provider
+  stages, and payload/redaction canaries. Prove that no asynchronous local
+  persistence operation executes inside the consent-consumption closure.
 - Test fresh-container canonical-root bootstrap, owner-only mode, symlink/path
   substitution, bounded interrupted syscalls, and fail-closed bootstrap errors.
 - Test public state, errors, reflection, logs, and diagnostics with forbidden
