@@ -111,6 +111,7 @@ public struct IOSForegroundVoiceSavingResultExpectation: Equatable, Sendable {
 
 public enum IOSForegroundVoiceAcceptanceResult: Equatable, Sendable {
     case resultReady(IOSAcceptedOutputDeliveryRecord)
+    case acceptedHistoryRecoveryPending(IOSAcceptedOutputDeliveryRecord)
     case savingResult(IOSForegroundVoiceSavingResultExpectation)
     case expired(IOSAcceptedOutputDeliveryExpectation)
     case clockRollbackAmbiguous(IOSAcceptedOutputDeliveryExpectation)
@@ -146,6 +147,11 @@ public enum IOSForegroundVoicePersistenceError: Error, Equatable, Sendable {
 }
 
 struct IOSForegroundVoicePersistenceWork: Equatable, Sendable {
+    enum Destination: Equatable, Sendable {
+        case appOnly
+        case captured(IOSAcceptedHistoryAcceptanceResult)
+    }
+
     enum RetirementOrigin: Equatable, Sendable {
         case liveProcess
         case processLoss
@@ -154,6 +160,19 @@ struct IOSForegroundVoicePersistenceWork: Equatable, Sendable {
     let preparation: IOSAcceptedOutputDeliveryPreparation
     let pendingRecording: IOSPendingRecording
     let retirementOrigin: RetirementOrigin
+    let destination: Destination
+
+    init(
+        preparation: IOSAcceptedOutputDeliveryPreparation,
+        pendingRecording: IOSPendingRecording,
+        retirementOrigin: RetirementOrigin,
+        destination: Destination = .appOnly
+    ) {
+        self.preparation = preparation
+        self.pendingRecording = pendingRecording
+        self.retirementOrigin = retirementOrigin
+        self.destination = destination
+    }
 
     var expectation: IOSForegroundVoiceSavingResultExpectation {
         IOSForegroundVoiceSavingResultExpectation(preparation: preparation)
@@ -165,6 +184,12 @@ struct IOSForegroundVoicePersistenceWork: Equatable, Sendable {
         self.expectation == expectation
     }
 }
+
+typealias IOSForegroundVoiceCapturedHistoryAcceptance =
+    @Sendable (
+        IOSAcceptedOutputDeliveryPreparation,
+        IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSAcceptedHistoryAcceptanceResult
 
 actor IOSForegroundVoicePersistenceOperationState {
     private var work: IOSForegroundVoicePersistenceWork?
@@ -343,6 +368,15 @@ struct IOSForegroundVoicePendingAudioRemovalAuthorization: Sendable {
 }
 
 extension IOSAcceptedOutputDeliveryRecord {
+    var isForegroundVoiceCapturedLatestRecord: Bool {
+        failedRetryID == nil
+            && publicationGeneration == 0
+            && !automaticInsertionPreferenceEnabled
+            && deliveryState == .pending
+            && acceptedText != nil
+            && historyWrite != nil
+    }
+
     var isForegroundVoiceAppOnlyRecord: Bool {
         failedRetryID == nil
             && publicationGeneration == 0
@@ -448,12 +482,16 @@ private extension IOSAcceptedOutputDeliveryObservation {
     }
 }
 
-/// Canonical P4 app-only accepted-output and PendingRecording transaction.
-/// It performs no History, outbox, bridge, or keyboard operation.
+/// Process-owned foreground accepted-output and PendingRecording transaction.
+/// Its public facade remains the canonical P4 app-only path; the containing
+/// app owner alone may route a coordinator-captured P5H History destination.
+/// It performs no provider, bridge, or keyboard operation.
 public struct IOSForegroundVoicePersistence: Sendable {
     private let operationGate: IOSPersistenceOperationGate
     private let pendingRecordingStore: IOSPendingRecordingStore
     private let deliveryStore: IOSAcceptedOutputDeliveryStore
+    private let capturedHistoryAcceptance:
+        IOSForegroundVoiceCapturedHistoryAcceptance?
     private let state: IOSForegroundVoicePersistenceOperationState
     private let productionContext:
         IOSAcceptedHistoryCoordinatorProcessContext?
@@ -476,9 +514,19 @@ public struct IOSForegroundVoicePersistence: Sendable {
         registry: IOSAcceptedHistoryCoordinatorProcessContextRegistry,
         context: IOSAcceptedHistoryCoordinatorProcessContext
     ) {
+        let acceptedHistoryCoordinator = IOSAcceptedHistoryCoordinator(
+            applicationSupportDirectoryURL: applicationSupportDirectoryURL,
+            registry: registry
+        )
         operationGate = context.operationGate
         pendingRecordingStore = context.pendingRecordingStore
         deliveryStore = context.deliveryStore
+        capturedHistoryAcceptance = { preparation, lease in
+            try await acceptedHistoryCoordinator.accept(
+                preparation,
+                operationLeaseAuthorization: lease
+            )
+        }
         state = context.foregroundVoicePersistenceState
         productionContext = context
         repositoryRegistration =
@@ -494,12 +542,15 @@ public struct IOSForegroundVoicePersistence: Sendable {
         operationGate: IOSPersistenceOperationGate,
         pendingRecordingStore: IOSPendingRecordingStore,
         deliveryStore: IOSAcceptedOutputDeliveryStore,
+        capturedHistoryAcceptance:
+            IOSForegroundVoiceCapturedHistoryAcceptance? = nil,
         state: IOSForegroundVoicePersistenceOperationState =
             IOSForegroundVoicePersistenceOperationState()
     ) {
         self.operationGate = operationGate
         self.pendingRecordingStore = pendingRecordingStore
         self.deliveryStore = deliveryStore
+        self.capturedHistoryAcceptance = capturedHistoryAcceptance
         self.state = state
         productionContext = nil
         repositoryRegistration = nil
@@ -540,10 +591,27 @@ public struct IOSForegroundVoicePersistence: Sendable {
         }
     }
 
+    /// Process-owned P5H foreground entry. The public P4 facade above remains
+    /// app-only so no caller can bypass the coordinator-minted History capture.
+    func acceptCapturedHistory(
+        _ preparation: IOSForegroundVoiceAcceptedOutputPreparation,
+        expectedPending: IOSPendingRecordingCASExpectation
+    ) async throws -> IOSForegroundVoiceAcceptanceResult {
+        guard case .captured = preparation.historyMode,
+              let capturedHistoryAcceptance else {
+            throw IOSAcceptedOutputDeliveryError.invalidPreparation
+        }
+        return try await performCapturedRootOperation(
+            preparation: preparation,
+            expectedPending: expectedPending,
+            capturedHistoryAcceptance: capturedHistoryAcceptance
+        )
+    }
+
     public func retrySavingResult(
         expected: IOSForegroundVoiceSavingResultExpectation
     ) async throws -> IOSForegroundVoiceAcceptanceResult {
-        try await performRootOperation { lease in
+        try await performGateOperation { lease in
             guard let work = await state.current() else {
                 throw IOSForegroundVoicePersistenceError.noSavingResult
             }
@@ -551,15 +619,34 @@ public struct IOSForegroundVoicePersistence: Sendable {
                 throw IOSForegroundVoicePersistenceError
                     .savingResultIdentityMismatch
             }
-            do {
-                return try await resume(
-                    work,
+            switch work.destination {
+            case .appOnly:
+                return try await performProductionAdmission(
                     operationLeaseAuthorization: lease
-                )
-            } catch {
-                return try await resolveResumeFailure(
-                    error,
-                    work: work,
+                ) {
+                    do {
+                        return try await resume(
+                            work,
+                            operationLeaseAuthorization: lease
+                        )
+                    } catch {
+                        return try await resolveResumeFailure(
+                            error,
+                            work: work,
+                            operationLeaseAuthorization: lease
+                        )
+                    }
+                }
+            case .captured:
+                let repositoryBinding = try await
+                    beginCapturedProductionAdmission(
+                        preparation: work.preparation,
+                        retainedWork: work,
+                        operationLeaseAuthorization: lease
+                    )
+                return await finishCapturedWork(
+                    work,
+                    expectedBinding: repositoryBinding,
                     operationLeaseAuthorization: lease
                 )
             }
@@ -597,13 +684,19 @@ public struct IOSForegroundVoicePersistence: Sendable {
 
     public func loadLatestResult()
         async throws -> IOSForegroundVoiceLatestResultObservation {
-        try await performRootOperation { lease in
+        try await performLatestResultOperation { lease in
             let retainedWork = await state.current()
             let pending = try await pendingRecordingStore
                 .loadForContainingAppBoundary(
                     operationLeaseAuthorization: lease
             )
             if let retainedWork {
+                if case .captured = retainedWork.destination {
+                    return .savingResult(
+                        retainedWork.expectation,
+                        priorResult: nil
+                    )
+                }
                 if try await state.hasCompletedRetirement(
                     matching: retainedWork.expectation
                 ) {
@@ -621,6 +714,8 @@ public struct IOSForegroundVoicePersistence: Sendable {
                         )
                         switch completed {
                         case .resultReady(let record):
+                            return .resultReady(record)
+                        case .acceptedHistoryRecoveryPending(let record):
                             return .resultReady(record)
                         case .expired(let expectation):
                             return .expired(expectation)
@@ -697,7 +792,7 @@ public struct IOSForegroundVoicePersistence: Sendable {
             let delivery: IOSAcceptedOutputDeliveryObservation?
             do {
                 delivery = try await deliveryStore
-                    .loadForegroundVoiceLatestResult(
+                    .loadForegroundVoiceLatestResultIncludingCapturedHistory(
                         operationLeaseAuthorization: lease
                     )
             } catch IOSAcceptedOutputDeliveryError.removalCommitUncertain {
@@ -818,6 +913,176 @@ public struct IOSForegroundVoicePersistence: Sendable {
                 .retryForegroundVoiceLatestResultCleanup(
                     operationLeaseAuthorization: lease
                 )
+        }
+    }
+
+    private func performCapturedRootOperation(
+        preparation: IOSForegroundVoiceAcceptedOutputPreparation,
+        expectedPending: IOSPendingRecordingCASExpectation,
+        capturedHistoryAcceptance:
+            @escaping IOSForegroundVoiceCapturedHistoryAcceptance
+    ) async throws -> IOSForegroundVoiceAcceptanceResult {
+        try await performGateOperation { lease in
+            if let retained = await state.current() {
+                guard retained.preparation
+                        == preparation.deliveryPreparation,
+                      IOSPendingRecordingCASExpectation(
+                        recording: retained.pendingRecording
+                      ) == expectedPending,
+                      case .captured = retained.destination else {
+                    throw IOSForegroundVoicePersistenceError
+                        .savingResultIdentityMismatch
+                }
+                let repositoryBinding = try await
+                    beginCapturedProductionAdmission(
+                        preparation: retained.preparation,
+                        retainedWork: retained,
+                        operationLeaseAuthorization: lease
+                    )
+                return await finishCapturedWork(
+                    retained,
+                    expectedBinding: repositoryBinding,
+                    operationLeaseAuthorization: lease
+                )
+            }
+
+            let repositoryBinding = try await
+                beginCapturedProductionAdmission(
+                    preparation: preparation.deliveryPreparation,
+                    retainedWork: nil,
+                    operationLeaseAuthorization: lease
+                )
+            let pending = try await requireOutputDeliveryPending(
+                expected: expectedPending,
+                preparation: preparation.deliveryPreparation,
+                operationLeaseAuthorization: lease
+            )
+            let acceptance = try await capturedHistoryAcceptance(
+                preparation.deliveryPreparation,
+                lease
+            )
+            let work = try await state.begin(
+                IOSForegroundVoicePersistenceWork(
+                    preparation: preparation.deliveryPreparation,
+                    pendingRecording: pending,
+                    retirementOrigin: .liveProcess,
+                    destination: .captured(acceptance)
+                )
+            )
+            return await finishCapturedWork(
+                work,
+                expectedBinding: repositoryBinding,
+                operationLeaseAuthorization: lease
+            )
+        }
+    }
+
+    /// Once accepted History returns a mandatory delivery destination, every
+    /// later failure is provider-free Saving Result work. The retained work is
+    /// cleared only after Pending retirement and final root revalidation both
+    /// succeed under the same lease.
+    private func finishCapturedWork(
+        _ work: IOSForegroundVoicePersistenceWork,
+        expectedBinding: IOSAcceptedHistoryCoordinatorRepositoryBinding?,
+        operationLeaseAuthorization lease:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async -> IOSForegroundVoiceAcceptanceResult {
+        do {
+            let result = try await resumeCapturedWork(
+                work,
+                operationLeaseAuthorization: lease
+            )
+            try finishProductionAdmission(expectedBinding: expectedBinding)
+            try await state.clear(matching: work.expectation)
+            return result
+        } catch {
+            _ = try? finishProductionAdmission(
+                expectedBinding: expectedBinding
+            )
+            return .savingResult(work.expectation)
+        }
+    }
+
+    private func resumeCapturedWork(
+        _ work: IOSForegroundVoicePersistenceWork,
+        operationLeaseAuthorization lease:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSForegroundVoiceAcceptanceResult {
+        guard work.retirementOrigin == .liveProcess,
+              case .captured(let acceptance) = work.destination else {
+            throw IOSAcceptedOutputDeliveryError.invalidPreparation
+        }
+
+        if try await state.hasCompletedRetirement(
+            matching: work.expectation
+        ) {
+            let destination = try await deliveryStore
+                .authorizeForegroundVoiceCapturedDestination(
+                    acceptance: acceptance,
+                    preparation: work.preparation,
+                    pendingRecording: work.pendingRecording,
+                    operationLeaseAuthorization: lease
+                )
+            return capturedAcceptanceResult(
+                acceptance,
+                currentRecord: destination.record
+            )
+        }
+
+        let firstDestination = try await deliveryStore
+            .authorizeForegroundVoiceCapturedDestination(
+                acceptance: acceptance,
+                preparation: work.preparation,
+                pendingRecording: work.pendingRecording,
+                operationLeaseAuthorization: lease
+            )
+        let audioRemoval = try await pendingRecordingStore
+            .removeForegroundVoiceCapturedAcceptedOutputAudio(
+                expected: work.pendingRecording,
+                destinationAuthorization: firstDestination,
+                deliveryStoreIdentity: deliveryStore.storeIdentity,
+                operationLeaseAuthorization: lease
+            )
+        let confirmedDestination = try await deliveryStore
+            .authorizeForegroundVoiceCapturedDestination(
+                acceptance: acceptance,
+                preparation: work.preparation,
+                pendingRecording: work.pendingRecording,
+                operationLeaseAuthorization: lease
+            )
+        try await pendingRecordingStore
+            .retireForegroundVoiceCapturedAcceptedOutputJournal(
+                expected: work.pendingRecording,
+                destinationAuthorization: confirmedDestination,
+                audioRemovalAuthorization: audioRemoval,
+                deliveryStoreIdentity: deliveryStore.storeIdentity,
+                operationLeaseAuthorization: lease
+            )
+        try await state.markRetirementCompleted(
+            matching: work.expectation
+        )
+        let completedDestination = try await deliveryStore
+            .authorizeForegroundVoiceCapturedDestination(
+                acceptance: acceptance,
+                preparation: work.preparation,
+                pendingRecording: work.pendingRecording,
+                operationLeaseAuthorization: lease
+            )
+        return capturedAcceptanceResult(
+            acceptance,
+            currentRecord: completedDestination.record
+        )
+    }
+
+    private func capturedAcceptanceResult(
+        _ acceptance: IOSAcceptedHistoryAcceptanceResult,
+        currentRecord: IOSAcceptedOutputDeliveryRecord
+    ) -> IOSForegroundVoiceAcceptanceResult {
+        switch acceptance.resolution {
+        case .pendingLocalRecovery:
+            .acceptedHistoryRecoveryPending(currentRecord)
+        case .notRequested, .committed, .cancelled:
+            .resultReady(currentRecord)
         }
     }
 
@@ -1091,24 +1356,68 @@ public struct IOSForegroundVoicePersistence: Sendable {
             IOSPersistenceOperationLeaseAuthorization
         ) async throws -> Value
     ) async throws -> Value {
-        do {
-            return try await operationGate.perform { lease in
-                let repositoryBinding = try await beginProductionAdmission(
-                    operationLeaseAuthorization: lease
-                )
-                do {
-                    let value = try await operation(lease)
-                    try finishProductionAdmission(
-                        expectedBinding: repositoryBinding
-                    )
-                    return value
-                } catch {
-                    try finishProductionAdmission(
-                        expectedBinding: repositoryBinding
-                    )
-                    throw error
-                }
+        try await performGateOperation { lease in
+            try await performProductionAdmission(
+                operationLeaseAuthorization: lease
+            ) {
+                try await operation(lease)
             }
+        }
+    }
+
+    private func performLatestResultOperation<Value: Sendable>(
+        _ operation: @escaping @Sendable (
+            IOSPersistenceOperationLeaseAuthorization
+        ) async throws -> Value
+    ) async throws -> Value {
+        try await performGateOperation { lease in
+            let repositoryBinding = try await beginLatestResultAdmission(
+                operationLeaseAuthorization: lease
+            )
+            do {
+                let value = try await operation(lease)
+                try finishProductionAdmission(
+                    expectedBinding: repositoryBinding
+                )
+                return value
+            } catch {
+                try finishProductionAdmission(
+                    expectedBinding: repositoryBinding
+                )
+                throw error
+            }
+        }
+    }
+
+    private func performProductionAdmission<Value: Sendable>(
+        operationLeaseAuthorization lease:
+            IOSPersistenceOperationLeaseAuthorization,
+        _ operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        let repositoryBinding = try await beginProductionAdmission(
+            operationLeaseAuthorization: lease
+        )
+        do {
+            let value = try await operation()
+            try finishProductionAdmission(
+                expectedBinding: repositoryBinding
+            )
+            return value
+        } catch {
+            try finishProductionAdmission(
+                expectedBinding: repositoryBinding
+            )
+            throw error
+        }
+    }
+
+    private func performGateOperation<Value: Sendable>(
+        _ operation: @escaping @Sendable (
+            IOSPersistenceOperationLeaseAuthorization
+        ) async throws -> Value
+    ) async throws -> Value {
+        do {
+            return try await operationGate.perform(operation)
         } catch IOSPersistenceOperationGate.AcquisitionError
             .cancelledBeforeLease {
             throw IOSForegroundVoicePersistenceError
@@ -1117,6 +1426,88 @@ public struct IOSForegroundVoicePersistence: Sendable {
             .reentrantOperation {
             throw IOSForegroundVoicePersistenceError.reentrantOperation
         }
+    }
+
+    private func beginCapturedProductionAdmission(
+        preparation: IOSAcceptedOutputDeliveryPreparation,
+        retainedWork: IOSForegroundVoicePersistenceWork?,
+        operationLeaseAuthorization lease:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSAcceptedHistoryCoordinatorRepositoryBinding? {
+        guard preparation.historyCapture != nil else {
+            throw IOSAcceptedOutputDeliveryError.invalidPreparation
+        }
+        guard let context else { return nil }
+        guard await context.failedHistoryRetryState.hasLiveOwner() == false,
+              !context.failedHistoryMutationInterlock.isBlocked,
+              await context.baselineRecoveryState.value() == false,
+              await context.outboxWorkerState.current() == nil,
+              await context.policyCutoverState.current() == nil,
+              await context.failedHistoryTransferState.current() == nil,
+              await context.failedHistoryAudioCleanupState.current() == nil,
+              try await context.failedHistoryStore
+                .hasPendingJournalRetirement(
+                    operationLeaseAuthorization: lease
+                ) == false else {
+            throw IOSForegroundVoicePersistenceError.localRecoveryPending
+        }
+
+        let retainedAcceptance = await context.acceptanceState.current()
+        let retainedReplacement = await context.pendingReplacementState
+            .current()
+        if let retainedAcceptance {
+            guard retainedReplacement == nil,
+                  retainedAcceptance.mayResume(with: preparation) else {
+                throw IOSForegroundVoicePersistenceError.localRecoveryPending
+            }
+        } else if let retainedReplacement {
+            guard retainedReplacement.preparation == preparation else {
+                throw IOSForegroundVoicePersistenceError.localRecoveryPending
+            }
+        }
+        if let retainedWork,
+           case .captured(let acceptance) = retainedWork.destination,
+           acceptance.resolution != .pendingLocalRecovery,
+           (retainedAcceptance != nil || retainedReplacement != nil) {
+            throw IOSForegroundVoicePersistenceError.localRecoveryPending
+        }
+
+        let binding = repositoryRegistration?.revalidate()
+        guard !context.repositoryIdentityState.isConflicted else {
+            throw IOSForegroundVoicePersistenceError
+                .repositoryIdentityConflict
+        }
+        return binding
+    }
+
+    /// Latest is a strict read-only projection. A retained accepted-History
+    /// decision may coexist with this read, but replacement and every other
+    /// root mutation owner remain exclusive.
+    private func beginLatestResultAdmission(
+        operationLeaseAuthorization lease:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSAcceptedHistoryCoordinatorRepositoryBinding? {
+        guard let context else { return nil }
+        guard await context.failedHistoryRetryState.hasLiveOwner() == false,
+              !context.failedHistoryMutationInterlock.isBlocked,
+              await context.baselineRecoveryState.value() == false,
+              await context.pendingReplacementState.current() == nil,
+              await context.outboxWorkerState.current() == nil,
+              await context.policyCutoverState.current() == nil,
+              await context.failedHistoryTransferState.current() == nil,
+              await context.failedHistoryAudioCleanupState.current() == nil,
+              try await context.failedHistoryStore
+                .hasPendingJournalRetirement(
+                    operationLeaseAuthorization: lease
+                ) == false else {
+            throw IOSForegroundVoicePersistenceError.localRecoveryPending
+        }
+        let binding = repositoryRegistration?.revalidate()
+        guard !context.repositoryIdentityState.isConflicted else {
+            throw IOSForegroundVoicePersistenceError
+                .repositoryIdentityConflict
+        }
+        return binding
     }
 
     private func beginProductionAdmission(

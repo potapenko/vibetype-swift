@@ -116,6 +116,201 @@ struct IOSForegroundVoicePersistenceTests {
         #expect(fixture.audio.isPresent)
     }
 
+    @Test func processOwnerAcceptsCapturedHistoryAndRetiresPendingAtomically()
+        async throws {
+        let fixture = ForegroundVoicePersistenceFixture()
+        let output = try await fixture.makeOutputDelivery()
+        let preparation = try await fixture.capturedPreparation(
+            for: output,
+            historyEnabled: true
+        )
+        let owner = IOSForegroundVoicePersistenceOwner(
+            pendingRecordingStore: fixture.pendingStore,
+            acceptedOutputPersistence: fixture.facade
+        )
+
+        let record = try await owner.accept(
+            preparation,
+            expectedPending: IOSPendingRecordingCASExpectation(
+                recording: output
+            )
+        ).requireHistoryRecoveryPending()
+
+        #expect(record.historyWrite?.state == .pending)
+        #expect(fixture.capturedHistoryClient.callCount == 1)
+        #expect(await fixture.state.current() == nil)
+        #expect(fixture.pendingJournal.recording == nil)
+        #expect(!fixture.audio.isPresent)
+        #expect(
+            try await owner.loadLatestResult() == .resultReady(record)
+        )
+    }
+
+    @Test func processOwnerAcceptsCapturedDisabledHistoryAsReadyResult()
+        async throws {
+        let fixture = ForegroundVoicePersistenceFixture()
+        let output = try await fixture.makeOutputDelivery()
+        let preparation = try await fixture.capturedPreparation(
+            for: output,
+            historyEnabled: false
+        )
+        let owner = IOSForegroundVoicePersistenceOwner(
+            pendingRecordingStore: fixture.pendingStore,
+            acceptedOutputPersistence: fixture.facade
+        )
+
+        let record = try await owner.accept(
+            preparation,
+            expectedPending: IOSPendingRecordingCASExpectation(
+                recording: output
+            )
+        ).requireReady()
+
+        #expect(record.historyWrite == nil)
+        #expect(fixture.capturedHistoryClient.callCount == 1)
+        #expect(await fixture.state.current() == nil)
+        #expect(fixture.pendingJournal.recording == nil)
+        #expect(!fixture.audio.isPresent)
+    }
+
+    @Test func capturedAudioFailureRetriesRetirementWithoutReacceptingHistory()
+        async throws {
+        let fixture = ForegroundVoicePersistenceFixture()
+        let output = try await fixture.makeOutputDelivery()
+        let preparation = try await fixture.capturedPreparation(
+            for: output,
+            historyEnabled: true
+        )
+        let owner = IOSForegroundVoicePersistenceOwner(
+            pendingRecordingStore: fixture.pendingStore,
+            acceptedOutputPersistence: fixture.facade
+        )
+        fixture.audio.failNextRemove = .removeFailed
+
+        let saving = try await owner.accept(
+            preparation,
+            expectedPending: IOSPendingRecordingCASExpectation(
+                recording: output
+            )
+        ).requireSaving()
+        #expect(fixture.capturedHistoryClient.callCount == 1)
+        #expect(await fixture.state.current() != nil)
+
+        _ = try await owner.retrySavingResult(
+            expected: saving
+        ).requireHistoryRecoveryPending()
+        #expect(fixture.capturedHistoryClient.callCount == 1)
+        #expect(await fixture.state.current() == nil)
+        #expect(fixture.pendingJournal.recording == nil)
+        #expect(!fixture.audio.isPresent)
+    }
+
+    @Test func capturedJournalFailureRetriesWithoutReacceptingHistory()
+        async throws {
+        let fixture = ForegroundVoicePersistenceFixture()
+        let output = try await fixture.makeOutputDelivery()
+        let preparation = try await fixture.capturedPreparation(
+            for: output,
+            historyEnabled: true
+        )
+        let owner = IOSForegroundVoicePersistenceOwner(
+            pendingRecordingStore: fixture.pendingStore,
+            acceptedOutputPersistence: fixture.facade
+        )
+        fixture.pendingJournal.failNextRemove(
+            .journalRemoveFailed,
+            commitBeforeThrowing: false
+        )
+
+        let saving = try await owner.accept(
+            preparation,
+            expectedPending: IOSPendingRecordingCASExpectation(
+                recording: output
+            )
+        ).requireSaving()
+        #expect(fixture.capturedHistoryClient.callCount == 1)
+        #expect(await fixture.state.current() != nil)
+
+        _ = try await owner.retrySavingResult(
+            expected: saving
+        ).requireHistoryRecoveryPending()
+        #expect(fixture.capturedHistoryClient.callCount == 1)
+        #expect(await fixture.state.current() == nil)
+        #expect(fixture.pendingJournal.recording == nil)
+        #expect(!fixture.audio.isPresent)
+    }
+
+    @Test func capturedRetryAfterJournalRetirementUsesRetainedDestinationOnly()
+        async throws {
+        let fixture = ForegroundVoicePersistenceFixture()
+        let output = try await fixture.makeOutputDelivery()
+        let preparation = try await fixture.capturedPreparation(
+            for: output,
+            historyEnabled: true
+        )
+        let owner = IOSForegroundVoicePersistenceOwner(
+            pendingRecordingStore: fixture.pendingStore,
+            acceptedOutputPersistence: fixture.facade
+        )
+        fixture.pendingJournal.onSuccessfulMetadataRemoval = {
+            [deliveryJournal = fixture.deliveryJournal] in
+            deliveryJournal.failNextLoad(.readFailed)
+        }
+
+        let saving = try await owner.accept(
+            preparation,
+            expectedPending: IOSPendingRecordingCASExpectation(
+                recording: output
+            )
+        ).requireSaving()
+        #expect(fixture.pendingJournal.recording == nil)
+        #expect(!fixture.audio.isPresent)
+        #expect(fixture.capturedHistoryClient.callCount == 1)
+        #expect(
+            try await fixture.state.hasCompletedRetirement(
+                matching: saving
+            )
+        )
+
+        _ = try await owner.retrySavingResult(
+            expected: saving
+        ).requireHistoryRecoveryPending()
+        #expect(fixture.capturedHistoryClient.callCount == 1)
+        #expect(await fixture.state.current() == nil)
+    }
+
+    @Test func capturedSavingResultCannotRollBackAnAcceptedDestination()
+        async throws {
+        let fixture = ForegroundVoicePersistenceFixture()
+        let output = try await fixture.makeOutputDelivery()
+        let preparation = try await fixture.capturedPreparation(
+            for: output,
+            historyEnabled: true
+        )
+        let owner = IOSForegroundVoicePersistenceOwner(
+            pendingRecordingStore: fixture.pendingStore,
+            acceptedOutputPersistence: fixture.facade
+        )
+        fixture.audio.failNextRemove = .removeFailed
+        let saving = try await owner.accept(
+            preparation,
+            expectedPending: IOSPendingRecordingCASExpectation(
+                recording: output
+            )
+        ).requireSaving()
+
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.invalidPreparation
+        ) {
+            _ = try await owner.recoverRecordingFromSavingResult(
+                expected: saving
+            )
+        }
+        #expect(await fixture.state.current() != nil)
+        #expect(fixture.pendingJournal.recording == output)
+        #expect(fixture.capturedHistoryClient.callCount == 1)
+    }
+
     @Test func capturedHistoryDestinationRetiresPendingWithoutDeliveryRewrite()
         async throws {
         let fixture = ForegroundVoicePersistenceFixture()
@@ -1575,6 +1770,14 @@ private extension IOSForegroundVoiceAcceptanceResult {
         }
         return expectation
     }
+
+    func requireHistoryRecoveryPending() throws
+        -> IOSAcceptedOutputDeliveryRecord {
+        guard case .acceptedHistoryRecoveryPending(let record) = self else {
+            throw ForegroundVoiceTestError.unexpectedResult
+        }
+        return record
+    }
 }
 
 private enum ForegroundVoiceTestError: Error {
@@ -1639,6 +1842,7 @@ private final class ForegroundVoicePersistenceFixture: @unchecked Sendable {
     let audio = ForegroundVoiceAudioFileSystem()
     let deliveryJournal = ForegroundVoiceDeliveryJournal()
     let executor = ForegroundVoiceExecutor()
+    let capturedHistoryClient = ForegroundVoiceCapturedHistoryClient()
     let state = IOSForegroundVoicePersistenceOperationState()
     let clock = ForegroundVoiceClock(
         date: Date(timeIntervalSince1970: 1_800_000_000)
@@ -1661,6 +1865,14 @@ private final class ForegroundVoicePersistenceFixture: @unchecked Sendable {
         operationGate: operationGate,
         pendingRecordingStore: pendingStore,
         deliveryStore: deliveryStore,
+        capturedHistoryAcceptance: {
+            [capturedHistoryClient, deliveryStore] preparation, lease in
+            try await capturedHistoryClient.accept(
+                preparation,
+                deliveryStore: deliveryStore,
+                operationLeaseAuthorization: lease
+            )
+        },
         state: state
     )
 
@@ -1843,6 +2055,33 @@ private final class ForegroundVoiceExecutor:
         _ = audio
         lock.withLock { storedCallCount += 1 }
         return "provider result"
+    }
+}
+
+private final class ForegroundVoiceCapturedHistoryClient:
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedCallCount = 0
+
+    var callCount: Int { lock.withLock { storedCallCount } }
+
+    func accept(
+        _ preparation: IOSAcceptedOutputDeliveryPreparation,
+        deliveryStore: IOSAcceptedOutputDeliveryStore,
+        operationLeaseAuthorization:
+            IOSPersistenceOperationLeaseAuthorization
+    ) async throws -> IOSAcceptedHistoryAcceptanceResult {
+        lock.withLock { storedCallCount += 1 }
+        let acceptance = try await deliveryStore.acceptForHistoryCoordinator(
+            preparation,
+            operationLeaseAuthorization: operationLeaseAuthorization
+        )
+        return IOSAcceptedHistoryAcceptanceResult(
+            deliveryRecord: acceptance.record,
+            resolution: preparation.historyWrite == nil
+                ? .notRequested
+                : .pendingLocalRecovery
+        )
     }
 }
 
