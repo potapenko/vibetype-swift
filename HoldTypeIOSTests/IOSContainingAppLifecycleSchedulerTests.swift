@@ -1,4 +1,4 @@
-import HoldTypePersistence
+@_spi(HoldTypeIOSCore) import HoldTypePersistence
 import SwiftUI
 import Testing
 @testable import HoldTypeIOS
@@ -28,7 +28,7 @@ struct IOSContainingAppLifecycleSchedulerTests {
         await scheduler.waitUntilIdle()
         #expect(
             await recorder.opportunities()
-                == [.processLaunch, .foreground]
+                == [.processLaunch, .foregroundOpportunity]
         )
     }
 
@@ -54,7 +54,7 @@ struct IOSContainingAppLifecycleSchedulerTests {
         await scheduler.waitUntilIdle()
         #expect(
             await recorder.opportunities()
-                == [.processLaunch, .foreground]
+                == [.processLaunch, .foregroundOpportunity]
         )
         #expect(await recorder.maximumConcurrentRecoveries() == 1)
         #expect(scheduler.latestDisposition == .complete)
@@ -108,7 +108,7 @@ struct IOSContainingAppLifecycleSchedulerTests {
         await scheduler.waitUntilIdle()
         #expect(
             await recorder.opportunities()
-                == [.processLaunch, .foreground]
+                == [.processLaunch, .foregroundOpportunity]
         )
     }
 
@@ -135,7 +135,7 @@ struct IOSContainingAppLifecycleSchedulerTests {
         await scheduler.waitUntilIdle()
         #expect(
             await recorder.opportunities()
-                == [.processLaunch, .foreground]
+                == [.processLaunch, .foregroundOpportunity]
         )
         #expect(await recorder.maximumConcurrentRecoveries() == 1)
     }
@@ -223,14 +223,14 @@ struct IOSContainingAppLifecycleSchedulerTests {
 }
 
 private actor LifecycleRecoveryRecorder {
-    private let results: [IOSContainingAppRecoveryDisposition]
+    private let results: [IOSV1ContainingAppRecoveryDisposition]
     private let blockedPasses: [Int: LifecycleRecoveryLatch]
-    private var calls: [IOSContainingAppRecoveryOpportunity] = []
+    private var calls: [IOSV1ContainingAppRecoveryOpportunity] = []
     private var activeRecoveries = 0
     private var maximumActiveRecoveries = 0
 
     init(
-        results: [IOSContainingAppRecoveryDisposition],
+        results: [IOSV1ContainingAppRecoveryDisposition],
         blockedPasses: [Int: LifecycleRecoveryLatch] = [:]
     ) {
         self.results = results
@@ -238,8 +238,8 @@ private actor LifecycleRecoveryRecorder {
     }
 
     func recover(
-        _ opportunity: IOSContainingAppRecoveryOpportunity
-    ) async -> IOSContainingAppRecoveryDisposition {
+        _ opportunity: IOSV1ContainingAppRecoveryOpportunity
+    ) async -> IOSV1ContainingAppRecoveryDisposition {
         let index = calls.count
         calls.append(opportunity)
         activeRecoveries += 1
@@ -257,7 +257,7 @@ private actor LifecycleRecoveryRecorder {
         return results[index]
     }
 
-    func opportunities() -> [IOSContainingAppRecoveryOpportunity] {
+    func opportunities() -> [IOSV1ContainingAppRecoveryOpportunity] {
         calls
     }
 
@@ -267,12 +267,12 @@ private actor LifecycleRecoveryRecorder {
 }
 
 private actor LifecycleCancellationProbe {
-    private var calls: [IOSContainingAppRecoveryOpportunity] = []
+    private var calls: [IOSV1ContainingAppRecoveryOpportunity] = []
     private var cancellationObserved = false
 
     func recover(
-        _ opportunity: IOSContainingAppRecoveryOpportunity
-    ) async -> IOSContainingAppRecoveryDisposition {
+        _ opportunity: IOSV1ContainingAppRecoveryOpportunity
+    ) async -> IOSV1ContainingAppRecoveryDisposition {
         calls.append(opportunity)
         do {
             try await Task.sleep(for: .seconds(3_600))
@@ -287,7 +287,7 @@ private actor LifecycleCancellationProbe {
 
     func wasCancelled() -> Bool { cancellationObserved }
 
-    func opportunities() -> [IOSContainingAppRecoveryOpportunity] { calls }
+    func opportunities() -> [IOSV1ContainingAppRecoveryOpportunity] { calls }
 }
 
 private actor LifecycleRecoveryLatch {

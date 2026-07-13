@@ -10,10 +10,7 @@ struct IOSNativeVoicePresentationTests {
             .notLoaded,
             .absent,
             .ready,
-            .priorWhileSaving,
-            .savingWithoutPrior,
             .clearing,
-            .cleanupPending,
             .unavailable,
         ]
 
@@ -71,7 +68,7 @@ struct IOSNativeVoicePresentationTests {
     @Test func consentStatesExposeOnlyTheirAdmittedAction() {
         let cases: [
             (
-                IOSProviderConsentStatus,
+                IOSV1ProviderConsentStatus,
                 Bool,
                 IOSProviderConsentPrivacyAction?
             )

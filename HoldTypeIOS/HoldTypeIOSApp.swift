@@ -5,7 +5,7 @@
 //  Created by Codex on 6/21/26.
 //
 
-import HoldTypePersistence
+@_spi(HoldTypeIOSCore) import HoldTypePersistence
 import SwiftUI
 
 @main

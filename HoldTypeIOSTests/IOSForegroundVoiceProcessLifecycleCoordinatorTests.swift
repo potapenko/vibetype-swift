@@ -43,7 +43,7 @@ struct IOSForegroundVoiceProcessLifecycleCoordinatorTests {
         #expect(controller.submit(start, from: scene) == .accepted)
         await fixture.primaryDidStart.wait()
 
-        var opportunities: [IOSContainingAppRecoveryOpportunity] = []
+        var opportunities: [IOSV1ContainingAppRecoveryOpportunity] = []
         var publicationPhases: [VoiceWorkPhase] = []
         let coordinator = IOSForegroundVoiceProcessLifecycleCoordinator(
             controller: controller,
@@ -67,7 +67,7 @@ struct IOSForegroundVoiceProcessLifecycleCoordinatorTests {
         await primaryGate.open()
         await scheduler.waitUntilIdle()
 
-        #expect(opportunities == [.processLaunch, .foreground])
+        #expect(opportunities == [.processLaunch, .foregroundOpportunity])
         #expect(publicationPhases == [.inactive, .inactive])
         #expect(fixture.primaryReturnCount == 1)
         #expect(controller.presentation.phase == .inactive)
@@ -93,7 +93,7 @@ struct IOSForegroundVoiceProcessLifecycleCoordinatorTests {
                 return lifecycleRefresh()
             }
         )
-        let task = Task { await coordinator.recover(.foreground) }
+        let task = Task { await coordinator.recover(.foregroundOpportunity) }
         await refreshStarted.wait()
         task.cancel()
 

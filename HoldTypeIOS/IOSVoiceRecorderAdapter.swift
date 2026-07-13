@@ -82,9 +82,9 @@ nonisolated enum IOSVoiceRecorderDiagnostic: String, Equatable, Sendable {
 @MainActor
 final class IOSVoiceRecorderCompletedCaptureHandoff {
     typealias PreparePending = @MainActor @Sendable (
-        IOSForegroundVoicePersistenceOwner,
+        IOSV1ForegroundVoicePersistenceOwner,
         TranscriptionConfiguration
-    ) async throws -> IOSPendingRecording
+    ) async throws -> IOSV1PendingRecording
 
     private enum State {
         case available
@@ -107,9 +107,9 @@ final class IOSVoiceRecorderCompletedCaptureHandoff {
     }
 
     func preparePending(
-        using owner: IOSForegroundVoicePersistenceOwner,
+        using owner: IOSV1ForegroundVoicePersistenceOwner,
         transcriptionConfiguration: TranscriptionConfiguration
-    ) async throws -> IOSPendingRecording {
+    ) async throws -> IOSV1PendingRecording {
         guard case .available = state else {
             throw IOSVoiceRecorderCompletedCaptureHandoffError.unavailable
         }
@@ -179,7 +179,7 @@ final class IOSVoiceRecorderCompletedCapture {
         )
     }
 
-    convenience init(capture: IOSForegroundVoiceCompletedCapture) {
+    convenience init(capture: IOSV1ForegroundVoiceCompletedCapture) {
         self.init(
             durationMilliseconds: capture.durationMilliseconds,
             byteCount: capture.byteCount,
@@ -210,7 +210,7 @@ final class IOSVoiceRecorderCompletedCapture {
 
 nonisolated enum IOSVoiceRecorderStopResult: Sendable {
     case completed(IOSVoiceRecorderCompletedCapture)
-    case invalid(IOSForegroundVoiceCaptureInvalidReason)
+    case invalid(IOSV1ForegroundVoiceCaptureInvalidReason)
     case discarded
     case preserved(IOSVoiceRecorderFailure)
     case stale
@@ -382,7 +382,7 @@ protocol IOSVoiceRecorderCaptureSourceSystem: AnyObject {
 
 nonisolated enum IOSVoiceRecorderCaptureFinalization: Sendable {
     case completed(IOSVoiceRecorderCompletedCapture)
-    case discarded(IOSForegroundVoiceCaptureInvalidReason)
+    case discarded(IOSV1ForegroundVoiceCaptureInvalidReason)
 }
 
 /// Fail-closed candidate around AVAudioRecorder. It owns recorder lifetime but
@@ -500,7 +500,7 @@ final class IOSVoiceRecorderAdapter {
 
     private enum StoredTerminalResult {
         case completed(WeakCompletedCapture)
-        case invalid(IOSForegroundVoiceCaptureInvalidReason)
+        case invalid(IOSV1ForegroundVoiceCaptureInvalidReason)
         case discarded
         case preserved(IOSVoiceRecorderFailure)
         case stale
@@ -565,7 +565,7 @@ final class IOSVoiceRecorderAdapter {
     }
 
     convenience init(
-        lease: IOSForegroundVoiceCaptureSourceLease,
+        lease: IOSV1ForegroundVoiceCaptureLease,
         client: IOSVoiceRecorderClient = .live,
         diagnose: @escaping DiagnosticHandler = { _ in }
     ) {
@@ -1206,9 +1206,9 @@ final class IOSVoiceRecorderAdapter {
 private final class IOSVoiceRecorderCaptureSourceLeaseSystem:
     IOSVoiceRecorderCaptureSourceSystem
 {
-    private let lease: IOSForegroundVoiceCaptureSourceLease
+    private let lease: IOSV1ForegroundVoiceCaptureLease
 
-    init(lease: IOSForegroundVoiceCaptureSourceLease) {
+    init(lease: IOSV1ForegroundVoiceCaptureLease) {
         self.lease = lease
     }
 
@@ -1219,7 +1219,7 @@ private final class IOSVoiceRecorderCaptureSourceLeaseSystem:
     }
 
     func revalidateRecorderCheckpoint() async throws {
-        try await lease.revalidateRecorderCheckpoint()
+        try lease.revalidateRecorderCheckpoint()
     }
 
     func beginFinalizing() async throws {

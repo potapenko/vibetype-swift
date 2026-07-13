@@ -30,32 +30,17 @@ nonisolated struct IOSForegroundVoiceCoreProcessorClient: Sendable {
         IOSForegroundVoiceProcessingRequest,
         @escaping IOSForegroundVoiceProcessingProgressHandler
     ) async -> IOSForegroundVoiceProcessingResolution
-    typealias RetryLocalRecovery = @Sendable (
-        IOSForegroundVoiceProviderRetryAuthorization?,
-        @escaping IOSForegroundVoiceProcessingProgressHandler
-    ) async -> IOSForegroundVoiceProcessingResolution
 
     let process: Process
-    let retryLocalRecovery: RetryLocalRecovery
 
     init(processor: IOSForegroundVoiceProcessor) {
         process = { request, progress in
             await processor.process(request, progress: progress)
         }
-        retryLocalRecovery = { authorization, progress in
-            await processor.retryLocalRecovery(
-                authorization: authorization,
-                progress: progress
-            )
-        }
     }
 
-    init(
-        process: @escaping Process,
-        retryLocalRecovery: @escaping RetryLocalRecovery
-    ) {
+    init(process: @escaping Process) {
         self.process = process
-        self.retryLocalRecovery = retryLocalRecovery
     }
 }
 
@@ -170,38 +155,6 @@ actor IOSForegroundVoiceProviderBridge {
                 library: request.configuration.library,
                 credential: credential,
                 consentObservation: request.consentObservation
-            ),
-            progress
-        )
-    }
-
-    func retryLocalRecovery(
-        _ authorization:
-            IOSForegroundVoiceWorkflowProviderRetryAuthorization?,
-        progress: @escaping IOSForegroundVoiceProcessingProgressHandler
-    ) async -> IOSForegroundVoiceProcessingResolution {
-        guard let processorClient else {
-            if let authorization {
-                retire(authorization.credential)
-            }
-            return .notStarted(.localPersistence)
-        }
-
-        // A nil authorization is the workflow's typed provider-free path. It
-        // must reach Core without consulting or mutating credential state.
-        guard let authorization else {
-            return await processorClient.retryLocalRecovery(nil, progress)
-        }
-        guard let credential = await consumeCredential(
-            for: authorization.credential
-        ) else {
-            return .notStarted(.credentialRejected)
-        }
-
-        return await processorClient.retryLocalRecovery(
-            IOSForegroundVoiceProviderRetryAuthorization(
-                credential: credential,
-                consentObservation: authorization.consentObservation
             ),
             progress
         )

@@ -22,16 +22,14 @@ enum IOSForegroundVoiceFailure: Equatable, Sendable {
 
 enum IOSForegroundVoiceWarning: Equatable, Sendable {
     case historySaveFailed
+    case localCleanupPending
 }
 
 enum IOSForegroundVoiceRecovery: Equatable, Sendable {
     case none
     case captureRecoverOrDiscard
-    case captureRecoverOnly
     case captureDiscardOnly
     case pendingRetryOrDiscard
-    case savingResult
-    case localCheckpoint(VoiceAttemptStage)
     case blocked
 }
 
@@ -39,8 +37,6 @@ enum IOSForegroundVoiceLatestAvailability: Equatable, Sendable {
     case unknown
     case absent
     case available
-    case priorAvailableWhileSaving
-    case cleanupPending
     case unavailable
 }
 
@@ -54,8 +50,6 @@ enum IOSForegroundVoiceAction: Equatable, Sendable {
     case recoverRecording
     case retryPending
     case discard
-    case retrySavingResult
-    case retryLocalCheckpoint
 }
 
 struct IOSForegroundVoiceActionCommand: Equatable, Sendable {
@@ -143,8 +137,6 @@ enum IOSForegroundVoiceOperation: Equatable, Sendable {
     case retryPending
     case recoverRecording
     case discard
-    case retrySavingResult
-    case retryLocalCheckpoint
 }
 
 enum IOSForegroundVoiceProgress: Equatable, Sendable {
@@ -343,7 +335,7 @@ final class IOSForegroundVoiceController {
     func performLifecycleRefresh(
         _ refresh: @escaping @MainActor @Sendable () async
             -> IOSForegroundVoiceLifecycleRefresh
-    ) async -> IOSContainingAppRecoveryDisposition {
+    ) async -> IOSV1ContainingAppRecoveryDisposition {
         if activeWork != nil { lifecycleRefreshIsWaiting = true }
         while let activeWork {
             guard let currentTask = activeTask else {
@@ -433,10 +425,6 @@ final class IOSForegroundVoiceController {
             guard begin(.recoverRecording) else { return .unavailable }
         case .discard:
             guard begin(.discard) else { return .unavailable }
-        case .retrySavingResult:
-            guard begin(.retrySavingResult) else { return .unavailable }
-        case .retryLocalCheckpoint:
-            guard begin(.retryLocalCheckpoint) else { return .unavailable }
         case .finishUtterance:
             finishCurrentUtterance()
         case .cancelStart, .cancelUtterance:
@@ -736,16 +724,10 @@ final class IOSForegroundVoiceController {
         switch recovery {
         case .captureRecoverOrDiscard:
             return [.recoverRecording, .discard]
-        case .captureRecoverOnly:
-            return [.recoverRecording]
         case .captureDiscardOnly:
             return [.discard]
         case .pendingRetryOrDiscard:
             return [.retryPending, .discard]
-        case .savingResult:
-            return [.retrySavingResult]
-        case .localCheckpoint:
-            return [.retryLocalCheckpoint]
         case .blocked:
             return []
         case .none:
@@ -768,10 +750,6 @@ final class IOSForegroundVoiceController {
             (.processing, .transcription)
         case .recoverRecording, .discard:
             (.finalizing, .recordingFinalization)
-        case .retrySavingResult:
-            (.processing, presentation.stage)
-        case .retryLocalCheckpoint:
-            (.processing, presentation.stage)
         }
     }
 
@@ -787,14 +765,9 @@ final class IOSForegroundVoiceController {
 
         switch recovery {
         case .captureRecoverOrDiscard,
-             .captureRecoverOnly,
              .captureDiscardOnly,
              .pendingRetryOrDiscard:
             return reportedStage
-        case .savingResult:
-            return reportedStage
-        case .localCheckpoint(let stage):
-            return stage
         case .none, .blocked:
             return nil
         }
@@ -804,13 +777,11 @@ final class IOSForegroundVoiceController {
         for recovery: IOSForegroundVoiceRecovery
     ) -> VoiceAttemptOutcome? {
         switch recovery {
-        case .pendingRetryOrDiscard, .localCheckpoint:
+        case .pendingRetryOrDiscard:
             return .recoverableFailure
         case .none,
              .captureRecoverOrDiscard,
-             .captureRecoverOnly,
              .captureDiscardOnly,
-             .savingResult,
              .blocked:
             return nil
         }
@@ -825,14 +796,13 @@ final class IOSForegroundVoiceController {
         let failure: IOSForegroundVoiceFailure?
 
         switch resolution.observation.recovery {
-        case .pendingRetryOrDiscard, .localCheckpoint:
+        case .pendingRetryOrDiscard:
             outcome = .recoverableFailure
             failure = resolution.failure
-        case .savingResult, .blocked:
+        case .blocked:
             outcome = nil
             failure = resolution.failure
         case .captureRecoverOrDiscard,
-             .captureRecoverOnly,
              .captureDiscardOnly:
             outcome = nil
             failure = resolution.failure
@@ -939,32 +909,6 @@ final class IOSForegroundVoiceController {
                 outcome: .recoverableFailure,
                 failure: resolution.failure
             )
-        case .localCheckpoint(let retainedStage):
-            return TerminalProjection(
-                observation: IOSForegroundVoiceObservation(
-                    setup: setup,
-                    recovery: .localCheckpoint(retainedStage),
-                    stage: retainedStage,
-                    latestAvailability: latestAvailability,
-                    translationAvailable: translationAvailable
-                ),
-                stage: retainedStage,
-                outcome: .recoverableFailure,
-                failure: resolution.failure
-            )
-        case .savingResult:
-            return TerminalProjection(
-                observation: IOSForegroundVoiceObservation(
-                    setup: setup,
-                    recovery: .savingResult,
-                    stage: reportedStage,
-                    latestAvailability: latestAvailability,
-                    translationAvailable: translationAvailable
-                ),
-                stage: reportedStage,
-                outcome: nil,
-                failure: resolution.failure
-            )
         case .blocked:
             return TerminalProjection(
                 observation: IOSForegroundVoiceObservation(
@@ -990,7 +934,6 @@ final class IOSForegroundVoiceController {
                 failure: nil
             )
         case .captureRecoverOrDiscard,
-             .captureRecoverOnly,
              .captureDiscardOnly:
             return TerminalProjection(
                 observation: IOSForegroundVoiceObservation(
@@ -1009,9 +952,9 @@ final class IOSForegroundVoiceController {
     private var processingCancellationIsAvailable: Bool {
         guard let activeOperation else { return false }
         switch activeOperation {
-        case .start, .retryPending, .retryLocalCheckpoint:
+        case .start, .retryPending:
             return true
-        case .recoverRecording, .discard, .retrySavingResult:
+        case .recoverRecording, .discard:
             return false
         }
     }
@@ -1020,12 +963,6 @@ final class IOSForegroundVoiceController {
         for operation: IOSForegroundVoiceOperation,
         presentation: (phase: VoiceWorkPhase, stage: VoiceAttemptStage?)
     ) -> ProgressPosition {
-        if operation == .retrySavingResult {
-            return presentation.stage == .outputDelivery
-                ? .outputDelivery
-                : .postProcessing
-        }
-
         switch presentation.phase {
         case .arming:
             return .arming

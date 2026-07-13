@@ -23,7 +23,7 @@ struct IOSContainingAppCompositionTests {
         var capturedSettingsStateOwner: IOSAppSettingsStateOwner?
         var capturedLibraryStateOwner: IOSLibraryStateOwner?
         var capturedProviderConsentCoordinator:
-            IOSProviderConsentCoordinator?
+            IOSV1ProviderConsentCoordinator?
         var capturedAcceptedTextHistoryRepository:
             IOSAcceptedTextHistoryRepository?
         var capturedUsageRepository: IOSTranscriptionUsageRepository?
@@ -73,7 +73,7 @@ struct IOSContainingAppCompositionTests {
                 makeProviderConsentCoordinator: { resolvedRoot in
                     events.append("provider-consent")
                     providerConsentFactoryCount += 1
-                    let coordinator = IOSProviderConsentCoordinator(
+                    let coordinator = IOSV1ProviderConsentCoordinator(
                         applicationSupportDirectoryURL: resolvedRoot
                     )
                     capturedProviderConsentCoordinator = coordinator
@@ -86,7 +86,7 @@ struct IOSContainingAppCompositionTests {
                     foregroundPersistenceFactoryCount += 1
                     capturedAcceptedTextHistoryRepository =
                         acceptedTextHistoryRepository
-                    return IOSForegroundVoicePersistenceOwner(
+                    return IOSV1ForegroundVoicePersistenceOwner(
                         applicationSupportDirectoryURL: resolvedRoot,
                         acceptedTextHistoryRepository:
                             acceptedTextHistoryRepository
@@ -336,7 +336,7 @@ struct IOSContainingAppCompositionTests {
                 },
                 makeProviderConsentCoordinator: { resolvedRoot in
                     providerConsentFactoryCalls += 1
-                    return IOSProviderConsentCoordinator(
+                    return IOSV1ProviderConsentCoordinator(
                         applicationSupportDirectoryURL: resolvedRoot
                     )
                 },
@@ -344,7 +344,7 @@ struct IOSContainingAppCompositionTests {
                     resolvedRoot,
                     acceptedTextHistoryRepository in
                     foregroundPersistenceFactoryCalls += 1
-                    return IOSForegroundVoicePersistenceOwner(
+                    return IOSV1ForegroundVoicePersistenceOwner(
                         applicationSupportDirectoryURL: resolvedRoot,
                         acceptedTextHistoryRepository:
                             acceptedTextHistoryRepository
@@ -446,7 +446,7 @@ struct IOSContainingAppCompositionTests {
                 },
                 makeProviderConsentCoordinator: { resolvedRoot in
                     providerConsentFactoryCalls += 1
-                    return IOSProviderConsentCoordinator(
+                    return IOSV1ProviderConsentCoordinator(
                         applicationSupportDirectoryURL: resolvedRoot
                     )
                 },
@@ -454,7 +454,7 @@ struct IOSContainingAppCompositionTests {
                     resolvedRoot,
                     acceptedTextHistoryRepository in
                     foregroundPersistenceFactoryCalls += 1
-                    return IOSForegroundVoicePersistenceOwner(
+                    return IOSV1ForegroundVoicePersistenceOwner(
                         applicationSupportDirectoryURL: resolvedRoot,
                         acceptedTextHistoryRepository:
                             acceptedTextHistoryRepository

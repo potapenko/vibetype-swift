@@ -32,10 +32,10 @@ struct IOSForegroundVoiceRuntimeTests {
             },
             commit: { $0 }
         )
-        let consentCoordinator = IOSProviderConsentCoordinator(
+        let consentCoordinator = IOSV1ProviderConsentCoordinator(
             applicationSupportDirectoryURL: root
         )
-        let persistenceOwner = IOSForegroundVoicePersistenceOwner(
+        let persistenceOwner = IOSV1ForegroundVoicePersistenceOwner(
             applicationSupportDirectoryURL: root
         )
         let factories = IOSVoiceRuntimeFactoryProbe()
@@ -87,11 +87,12 @@ struct IOSForegroundVoiceRuntimeTests {
 
         let dependencies = try #require(factories.dependencies)
         #expect(
-            await persistenceOwner.reconcileCaptureSourcesAtLaunch().status
-                == .empty
+            await persistenceOwner.reconcileCaptureSourcesAtLaunch() == .empty
         )
         #expect(
-            await dependencies.recoverContainingAppLifecycle(.foreground)
+            await dependencies.recoverContainingAppLifecycle(
+                .foregroundOpportunity
+            )
                 == .complete
         )
         #expect(

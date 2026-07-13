@@ -9,13 +9,9 @@ struct IOSForegroundVoiceLatestResultOwnerTests {
     @Test func constructionIsPassiveAndEveryDurableStateMapsWithoutIdentity()
         async throws {
         let record = try latestResultRecord(text: "exact accepted text")
-        let saving = try latestSavingExpectation()
         let probe = LatestResultClientProbe(
             loads: [
                 .value(.resultReady(record)),
-                .value(.savingResult(saving, priorResult: record)),
-                .value(.savingResult(saving, priorResult: nil)),
-                .value(.clearedCleanupPending),
                 .value(.absent),
             ]
         )
@@ -37,25 +33,12 @@ struct IOSForegroundVoiceLatestResultOwnerTests {
         #expect(owner.clearCommand != nil)
 
         _ = try await owner.loadForVoiceWorkflow()
-        #expect(owner.presentation.status == .priorWhileSaving)
-        #expect(owner.presentation.text == "exact accepted text")
-        #expect(owner.clearCommand == nil)
-
-        _ = try await owner.loadForVoiceWorkflow()
-        #expect(owner.presentation.status == .savingWithoutPrior)
-        #expect(owner.presentation.text == nil)
-
-        _ = try await owner.loadForVoiceWorkflow()
-        #expect(owner.presentation.status == .cleanupPending)
-        #expect(owner.presentation.text == nil)
-
-        _ = try await owner.loadForVoiceWorkflow()
         #expect(owner.presentation.status == .absent)
         #expect(owner.clearCommand == nil)
         let mappedSnapshot = await probe.snapshot()
         #expect(
             mappedSnapshot == .init(
-                loads: 5,
+                loads: 2,
                 clears: [],
                 maximumConcurrentCalls: 1
             )
@@ -83,15 +66,11 @@ struct IOSForegroundVoiceLatestResultOwnerTests {
         #expect(snapshot.clears.isEmpty)
     }
 
-    @Test func contentCommandAdmitsReadyPriorAndRetainedClearingText()
+    @Test func contentCommandAdmitsReadyAndRetainedClearingText()
         async throws {
         let record = try latestResultRecord(text: "exact visible result")
-        let saving = try latestSavingExpectation()
         let mappedProbe = LatestResultClientProbe(
-            loads: [
-                .value(.resultReady(record)),
-                .value(.savingResult(saving, priorResult: record)),
-            ]
+            loads: [.value(.resultReady(record))]
         )
         let mappedOwner = latestResultOwner(probe: mappedProbe)
 
@@ -99,13 +78,6 @@ struct IOSForegroundVoiceLatestResultOwnerTests {
         let readyCommand = try #require(mappedOwner.contentCommand)
         #expect(
             mappedOwner.content(for: readyCommand) == "exact visible result"
-        )
-
-        _ = try await mappedOwner.loadForVoiceWorkflow()
-        #expect(mappedOwner.content(for: readyCommand) == nil)
-        let priorCommand = try #require(mappedOwner.contentCommand)
-        #expect(
-            mappedOwner.content(for: priorCommand) == "exact visible result"
         )
 
         let clearStarted = LatestResultTestGate()
@@ -138,26 +110,17 @@ struct IOSForegroundVoiceLatestResultOwnerTests {
 
     @Test func contentCommandIsUnavailableForEveryContentFreeState()
         async throws {
-        let saving = try latestSavingExpectation()
         let probe = LatestResultClientProbe(
             loads: [
                 .value(.absent),
-                .value(.savingResult(saving, priorResult: nil)),
-                .value(.clearedCleanupPending),
                 .failure,
             ]
         )
         let owner = latestResultOwner(probe: probe)
 
-        for expectedStatus in [
-            IOSForegroundVoiceLatestResultStatus.absent,
-            .savingWithoutPrior,
-            .cleanupPending,
-        ] {
-            _ = try await owner.loadForVoiceWorkflow()
-            #expect(owner.presentation.status == expectedStatus)
-            #expect(owner.contentCommand == nil)
-        }
+        _ = try await owner.loadForVoiceWorkflow()
+        #expect(owner.presentation.status == .absent)
+        #expect(owner.contentCommand == nil)
 
         await #expect(
             throws: IOSForegroundVoiceLatestResultOwnerError.self
@@ -199,13 +162,13 @@ struct IOSForegroundVoiceLatestResultOwnerTests {
         #expect(owner.contentCommand == nil)
     }
 
-    @Test func confirmedClearUsesExactExpectationAndHidesCleanupTombstone()
+    @Test func confirmedClearUsesExactExpectationAndPublishesAbsent()
         async throws {
         let record = try latestResultRecord(text: "clear me")
-        let expected = IOSAcceptedOutputDeliveryExpectation(record: record)
+        let expected = IOSV1AcceptedOutputDeliveryExpectation(record: record)
         let probe = LatestResultClientProbe(
             loads: [.value(.resultReady(record))],
-            clears: [.value(.clearedCleanupPending)]
+            clears: [.value(.cleared)]
         )
         let owner = latestResultOwner(probe: probe)
 
@@ -218,7 +181,7 @@ struct IOSForegroundVoiceLatestResultOwnerTests {
 
         await owner.waitUntilClearIsIdle()
 
-        #expect(owner.presentation.status == .cleanupPending)
+        #expect(owner.presentation.status == .absent)
         #expect(owner.presentation.text == nil)
         #expect(owner.clearCommand == nil)
         let snapshot = await probe.snapshot()
@@ -251,7 +214,7 @@ struct IOSForegroundVoiceLatestResultOwnerTests {
         async throws {
         let old = try latestResultRecord(text: "old selected result")
         let replacement = try latestResultRecord(text: "new durable result")
-        let oldExpectation = IOSAcceptedOutputDeliveryExpectation(record: old)
+        let oldExpectation = IOSV1AcceptedOutputDeliveryExpectation(record: old)
         let probe = LatestResultClientProbe(
             loads: [
                 .value(.resultReady(old)),
@@ -535,20 +498,20 @@ private nonisolated enum LatestResultProbeError: Error {
 }
 
 private nonisolated enum LatestResultLoadStep: Sendable {
-    case value(IOSForegroundVoiceLatestResultObservation)
+    case value(IOSV1ForegroundVoiceLatestResultObservation)
     case failure
     case cancelled
 }
 
 private nonisolated enum LatestResultClearStep: Sendable {
-    case value(IOSForegroundVoiceClearResult)
+    case value(IOSV1ForegroundVoiceClearResult)
     case failure
 }
 
 private actor LatestResultClientProbe {
     nonisolated struct Snapshot: Equatable, Sendable {
         let loads: Int
-        let clears: [IOSAcceptedOutputDeliveryExpectation]
+        let clears: [IOSV1AcceptedOutputDeliveryExpectation]
         var maximumConcurrentCalls: Int = 0
     }
 
@@ -559,7 +522,7 @@ private actor LatestResultClientProbe {
     private let firstLoadStarted: LatestResultTestGate?
     private let firstLoadRelease: LatestResultTestGate?
     private var loadCount = 0
-    private var clearExpectations: [IOSAcceptedOutputDeliveryExpectation] = []
+    private var clearExpectations: [IOSV1AcceptedOutputDeliveryExpectation] = []
     private var activeCalls = 0
     private var maximumConcurrentCalls = 0
 
@@ -579,7 +542,7 @@ private actor LatestResultClientProbe {
         self.firstLoadRelease = firstLoadRelease
     }
 
-    func load() async throws -> IOSForegroundVoiceLatestResultObservation {
+    func load() async throws -> IOSV1ForegroundVoiceLatestResultObservation {
         beginCall()
         defer { endCall() }
         let index = loadCount
@@ -600,8 +563,8 @@ private actor LatestResultClientProbe {
     }
 
     func clear(
-        _ expected: IOSAcceptedOutputDeliveryExpectation
-    ) async throws -> IOSForegroundVoiceClearResult {
+        _ expected: IOSV1AcceptedOutputDeliveryExpectation
+    ) async throws -> IOSV1ForegroundVoiceClearResult {
         beginCall()
         defer { endCall() }
         clearExpectations.append(expected)
@@ -669,45 +632,12 @@ private func latestResultOwner(
 
 private func latestResultRecord(
     text: String
-) throws -> IOSAcceptedOutputDeliveryRecord {
+) throws -> IOSV1AcceptedOutputDeliveryRecord {
     let createdAt = Date(timeIntervalSince1970: 1_800_000_000)
-    let expiresAt = Date(
-        timeIntervalSince1970:
-            createdAt.timeIntervalSince1970
-                + TimeInterval(
-                    IOSAcceptedOutputDeliveryValidation.lifetimeMilliseconds
-                ) / 1_000
-    )
-    return try IOSAcceptedOutputDeliveryRecord(
-        revision: 1,
-        deliveryID: UUID(),
-        sessionID: UUID(),
-        attemptID: UUID(),
-        transcriptID: UUID(),
+    return try IOSV1AcceptedOutputDeliveryRecord(
+        resultID: UUID(),
+        sourceAttemptID: UUID(),
         acceptedText: text,
-        outputIntent: .standard,
-        createdAt: createdAt,
-        updatedAt: createdAt,
-        expiresAt: expiresAt,
-        deliveryState: .pending,
-        automaticInsertionPreferenceEnabled: false,
-        keepLatestResult: true,
-        publicationGeneration: 0,
-        historyWrite: nil
-    )
-}
-
-private func latestSavingExpectation()
-    throws -> IOSForegroundVoiceSavingResultExpectation {
-    let preparation = try IOSForegroundVoiceAcceptedOutputPreparation(
-        deliveryID: UUID(),
-        sessionID: UUID(),
-        attemptID: UUID(),
-        transcriptID: UUID(),
-        rawAcceptedText: "saving",
-        outputIntent: .standard
-    )
-    return IOSForegroundVoiceSavingResultExpectation(
-        preparation: preparation.deliveryPreparation
+        createdAt: createdAt
     )
 }

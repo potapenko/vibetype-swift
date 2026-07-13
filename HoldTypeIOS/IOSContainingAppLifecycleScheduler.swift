@@ -1,25 +1,25 @@
-import HoldTypePersistence
+@_spi(HoldTypeIOSCore) import HoldTypePersistence
 import SwiftUI
 
 @MainActor
 final class IOSContainingAppLifecycleScheduler {
     typealias Recovery = @Sendable (
-        IOSContainingAppRecoveryOpportunity
-    ) async -> IOSContainingAppRecoveryDisposition
+        IOSV1ContainingAppRecoveryOpportunity
+    ) async -> IOSV1ContainingAppRecoveryDisposition
 
     private let recover: Recovery
     private var activeTask: Task<Void, Never>?
     // Signals may request one bounded follow-up pass, but a disposition never
     // creates an automatic retry loop.
     private var pendingOpportunity:
-        IOSContainingAppRecoveryOpportunity?
+        IOSV1ContainingAppRecoveryOpportunity?
     private var processLaunchRecoveryCompleted = false
     private var observedInitialAggregateForeground = false
     private var aggregateForegroundIsActive = false
     private var initialActivationCoveredByLaunch = false
 
     private(set) var latestDisposition:
-        IOSContainingAppRecoveryDisposition = .pendingLocalRecovery
+        IOSV1ContainingAppRecoveryDisposition = .pendingLocalRecovery
 
     init(recover: @escaping Recovery) {
         self.recover = recover
@@ -30,7 +30,7 @@ final class IOSContainingAppLifecycleScheduler {
     }
 
     func scheduleForeground() {
-        enqueue(.foreground)
+        enqueue(.foregroundOpportunity)
     }
 
     func observeScenePhase(
@@ -79,7 +79,7 @@ final class IOSContainingAppLifecycleScheduler {
     }
 
     private func enqueue(
-        _ signal: IOSContainingAppRecoveryOpportunity
+        _ signal: IOSV1ContainingAppRecoveryOpportunity
     ) {
         pendingOpportunity = merged(
             pendingOpportunity,
@@ -105,10 +105,10 @@ final class IOSContainingAppLifecycleScheduler {
     }
 
     private func takeNextOpportunity()
-        -> IOSContainingAppRecoveryOpportunity? {
+        -> IOSV1ContainingAppRecoveryOpportunity? {
         guard let pendingOpportunity else { return nil }
         self.pendingOpportunity = nil
-        if pendingOpportunity == .foreground,
+        if pendingOpportunity == .foregroundOpportunity,
            !processLaunchRecoveryCompleted {
             return .processLaunch
         }
@@ -116,23 +116,23 @@ final class IOSContainingAppLifecycleScheduler {
     }
 
     private func merged(
-        _ pending: IOSContainingAppRecoveryOpportunity?,
-        with signal: IOSContainingAppRecoveryOpportunity
-    ) -> IOSContainingAppRecoveryOpportunity {
+        _ pending: IOSV1ContainingAppRecoveryOpportunity?,
+        with signal: IOSV1ContainingAppRecoveryOpportunity
+    ) -> IOSV1ContainingAppRecoveryOpportunity {
         guard let pending else { return signal }
         // Launch recovery is the stronger opportunity and covers coalesced
         // foreground work while preserving launch-before-foreground ordering.
         return switch (pending, signal) {
         case (.processLaunch, _), (_, .processLaunch):
             .processLaunch
-        case (.foreground, .foreground):
-            .foreground
+        case (.foregroundOpportunity, .foregroundOpportunity):
+            .foregroundOpportunity
         }
     }
 
     private func finish(
-        _ opportunity: IOSContainingAppRecoveryOpportunity,
-        disposition: IOSContainingAppRecoveryDisposition
+        _ opportunity: IOSV1ContainingAppRecoveryOpportunity,
+        disposition: IOSV1ContainingAppRecoveryDisposition
     ) {
         latestDisposition = disposition
         if opportunity == .processLaunch,

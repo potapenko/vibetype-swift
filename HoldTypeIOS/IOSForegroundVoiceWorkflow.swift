@@ -89,13 +89,6 @@ nonisolated struct IOSForegroundVoiceWorkflowCredentialProof:
     }
 }
 
-/// Fresh, redacted provider authority passed only to an exact retained retry.
-nonisolated struct IOSForegroundVoiceWorkflowProviderRetryAuthorization:
-    Sendable {
-    let credential: IOSForegroundVoiceWorkflowCredentialProof
-    let consentObservation: IOSV1ProviderConsentObservation
-}
-
 nonisolated enum IOSForegroundVoiceWorkflowCredentialResolution: Sendable {
     case available(IOSForegroundVoiceWorkflowCredentialProof)
     case needsSetup
@@ -120,7 +113,7 @@ nonisolated struct IOSForegroundVoiceWorkflowPermissionClient: Sendable {
 
 nonisolated struct IOSForegroundVoiceWorkflowProcessingRequest: Sendable {
     let sessionID: UUID
-    let pendingRecording: IOSPendingRecording
+    let pendingRecording: IOSV1PendingRecording
     let mode: IOSForegroundVoiceProcessingMode
     let configuration: IOSForegroundVoiceWorkflowConfiguration
     let credential: IOSForegroundVoiceWorkflowCredentialProof
@@ -128,9 +121,9 @@ nonisolated struct IOSForegroundVoiceWorkflowProcessingRequest: Sendable {
 }
 
 nonisolated struct IOSForegroundVoiceWorkflowDurableObservation: Sendable {
-    let capture: IOSForegroundVoiceCaptureRecoveryObservation
-    let pending: IOSPendingRecordingObservation?
-    let latest: IOSForegroundVoiceLatestResultObservation
+    let capture: IOSV1ForegroundVoiceCaptureRecoveryObservation
+    let pending: IOSV1PendingRecordingObservation?
+    let latest: IOSV1ForegroundVoiceLatestResultObservation
 }
 
 nonisolated enum IOSForegroundVoiceWorkflowCaptureStopReason:
@@ -159,14 +152,14 @@ final class IOSForegroundVoiceWorkflowCaptureHandoff {
 
     private let prepareAction: @MainActor @Sendable (
         TranscriptionConfiguration
-    ) async throws -> IOSPendingRecording
+    ) async throws -> IOSV1PendingRecording
     private let cleanup: IOSForegroundVoiceMainActorCleanup
     private var state = State.available
 
     init(
         prepare: @escaping @MainActor @Sendable (
             TranscriptionConfiguration
-        ) async throws -> IOSPendingRecording,
+        ) async throws -> IOSV1PendingRecording,
         release: @escaping @MainActor @Sendable () -> Void
     ) {
         prepareAction = prepare
@@ -175,7 +168,7 @@ final class IOSForegroundVoiceWorkflowCaptureHandoff {
 
     func preparePending(
         transcriptionConfiguration: TranscriptionConfiguration
-    ) async throws -> IOSPendingRecording {
+    ) async throws -> IOSV1PendingRecording {
         guard state == .available else { throw UseError.unavailable }
         state = .preparing
         do {
@@ -220,7 +213,7 @@ final class IOSForegroundVoiceWorkflowFinalizationLease {
 nonisolated enum IOSForegroundVoiceWorkflowCaptureStopResult: Sendable {
     case completed(IOSForegroundVoiceWorkflowCaptureHandoff)
     case discarded
-    case invalid(IOSForegroundVoiceCaptureInvalidReason)
+    case invalid(IOSV1ForegroundVoiceCaptureInvalidReason)
     case preserved
     case stale
 }
@@ -386,14 +379,14 @@ final class IOSForegroundVoiceWorkflowAudioLease {
 /// default: production composition must deliberately supply every boundary.
 struct IOSForegroundVoiceWorkflowDependencies {
     typealias ObserveCapture = @Sendable () async ->
-        IOSForegroundVoiceCaptureRecoveryObservation
+        IOSV1ForegroundVoiceCaptureRecoveryObservation
     typealias RecoverLifecycle = @Sendable (
-        IOSContainingAppRecoveryOpportunity
-    ) async -> IOSContainingAppRecoveryDisposition
+        IOSV1ContainingAppRecoveryOpportunity
+    ) async -> IOSV1ContainingAppRecoveryDisposition
     typealias LoadPending = @Sendable () async throws ->
-        IOSPendingRecordingObservation?
+        IOSV1PendingRecordingObservation?
     typealias LoadLatest = @Sendable () async throws ->
-        IOSForegroundVoiceLatestResultObservation
+        IOSV1ForegroundVoiceLatestResultObservation
     typealias LoadSettings = @Sendable () async throws -> IOSAppSettings
     typealias LoadLibrary = @Sendable () async throws -> IOSLibraryContent
     typealias ObserveConsent = @Sendable () async ->
@@ -428,23 +421,14 @@ struct IOSForegroundVoiceWorkflowDependencies {
         IOSForegroundVoiceWorkflowProcessingRequest,
         @escaping IOSForegroundVoiceProcessingProgressHandler
     ) async -> IOSForegroundVoiceProcessingResolution
-    typealias RetryLocal = @Sendable (
-        IOSForegroundVoiceWorkflowProviderRetryAuthorization?,
-        @escaping IOSForegroundVoiceProcessingProgressHandler
-    ) async -> IOSForegroundVoiceProcessingResolution
     typealias RecoverCapture = @Sendable (
-        IOSForegroundVoiceCaptureRecoveryCapability,
+        UUID,
         TranscriptionConfiguration
-    ) async throws -> IOSForegroundVoiceCaptureRecoveryResult
-    typealias DiscardCapture = @Sendable (
-        IOSForegroundVoiceCaptureRecoveryCapability
-    ) async throws -> Void
+    ) async throws -> IOSV1PendingRecording
+    typealias DiscardCapture = @Sendable (UUID) async throws -> Void
     typealias DiscardPending = @Sendable (
-        IOSPendingRecordingCASExpectation
-    ) async throws -> IOSPendingRecordingDiscardResult
-    typealias RetrySaving = @Sendable (
-        IOSForegroundVoiceSavingResultExpectation
-    ) async throws -> IOSForegroundVoiceAcceptanceResult
+        IOSV1PendingRecordingExpectation
+    ) async throws -> IOSV1PendingRecordingDiscardResult
     typealias Sleep = @Sendable (Duration) async throws -> Void
 
     let sceneRegistry: IOSVoiceSceneRegistry
@@ -468,11 +452,9 @@ struct IOSForegroundVoiceWorkflowDependencies {
     let makeRecording: MakeRecording
     let beginFinalization: BeginFinalization
     let process: Process
-    let retryLocalRecovery: RetryLocal
     let recoverCapture: RecoverCapture
     let discardCapture: DiscardCapture
     let discardPending: DiscardPending
-    let retrySavingResult: RetrySaving
     let sleep: Sleep
     let makeUUID: @Sendable () -> UUID
 }
@@ -562,14 +544,8 @@ final class IOSForegroundVoiceWorkflow {
 
     private let dependencies: IOSForegroundVoiceWorkflowDependencies
     private var activeAttempt: Attempt?
-    private var captureRecoveryCapability:
-        IOSForegroundVoiceCaptureRecoveryCapability?
-    private var pendingObservation: IOSPendingRecordingObservation?
-    private var savingResultExpectation:
-        IOSForegroundVoiceSavingResultExpectation?
-    private var localCheckpointStage: VoiceAttemptStage?
-    private var localCheckpointRequirement:
-        IOSForegroundVoiceLocalRecoveryRequirement?
+    private var captureRecoveryAttemptID: UUID?
+    private var pendingObservation: IOSV1PendingRecordingObservation?
     private var latestAvailability = IOSForegroundVoiceLatestAvailability.unknown
     private var lastConfiguration: IOSForegroundVoiceWorkflowConfiguration?
     private var passiveConfigurationSetupOverride: IOSForegroundVoiceSetup?
@@ -729,7 +705,7 @@ final class IOSForegroundVoiceWorkflow {
     /// guarantees this cannot overlap primary Voice work; the guard remains a
     /// fail-closed defense for direct test or future internal callers.
     func recoverLifecycle(
-        _ opportunity: IOSContainingAppRecoveryOpportunity
+        _ opportunity: IOSV1ContainingAppRecoveryOpportunity
     ) async -> IOSForegroundVoiceLifecycleRefresh {
         guard activeAttempt == nil,
               !isRunningRecoveryOperation,
@@ -753,7 +729,7 @@ final class IOSForegroundVoiceWorkflow {
         }
         if opportunity == .processLaunch,
            historyDisposition == .complete,
-           capture.status == .blockedUnknown {
+           capture == .blocked {
             capture = await dependencies.reconcileCaptureSources()
             guard !Task.isCancelled else {
                 return cancelledLifecycleRefresh(capture: capture)
@@ -764,8 +740,8 @@ final class IOSForegroundVoiceWorkflow {
             includeConfiguration: true,
             continueIf: { !Task.isCancelled }
         )
-        let isBlockedUnknown = capture.status == .blockedUnknown
-        let disposition: IOSContainingAppRecoveryDisposition =
+        let isBlockedUnknown = capture == .blocked
+        let disposition: IOSV1ContainingAppRecoveryDisposition =
             historyDisposition == .complete
                 && durable.localLoadsSucceeded
                 && !isBlockedUnknown
@@ -779,7 +755,7 @@ final class IOSForegroundVoiceWorkflow {
     }
 
     private func cancelledLifecycleRefresh(
-        capture: IOSForegroundVoiceCaptureRecoveryObservation
+        capture: IOSV1ForegroundVoiceCaptureRecoveryObservation
     ) -> IOSForegroundVoiceLifecycleRefresh {
         IOSForegroundVoiceLifecycleRefresh(
             observation: applyDurableFailure(capture: capture),
@@ -793,7 +769,7 @@ final class IOSForegroundVoiceWorkflow {
     }
 
     private func loadDurableObservation(
-        capture: IOSForegroundVoiceCaptureRecoveryObservation,
+        capture: IOSV1ForegroundVoiceCaptureRecoveryObservation,
         includeConfiguration: Bool,
         continueIf: @MainActor () -> Bool = { true }
     ) async -> DurableObservationResolution {
@@ -809,10 +785,9 @@ final class IOSForegroundVoiceWorkflow {
             )
             if includeConfiguration,
                mapRecovery(
-                capture: capture,
-                pending: pending,
-                latest: latest
-            ) == .none {
+                    capture: capture,
+                    pending: pending
+                ) == .none {
                 switch await loadConfiguration(
                     .standard,
                     continueIf: continueIf
@@ -878,10 +853,6 @@ final class IOSForegroundVoiceWorkflow {
             return await runRecoverRecording()
         case .discard:
             return await runDiscard()
-        case .retrySavingResult:
-            return await runRetrySavingResult()
-        case .retryLocalCheckpoint:
-            return await runRetryLocalCheckpoint(progress: progress)
         }
     }
 
@@ -1428,7 +1399,7 @@ final class IOSForegroundVoiceWorkflow {
                 )
             }
             deactivateAudio(for: attempt)
-            let pending: IOSPendingRecording
+            let pending: IOSV1PendingRecording
             do {
                 pending = try await capture.preparePending(
                     transcriptionConfiguration:
@@ -1548,7 +1519,7 @@ final class IOSForegroundVoiceWorkflow {
     }
 
     private func performRetryPending(
-        expectedPending: IOSPendingRecordingObservation?,
+        expectedPending: IOSV1PendingRecordingObservation?,
         authority: IOSForegroundVoiceRetryAuthority,
         registry: IOSVoiceSceneRegistry,
         progress: @escaping IOSForegroundVoiceClient.Progress
@@ -1559,7 +1530,7 @@ final class IOSForegroundVoiceWorkflow {
         guard let expectedPending,
               expectedPending.availability == .available,
               expectedPending.recording.phase == .readyForTranscription
-                || expectedPending.recording.phase == .awaitingRecovery else {
+                || expectedPending.recording.phase == .failed else {
             return await pendingRetryPreflightResolution(
                 failure: .localRecovery,
                 authority: authority,
@@ -1569,7 +1540,7 @@ final class IOSForegroundVoiceWorkflow {
 
         // Canonical Pending is the first async read. Cached observation state
         // never authorizes provider dispatch.
-        let pending: IOSPendingRecordingObservation
+        let pending: IOSV1PendingRecordingObservation
         do {
             guard let current = try await dependencies.loadPending() else {
                 return await pendingRetryPreflightResolution(
@@ -1590,7 +1561,7 @@ final class IOSForegroundVoiceWorkflow {
               pending == expectedPending,
               pending.availability == .available,
               pending.recording.phase == .readyForTranscription
-                || pending.recording.phase == .awaitingRecovery else {
+                || pending.recording.phase == .failed else {
             return await pendingRetryPreflightResolution(
                 failure: .localRecovery,
                 authority: authority,
@@ -1783,193 +1754,8 @@ final class IOSForegroundVoiceWorkflow {
         )
     }
 
-    private func runRetryLocalCheckpoint(
-        progress: @escaping IOSForegroundVoiceClient.Progress
-    ) async -> IOSForegroundVoiceResolution {
-        let stage = localCheckpointStage
-        let requirement = localCheckpointRequirement
-        let registry = dependencies.sceneRegistry
-        let authority = IOSForegroundVoiceRetryAuthority()
-        let observation = registry.observeEvents { event in
-            guard registry.validate(event) else { return }
-            if event.kind == .lastActiveSceneLost(.voiceWorkMustStop) {
-                authority.terminate()
-            }
-        }
-        defer { observation.cancel() }
-        if !registry.snapshot.isForegroundActive { authority.terminate() }
-
-        return await withTaskCancellationHandler {
-            await performRetryLocalCheckpoint(
-                stage: stage,
-                requirement: requirement,
-                authority: authority,
-                registry: registry,
-                progress: progress
-            )
-        } onCancel: {
-            authority.terminate()
-        }
-    }
-
-    private func performRetryLocalCheckpoint(
-        stage: VoiceAttemptStage?,
-        requirement: IOSForegroundVoiceLocalRecoveryRequirement?,
-        authority: IOSForegroundVoiceRetryAuthority,
-        registry: IOSVoiceSceneRegistry,
-        progress: @escaping IOSForegroundVoiceClient.Progress
-    ) async -> IOSForegroundVoiceResolution {
-        guard let stage else {
-            return await blockedPreflight(failure: .localRecovery)
-        }
-        guard let requirement else {
-            return localCheckpointLossResolution(stage: stage)
-        }
-        guard retryCanContinue(authority, registry: registry) else {
-            return localCheckpointLossResolution(stage: stage)
-        }
-
-        let providerAuthorization:
-            IOSForegroundVoiceWorkflowProviderRetryAuthorization?
-        switch requirement {
-        case .providerFree:
-            providerAuthorization = nil
-        case .currentProviderAuthority:
-            switch await resolveConsentWithoutPresentation() {
-            case .accepted(let consent):
-                guard retryCanContinue(authority, registry: registry) else {
-                    return localCheckpointLossResolution(stage: stage)
-                }
-                guard await dependencies.revalidateConsent(consent),
-                      retryCanContinue(authority, registry: registry) else {
-                    return retryCanContinue(authority, registry: registry)
-                        ? localCheckpointLossResolution(
-                            stage: stage,
-                            failure: .unavailable
-                        )
-                        : localCheckpointLossResolution(stage: stage)
-                }
-                guard retryCanContinue(authority, registry: registry) else {
-                    return localCheckpointLossResolution(stage: stage)
-                }
-                switch await dependencies.resolveCredential() {
-                case .available(let credential):
-                    guard retryCanContinue(authority, registry: registry) else {
-                        return localCheckpointLossResolution(stage: stage)
-                    }
-                    guard await dependencies.revalidateCredential(credential),
-                          retryCanContinue(
-                            authority,
-                            registry: registry
-                          ) else {
-                        return retryCanContinue(
-                            authority,
-                            registry: registry
-                        )
-                            ? localCheckpointLossResolution(
-                                stage: stage,
-                                failure: .unavailable
-                            )
-                            : localCheckpointLossResolution(stage: stage)
-                    }
-                    providerAuthorization =
-                        IOSForegroundVoiceWorkflowProviderRetryAuthorization(
-                            credential: credential,
-                            consentObservation: consent
-                        )
-                case .needsSetup:
-                    return localCheckpointLossResolution(
-                        stage: stage,
-                        setup: .needsSetup(.openAI),
-                        failure: nil
-                    )
-                case .unavailable:
-                    return localCheckpointLossResolution(
-                        stage: stage,
-                        setup: .unavailable,
-                        failure: .unavailable
-                    )
-                }
-            case .needsSetup:
-                return localCheckpointLossResolution(
-                    stage: stage,
-                    setup: .needsSetup(.microphoneAndPrivacy),
-                    failure: nil
-                )
-            case .unavailable:
-                return localCheckpointLossResolution(
-                    stage: stage,
-                    setup: .unavailable,
-                    failure: .localRecovery
-                )
-            }
-        }
-
-        guard retryCanContinue(authority, registry: registry) else {
-            return localCheckpointLossResolution(stage: stage)
-        }
-        let retry = dependencies.retryLocalRecovery
-        let operation = Task {
-            guard authority.canContinue, !Task.isCancelled else {
-                return IOSForegroundVoiceProcessingResolution.notStarted(
-                    .cancelled
-                )
-            }
-            return await retry(providerAuthorization) { currentStage in
-                guard authority.canContinue,
-                      !Task.isCancelled,
-                      registry.snapshot.isForegroundActive else {
-                    return
-                }
-                progress(.processing(currentStage))
-            }
-        }
-        guard authority.install(operation) else {
-            return localCheckpointLossResolution(stage: stage)
-        }
-        let result = await operation.value
-        authority.clearChild()
-        guard retryCanContinue(authority, registry: registry) else {
-            return localCheckpointLossResolution(stage: stage)
-        }
-        switch result {
-        case .notStarted(let failure):
-            return localCheckpointLossResolution(
-                stage: stage,
-                failure: map(failure)
-            )
-        case .busy:
-            return localCheckpointLossResolution(
-                stage: stage,
-                failure: .unavailable
-            )
-        case .acceptance, .awaitingRecovery, .localRecoveryPending:
-            break
-        }
-        return await mapProcessing(result)
-    }
-
-    private func localCheckpointLossResolution(
-        stage: VoiceAttemptStage,
-        setup: IOSForegroundVoiceSetup = .ready,
-        failure: IOSForegroundVoiceFailure? = .localRecovery
-    ) -> IOSForegroundVoiceResolution {
-        IOSForegroundVoiceResolution(
-            observation: IOSForegroundVoiceObservation(
-                setup: setup,
-                recovery: .localCheckpoint(stage),
-                stage: stage,
-                latestAvailability: latestAvailability,
-                translationAvailable: translationIsAvailable
-            ),
-            stage: stage,
-            outcome: .recoverableFailure,
-            failure: failure
-        )
-    }
-
     private func runRecoverRecording() async -> IOSForegroundVoiceResolution {
-        guard let capability = captureRecoveryCapability,
+        guard let attemptID = captureRecoveryAttemptID,
               let settings = try? await dependencies.loadSettings(),
               !settings.transcriptionConfiguration
                 .customLanguageCodeValidation.isInvalid else {
@@ -1977,7 +1763,7 @@ final class IOSForegroundVoiceWorkflow {
         }
         do {
             _ = try await dependencies.recoverCapture(
-                capability,
+                attemptID,
                 settings.transcriptionConfiguration
             )
             return IOSForegroundVoiceResolution(
@@ -1995,8 +1781,8 @@ final class IOSForegroundVoiceWorkflow {
 
     private func runDiscard() async -> IOSForegroundVoiceResolution {
         do {
-            if let capability = captureRecoveryCapability {
-                try await dependencies.discardCapture(capability)
+            if let attemptID = captureRecoveryAttemptID {
+                try await dependencies.discardCapture(attemptID)
             } else if let pending = pendingObservation {
                 _ = try await dependencies.discardPending(
                     pending.expectation
@@ -2017,82 +1803,20 @@ final class IOSForegroundVoiceWorkflow {
         }
     }
 
-    private func runRetrySavingResult() async -> IOSForegroundVoiceResolution {
-        guard let expectation = savingResultExpectation else {
-            return await blockedPreflight(failure: .localRecovery)
-        }
-        do {
-            return await mapAcceptance(
-                try await dependencies.retrySavingResult(expectation)
-            )
-        } catch {
-            return IOSForegroundVoiceResolution(
-                observation: await observe(),
-                stage: .outputDelivery,
-                failure: .localRecovery
-            )
-        }
-    }
-
     private func mapProcessing(
         _ resolution: IOSForegroundVoiceProcessingResolution
     ) async -> IOSForegroundVoiceResolution {
         switch resolution {
         case .acceptance(let acceptance):
-            localCheckpointStage = nil
-            localCheckpointRequirement = nil
             return await mapAcceptance(acceptance)
-        case .awaitingRecovery(_, let failure, let stage):
-            localCheckpointStage = nil
-            localCheckpointRequirement = nil
+        case .retryAvailable(_, let failure, let stage):
             return IOSForegroundVoiceResolution(
                 observation: await observe(),
                 stage: stage,
                 outcome: .recoverableFailure,
                 failure: map(failure)
             )
-        case .localRecoveryPending(
-            let failure,
-            let stage,
-            let disposition,
-            let requirement
-        ):
-            if disposition == .savingResult {
-                let durable = await observe()
-                if savingResultExpectation != nil {
-                    localCheckpointStage = nil
-                    localCheckpointRequirement = nil
-                    return IOSForegroundVoiceResolution(
-                        observation: IOSForegroundVoiceObservation(
-                            setup: durable.setup,
-                            recovery: .savingResult,
-                            stage: stage,
-                            latestAvailability: durable.latestAvailability,
-                            translationAvailable:
-                                durable.translationAvailable
-                        ),
-                        stage: stage,
-                        failure: map(failure)
-                    )
-                }
-            }
-            localCheckpointStage = stage
-            localCheckpointRequirement = requirement
-            return IOSForegroundVoiceResolution(
-                observation: IOSForegroundVoiceObservation(
-                    setup: .ready,
-                    recovery: .localCheckpoint(stage),
-                    stage: stage,
-                    latestAvailability: latestAvailability,
-                    translationAvailable: translationIsAvailable
-                ),
-                stage: stage,
-                outcome: .recoverableFailure,
-                failure: map(failure)
-            )
         case .notStarted(let failure):
-            localCheckpointStage = nil
-            localCheckpointRequirement = nil
             return IOSForegroundVoiceResolution(
                 observation: await observe(),
                 failure: map(failure)
@@ -2235,7 +1959,7 @@ final class IOSForegroundVoiceWorkflow {
     }
 
     private func mapAcceptance(
-        _ acceptance: IOSForegroundVoiceAcceptanceResult
+        _ acceptance: IOSV1ForegroundVoiceAcceptanceResult
     ) async -> IOSForegroundVoiceResolution {
         let observation = await observe()
         switch acceptance {
@@ -2243,27 +1967,22 @@ final class IOSForegroundVoiceWorkflow {
             return IOSForegroundVoiceResolution(
                 observation: observation,
                 outcome: .resultReady,
-                warning: notice == .historyWriteFailed
-                    ? .historySaveFailed
-                    : nil
+                warning: map(notice)
             )
-        case .savingResult(let expectation):
-            savingResultExpectation = expectation
-            return IOSForegroundVoiceResolution(
-                observation: IOSForegroundVoiceObservation(
-                    setup: observation.setup,
-                    recovery: .savingResult,
-                    stage: .outputDelivery,
-                    latestAvailability:
-                        observation.latestAvailability == .available
-                            ? .priorAvailableWhileSaving
-                            : observation.latestAvailability,
-                    translationAvailable:
-                        observation.translationAvailable
-                ),
-                stage: .outputDelivery,
-                failure: .localRecovery
-            )
+        }
+    }
+
+    private func map(
+        _ notice: IOSV1ForegroundVoiceAcceptanceNotice?
+    ) -> IOSForegroundVoiceWarning? {
+        switch notice {
+        case nil:
+            nil
+        case .historyWriteFailed:
+            .historySaveFailed
+        case .localCleanupPending,
+             .historyWriteFailedAndLocalCleanupPending:
+            .localCleanupPending
         }
     }
 
@@ -2654,19 +2373,18 @@ final class IOSForegroundVoiceWorkflow {
     private func apply(
         _ durable: IOSForegroundVoiceWorkflowDurableObservation
     ) -> IOSForegroundVoiceObservation {
-        captureRecoveryCapability = durable.capture.recoveryCapability
+        captureRecoveryAttemptID = switch durable.capture {
+        case .recoverable(let attemptID), .discardOnly(let attemptID):
+            attemptID
+        case .empty, .blocked:
+            nil
+        }
         pendingObservation = durable.pending
         latestAvailability = map(durable.latest)
-        if case .savingResult(let expectation, _) = durable.latest {
-            savingResultExpectation = expectation
-        } else {
-            savingResultExpectation = nil
-        }
 
         let recovery = mapRecovery(
             capture: durable.capture,
-            pending: durable.pending,
-            latest: durable.latest
+            pending: durable.pending
         )
         return IOSForegroundVoiceObservation(
             setup: recovery == .blocked ? .unavailable : passiveSetup,
@@ -2678,80 +2396,83 @@ final class IOSForegroundVoiceWorkflow {
     }
 
     private func applyDurableFailure(
-        capture: IOSForegroundVoiceCaptureRecoveryObservation
+        capture: IOSV1ForegroundVoiceCaptureRecoveryObservation
     ) -> IOSForegroundVoiceObservation {
-        captureRecoveryCapability = capture.recoveryCapability
+        captureRecoveryAttemptID = switch capture {
+        case .recoverable(let attemptID), .discardOnly(let attemptID):
+            attemptID
+        case .empty, .blocked:
+            nil
+        }
         pendingObservation = nil
+        let recovery: IOSForegroundVoiceRecovery = switch capture {
+        case .recoverable:
+            .captureRecoverOrDiscard
+        case .discardOnly:
+            .captureDiscardOnly
+        case .empty, .blocked:
+            .blocked
+        }
         return IOSForegroundVoiceObservation(
             setup: .unavailable,
-            recovery: capture.recoveryCapability == nil
-                ? .blocked
-                : .captureRecoverOrDiscard,
+            recovery: recovery,
             latestAvailability: .unavailable
         )
     }
 
     private func mapRecovery(
-        capture: IOSForegroundVoiceCaptureRecoveryObservation,
-        pending: IOSPendingRecordingObservation?,
-        latest: IOSForegroundVoiceLatestResultObservation
+        capture: IOSV1ForegroundVoiceCaptureRecoveryObservation,
+        pending: IOSV1PendingRecordingObservation?
     ) -> IOSForegroundVoiceRecovery {
-        switch capture.status {
-        case .activeNeedsRecovery, .finalizingNeedsRecovery,
-             .completedNeedsPendingHandoff:
+        switch capture {
+        case .recoverable:
             return .captureRecoverOrDiscard
-        case .emptyActiveNeedsDiscard:
+        case .discardOnly:
             return .captureDiscardOnly
-        case .preparingPendingNeedsRecovery:
-            return .captureRecoverOnly
-        case .recordingInProgress, .transferredCleanupPending,
-             .blockedUnknown:
+        case .blocked:
             return .blocked
-        case .empty, .cleanupPerformed:
+        case .empty:
             break
         }
 
-        if case .savingResult = latest { return .savingResult }
         guard let pending else { return .none }
         guard pending.availability == .available else { return .blocked }
         switch pending.recording.phase {
-        case .readyForTranscription, .awaitingRecovery:
+        case .readyForTranscription, .failed:
             return .pendingRetryOrDiscard
-        case .transcribing, .postProcessing, .outputDelivery:
+        case .transcribing, .postProcessing, .outputDelivery,
+             .acceptedCleanup:
             return .blocked
         }
     }
 
     private func stage(
-        for pending: IOSPendingRecordingObservation?
+        for pending: IOSV1PendingRecordingObservation?
     ) -> VoiceAttemptStage? {
         guard let pending else { return nil }
         switch pending.recording.phase {
-        case .readyForTranscription, .awaitingRecovery:
+        case .readyForTranscription, .failed:
             return .transcription
         case .transcribing:
             return .transcription
         case .postProcessing:
             return .postProcessing
-        case .outputDelivery:
+        case .outputDelivery, .acceptedCleanup:
             return .outputDelivery
         }
     }
 
     private func map(
-        _ latest: IOSForegroundVoiceLatestResultObservation
+        _ latest: IOSV1ForegroundVoiceLatestResultObservation
     ) -> IOSForegroundVoiceLatestAvailability {
         switch latest {
         case .absent: .absent
         case .resultReady: .available
-        case .savingResult(_, let prior):
-            prior == nil ? .unknown : .priorAvailableWhileSaving
-        case .clearedCleanupPending: .cleanupPending
         }
     }
 
     private func failure(
-        for reason: IOSForegroundVoiceCaptureInvalidReason
+        for reason: IOSV1ForegroundVoiceCaptureInvalidReason
     ) -> IOSForegroundVoiceFailure {
         switch reason {
         case .tooShort, .empty: .tooShort
@@ -2891,18 +2612,6 @@ extension IOSForegroundVoiceWorkflowCredentialProof:
     CustomReflectable {
     nonisolated var description: String {
         "IOSForegroundVoiceWorkflowCredentialProof(<redacted>)"
-    }
-
-    nonisolated var debugDescription: String { description }
-    nonisolated var customMirror: Mirror { Mirror(self, children: [:]) }
-}
-
-extension IOSForegroundVoiceWorkflowProviderRetryAuthorization:
-    CustomStringConvertible,
-    CustomDebugStringConvertible,
-    CustomReflectable {
-    nonisolated var description: String {
-        "IOSForegroundVoiceWorkflowProviderRetryAuthorization(<redacted>)"
     }
 
     nonisolated var debugDescription: String { description }

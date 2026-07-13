@@ -98,20 +98,6 @@ struct IOSVoiceActionPresentation: Equatable, Sendable {
                 prominence: .destructive,
                 requiresConfirmation: true
             )
-        case .retrySavingResult:
-            makeAction(
-                action,
-                title: "Retry Saving Result",
-                image: "arrow.clockwise",
-                prominence: .primary
-            )
-        case .retryLocalCheckpoint:
-            makeAction(
-                action,
-                title: "Retry Local Checkpoint",
-                image: "arrow.clockwise",
-                prominence: .primary
-            )
         }
     }
 
@@ -145,8 +131,6 @@ struct IOSVoiceActionPresentation: Equatable, Sendable {
         case .recoverRecording: "recover-recording"
         case .retryPending: "retry-pending"
         case .discard: "discard"
-        case .retrySavingResult: "retry-saving-result"
-        case .retryLocalCheckpoint: "retry-local-checkpoint"
         }
     }
 }
@@ -350,6 +334,13 @@ enum IOSVoiceHomePresentation {
                 image: "exclamationmark.arrow.triangle.2.circlepath",
                 tone: .warning
             )
+        case .localCleanupPending:
+            status(
+                "Result ready",
+                detail: "Latest Result is safe; HoldType will finish local cleanup automatically.",
+                image: "checkmark.circle",
+                tone: .warning
+            )
         }
     }
 
@@ -368,13 +359,6 @@ enum IOSVoiceHomePresentation {
                 image: "waveform.badge.exclamationmark",
                 tone: .warning
             )
-        case .captureRecoverOnly:
-            return status(
-                "Recording can be recovered",
-                detail: prefix + "Finish protecting it before Retry.",
-                image: "arrow.clockwise",
-                tone: .warning
-            )
         case .captureDiscardOnly:
             return status(
                 "Incomplete recording",
@@ -389,20 +373,6 @@ enum IOSVoiceHomePresentation {
                 image: "arrow.clockwise",
                 tone: .warning
             )
-        case .savingResult:
-            return status(
-                "Saving result needs attention",
-                detail: "Retry the local save without repeating provider work.",
-                image: "externaldrive.badge.exclamationmark",
-                tone: .warning
-            )
-        case .localCheckpoint(let stage):
-            return status(
-                "Finish previous result",
-                detail: localCheckpointDetail(stage),
-                image: "arrow.clockwise",
-                tone: .warning
-            )
         case .blocked:
             return status(
                 "Local recovery blocked",
@@ -410,21 +380,6 @@ enum IOSVoiceHomePresentation {
                 image: "lock.trianglebadge.exclamationmark",
                 tone: .failure
             )
-        }
-    }
-
-    private static func localCheckpointDetail(
-        _ stage: VoiceAttemptStage
-    ) -> String {
-        switch stage {
-        case .recordingFinalization:
-            "Retry the retained recording-finalization checkpoint."
-        case .transcription:
-            "Review consent and retry only the retained transcription work."
-        case .postProcessing:
-            "Retry only the retained local or provider-authorized text work."
-        case .outputDelivery:
-            "Retry only the retained app-private result save."
         }
     }
 

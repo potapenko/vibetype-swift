@@ -6,10 +6,7 @@ nonisolated enum IOSForegroundVoiceLatestResultStatus: Equatable, Sendable {
     case notLoaded
     case absent
     case ready
-    case priorWhileSaving
-    case savingWithoutPrior
     case clearing
-    case cleanupPending
     case unavailable
 }
 
@@ -69,32 +66,32 @@ nonisolated enum IOSForegroundVoiceLatestResultOwnerError:
 
 private nonisolated struct IOSForegroundVoiceLatestResultClient: Sendable {
     typealias Load = @Sendable () async throws
-        -> IOSForegroundVoiceLatestResultObservation
+        -> IOSV1ForegroundVoiceLatestResultObservation
     typealias Clear = @Sendable (
-        IOSAcceptedOutputDeliveryExpectation
-    ) async throws -> IOSForegroundVoiceClearResult
+        IOSV1AcceptedOutputDeliveryExpectation
+    ) async throws -> IOSV1ForegroundVoiceClearResult
 
     let load: Load
     let clear: Clear
 }
 
 private nonisolated struct IOSForegroundVoiceLatestResultSelection: Sendable {
-    let record: IOSAcceptedOutputDeliveryRecord
+    let record: IOSV1AcceptedOutputDeliveryRecord
 
-    var expectation: IOSAcceptedOutputDeliveryExpectation {
-        IOSAcceptedOutputDeliveryExpectation(record: record)
+    var expectation: IOSV1AcceptedOutputDeliveryExpectation {
+        IOSV1AcceptedOutputDeliveryExpectation(record: record)
     }
 }
 
 private nonisolated enum IOSForegroundVoiceLatestResultClearExecution:
     Sendable {
-    case completed(IOSForegroundVoiceClearResult)
-    case failed(reconciliation: IOSForegroundVoiceLatestResultObservation?)
+    case completed(IOSV1ForegroundVoiceClearResult)
+    case failed(reconciliation: IOSV1ForegroundVoiceLatestResultObservation?)
 }
 
 private nonisolated enum IOSForegroundVoiceLatestResultLoadExecution:
     Sendable {
-    case completed(IOSForegroundVoiceLatestResultObservation)
+    case completed(IOSV1ForegroundVoiceLatestResultObservation)
     case failed(isCancellation: Bool)
 }
 
@@ -149,7 +146,7 @@ private actor IOSForegroundVoiceLatestResultOperationCore {
     /// operation. It deliberately ignores cancellation of the initiating UI
     /// caller and keeps the exact expectation captured at admission.
     func clear(
-        expected: IOSAcceptedOutputDeliveryExpectation
+        expected: IOSV1AcceptedOutputDeliveryExpectation
     ) async -> IOSForegroundVoiceLatestResultSequenced<
         IOSForegroundVoiceLatestResultClearExecution
     > {
@@ -197,12 +194,7 @@ private actor IOSForegroundVoiceLatestResultOperationCore {
     }
 
     private nonisolated static func isCancellation(_ error: Error) -> Bool {
-        if error is CancellationError { return true }
-        if let error = error as? IOSForegroundVoicePersistenceError,
-           error == .cancelledBeforeOperation {
-            return true
-        }
-        return false
+        error is CancellationError
     }
 }
 
@@ -224,7 +216,7 @@ final class IOSForegroundVoiceLatestResultOwner {
     @ObservationIgnored
     private var selection: IOSForegroundVoiceLatestResultSelection?
     @ObservationIgnored
-    private var clearExpectation: IOSAcceptedOutputDeliveryExpectation?
+    private var clearExpectation: IOSV1AcceptedOutputDeliveryExpectation?
     @ObservationIgnored
     private var clearTask: Task<Void, Never>?
     @ObservationIgnored
@@ -234,7 +226,7 @@ final class IOSForegroundVoiceLatestResultOwner {
     @ObservationIgnored
     private var latestPublishedCoreSequence: UInt64 = 0
 
-    convenience init(persistenceOwner: IOSForegroundVoicePersistenceOwner) {
+    convenience init(persistenceOwner: IOSV1ForegroundVoicePersistenceOwner) {
         self.init(
             load: { try await persistenceOwner.loadLatestResult() },
             clear: { expectation in
@@ -247,10 +239,10 @@ final class IOSForegroundVoiceLatestResultOwner {
 
     init(
         load: @escaping @Sendable () async throws
-            -> IOSForegroundVoiceLatestResultObservation,
+            -> IOSV1ForegroundVoiceLatestResultObservation,
         clear: @escaping @Sendable (
-            IOSAcceptedOutputDeliveryExpectation
-        ) async throws -> IOSForegroundVoiceClearResult,
+            IOSV1AcceptedOutputDeliveryExpectation
+        ) async throws -> IOSV1ForegroundVoiceClearResult,
         beforePublishing: @escaping BeforePublishing = { _ in }
     ) {
         operationCore = IOSForegroundVoiceLatestResultOperationCore(
@@ -309,7 +301,7 @@ final class IOSForegroundVoiceLatestResultOwner {
     /// this text owner and is returned unchanged for the controller's
     /// payload-free projection.
     func loadForVoiceWorkflow() async throws
-        -> IOSForegroundVoiceLatestResultObservation {
+        -> IOSV1ForegroundVoiceLatestResultObservation {
         let startingEpoch = publicationEpoch
         let completion = await operationCore.load()
         await beforePublishing(completion.sequence)
@@ -393,7 +385,7 @@ final class IOSForegroundVoiceLatestResultOwner {
         _ completion: IOSForegroundVoiceLatestResultSequenced<
             IOSForegroundVoiceLatestResultClearExecution
         >,
-        expected: IOSAcceptedOutputDeliveryExpectation
+        expected: IOSV1AcceptedOutputDeliveryExpectation
     ) async {
         await beforePublishing(completion.sequence)
         clearTask = nil
@@ -410,18 +402,6 @@ final class IOSForegroundVoiceLatestResultOwner {
                     Projection(
                         presentation: IOSForegroundVoiceLatestResultPresentation(
                             status: .absent,
-                            text: nil,
-                            notice: nil
-                        ),
-                        selection: nil,
-                        clearExpectation: nil
-                    )
-                )
-            case .clearedCleanupPending:
-                publish(
-                    Projection(
-                        presentation: IOSForegroundVoiceLatestResultPresentation(
-                            status: .cleanupPending,
                             text: nil,
                             notice: nil
                         ),
@@ -481,7 +461,7 @@ final class IOSForegroundVoiceLatestResultOwner {
     private nonisolated struct Projection {
         let presentation: IOSForegroundVoiceLatestResultPresentation
         let selection: IOSForegroundVoiceLatestResultSelection?
-        let clearExpectation: IOSAcceptedOutputDeliveryExpectation?
+        let clearExpectation: IOSV1AcceptedOutputDeliveryExpectation?
 
         func withNotice(
             _ notice: IOSForegroundVoiceLatestResultNotice?
@@ -499,7 +479,7 @@ final class IOSForegroundVoiceLatestResultOwner {
     }
 
     private nonisolated static func projection(
-        for observation: IOSForegroundVoiceLatestResultObservation
+        for observation: IOSV1ForegroundVoiceLatestResultObservation
     ) throws -> Projection {
         switch observation {
         case .absent:
@@ -513,76 +493,30 @@ final class IOSForegroundVoiceLatestResultOwner {
                 clearExpectation: nil
             )
         case .resultReady(let record):
-            guard let text = record.acceptedText else {
-                throw IOSForegroundVoiceLatestResultOwnerError
-                    .invalidObservation
-            }
             let selection = IOSForegroundVoiceLatestResultSelection(
                 record: record
             )
             return Projection(
                 presentation: IOSForegroundVoiceLatestResultPresentation(
                     status: .ready,
-                    text: text,
+                    text: record.acceptedText,
                     notice: nil
                 ),
                 selection: selection,
                 clearExpectation: selection.expectation
             )
-        case .savingResult(_, let priorResult):
-            guard let priorResult else {
-                return Projection(
-                    presentation: IOSForegroundVoiceLatestResultPresentation(
-                        status: .savingWithoutPrior,
-                        text: nil,
-                        notice: nil
-                    ),
-                    selection: nil,
-                    clearExpectation: nil
-                )
-            }
-            guard let text = priorResult.acceptedText else {
-                throw IOSForegroundVoiceLatestResultOwnerError
-                    .invalidObservation
-            }
-            let selection = IOSForegroundVoiceLatestResultSelection(
-                record: priorResult
-            )
-            return Projection(
-                presentation: IOSForegroundVoiceLatestResultPresentation(
-                    status: .priorWhileSaving,
-                    text: text,
-                    notice: nil
-                ),
-                selection: selection,
-                clearExpectation: nil
-            )
-        case .clearedCleanupPending:
-            return Projection(
-                presentation: IOSForegroundVoiceLatestResultPresentation(
-                    status: .cleanupPending,
-                    text: nil,
-                    notice: nil
-                ),
-                selection: nil,
-                clearExpectation: nil
-            )
         }
     }
 
     private nonisolated static func clearFailureNotice(
-        after observation: IOSForegroundVoiceLatestResultObservation,
-        expected: IOSAcceptedOutputDeliveryExpectation
+        after observation: IOSV1ForegroundVoiceLatestResultObservation,
+        expected: IOSV1AcceptedOutputDeliveryExpectation
     ) -> IOSForegroundVoiceLatestResultNotice? {
         switch observation {
         case .resultReady(let record):
-            return IOSAcceptedOutputDeliveryExpectation(record: record)
+            return IOSV1AcceptedOutputDeliveryExpectation(record: record)
                 == expected ? .clearFailed : .resultChanged
-        case .savingResult(_, let priorResult):
-            guard let priorResult else { return .resultChanged }
-            return IOSAcceptedOutputDeliveryExpectation(record: priorResult)
-                == expected ? .clearFailed : .resultChanged
-        case .absent, .clearedCleanupPending:
+        case .absent:
             return nil
         }
     }
@@ -592,14 +526,13 @@ final class IOSForegroundVoiceLatestResultOwner {
         selection: IOSForegroundVoiceLatestResultSelection?
     ) -> Bool {
         switch presentation.status {
-        case .ready, .priorWhileSaving, .clearing:
+        case .ready, .clearing:
             guard let visibleText = presentation.text,
                   let selectedText = selection?.record.acceptedText else {
                 return false
             }
             return visibleText.utf8.elementsEqual(selectedText.utf8)
-        case .notLoaded, .absent, .savingWithoutPrior, .cleanupPending,
-             .unavailable:
+        case .notLoaded, .absent, .unavailable:
             return false
         }
     }

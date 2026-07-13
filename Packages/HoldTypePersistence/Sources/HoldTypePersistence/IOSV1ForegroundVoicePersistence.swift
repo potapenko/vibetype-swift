@@ -66,6 +66,65 @@ public struct IOSV1PendingRecording: Equatable, Sendable {
             transcriptionID = nil
         }
     }
+
+#if DEBUG
+    public static func qualificationFixture(
+        attemptID: UUID = UUID(),
+        outputIntent: DictationOutputIntent = .standard,
+        phase: IOSV1PendingRecordingPhase = .readyForTranscription,
+        transcriptionID: UUID? = nil,
+        transcriptionConfiguration: TranscriptionConfiguration = .init(),
+        createdAt: Date = Date(timeIntervalSince1970: 1_800_000_000),
+        durationMilliseconds: Int64 = 1_000,
+        byteCount: Int64 = 1_024
+    ) throws -> Self {
+        let status: IOSVoiceStatePendingStatus
+        switch phase {
+        case .readyForTranscription:
+            guard transcriptionID == nil else {
+                throw IOSV1ForegroundVoicePersistenceError.invalidTransition
+            }
+            status = .ready
+        case .failed:
+            guard transcriptionID == nil else {
+                throw IOSV1ForegroundVoicePersistenceError.invalidTransition
+            }
+            status = .failed
+        case .transcribing, .postProcessing, .outputDelivery:
+            guard let transcriptionID else {
+                throw IOSV1ForegroundVoicePersistenceError.invalidTransition
+            }
+            let stage: IOSVoiceStateProcessingStage = switch phase {
+            case .transcribing: .transcription
+            case .postProcessing: .postProcessing
+            case .outputDelivery: .outputDelivery
+            default: preconditionFailure("unreachable phase")
+            }
+            status = .processing(stage, operationID: transcriptionID)
+        case .acceptedCleanup:
+            throw IOSV1ForegroundVoicePersistenceError.invalidTransition
+        }
+        return Self(
+            try IOSVoiceStatePending(
+                attemptID: attemptID,
+                audioRelativeIdentifier:
+                    IOSVoiceStateStorageLocation.relativeAudioIdentifier(
+                        for: attemptID
+                    ),
+                createdAt: createdAt,
+                updatedAt: createdAt,
+                outputIntent: outputIntent,
+                transcriptionModel:
+                    transcriptionConfiguration.resolvedModel,
+                transcriptionLanguageCode:
+                    transcriptionConfiguration.resolvedLanguageCode,
+                durationMilliseconds: durationMilliseconds,
+                byteCount: byteCount,
+                status: status
+            )
+        )
+    }
+#endif
 }
 
 @_spi(HoldTypeIOSCore)
@@ -91,6 +150,14 @@ public struct IOSV1PendingRecordingObservation: Equatable, Sendable {
 
     public var expectation: IOSV1PendingRecordingExpectation {
         IOSV1PendingRecordingExpectation(recording: recording)
+    }
+
+    public init(
+        recording: IOSV1PendingRecording,
+        availability: IOSV1PendingRecordingAvailability
+    ) {
+        self.recording = recording
+        self.availability = availability
     }
 }
 

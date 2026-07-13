@@ -1,4 +1,4 @@
-import HoldTypePersistence
+@_spi(HoldTypeIOSCore) import HoldTypePersistence
 import Testing
 @testable import HoldTypeIOS
 
@@ -39,7 +39,7 @@ struct IOSVoiceSceneLifecycleBindingTests {
         await scheduler.waitUntilIdle()
         #expect(
             await recorder.opportunities()
-                == [.processLaunch, .foreground]
+                == [.processLaunch, .foregroundOpportunity]
         )
     }
 
@@ -83,7 +83,7 @@ struct IOSVoiceSceneLifecycleBindingTests {
         await scheduler.waitUntilIdle()
         #expect(
             await recorder.opportunities()
-                == [.processLaunch, .foreground]
+                == [.processLaunch, .foregroundOpportunity]
         )
     }
 
@@ -120,7 +120,7 @@ struct IOSVoiceSceneLifecycleBindingTests {
         await scheduler.waitUntilIdle()
         #expect(
             await recorder.opportunities()
-                == [.processLaunch, .foreground]
+                == [.processLaunch, .foregroundOpportunity]
         )
     }
 
@@ -169,16 +169,16 @@ struct IOSVoiceSceneLifecycleBindingTests {
 }
 
 private actor VoiceSceneLifecycleRecoveryRecorder {
-    private var values: [IOSContainingAppRecoveryOpportunity] = []
+    private var values: [IOSV1ContainingAppRecoveryOpportunity] = []
 
     func recover(
-        _ opportunity: IOSContainingAppRecoveryOpportunity
-    ) -> IOSContainingAppRecoveryDisposition {
+        _ opportunity: IOSV1ContainingAppRecoveryOpportunity
+    ) -> IOSV1ContainingAppRecoveryDisposition {
         values.append(opportunity)
         return .complete
     }
 
-    func opportunities() -> [IOSContainingAppRecoveryOpportunity] {
+    func opportunities() -> [IOSV1ContainingAppRecoveryOpportunity] {
         values
     }
 }

@@ -132,7 +132,7 @@ struct IOSForegroundVoiceRecorderBridgeTests {
             makeDriver: { _, _ in driver },
             preparePending: { handoff, configuration in
                 try await handoff.preparePending(
-                    using: IOSForegroundVoicePersistenceOwner(
+                    using: IOSV1ForegroundVoicePersistenceOwner(
                         applicationSupportDirectoryURL: URL(
                             fileURLWithPath: "/tmp/holdtype-recorder-bridge",
                             isDirectory: true
@@ -425,7 +425,7 @@ private final class RecorderBridgeFixture {
             },
             preparePending: { handoff, configuration in
                 try await handoff.preparePending(
-                    using: IOSForegroundVoicePersistenceOwner(
+                    using: IOSV1ForegroundVoicePersistenceOwner(
                         applicationSupportDirectoryURL: URL(
                             fileURLWithPath: "/tmp/holdtype-recorder-bridge",
                             isDirectory: true
@@ -456,7 +456,7 @@ private func isDiscarded(
 
 private func isInvalid(
     _ result: IOSForegroundVoiceWorkflowCaptureStopResult,
-    reason: IOSForegroundVoiceCaptureInvalidReason
+    reason: IOSV1ForegroundVoiceCaptureInvalidReason
 ) -> Bool {
     if case .invalid(let actual) = result { return actual == reason }
     return false
@@ -469,23 +469,23 @@ private func isPreserved(
     return false
 }
 
-private func makeRecorderBridgePending() throws -> IOSPendingRecording {
+private func makeRecorderBridgePending() throws -> IOSV1PendingRecording {
     let attemptID = UUID()
     let now = Date(timeIntervalSinceReferenceDate: 1_000)
-    return try IOSPendingRecording(
+    let state = try IOSVoiceStatePending(
         attemptID: attemptID,
-        audioRelativeIdentifier: IOSPendingRecordingStorageLocation
-            .relativeAudioIdentifier(for: attemptID, format: .m4a),
+        audioRelativeIdentifier: IOSVoiceStateStorageLocation
+            .relativeAudioIdentifier(for: attemptID),
         createdAt: now,
         updatedAt: now,
-        phase: .readyForTranscription,
         outputIntent: .standard,
-        transcriptionID: nil,
         transcriptionModel: TranscriptionConfiguration.defaultModel,
         transcriptionLanguageCode: nil,
         durationMilliseconds: 1_000,
-        byteCount: 2_000
+        byteCount: 2_000,
+        status: .ready
     )
+    return IOSV1PendingRecording(state)
 }
 
 @MainActor

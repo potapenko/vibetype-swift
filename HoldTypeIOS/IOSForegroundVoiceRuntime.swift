@@ -24,7 +24,7 @@ final class IOSForegroundVoiceRuntime {
         let makeFinalizationOwner: @MainActor () ->
             IOSForegroundVoiceWorkflowFinalizationOwner
         let makeRecorderBridge: @MainActor (
-            IOSForegroundVoicePersistenceOwner,
+            IOSV1ForegroundVoicePersistenceOwner,
             IOSForegroundVoiceFeedbackBridge
         ) -> IOSForegroundVoiceRecorderBridge
         let makeProviderBridge: @MainActor (
@@ -111,7 +111,7 @@ final class IOSForegroundVoiceRuntime {
         settingsStateOwner: IOSAppSettingsStateOwner,
         libraryStateOwner: IOSLibraryStateOwner,
         providerConsentCoordinator: IOSV1ProviderConsentCoordinator,
-        persistenceOwner: IOSForegroundVoicePersistenceOwner,
+        persistenceOwner: IOSV1ForegroundVoicePersistenceOwner,
         credentialCoordinator: IOSOpenAICredentialCoordinator?,
         processor: IOSForegroundVoiceProcessor?,
         factories: Factories
@@ -241,28 +241,19 @@ final class IOSForegroundVoiceRuntime {
                     progress: progress
                 )
             },
-            retryLocalRecovery: { authorization, progress in
-                await providerBridge.retryLocalRecovery(
-                    authorization,
-                    progress: progress
-                )
-            },
-            recoverCapture: { capability, configuration in
+            recoverCapture: { attemptID, configuration in
                 try await persistenceOwner.recoverCapture(
-                    capability,
+                    attemptID: attemptID,
                     transcriptionConfiguration: configuration
                 )
             },
-            discardCapture: { capability in
-                try await persistenceOwner.discardCapture(capability)
+            discardCapture: { attemptID in
+                try await persistenceOwner.discardCapture(
+                    attemptID: attemptID
+                )
             },
             discardPending: { expectation in
                 try await persistenceOwner.discard(expected: expectation)
-            },
-            retrySavingResult: { expectation in
-                try await persistenceOwner.retrySavingResult(
-                    expected: expectation
-                )
             },
             sleep: { duration in
                 try await Task.sleep(for: duration)

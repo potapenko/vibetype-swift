@@ -67,14 +67,14 @@ final class IOSForegroundVoiceRecorderBridge {
     typealias PreparePending = @MainActor @Sendable (
         IOSVoiceRecorderCompletedCaptureHandoff,
         TranscriptionConfiguration
-    ) async throws -> IOSPendingRecording
+    ) async throws -> IOSV1PendingRecording
 
     private let makeDriver: MakeDriver
     private let preparePending: PreparePending
     private let feedback: IOSForegroundVoiceFeedbackBridge?
 
     init(
-        persistenceOwner: IOSForegroundVoicePersistenceOwner,
+        persistenceOwner: IOSV1ForegroundVoicePersistenceOwner,
         recorderClient: IOSVoiceRecorderClient = .live,
         feedback: IOSForegroundVoiceFeedbackBridge? = nil,
         diagnose: @escaping IOSVoiceRecorderAdapter.DiagnosticHandler = {

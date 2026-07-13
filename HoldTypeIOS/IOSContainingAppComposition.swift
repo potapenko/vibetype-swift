@@ -34,12 +34,12 @@ final class IOSContainingAppComposition {
         let makeForegroundVoicePersistenceOwner: @MainActor (
             URL,
             IOSAcceptedTextHistoryRepository
-        ) -> IOSForegroundVoicePersistenceOwner
+        ) -> IOSV1ForegroundVoicePersistenceOwner
         let makeTranscriptionUsageRepository: @MainActor (
             URL
         ) -> IOSTranscriptionUsageRepository
         let makeForegroundVoiceProcessor: @MainActor (
-            IOSForegroundVoicePersistenceOwner,
+            IOSV1ForegroundVoicePersistenceOwner,
             IOSV1ProviderConsentCoordinator,
             IOSTranscriptionUsageRecordingClient,
             IOSOpenAICredentialCoordinator
@@ -94,7 +94,7 @@ final class IOSContainingAppComposition {
             makeForegroundVoicePersistenceOwner: {
                 applicationSupportDirectoryURL,
                 acceptedTextHistoryRepository in
-                IOSForegroundVoicePersistenceOwner(
+                IOSV1ForegroundVoicePersistenceOwner(
                     applicationSupportDirectoryURL:
                         applicationSupportDirectoryURL,
                     acceptedTextHistoryRepository:
@@ -134,7 +134,7 @@ final class IOSContainingAppComposition {
     let acceptedTextHistoryStateOwner:
         IOSAcceptedTextHistoryStateOwner?
     let foregroundVoicePersistenceOwner:
-        IOSForegroundVoicePersistenceOwner?
+        IOSV1ForegroundVoicePersistenceOwner?
     let transcriptionUsageRepository: IOSTranscriptionUsageRepository?
     let usageEstimateStateOwner: IOSUsageEstimateStateOwner?
     let foregroundVoiceProcessor: IOSForegroundVoiceProcessor?

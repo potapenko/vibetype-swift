@@ -112,10 +112,6 @@ struct IOSForegroundVoiceControllerTests {
         #expect(
             controller.presentation.availableActions == [.startStandard]
         )
-        #expect(
-            !controller.presentation.availableActions
-                .contains(.retrySavingResult)
-        )
     }
 
     @Test func withdrawalCannotHideCommittedRetryResult() async throws {
@@ -319,7 +315,7 @@ struct IOSForegroundVoiceControllerTests {
             ),
             VoiceOperationCase(
                 observation: voiceObservation(
-                    recovery: .captureRecoverOnly
+                    recovery: .captureRecoverOrDiscard
                 ),
                 action: .recoverRecording,
                 operation: .recoverRecording,
@@ -345,27 +341,6 @@ struct IOSForegroundVoiceControllerTests {
                 operation: .retryPending,
                 phase: .processing,
                 stage: .transcription,
-                actions: [.cancelProcessing]
-            ),
-            VoiceOperationCase(
-                observation: voiceObservation(
-                    recovery: .savingResult,
-                    stage: .postProcessing
-                ),
-                action: .retrySavingResult,
-                operation: .retrySavingResult,
-                phase: .processing,
-                stage: .postProcessing,
-                actions: []
-            ),
-            VoiceOperationCase(
-                observation: voiceObservation(
-                    recovery: .localCheckpoint(.postProcessing)
-                ),
-                action: .retryLocalCheckpoint,
-                operation: .retryLocalCheckpoint,
-                phase: .processing,
-                stage: .postProcessing,
                 actions: [.cancelProcessing]
             ),
         ]
@@ -421,7 +396,7 @@ struct IOSForegroundVoiceControllerTests {
         async throws {
         let fixture = IOSForegroundVoiceClientFixture(
             observation: voiceObservation(
-                latest: .priorAvailableWhileSaving
+                latest: .available
             )
         )
         let controller = IOSForegroundVoiceController(
@@ -434,7 +409,7 @@ struct IOSForegroundVoiceControllerTests {
         try await voiceEventually { fixture.runOperations.count == 1 }
         #expect(
             controller.presentation.latestAvailability
-                == .priorAvailableWhileSaving
+                == .available
         )
 
         fixture.sendProgress(.listening, at: 0)
@@ -459,7 +434,7 @@ struct IOSForegroundVoiceControllerTests {
         )
         #expect(
             controller.presentation.latestAvailability
-                == .priorAvailableWhileSaving
+                == .available
         )
 
         fixture.sendProgress(.processing(.postProcessing), at: 0)
@@ -619,27 +594,27 @@ struct IOSForegroundVoiceControllerTests {
                 resolutionOutcome: nil,
                 terminalOutcome: .recoverableFailure,
                 terminalFailure: .operationFailed,
-                terminalLatest: .priorAvailableWhileSaving
+                terminalLatest: .available
             ),
             VoiceCancellationCase(
                 progress: .processing(.postProcessing),
                 action: .cancelProcessing,
                 phase: .processing,
                 activeStage: .postProcessing,
-                resolutionRecovery: .savingResult,
-                terminalRecovery: .savingResult,
+                resolutionRecovery: .pendingRetryOrDiscard,
+                terminalRecovery: .pendingRetryOrDiscard,
                 terminalStage: .postProcessing,
                 resolutionOutcome: .recoverableFailure,
                 terminalOutcome: nil,
                 terminalFailure: .operationFailed,
-                terminalLatest: .priorAvailableWhileSaving
+                terminalLatest: .available
             ),
         ]
 
         for scenario in scenarios {
             let fixture = IOSForegroundVoiceClientFixture(
                 observation: voiceObservation(
-                    latest: .priorAvailableWhileSaving
+                    latest: .available
                 )
             )
             let controller = IOSForegroundVoiceController(
@@ -718,7 +693,7 @@ struct IOSForegroundVoiceControllerTests {
         async throws {
         let fixture = IOSForegroundVoiceClientFixture(
             observation: voiceObservation(
-                latest: .priorAvailableWhileSaving
+                latest: .available
             )
         )
         let controller = IOSForegroundVoiceController(
@@ -749,7 +724,7 @@ struct IOSForegroundVoiceControllerTests {
         #expect(controller.presentation.stage == nil)
         #expect(
             controller.presentation.latestAvailability
-                == .priorAvailableWhileSaving
+                == .available
         )
         #expect(controller.presentation.availableActions.isEmpty)
     }
@@ -766,22 +741,6 @@ struct IOSForegroundVoiceControllerTests {
                 expectedActions: [.retryPending, .discard]
             ),
             VoiceTerminalCase(
-                recovery: .savingResult,
-                reportedStage: .postProcessing,
-                inputOutcome: nil,
-                expectedStage: .postProcessing,
-                expectedOutcome: nil,
-                expectedActions: [.retrySavingResult]
-            ),
-            VoiceTerminalCase(
-                recovery: .localCheckpoint(.postProcessing),
-                reportedStage: .transcription,
-                inputOutcome: .resultReady,
-                expectedStage: .postProcessing,
-                expectedOutcome: .recoverableFailure,
-                expectedActions: [.retryLocalCheckpoint]
-            ),
-            VoiceTerminalCase(
                 recovery: .captureRecoverOrDiscard,
                 reportedStage: .recordingFinalization,
                 inputOutcome: .recoverableFailure,
@@ -796,14 +755,6 @@ struct IOSForegroundVoiceControllerTests {
                 expectedStage: nil,
                 expectedOutcome: nil,
                 expectedActions: []
-            ),
-            VoiceTerminalCase(
-                recovery: .savingResult,
-                reportedStage: .transcription,
-                inputOutcome: .resultReady,
-                expectedStage: .transcription,
-                expectedOutcome: nil,
-                expectedActions: [.retrySavingResult]
             ),
         ]
 
@@ -913,13 +864,6 @@ struct IOSForegroundVoiceControllerTests {
             ),
             VoiceActionCase(
                 observation: voiceObservation(
-                    recovery: .captureRecoverOnly
-                ),
-                actions: [.recoverRecording],
-                stage: nil
-            ),
-            VoiceActionCase(
-                observation: voiceObservation(
                     recovery: .captureDiscardOnly
                 ),
                 actions: [.discard],
@@ -932,21 +876,6 @@ struct IOSForegroundVoiceControllerTests {
                 ),
                 actions: [.retryPending, .discard],
                 stage: .transcription
-            ),
-            VoiceActionCase(
-                observation: voiceObservation(
-                    recovery: .savingResult,
-                    stage: .postProcessing
-                ),
-                actions: [.retrySavingResult],
-                stage: .postProcessing
-            ),
-            VoiceActionCase(
-                observation: voiceObservation(
-                    recovery: .localCheckpoint(.postProcessing)
-                ),
-                actions: [.retryLocalCheckpoint],
-                stage: .postProcessing
             ),
             VoiceActionCase(
                 observation: voiceObservation(recovery: .blocked),
@@ -990,11 +919,11 @@ struct IOSForegroundVoiceControllerTests {
         }
     }
 
-    @Test func resultReadyAndPriorLatestAvailabilityArePreserved()
+    @Test func resultReadyAndLatestAvailabilityArePreserved()
         async throws {
         let fixture = IOSForegroundVoiceClientFixture(
             observation: voiceObservation(
-                latest: .priorAvailableWhileSaving
+                latest: .available
             )
         )
         let controller = IOSForegroundVoiceController(
@@ -1008,7 +937,7 @@ struct IOSForegroundVoiceControllerTests {
 
         #expect(
             controller.presentation.latestAvailability
-                == .priorAvailableWhileSaving
+                == .available
         )
 
         fixture.resolveRun(
@@ -1035,8 +964,8 @@ struct IOSForegroundVoiceControllerTests {
         let fixture = IOSForegroundVoiceClientFixture(
             observation: voiceObservation(
                 setup: .needsSetup(.translation),
-                recovery: .localCheckpoint(.postProcessing),
-                latest: .cleanupPending,
+                recovery: .pendingRetryOrDiscard,
+                latest: .available,
                 translationAvailable: true
             )
         )
@@ -1044,7 +973,7 @@ struct IOSForegroundVoiceControllerTests {
         let controller = IOSForegroundVoiceController(client: client)
         await controller.activate()
         let command = try voiceCommand(
-            .retryLocalCheckpoint,
+            .retryPending,
             in: controller
         )
         #expect(submitVoiceCommand(command, in: controller) == .accepted)
@@ -1071,17 +1000,15 @@ struct IOSForegroundVoiceControllerTests {
                 "IOSForegroundVoiceWarning(<redacted>)"
             ),
             (
-                IOSForegroundVoiceRecovery.localCheckpoint(
-                    .postProcessing
-                ),
+                IOSForegroundVoiceRecovery.pendingRetryOrDiscard,
                 "IOSForegroundVoiceRecovery(<redacted>)"
             ),
             (
-                IOSForegroundVoiceLatestAvailability.cleanupPending,
+                IOSForegroundVoiceLatestAvailability.available,
                 "IOSForegroundVoiceLatestAvailability(<redacted>)"
             ),
             (
-                IOSForegroundVoiceAction.retryLocalCheckpoint,
+                IOSForegroundVoiceAction.retryPending,
                 "IOSForegroundVoiceAction(<redacted>)"
             ),
             (
@@ -1426,13 +1353,11 @@ private func activationOutcome(
     for recovery: IOSForegroundVoiceRecovery
 ) -> VoiceAttemptOutcome? {
     switch recovery {
-    case .pendingRetryOrDiscard, .localCheckpoint:
+    case .pendingRetryOrDiscard:
         return .recoverableFailure
     case .none,
          .captureRecoverOrDiscard,
-         .captureRecoverOnly,
          .captureDiscardOnly,
-         .savingResult,
          .blocked:
         return nil
     }
@@ -1465,9 +1390,7 @@ private func submitVoiceCommand(
          .cancelProcessing,
          .recoverRecording,
          .retryPending,
-         .discard,
-         .retrySavingResult,
-         .retryLocalCheckpoint:
+         .discard:
         return controller.submit(command)
     }
 }

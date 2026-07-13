@@ -1,5 +1,5 @@
 import HoldTypeOpenAI
-import HoldTypePersistence
+@_spi(HoldTypeIOSCore) import HoldTypePersistence
 import Testing
 @testable import HoldTypeIOS
 
@@ -57,13 +57,13 @@ struct OpenAIProviderServicesIOSTests {
 }
 
 private actor ContainingAppRecoveryInvocationRecorder {
-    private var values: [IOSContainingAppRecoveryOpportunity] = []
+    private var values: [IOSV1ContainingAppRecoveryOpportunity] = []
 
-    func record(_ opportunity: IOSContainingAppRecoveryOpportunity) {
+    func record(_ opportunity: IOSV1ContainingAppRecoveryOpportunity) {
         values.append(opportunity)
     }
 
-    func opportunities() -> [IOSContainingAppRecoveryOpportunity] {
+    func opportunities() -> [IOSV1ContainingAppRecoveryOpportunity] {
         values
     }
 }

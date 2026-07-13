@@ -20,7 +20,7 @@ nonisolated enum IOSUIQualificationRoute:
     case voiceFinalizing = "voice-finalizing"
     case voiceProcessing = "voice-processing"
     case voicePostProcessing = "voice-post-processing"
-    case voiceSavingResult = "voice-saving-result"
+    case voiceOutputDelivery = "voice-output-delivery"
     case voiceCaptureRecovery = "voice-capture-recovery"
     case voicePendingRetry = "voice-pending-retry"
     case latestEmpty = "latest-empty"
@@ -70,8 +70,8 @@ nonisolated enum IOSUIQualificationRoute:
             "Voice — Processing"
         case .voicePostProcessing:
             "Voice — Refining Text"
-        case .voiceSavingResult:
-            "Voice — Saving Result"
+        case .voiceOutputDelivery:
+            "Voice — Publishing Result"
         case .voiceCaptureRecovery:
             "Voice — Recover or Discard"
         case .voicePendingRetry:
@@ -115,7 +115,7 @@ nonisolated enum IOSUIQualificationRoute:
             nil
         case .voiceStart, .voiceSetupBlocked, .voiceArming, .voiceListening,
              .voiceFinalizing, .voiceProcessing, .voicePostProcessing,
-             .voiceSavingResult, .voiceCaptureRecovery, .voicePendingRetry:
+             .voiceOutputDelivery, .voiceCaptureRecovery, .voicePendingRetry:
             .voice
         case .latestEmpty, .latestSuccess, .latestFailure:
             .latestResult
@@ -144,8 +144,8 @@ nonisolated enum IOSUIQualificationRoute:
             .processing
         case .voicePostProcessing:
             .postProcessing
-        case .voiceSavingResult:
-            .savingResult
+        case .voiceOutputDelivery:
+            .outputDelivery
         case .voiceCaptureRecovery:
             .captureRecovery
         case .voicePendingRetry:
@@ -178,7 +178,7 @@ nonisolated enum IOSUIQualificationRoute:
             .failure
         case .gallery, .voiceStart, .voiceSetupBlocked, .voiceArming,
              .voiceListening, .voiceFinalizing, .voiceProcessing,
-             .voicePostProcessing, .voiceSavingResult,
+             .voicePostProcessing, .voiceOutputDelivery,
              .voiceCaptureRecovery, .voicePendingRetry, .latestEmpty,
              .latestSuccess, .latestFailure, .usageEmpty, .usageKnown,
              .usageMixed, .usageUnknown, .usageLoadFailure,
@@ -205,7 +205,7 @@ nonisolated enum IOSUIQualificationRoute:
             .resetFailure
         case .gallery, .voiceStart, .voiceSetupBlocked, .voiceArming,
              .voiceListening, .voiceFinalizing, .voiceProcessing,
-             .voicePostProcessing, .voiceSavingResult,
+             .voicePostProcessing, .voiceOutputDelivery,
              .voiceCaptureRecovery, .voicePendingRetry, .latestEmpty,
              .latestSuccess, .latestFailure, .privacyChecking,
              .privacyReady, .privacyAccepted, .privacyUnreadable,
@@ -289,7 +289,7 @@ fileprivate enum IOSUIQualificationVoiceScenario: Sendable {
     case finalizing
     case processing
     case postProcessing
-    case savingResult
+    case outputDelivery
     case captureRecovery
     case pendingRetry
     case latestEmpty
@@ -311,7 +311,7 @@ fileprivate enum IOSUIQualificationVoiceScenario: Sendable {
         case .setupBlocked:
             .needsSetup(.openAI)
         case .start, .arming, .listening, .finalizing, .processing,
-             .postProcessing, .savingResult, .captureRecovery,
+             .postProcessing, .outputDelivery, .captureRecovery,
              .pendingRetry, .latestEmpty, .latestSuccess, .latestFailure:
             .ready
         }
@@ -324,7 +324,7 @@ fileprivate enum IOSUIQualificationVoiceScenario: Sendable {
         case .pendingRetry:
             .pendingRetryOrDiscard
         case .start, .setupBlocked, .arming, .listening, .finalizing,
-             .processing, .postProcessing, .savingResult, .latestEmpty,
+             .processing, .postProcessing, .outputDelivery, .latestEmpty,
              .latestSuccess, .latestFailure:
             .none
         }
@@ -337,7 +337,7 @@ fileprivate enum IOSUIQualificationVoiceScenario: Sendable {
         case .pendingRetry:
             .transcription
         case .start, .setupBlocked, .arming, .listening, .finalizing,
-             .processing, .postProcessing, .savingResult, .latestEmpty,
+             .processing, .postProcessing, .outputDelivery, .latestEmpty,
              .latestSuccess, .latestFailure:
             nil
         }
@@ -350,7 +350,7 @@ fileprivate enum IOSUIQualificationVoiceScenario: Sendable {
         case .latestFailure:
             .unavailable
         case .start, .setupBlocked, .arming, .listening, .finalizing,
-             .processing, .postProcessing, .savingResult, .captureRecovery,
+             .processing, .postProcessing, .outputDelivery, .captureRecovery,
              .pendingRetry, .latestEmpty:
             .absent
         }
@@ -368,7 +368,7 @@ fileprivate enum IOSUIQualificationVoiceScenario: Sendable {
             [.listening, .finalizing, .processing(.transcription)]
         case .postProcessing:
             [.listening, .finalizing, .processing(.postProcessing)]
-        case .savingResult:
+        case .outputDelivery:
             [.listening, .finalizing, .processing(.outputDelivery)]
         case .start, .setupBlocked, .captureRecovery, .pendingRetry,
              .latestEmpty, .latestSuccess, .latestFailure:
@@ -379,7 +379,7 @@ fileprivate enum IOSUIQualificationVoiceScenario: Sendable {
     var startsOperation: Bool {
         switch self {
         case .arming, .listening, .finalizing, .processing,
-             .postProcessing, .savingResult:
+             .postProcessing, .outputDelivery:
             true
         case .start, .setupBlocked, .captureRecovery, .pendingRetry,
              .latestEmpty, .latestSuccess, .latestFailure:
@@ -394,7 +394,7 @@ fileprivate enum IOSUIQualificationVoiceScenario: Sendable {
         case .latestFailure:
             .failure
         case .start, .setupBlocked, .arming, .listening, .finalizing,
-             .processing, .postProcessing, .savingResult, .captureRecovery,
+             .processing, .postProcessing, .outputDelivery, .captureRecovery,
              .pendingRetry, .latestEmpty:
             .empty
         }
@@ -462,11 +462,13 @@ private final class IOSUIQualificationVoiceFixture {
                     return .absent
                 case .success:
                     return .resultReady(
-                        IOSAcceptedOutputDeliveryQualificationFixture
-                            .activeRecord(
-                                text: "A protected sample dictation result "
-                                    + "for layout and action qualification."
-                            )
+                        try IOSV1AcceptedOutputDeliveryRecord(
+                            resultID: UUID(),
+                            sourceAttemptID: UUID(),
+                            acceptedText: "A protected sample dictation result "
+                                + "for layout and action qualification.",
+                            createdAt: Date()
+                        )
                     )
                 case .failure:
                     throw IOSUIQualificationFailure.latestResultUnavailable

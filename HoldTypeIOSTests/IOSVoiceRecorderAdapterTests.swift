@@ -272,7 +272,7 @@ struct IOSVoiceRecorderAdapterTests {
 
         let handoff = try #require(completed.claimPersistenceHandoff())
         #expect(completed.claimPersistenceHandoff() == nil)
-        let persistenceOwner = IOSForegroundVoicePersistenceOwner(
+        let persistenceOwner = IOSV1ForegroundVoicePersistenceOwner(
             applicationSupportDirectoryURL: URL(
                 fileURLWithPath: "/tmp/holdtype-recorder-handoff-tests",
                 isDirectory: true
@@ -1100,7 +1100,7 @@ private final class CompletedCaptureHandoffFixture {
     typealias Prepare = @MainActor @Sendable (
         TranscriptionConfiguration,
         Int
-    ) async throws -> IOSPendingRecording
+    ) async throws -> IOSV1PendingRecording
 
     private let prepare: Prepare
     private(set) var prepareCount = 0
@@ -1157,8 +1157,8 @@ private final class CompletedCapturePrepareLatch {
 
 @MainActor
 private func makePassivePersistenceOwner()
-    -> IOSForegroundVoicePersistenceOwner {
-    IOSForegroundVoicePersistenceOwner(
+    -> IOSV1ForegroundVoicePersistenceOwner {
+    IOSV1ForegroundVoicePersistenceOwner(
         applicationSupportDirectoryURL: URL(
             fileURLWithPath: "/tmp/holdtype-recorder-handoff-tests",
             isDirectory: true
@@ -1166,23 +1166,23 @@ private func makePassivePersistenceOwner()
     )
 }
 
-private func makePendingRecording() throws -> IOSPendingRecording {
+private func makePendingRecording() throws -> IOSV1PendingRecording {
     let attemptID = UUID()
     let now = Date(timeIntervalSinceReferenceDate: 1_000)
-    return try IOSPendingRecording(
+    let state = try IOSVoiceStatePending(
         attemptID: attemptID,
-        audioRelativeIdentifier: IOSPendingRecordingStorageLocation
-            .relativeAudioIdentifier(for: attemptID, format: .m4a),
+        audioRelativeIdentifier: IOSVoiceStateStorageLocation
+            .relativeAudioIdentifier(for: attemptID),
         createdAt: now,
         updatedAt: now,
-        phase: .readyForTranscription,
         outputIntent: .standard,
-        transcriptionID: nil,
         transcriptionModel: TranscriptionConfiguration.defaultModel,
         transcriptionLanguageCode: nil,
         durationMilliseconds: 1_000,
-        byteCount: 2_000
+        byteCount: 2_000,
+        status: .ready
     )
+    return IOSV1PendingRecording(state)
 }
 
 @MainActor
@@ -1267,7 +1267,7 @@ private final class VoiceRecorderCaptureSourceFixture:
     var checkpointFailureAt: Int?
     var suspendedCheckpoint: Int?
     var failurePoint: FailurePoint?
-    var finalizationInvalidReason: IOSForegroundVoiceCaptureInvalidReason?
+    var finalizationInvalidReason: IOSV1ForegroundVoiceCaptureInvalidReason?
     var completedDurationMilliseconds: Int64 = 1_000
     var completedByteCount: Int64 = 2_000
     private var checkpointContinuation: CheckedContinuation<Void, Never>?
@@ -1482,7 +1482,7 @@ private extension IOSVoiceRecorderStopResult {
         return false
     }
 
-    var invalidReason: IOSForegroundVoiceCaptureInvalidReason? {
+    var invalidReason: IOSV1ForegroundVoiceCaptureInvalidReason? {
         if case let .invalid(reason) = self { return reason }
         return nil
     }

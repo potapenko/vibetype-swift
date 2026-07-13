@@ -3,7 +3,7 @@ import Foundation
 
 nonisolated struct IOSForegroundVoiceLifecycleRefresh: Sendable {
     let observation: IOSForegroundVoiceObservation
-    let disposition: IOSContainingAppRecoveryDisposition
+    let disposition: IOSV1ContainingAppRecoveryDisposition
 }
 
 /// The single process owner that binds lifecycle recovery to controller
@@ -12,7 +12,7 @@ nonisolated struct IOSForegroundVoiceLifecycleRefresh: Sendable {
 @MainActor
 final class IOSForegroundVoiceProcessLifecycleCoordinator {
     typealias Refresh = @MainActor @Sendable (
-        IOSContainingAppRecoveryOpportunity
+        IOSV1ContainingAppRecoveryOpportunity
     ) async -> IOSForegroundVoiceLifecycleRefresh
 
     private let controller: IOSForegroundVoiceController
@@ -37,8 +37,8 @@ final class IOSForegroundVoiceProcessLifecycleCoordinator {
     }
 
     func recover(
-        _ opportunity: IOSContainingAppRecoveryOpportunity
-    ) async -> IOSContainingAppRecoveryDisposition {
+        _ opportunity: IOSV1ContainingAppRecoveryOpportunity
+    ) async -> IOSV1ContainingAppRecoveryDisposition {
         await controller.performLifecycleRefresh {
             [refresh] in
             await refresh(opportunity)

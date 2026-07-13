@@ -36,16 +36,6 @@ struct IOSForegroundVoiceProviderBridgeTests {
         #expect(result == .notStarted(.credentialRejected))
         #expect(await processor.processCallCount() == 0)
 
-        let fullyUnavailable = IOSForegroundVoiceProviderBridge(
-            credentialClient: nil,
-            processorClient: nil
-        )
-        #expect(
-            await fullyUnavailable.retryLocalRecovery(
-                nil,
-                progress: { _ in }
-            ) == .notStarted(.localPersistence)
-        )
     }
 
     @Test
@@ -149,33 +139,6 @@ struct IOSForegroundVoiceProviderBridgeTests {
     }
 
     @Test
-    func accessFailureDuringAuthorizedRetryStopsBeforeCore() async throws {
-        let credential = try makeCredential(
-            key: "bridge-access-failure-canary",
-            generation: UUID()
-        )
-        let credentials = BridgeCredentialSource(state: .available(credential))
-        let processor = BridgeProcessorCapture()
-        let bridge = IOSForegroundVoiceProviderBridge(
-            credentialClient: makeCredentialClient(credentials),
-            processorClient: makeProcessorClient(processor)
-        )
-        let proof = try requireProof(await bridge.resolveCredential())
-        await credentials.setState(.unavailable)
-
-        let result = await bridge.retryLocalRecovery(
-            IOSForegroundVoiceWorkflowProviderRetryAuthorization(
-                credential: proof,
-                consentObservation: makeConsentObservation()
-            ),
-            progress: { _ in }
-        )
-
-        #expect(result == .notStarted(.credentialRejected))
-        #expect(await processor.retryCallCount() == 0)
-    }
-
-    @Test
     func newlyIssuedProofMakesPriorProofStaleEvenForSameGeneration()
         async throws {
         let credential = try makeCredential(
@@ -251,57 +214,6 @@ struct IOSForegroundVoiceProviderBridgeTests {
     }
 
     @Test
-    func providerAuthorizedRetryMapsFreshCredentialAndConsent() async throws {
-        let credential = try makeCredential(
-            key: "bridge-retry-canary",
-            generation: UUID()
-        )
-        let credentials = BridgeCredentialSource(state: .available(credential))
-        let processor = BridgeProcessorCapture(retryResult: .busy)
-        let bridge = IOSForegroundVoiceProviderBridge(
-            credentialClient: makeCredentialClient(credentials),
-            processorClient: makeProcessorClient(processor)
-        )
-        let proof = try requireProof(await bridge.resolveCredential())
-        let consent = makeConsentObservation()
-
-        let result = await bridge.retryLocalRecovery(
-            IOSForegroundVoiceWorkflowProviderRetryAuthorization(
-                credential: proof,
-                consentObservation: consent
-            ),
-            progress: { _ in }
-        )
-
-        #expect(result == .busy)
-        #expect(await processor.retryCallCount() == 1)
-        #expect(await processor.lastRetryUsedAuthorization())
-        #expect(await processor.lastRetryCredential() == credential)
-        #expect(await processor.lastRetryConsent() == consent)
-        #expect(await credentials.resolveCallCount() == 2)
-    }
-
-    @Test
-    func providerFreeRetryNeverResolvesCredential() async {
-        let credentials = BridgeCredentialSource(state: .unavailable)
-        let processor = BridgeProcessorCapture(retryResult: .busy)
-        let bridge = IOSForegroundVoiceProviderBridge(
-            credentialClient: makeCredentialClient(credentials),
-            processorClient: makeProcessorClient(processor)
-        )
-
-        let result = await bridge.retryLocalRecovery(
-            nil,
-            progress: { _ in }
-        )
-
-        #expect(result == .busy)
-        #expect(await credentials.resolveCallCount() == 0)
-        #expect(await processor.retryCallCount() == 1)
-        #expect(await processor.lastRetryUsedAuthorization() == false)
-    }
-
-    @Test
     func proofAndBridgeSurfacesAreRedacted() async throws {
         let canary = "bridge-reflection-secret"
         let credential = try makeCredential(key: canary, generation: UUID())
@@ -372,21 +284,13 @@ private actor BridgeCredentialSource {
 
 private actor BridgeProcessorCapture {
     private let processResult: IOSForegroundVoiceProcessingResolution
-    private let retryResult: IOSForegroundVoiceProcessingResolution
     private var processRequests: [IOSForegroundVoiceProcessingRequest] = []
-    private var retryCalls = 0
-    private var retryUsedAuthorization = false
-    private var retryCredential: IOSResolvedOpenAICredential?
-    private var retryConsent: IOSProviderConsentObservation?
 
     init(
         processResult: IOSForegroundVoiceProcessingResolution =
-            .notStarted(.networkFailure),
-        retryResult: IOSForegroundVoiceProcessingResolution =
-            .notStarted(.localPersistence)
+            .notStarted(.networkFailure)
     ) {
         self.processResult = processResult
-        self.retryResult = retryResult
     }
 
     func process(
@@ -396,16 +300,6 @@ private actor BridgeProcessorCapture {
         return processResult
     }
 
-    func retry(
-        _ authorization: IOSForegroundVoiceProviderRetryAuthorization?
-    ) -> IOSForegroundVoiceProcessingResolution {
-        retryCalls += 1
-        retryUsedAuthorization = authorization != nil
-        retryCredential = authorization?.credential
-        retryConsent = authorization?.consentObservation
-        return retryResult
-    }
-
     func processCallCount() -> Int { processRequests.count }
     func lastProcessRequest() -> IOSForegroundVoiceProcessingRequest? {
         processRequests.last
@@ -413,20 +307,14 @@ private actor BridgeProcessorCapture {
     func lastProcessCredential() -> IOSResolvedOpenAICredential? {
         processRequests.last?.credential
     }
-    func retryCallCount() -> Int { retryCalls }
-    func lastRetryUsedAuthorization() -> Bool { retryUsedAuthorization }
-    func lastRetryCredential() -> IOSResolvedOpenAICredential? {
-        retryCredential
-    }
-    func lastRetryConsent() -> IOSProviderConsentObservation? { retryConsent }
 }
 
 private struct BridgeWorkflowRequestFixture {
     let request: IOSForegroundVoiceWorkflowProcessingRequest
-    let pending: IOSPendingRecording
+    let pending: IOSV1PendingRecording
     let settings: IOSAppSettings
     let library: IOSLibraryContent
-    let consent: IOSProviderConsentObservation
+    let consent: IOSV1ProviderConsentObservation
 }
 
 private func makeCredentialClient(
@@ -443,9 +331,6 @@ private func makeProcessorClient(
     IOSForegroundVoiceCoreProcessorClient(
         process: { request, _ in
             await capture.process(request)
-        },
-        retryLocalRecovery: { authorization, _ in
-            await capture.retry(authorization)
         }
     )
 }
@@ -518,37 +403,29 @@ private func makeWorkflowRequest(
     )
 }
 
-private func makeConsentObservation() -> IOSProviderConsentObservation {
-    IOSProviderConsentObservation(
-        status: .acceptedCurrentDisclosure,
-        decisionAt: Date(timeIntervalSince1970: 1_800_000_000),
-        canResetUnreadableData: false,
-        ownerIdentity: IOSProviderConsentOwnerIdentity(),
-        source: .absent,
-        gateFence: IOSProviderConsentObservationFence()
-    )
+private func makeConsentObservation() -> IOSV1ProviderConsentObservation {
+    IOSV1ProviderConsentQualificationFixture.acceptedObservation()
 }
 
 private func makeBridgePendingRecording(
     configuration: TranscriptionConfiguration
-) throws -> IOSPendingRecording {
+) throws -> IOSV1PendingRecording {
     let attemptID = UUID()
     let createdAt = Date(timeIntervalSince1970: 1_800_000_000)
-    return try IOSPendingRecording(
+    let state = try IOSVoiceStatePending(
         attemptID: attemptID,
         audioRelativeIdentifier:
-            IOSPendingRecordingStorageLocation.relativeAudioIdentifier(
-                for: attemptID,
-                format: .m4a
+            IOSVoiceStateStorageLocation.relativeAudioIdentifier(
+                for: attemptID
             ),
         createdAt: createdAt,
         updatedAt: createdAt,
-        phase: .readyForTranscription,
         outputIntent: .standard,
-        transcriptionID: nil,
         transcriptionModel: configuration.resolvedModel,
         transcriptionLanguageCode: configuration.resolvedLanguageCode,
         durationMilliseconds: 1_000,
-        byteCount: 1_024
+        byteCount: 1_024,
+        status: .ready
     )
+    return IOSV1PendingRecording(state)
 }

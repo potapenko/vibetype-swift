@@ -332,8 +332,7 @@ struct IOSVoiceHomeView: View {
         switch latestResultOwner.presentation.status {
         case .notLoaded, .absent:
             false
-        case .ready, .priorWhileSaving, .savingWithoutPrior, .clearing,
-             .cleanupPending, .unavailable:
+        case .ready, .clearing, .unavailable:
             true
         }
     }
@@ -824,22 +823,6 @@ struct IOSVoiceLatestStatusPresentation {
                 tone: .success,
                 showsProgress: false
             )
-        case .priorWhileSaving:
-            Self(
-                title: "Previous Result",
-                detail: "A newer accepted result is still being saved.",
-                systemImage: "clock.arrow.circlepath",
-                tone: .neutral,
-                showsProgress: true
-            )
-        case .savingWithoutPrior:
-            Self(
-                title: "Saving Latest Result…",
-                detail: "No earlier result is available while the save finishes.",
-                systemImage: "externaldrive",
-                tone: .neutral,
-                showsProgress: true
-            )
         case .clearing:
             Self(
                 title: "Clearing Latest Result…",
@@ -847,14 +830,6 @@ struct IOSVoiceLatestStatusPresentation {
                 systemImage: "trash",
                 tone: .neutral,
                 showsProgress: true
-            )
-        case .cleanupPending:
-            Self(
-                title: "Latest Result Cleared",
-                detail: "Protected cleanup will retry automatically.",
-                systemImage: "checkmark.circle",
-                tone: .success,
-                showsProgress: false
             )
         case .unavailable:
             Self(

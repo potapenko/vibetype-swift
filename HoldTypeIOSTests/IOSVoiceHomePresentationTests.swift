@@ -16,8 +16,6 @@ struct IOSVoiceHomePresentationTests {
             .recoverRecording,
             .retryPending,
             .discard,
-            .retrySavingResult,
-            .retryLocalCheckpoint,
         ]
         let presentations = actions.map(IOSVoiceActionPresentation.resolve)
 
@@ -31,8 +29,6 @@ struct IOSVoiceHomePresentationTests {
             "Recover Recording",
             "Retry Transcription",
             "Discard Recording",
-            "Retry Saving Result",
-            "Retry Local Checkpoint",
         ])
         #expect(
             presentations.enumerated().filter {
@@ -40,7 +36,7 @@ struct IOSVoiceHomePresentationTests {
             }.map(\.offset) == [8]
         )
         #expect(
-            Set(presentations.map(\.accessibilityIdentifier)).count == 11
+            Set(presentations.map(\.accessibilityIdentifier)).count == 9
         )
         #expect(presentations[8].prominence == .destructive)
     }
@@ -95,11 +91,8 @@ struct IOSVoiceHomePresentationTests {
     @Test func everyRecoveryRemainsVisibleAndNeverLooksReady() {
         let recoveries: [IOSForegroundVoiceRecovery] = [
             .captureRecoverOrDiscard,
-            .captureRecoverOnly,
             .captureDiscardOnly,
             .pendingRetryOrDiscard,
-            .savingResult,
-            .localCheckpoint(.transcription),
             .blocked,
         ]
 
@@ -198,6 +191,22 @@ struct IOSVoiceHomePresentationTests {
         #expect(resolved.setupDestination == nil)
     }
 
+    @Test func localCleanupWarningKeepsTheAcceptedResultSafe() {
+        let resolved = IOSVoiceHomePresentation.resolve(
+            voicePresentation(
+                outcome: .resultReady,
+                warning: .localCleanupPending
+            )
+        )
+
+        #expect(resolved.title == "Result ready")
+        #expect(
+            resolved.detail
+                == "Latest Result is safe; HoldType will finish local cleanup automatically."
+        )
+        #expect(resolved.tone == .warning)
+    }
+
     @Test func everyReferencedSystemImageExistsOnTheDeploymentRuntime() {
         let actions: [IOSForegroundVoiceAction] = [
             .startStandard,
@@ -209,8 +218,6 @@ struct IOSVoiceHomePresentationTests {
             .recoverRecording,
             .retryPending,
             .discard,
-            .retrySavingResult,
-            .retryLocalCheckpoint,
         ]
         let statuses = voiceStatusFixtures().map {
             IOSVoiceHomePresentation.resolve($0)
@@ -276,11 +283,8 @@ private func voiceStatusFixtures() -> [IOSForegroundVoicePresentation] {
     ].map { voicePresentation(setup: .needsSetup($0)) }
     values += [
         IOSForegroundVoiceRecovery.captureRecoverOrDiscard,
-        .captureRecoverOnly,
         .captureDiscardOnly,
         .pendingRetryOrDiscard,
-        .savingResult,
-        .localCheckpoint(.transcription),
         .blocked,
     ].map { voicePresentation(recovery: $0) }
     values += [
