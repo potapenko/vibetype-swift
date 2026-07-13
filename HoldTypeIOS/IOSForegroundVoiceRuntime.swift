@@ -99,6 +99,7 @@ final class IOSForegroundVoiceRuntime {
     let providerBridge: IOSForegroundVoiceProviderBridge
     let historyPlaybackArbitrator:
         any IOSForegroundVoiceHistoryPlaybackArbitrating
+    let latestResultOwner: IOSForegroundVoiceLatestResultOwner
     let workflow: IOSForegroundVoiceWorkflow
     let controller: IOSForegroundVoiceController
     let lifecycleCoordinator:
@@ -146,6 +147,10 @@ final class IOSForegroundVoiceRuntime {
         let historyPlaybackArbitrator = factories
             .makeHistoryPlaybackArbitrator()
         self.historyPlaybackArbitrator = historyPlaybackArbitrator
+        let latestResultOwner = IOSForegroundVoiceLatestResultOwner(
+            persistenceOwner: persistenceOwner
+        )
+        self.latestResultOwner = latestResultOwner
 
         let dependencies = IOSForegroundVoiceWorkflowDependencies(
             sceneRegistry: sceneRegistry,
@@ -161,7 +166,7 @@ final class IOSForegroundVoiceRuntime {
                 try await persistenceOwner.load()
             },
             loadLatest: {
-                try await persistenceOwner.loadLatestResult()
+                try await latestResultOwner.loadForVoiceWorkflow()
             },
             loadSettings: {
                 try await settingsStateOwner

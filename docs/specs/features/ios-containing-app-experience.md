@@ -230,6 +230,62 @@ The app guides setup in this order:
   audio object, file mutation, provider call, App Group publication, keyboard
   dependency, or background behavior.
 
+### P4D-4 Native Voice And Privacy Presentation
+
+- Voice remains a native guided utility built from system navigation, grouped
+  sections, text, buttons, progress indicators, confirmations, and Share. It
+  does not become a custom dashboard or imitate a keyboard inside the app.
+- Active Voice work owns the main status. When inactive, exact local recovery
+  takes priority over setup, failure, and terminal outcome; it must never be
+  hidden by a later provider or permission setup requirement. Latest Result is
+  an independent process-owned surface and may remain visible while a newer
+  attempt is arming, processing, or saving.
+- The view renders only exact revision-bound commands supplied by the shared
+  controller. It never reconstructs a command from an action enum, enables a
+  stale command, invents a destructive Retry, or transfers an initiating-scene
+  prompt to another window. Discard and Clear require confirmation; ordinary
+  Cancel actions do not.
+- `ready` and Quick Session `expired` remain unavailable in P4. If either state
+  reaches this UI, it is presented as unavailable and exposes no background
+  session control.
+- Listening shows presentation-only elapsed time plus Done and Cancel when the
+  controller admits them. Finalizing uses neutral local-recording copy because
+  the same phase may represent live finalization, Recover, or Discard. Provider
+  and output stages remain visibly distinct, and Saving Result never offers
+  Cancel Processing.
+- One process-owned Latest Result presentation owner reads through the exact
+  Persistence owner already used by the workflow. It publishes selectable text
+  without putting text or record identity into the Voice controller. Full text
+  is available only for an exact active record; stale, expired, ambiguous, or
+  unavailable observations fail closed.
+- Copy, Share, and Use in Practice snapshot the exact currently admitted text.
+  Use in Practice replaces only the invoking scene's local practice draft.
+  Confirmed Clear uses an exact record expectation, survives view dismissal
+  after admission, never repeats itself for a replacement record, and removes
+  visible text only after a confirmed tombstone or already-absent result.
+- One process-owned consent presentation owner retains the exact durable
+  observation and exact initiating-scene lease. Only that scene may present the
+  OpenAI Processing disclosure. Accept resumes the same Start only after a
+  durable current decision and fresh lease validation; Decline, dismissal,
+  cancellation, or scene loss returns to inactive without permission, audio,
+  or provider work. Another window may show that setup is continuing but may
+  not present or inherit the prompt.
+- Privacy & Permissions passively shows the four microphone states and the
+  current OpenAI processing-consent state. It never requests microphone access,
+  reads Keychain, activates audio, or contacts OpenAI. Denied microphone access
+  may offer only the public app Settings URL plus written guidance.
+- Accept, Withdraw, and unreadable-data Reset are exact confirmed consent
+  mutations. Withdrawal closes provider authority before durable file work,
+  prevents late output from becoming accepted, and stops active capture through
+  the interruption/recovery path rather than ordinary user cancellation. A
+  valid partial or completed recording remains Recover-or-Discard; withdrawal
+  does not delete the API key, settings, History, Latest Result, usage, or other
+  separately owned data.
+- iPhone tabs and iPad split view render the same shared Voice, Latest, and
+  consent truth. Navigation and practice drafts remain scene-local. Dynamic
+  Type may stack actions vertically; text and recovery explanations are never
+  clipped to preserve a card height.
+
 ## Quick Session Gate
 
 - Quick Session is hidden or clearly unavailable until the M0B prerequisites
