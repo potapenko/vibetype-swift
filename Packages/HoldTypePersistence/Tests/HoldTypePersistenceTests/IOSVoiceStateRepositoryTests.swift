@@ -69,6 +69,121 @@ struct IOSVoiceStateRepositoryTests {
         }
     }
 
+    @Test func captureRoundTripsAndExcludesThePendingSlot() async throws {
+        let fileSystem = VoiceStateFileSystem()
+        let repository = makeRepository(fileSystem: fileSystem)
+        let capture = try makeCapture()
+
+        _ = try await repository.installCapture(capture)
+
+        #expect(try await makeRepository(fileSystem: fileSystem).load().capture == capture)
+        await #expect(
+            throws: IOSVoiceStateRepositoryError.pendingSlotOccupied
+        ) {
+            _ = try await repository.installPending(try makePending())
+        }
+        await #expect(
+            throws: IOSVoiceStateRepositoryError.pendingSlotOccupied
+        ) {
+            _ = try await repository.installCapture(
+                try makeCapture(attemptID: IDs.otherAttempt)
+            )
+        }
+    }
+
+    @Test func completedCapturePromotesAtomicallyWithoutChangingAudioIdentity() async throws {
+        let fileSystem = VoiceStateFileSystem()
+        let repository = makeRepository(fileSystem: fileSystem)
+        let capture = try makeCapture()
+        _ = try await repository.installCapture(capture)
+        _ = try await repository.transitionCapture(
+            attemptID: capture.attemptID,
+            to: .finalizing
+        )
+        let completed = try await repository.completeCapture(
+            attemptID: capture.attemptID,
+            durationMilliseconds: 1_250,
+            byteCount: 4_096
+        )
+        let writesBeforePromotion = fileSystem.writeCount
+
+        let pending = try await repository.promoteCapture(
+            attemptID: capture.attemptID,
+            transcriptionConfiguration: TranscriptionConfiguration(
+                language: .english
+            )
+        )
+
+        #expect(completed.phase == .completed)
+        #expect(fileSystem.writeCount == writesBeforePromotion + 1)
+        #expect(pending.audioRelativeIdentifier == capture.audioRelativeIdentifier)
+        #expect(pending.transcriptionLanguageCode == "en")
+        #expect(pending.status == .ready)
+        let snapshot = try await repository.load()
+        #expect(snapshot.capture == nil)
+        #expect(snapshot.pending == pending)
+    }
+
+    @Test func captureTransitionsRejectStaleAndIncompletePromotion() async throws {
+        let repository = makeRepository()
+        let capture = try makeCapture()
+        _ = try await repository.installCapture(capture)
+
+        await #expect(throws: IOSVoiceStateRepositoryError.stalePending) {
+            _ = try await repository.transitionCapture(
+                attemptID: IDs.otherAttempt,
+                to: .finalizing
+            )
+        }
+        await #expect(throws: IOSVoiceStateRepositoryError.invalidTransition) {
+            _ = try await repository.promoteCapture(
+                attemptID: capture.attemptID,
+                transcriptionConfiguration: .defaults
+            )
+        }
+        _ = try await repository.transitionCapture(
+            attemptID: capture.attemptID,
+            to: .finalizing
+        )
+        await #expect(throws: IOSVoiceStateRepositoryError.invalidTransition) {
+            _ = try await repository.transitionCapture(
+                attemptID: capture.attemptID,
+                to: .recording
+            )
+        }
+    }
+
+    @Test func invalidPromotionLeavesCompletedCaptureUnchanged() async throws {
+        let fileSystem = VoiceStateFileSystem()
+        let repository = makeRepository(fileSystem: fileSystem)
+        let capture = try makeCapture()
+        _ = try await repository.installCapture(capture)
+        _ = try await repository.transitionCapture(
+            attemptID: capture.attemptID,
+            to: .finalizing
+        )
+        _ = try await repository.completeCapture(
+            attemptID: capture.attemptID,
+            durationMilliseconds: 1_250,
+            byteCount: 4_096
+        )
+        let bytes = fileSystem.bytes
+
+        await #expect(throws: IOSVoiceStateRepositoryError.invalidTransition) {
+            _ = try await repository.promoteCapture(
+                attemptID: capture.attemptID,
+                transcriptionConfiguration: TranscriptionConfiguration(
+                    language: .custom,
+                    customLanguageCode: "invalid-code"
+                )
+            )
+        }
+
+        #expect(fileSystem.bytes == bytes)
+        #expect(try await repository.load().capture?.phase == .completed)
+        #expect(try await repository.load().pending == nil)
+    }
+
     @Test func initialAndRetryProcessingHaveDistinctAdmission() async throws {
         let repository = makeRepository()
         let pending = try makePending()
@@ -267,14 +382,14 @@ struct IOSVoiceStateRepositoryTests {
             (Data("not-json".utf8), IOSVoiceStateRepositoryError.malformedData),
             (
                 Data(
-                    "{\"latest\":null,\"pending\":null,\"schemaVersion\":2}"
+                    "{\"capture\":null,\"latest\":null,\"pending\":null,\"schemaVersion\":2}"
                         .utf8
                 ),
                 IOSVoiceStateRepositoryError.unsupportedSchemaVersion
             ),
             (
                 Data(
-                    "{\"extra\":1,\"latest\":null,\"pending\":null,\"schemaVersion\":1}"
+                    "{\"capture\":null,\"extra\":1,\"latest\":null,\"pending\":null,\"schemaVersion\":1}"
                         .utf8
                 ),
                 IOSVoiceStateRepositoryError.invalidRecord
@@ -363,6 +478,21 @@ struct IOSVoiceStateRepositoryTests {
             to: .outputDelivery
         )
     }
+}
+
+private func makeCapture(
+    attemptID: UUID = IDs.attempt
+) throws -> IOSVoiceStateCapture {
+    try IOSVoiceStateCapture(
+        attemptID: attemptID,
+        audioRelativeIdentifier:
+            IOSVoiceStateStorageLocation.relativeAudioIdentifier(
+                for: attemptID
+            ),
+        createdAt: Dates.created,
+        outputIntent: .standard,
+        phase: .recording
+    )
 }
 
 private func makePending(

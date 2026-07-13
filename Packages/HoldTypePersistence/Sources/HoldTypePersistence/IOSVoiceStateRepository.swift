@@ -35,6 +35,71 @@ enum IOSVoiceStatePendingStatus: Equatable, Sendable {
     case acceptedCleanup(IOSVoiceStateAcceptedResult)
 }
 
+enum IOSVoiceStateCapturePhase: String, Equatable, Sendable {
+    case recording
+    case finalizing
+    case completed
+    case discarding
+}
+
+struct IOSVoiceStateCapture: Equatable, Sendable {
+    let attemptID: UUID
+    let audioRelativeIdentifier: String
+    let createdAt: Date
+    let outputIntent: DictationOutputIntent
+    let phase: IOSVoiceStateCapturePhase
+    let durationMilliseconds: Int64?
+    let byteCount: Int64?
+
+    init(
+        attemptID: UUID,
+        audioRelativeIdentifier: String,
+        createdAt: Date,
+        outputIntent: DictationOutputIntent,
+        phase: IOSVoiceStateCapturePhase,
+        durationMilliseconds: Int64? = nil,
+        byteCount: Int64? = nil
+    ) throws {
+        let hasCompletion = durationMilliseconds != nil || byteCount != nil
+        guard IOSVoiceStateValidation.isCanonicalCaptureAudioIdentifier(
+                  audioRelativeIdentifier,
+                  attemptID: attemptID
+              ),
+              IOSVoiceStateValidation.isValidDate(createdAt),
+              (phase == .completed) == hasCompletion,
+              (durationMilliseconds == nil && byteCount == nil)
+                || ((durationMilliseconds ?? 0) > 0
+                    && (durationMilliseconds ?? 0) < 300_000
+                    && (byteCount ?? 0) > 0
+                    && (byteCount ?? 0) < 25_000_000) else {
+            throw IOSVoiceStateRepositoryError.invalidRecord
+        }
+        self.attemptID = attemptID
+        self.audioRelativeIdentifier = audioRelativeIdentifier
+        self.createdAt = createdAt
+        self.outputIntent = outputIntent
+        self.phase = phase
+        self.durationMilliseconds = durationMilliseconds
+        self.byteCount = byteCount
+    }
+
+    func replacing(
+        phase: IOSVoiceStateCapturePhase,
+        durationMilliseconds: Int64? = nil,
+        byteCount: Int64? = nil
+    ) throws -> Self {
+        try Self(
+            attemptID: attemptID,
+            audioRelativeIdentifier: audioRelativeIdentifier,
+            createdAt: createdAt,
+            outputIntent: outputIntent,
+            phase: phase,
+            durationMilliseconds: durationMilliseconds,
+            byteCount: byteCount
+        )
+    }
+}
+
 struct IOSVoiceStatePending: Equatable, Sendable {
     let attemptID: UUID
     let audioRelativeIdentifier: String
@@ -137,10 +202,11 @@ struct IOSVoiceStateLatest: Equatable, Sendable {
 }
 
 struct IOSVoiceStateSnapshot: Equatable, Sendable {
+    var capture: IOSVoiceStateCapture?
     var pending: IOSVoiceStatePending?
     var latest: IOSVoiceStateLatest?
 
-    static let empty = Self(pending: nil, latest: nil)
+    static let empty = Self(capture: nil, pending: nil, latest: nil)
 }
 
 enum IOSVoiceStateMutationResult: Equatable, Sendable {
@@ -207,12 +273,138 @@ actor IOSVoiceStateRepository {
         _ pending: IOSVoiceStatePending
     ) throws -> IOSVoiceStateSnapshot {
         var snapshot = try load()
-        guard snapshot.pending == nil else {
+        guard snapshot.capture == nil, snapshot.pending == nil else {
             throw IOSVoiceStateRepositoryError.pendingSlotOccupied
         }
         snapshot.pending = pending
         try replace(snapshot)
         return snapshot
+    }
+
+    @discardableResult
+    func installCapture(
+        _ capture: IOSVoiceStateCapture
+    ) throws -> IOSVoiceStateSnapshot {
+        var snapshot = try load()
+        guard snapshot.capture == nil, snapshot.pending == nil else {
+            throw IOSVoiceStateRepositoryError.pendingSlotOccupied
+        }
+        snapshot.capture = capture
+        try replace(snapshot)
+        return snapshot
+    }
+
+    @discardableResult
+    func transitionCapture(
+        attemptID: UUID,
+        to phase: IOSVoiceStateCapturePhase
+    ) throws -> IOSVoiceStateCapture {
+        var snapshot = try load()
+        guard let capture = snapshot.capture,
+              capture.attemptID == attemptID else {
+            throw IOSVoiceStateRepositoryError.stalePending
+        }
+        let isAllowed: Bool
+        switch (capture.phase, phase) {
+        case (.recording, .finalizing),
+             (.recording, .discarding),
+             (.finalizing, .discarding),
+             (.completed, .discarding):
+            isAllowed = true
+        default:
+            isAllowed = capture.phase == phase
+        }
+        guard isAllowed else {
+            throw IOSVoiceStateRepositoryError.invalidTransition
+        }
+        if capture.phase == phase { return capture }
+        let updated = try capture.replacing(phase: phase)
+        snapshot.capture = updated
+        try replace(snapshot)
+        return updated
+    }
+
+    @discardableResult
+    func completeCapture(
+        attemptID: UUID,
+        durationMilliseconds: Int64,
+        byteCount: Int64
+    ) throws -> IOSVoiceStateCapture {
+        var snapshot = try load()
+        guard let capture = snapshot.capture,
+              capture.attemptID == attemptID,
+              capture.phase == .finalizing else {
+            throw IOSVoiceStateRepositoryError.invalidTransition
+        }
+        let completed = try capture.replacing(
+            phase: .completed,
+            durationMilliseconds: durationMilliseconds,
+            byteCount: byteCount
+        )
+        snapshot.capture = completed
+        try replace(snapshot)
+        return completed
+    }
+
+    @discardableResult
+    func promoteCapture(
+        attemptID: UUID,
+        transcriptionConfiguration: TranscriptionConfiguration,
+        initialStatus: IOSVoiceStatePendingStatus = .ready
+    ) throws -> IOSVoiceStatePending {
+        var snapshot = try load()
+        guard snapshot.pending == nil,
+              let capture = snapshot.capture,
+              capture.attemptID == attemptID,
+              capture.phase == .completed,
+              let durationMilliseconds = capture.durationMilliseconds,
+              let byteCount = capture.byteCount,
+              !transcriptionConfiguration.customLanguageCodeValidation
+                .isInvalid else {
+            throw IOSVoiceStateRepositoryError.invalidTransition
+        }
+        switch initialStatus {
+        case .ready, .failed:
+            break
+        case .processing, .acceptedCleanup:
+            throw IOSVoiceStateRepositoryError.invalidTransition
+        }
+        let pending = try IOSVoiceStatePending(
+            attemptID: capture.attemptID,
+            audioRelativeIdentifier: capture.audioRelativeIdentifier,
+            createdAt: capture.createdAt,
+            updatedAt: mutationDate(after: capture.createdAt),
+            outputIntent: capture.outputIntent,
+            transcriptionModel: transcriptionConfiguration.resolvedModel,
+            transcriptionLanguageCode:
+                transcriptionConfiguration.resolvedLanguageCode,
+            durationMilliseconds: durationMilliseconds,
+            byteCount: byteCount,
+            status: initialStatus
+        )
+        snapshot.capture = nil
+        snapshot.pending = pending
+        try replace(snapshot)
+        return pending
+    }
+
+    @discardableResult
+    func clearCapture(
+        attemptID: UUID
+    ) throws -> IOSVoiceStateMutationResult {
+        var snapshot = try load()
+        guard let capture = snapshot.capture else {
+            return .unchanged(snapshot)
+        }
+        guard capture.attemptID == attemptID else {
+            throw IOSVoiceStateRepositoryError.stalePending
+        }
+        guard capture.phase == .discarding else {
+            throw IOSVoiceStateRepositoryError.invalidTransition
+        }
+        snapshot.capture = nil
+        try replace(snapshot)
+        return .changed(snapshot)
     }
 
     @discardableResult
@@ -466,6 +658,13 @@ enum IOSVoiceStateStorageLocation {
 }
 
 private enum IOSVoiceStateValidation {
+    static func isCanonicalCaptureAudioIdentifier(
+        _ value: String,
+        attemptID: UUID
+    ) -> Bool {
+        isCanonicalRelativeAudioIdentifier(value, attemptID: attemptID)
+    }
+
     static func isCanonicalRelativeAudioIdentifier(
         _ value: String,
         attemptID: UUID
@@ -531,7 +730,11 @@ private enum IOSVoiceStateValidation {
 private enum IOSVoiceStateWireCodec {
     private static let schemaVersion = 1
     private static let rootKeys: Set<String> = [
-        "schemaVersion", "pending", "latest",
+        "schemaVersion", "capture", "pending", "latest",
+    ]
+    private static let captureKeys: Set<String> = [
+        "attemptID", "audioRelativeIdentifier", "createdAtMilliseconds",
+        "outputIntent", "phase", "durationMilliseconds", "byteCount",
     ]
     private static let pendingKeys: Set<String> = [
         "attemptID", "audioRelativeIdentifier", "createdAtMilliseconds",
@@ -549,6 +752,7 @@ private enum IOSVoiceStateWireCodec {
     static func encode(_ snapshot: IOSVoiceStateSnapshot) throws -> Data {
         let wire = try RecordWire(
             schemaVersion: schemaVersion,
+            capture: snapshot.capture.map(CaptureWire.init),
             pending: snapshot.pending.map(PendingWire.init),
             latest: snapshot.latest.map(ResultWire.init)
         )
@@ -600,6 +804,10 @@ private enum IOSVoiceStateWireCodec {
             throw IOSVoiceStateRepositoryError.unsupportedSchemaVersion
         }
         try validateOptionalObject(
+            object["capture"],
+            keys: captureKeys
+        )
+        try validateOptionalObject(
             object["pending"],
             keys: pendingKeys,
             nested: { pending in
@@ -628,10 +836,15 @@ private enum IOSVoiceStateWireCodec {
             throw IOSVoiceStateRepositoryError.unsupportedSchemaVersion
         }
         do {
-            return IOSVoiceStateSnapshot(
+            let snapshot = IOSVoiceStateSnapshot(
+                capture: try wire.capture?.value(),
                 pending: try wire.pending?.value(),
                 latest: try wire.latest?.latestValue()
             )
+            guard snapshot.capture == nil || snapshot.pending == nil else {
+                throw IOSVoiceStateRepositoryError.invalidRecord
+            }
+            return snapshot
         } catch let error as IOSVoiceStateRepositoryError {
             throw error
         } catch {
@@ -664,11 +877,13 @@ private enum IOSVoiceStateWireCodec {
 
     private struct RecordWire: Codable {
         let schemaVersion: Int
+        let capture: CaptureWire?
         let pending: PendingWire?
         let latest: ResultWire?
 
         private enum CodingKeys: String, CodingKey {
             case schemaVersion
+            case capture
             case pending
             case latest
         }
@@ -676,6 +891,11 @@ private enum IOSVoiceStateWireCodec {
         func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encode(schemaVersion, forKey: .schemaVersion)
+            if let capture {
+                try container.encode(capture, forKey: .capture)
+            } else {
+                try container.encodeNil(forKey: .capture)
+            }
             if let pending {
                 try container.encode(pending, forKey: .pending)
             } else {
@@ -685,6 +905,86 @@ private enum IOSVoiceStateWireCodec {
                 try container.encode(latest, forKey: .latest)
             } else {
                 try container.encodeNil(forKey: .latest)
+            }
+        }
+    }
+
+    private struct CaptureWire: Codable {
+        let attemptID: String
+        let audioRelativeIdentifier: String
+        let createdAtMilliseconds: Int64
+        let outputIntent: String
+        let phase: String
+        let durationMilliseconds: Int64?
+        let byteCount: Int64?
+
+        init(_ capture: IOSVoiceStateCapture) throws {
+            attemptID = capture.attemptID.uuidString
+            audioRelativeIdentifier = capture.audioRelativeIdentifier
+            createdAtMilliseconds = try IOSVoiceStateValidation.milliseconds(
+                from: capture.createdAt
+            )
+            outputIntent = capture.outputIntent.rawValue
+            phase = capture.phase.rawValue
+            durationMilliseconds = capture.durationMilliseconds
+            byteCount = capture.byteCount
+        }
+
+        func value() throws -> IOSVoiceStateCapture {
+            guard let identifier = UUID(uuidString: attemptID),
+                  identifier.uuidString == attemptID,
+                  let output = DictationOutputIntent(rawValue: outputIntent),
+                  let phase = IOSVoiceStateCapturePhase(rawValue: phase) else {
+                throw IOSVoiceStateRepositoryError.invalidRecord
+            }
+            return try IOSVoiceStateCapture(
+                attemptID: identifier,
+                audioRelativeIdentifier: audioRelativeIdentifier,
+                createdAt: IOSVoiceStateValidation.date(
+                    from: createdAtMilliseconds
+                ),
+                outputIntent: output,
+                phase: phase,
+                durationMilliseconds: durationMilliseconds,
+                byteCount: byteCount
+            )
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case attemptID
+            case audioRelativeIdentifier
+            case createdAtMilliseconds
+            case outputIntent
+            case phase
+            case durationMilliseconds
+            case byteCount
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(attemptID, forKey: .attemptID)
+            try container.encode(
+                audioRelativeIdentifier,
+                forKey: .audioRelativeIdentifier
+            )
+            try container.encode(
+                createdAtMilliseconds,
+                forKey: .createdAtMilliseconds
+            )
+            try container.encode(outputIntent, forKey: .outputIntent)
+            try container.encode(phase, forKey: .phase)
+            if let durationMilliseconds {
+                try container.encode(
+                    durationMilliseconds,
+                    forKey: .durationMilliseconds
+                )
+            } else {
+                try container.encodeNil(forKey: .durationMilliseconds)
+            }
+            if let byteCount {
+                try container.encode(byteCount, forKey: .byteCount)
+            } else {
+                try container.encodeNil(forKey: .byteCount)
             }
         }
     }
