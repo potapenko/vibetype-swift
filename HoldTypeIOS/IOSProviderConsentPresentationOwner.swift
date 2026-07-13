@@ -69,6 +69,14 @@ nonisolated struct IOSProviderConsentConfirmationToken:
     fileprivate let value: UUID
 }
 
+nonisolated enum IOSProviderConsentConfirmationAdmission:
+    Equatable,
+    Sendable {
+    case accepted
+    case stale
+    case unavailable
+}
+
 nonisolated struct IOSProviderConsentPresentationClient: Sendable {
     typealias Observe = @Sendable () async -> IOSProviderConsentObservation
     typealias Accept = @Sendable (
@@ -217,6 +225,7 @@ final class IOSProviderConsentPresentationOwner {
     private(set) var notice: IOSProviderConsentPresentationNotice?
     private(set) var failure: IOSProviderConsentPresentationFailure?
     private(set) var voicePrompt: IOSProviderConsentVoicePromptPresentation?
+    private(set) var confirmationRevision: UInt64 = 0
 
     @ObservationIgnored
     private let client: IOSProviderConsentPresentationClient
@@ -575,21 +584,32 @@ final class IOSProviderConsentPresentationOwner {
             return nil
         }
         let token = IOSProviderConsentConfirmationToken(value: UUID())
-        pendingConfirmation = PendingConfirmation(
+        replacePendingConfirmation(PendingConfirmation(
             token: token,
             action: action,
             observation: observation
-        )
+        ))
         return token
     }
 
-    func confirmPrivacyAction(_ token: IOSProviderConsentConfirmationToken) {
-        guard operation == .idle,
-              let confirmation = pendingConfirmation,
+    func isPrivacyConfirmationCurrent(
+        _ token: IOSProviderConsentConfirmationToken
+    ) -> Bool {
+        _ = confirmationRevision
+        return operation == .idle
+            && pendingConfirmation?.token == token
+    }
+
+    @discardableResult
+    func confirmPrivacyAction(
+        _ token: IOSProviderConsentConfirmationToken
+    ) -> IOSProviderConsentConfirmationAdmission {
+        guard operation == .idle else { return .unavailable }
+        guard let confirmation = pendingConfirmation,
               confirmation.token == token else {
-            return
+            return .stale
         }
-        pendingConfirmation = nil
+        replacePendingConfirmation(nil)
         finishVoiceRequest(result: nil)
 
         let nextOperation: IOSProviderConsentPresentationOperation = switch
@@ -666,6 +686,7 @@ final class IOSProviderConsentPresentationOwner {
                 )
             }
         }
+        return .accepted
     }
 
     private func beginMutation(
@@ -674,7 +695,7 @@ final class IOSProviderConsentPresentationOwner {
     ) {
         guard operation == .idle, mutationTask == nil else { return }
         activePrivacyLoadID = nil
-        pendingConfirmation = nil
+        replacePendingConfirmation(nil)
         notice = nil
         failure = nil
         operation = nextOperation
@@ -789,7 +810,7 @@ final class IOSProviderConsentPresentationOwner {
         let observation = presented.observation
         privacyObservation = observation
         privacyAuthorizationIsReady = presented.isAuthorizationReady
-        pendingConfirmation = nil
+        replacePendingConfirmation(nil)
         privacyState = .ready(
             IOSProviderConsentPrivacySnapshot(
                 status: observation.status,
@@ -801,6 +822,13 @@ final class IOSProviderConsentPresentationOwner {
                         && !presented.isAuthorizationReady
             )
         )
+    }
+
+    private func replacePendingConfirmation(
+        _ next: PendingConfirmation?
+    ) {
+        pendingConfirmation = next
+        confirmationRevision &+= 1
     }
 
     private func receiveSceneEvent(_ event: IOSVoiceSceneRegistryEvent) {

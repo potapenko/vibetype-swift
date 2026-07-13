@@ -60,6 +60,29 @@ struct IOSContainingAppShellTests {
         )
     }
 
+    @Test func practiceDraftSurvivesRoundTripAndIsSceneLocal() {
+        var firstScene = IOSContainingAppSceneDraft()
+        let secondScene = IOSContainingAppSceneDraft()
+        firstScene.practiceText = "Scene one draft"
+
+        #expect(
+            IOSContainingAppDestinationSelectionDecision.resolve(
+                current: .voice,
+                requested: .settings,
+                hasUnsavedEditor: false
+            ) == .apply(.settings)
+        )
+        #expect(
+            IOSContainingAppDestinationSelectionDecision.resolve(
+                current: .settings,
+                requested: .voice,
+                hasUnsavedEditor: false
+            ) == .apply(.voice)
+        )
+        #expect(firstScene.practiceText == "Scene one draft")
+        #expect(secondScene.practiceText.isEmpty)
+    }
+
     @Test func unsavedEditorRequiresConfirmationBeforeDestinationChange() {
         #expect(
             IOSContainingAppDestinationSelectionDecision.resolve(

@@ -8,6 +8,7 @@ struct IOSSettingsHomeView: View {
     @State private var isLoading = false
     @Binding var openAIEditorDraft: IOSOpenAICredentialEditorDraft
     @Binding var hasUnsavedGeneralSettings: Bool
+    let foregroundVoiceRuntimeAvailable: Bool
 
     var body: some View {
         Group {
@@ -29,7 +30,9 @@ struct IOSSettingsHomeView: View {
                     showsSaveFailure: false,
                     openAIEditorDraft: $openAIEditorDraft,
                     hasUnsavedGeneralSettings:
-                        $hasUnsavedGeneralSettings
+                        $hasUnsavedGeneralSettings,
+                    foregroundVoiceRuntimeAvailable:
+                        foregroundVoiceRuntimeAvailable
                 )
             case .saveFailed(let lastDurableValue):
                 IOSSettingsSummaryList(
@@ -37,7 +40,9 @@ struct IOSSettingsHomeView: View {
                     showsSaveFailure: true,
                     openAIEditorDraft: $openAIEditorDraft,
                     hasUnsavedGeneralSettings:
-                        $hasUnsavedGeneralSettings
+                        $hasUnsavedGeneralSettings,
+                    foregroundVoiceRuntimeAvailable:
+                        foregroundVoiceRuntimeAvailable
                 )
             }
         }
@@ -45,6 +50,9 @@ struct IOSSettingsHomeView: View {
         .accessibilityIdentifier(
             IOSContainingAppDestination.settings.accessibilityIdentifier
         )
+        .navigationDestination(for: IOSSettingsRoute.self) { route in
+            settingsDestination(route)
+        }
         .task {
             guard case .notLoaded = stateOwner.state else { return }
             await load()
@@ -61,6 +69,73 @@ struct IOSSettingsHomeView: View {
         defer { isLoading = false }
         _ = try? await stateOwner.load()
     }
+
+    @ViewBuilder
+    private func settingsDestination(_ route: IOSSettingsRoute) -> some View {
+        switch route {
+        case .privacyAndPermissions:
+            if foregroundVoiceRuntimeAvailable {
+                IOSPrivacyPermissionsView()
+            } else {
+                ContentUnavailableView(
+                    "Privacy Status Unavailable",
+                    systemImage: "hand.raised.slash",
+                    description: Text(
+                        "Foreground Voice is unavailable in this build."
+                    )
+                )
+            }
+        case .openAI:
+            IOSOpenAISettingsView(editorDraft: $openAIEditorDraft)
+        case .general(let destination):
+            if let settings = currentSettings {
+                generalSettingsDestination(destination, settings: settings)
+            } else {
+                IOSDestinationLoadingView(title: "Loading Settings")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func generalSettingsDestination(
+        _ destination: IOSGeneralSettingsDestination,
+        settings: IOSAppSettings
+    ) -> some View {
+        switch destination {
+        case .transcription:
+            IOSTranscriptionSettingsView(
+                configuration: settings.transcriptionConfiguration,
+                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
+            )
+        case .writingCorrection:
+            IOSWritingCorrectionSettingsView(
+                configuration: settings.textCorrectionConfiguration,
+                localTextCleanupEnabled: settings.localTextCleanupEnabled,
+                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
+            )
+        case .translation:
+            IOSTranslationSettingsView(
+                configuration: settings.translationConfiguration,
+                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
+            )
+        case .voiceRecording:
+            IOSVoiceRecordingSettingsView(
+                preferences: settings.voiceSessionPreferences,
+                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
+            )
+        }
+    }
+
+    private var currentSettings: IOSAppSettings? {
+        switch stateOwner.state {
+        case .ready(let settings):
+            settings
+        case .saveFailed(let lastDurableValue):
+            lastDurableValue
+        case .notLoaded, .loadFailed:
+            nil
+        }
+    }
 }
 
 private struct IOSSettingsSummaryList: View {
@@ -71,6 +146,7 @@ private struct IOSSettingsSummaryList: View {
     let showsSaveFailure: Bool
     @Binding var openAIEditorDraft: IOSOpenAICredentialEditorDraft
     @Binding var hasUnsavedGeneralSettings: Bool
+    let foregroundVoiceRuntimeAvailable: Bool
 
     var body: some View {
         List {
@@ -158,6 +234,24 @@ private struct IOSSettingsSummaryList: View {
                 LabeledContent("Maximum Utterance", value: "5 minutes")
             }
 
+            if foregroundVoiceRuntimeAvailable {
+                Section("Privacy") {
+                    NavigationLink(
+                        value: IOSSettingsRoute.privacyAndPermissions
+                    ) {
+                        IOSSettingsDestinationLabel(
+                            title: "Privacy & Permissions",
+                            summary:
+                                "Microphone access and OpenAI processing consent",
+                            systemImage: "hand.raised"
+                        )
+                    }
+                    .accessibilityIdentifier(
+                        "ios.settings.privacy-permissions.row"
+                    )
+                }
+            }
+
             Section {
                 Text(
                     "Prompts and complete settings stay in HoldType’s private "
@@ -168,38 +262,6 @@ private struct IOSSettingsSummaryList: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
-        }
-        .navigationDestination(for: IOSSettingsRoute.self) { route in
-            settingsDestination(route)
-        }
-    }
-
-    @ViewBuilder
-    private func settingsDestination(_ route: IOSSettingsRoute) -> some View {
-        switch route {
-        case .openAI:
-            IOSOpenAISettingsView(editorDraft: $openAIEditorDraft)
-        case .general(.transcription):
-            IOSTranscriptionSettingsView(
-                configuration: settings.transcriptionConfiguration,
-                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
-            )
-        case .general(.writingCorrection):
-            IOSWritingCorrectionSettingsView(
-                configuration: settings.textCorrectionConfiguration,
-                localTextCleanupEnabled: settings.localTextCleanupEnabled,
-                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
-            )
-        case .general(.translation):
-            IOSTranslationSettingsView(
-                configuration: settings.translationConfiguration,
-                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
-            )
-        case .general(.voiceRecording):
-            IOSVoiceRecordingSettingsView(
-                preferences: settings.voiceSessionPreferences,
-                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
-            )
         }
     }
 

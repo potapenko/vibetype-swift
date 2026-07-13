@@ -90,6 +90,7 @@ enum IOSContainingAppDestinationSelectionDecision: Equatable, Sendable {
 enum IOSSettingsRoute: Hashable {
     case openAI
     case general(IOSGeneralSettingsDestination)
+    case privacyAndPermissions
 }
 
 enum IOSLibraryRoute: Hashable {

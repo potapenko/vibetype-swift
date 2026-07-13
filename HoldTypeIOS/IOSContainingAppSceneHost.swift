@@ -43,6 +43,8 @@ private struct IOSRegisteredContainingAppSceneHost: View {
         HoldTypeIOSRootView(composition: composition)
             .environment(runtime.controller)
             .environment(voiceSceneOwner)
+            .environment(runtime.latestResultOwner)
+            .environment(runtime.providerConsentPresentationOwner)
             .onChange(of: scenePhase, initial: true) { _, newPhase in
                 voiceSceneOwner.registerOrUpdateActivity(
                     IOSVoiceSceneActivity(newPhase)
@@ -63,7 +65,9 @@ private extension HoldTypeIOSRootView {
                 composition.openAISettingsStateOwner,
             secureProviderAvailability: .resolve(
                 compositionAvailability: composition.availability
-            )
+            ),
+            foregroundVoiceRuntimeAvailable:
+                composition.foregroundVoiceRuntime != nil
         )
     }
 }

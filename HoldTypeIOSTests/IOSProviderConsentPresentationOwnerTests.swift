@@ -284,6 +284,39 @@ struct IOSProviderConsentPresentationOwnerTests {
         )
     }
 
+    @Test func privacyConfirmationValidityTracksExactProcessToken()
+        async throws {
+        let fixture = try ConsentPresentationFixture()
+        defer { fixture.remove() }
+        _ = try await fixture.coordinator.accept(
+            using: fixture.coordinator.observe(),
+            decisionAt: fixture.now
+        )
+        let owner = fixture.makeOwner()
+        await owner.activatePrivacy()
+
+        let stale = try #require(
+            owner.makePrivacyConfirmation(for: .withdraw)
+        )
+        #expect(owner.isPrivacyConfirmationCurrent(stale))
+        let current = try #require(
+            owner.makePrivacyConfirmation(for: .withdraw)
+        )
+        #expect(!owner.isPrivacyConfirmationCurrent(stale))
+        #expect(owner.isPrivacyConfirmationCurrent(current))
+        #expect(owner.confirmPrivacyAction(stale) == .stale)
+
+        await owner.activatePrivacy()
+        #expect(!owner.isPrivacyConfirmationCurrent(current))
+        #expect(owner.confirmPrivacyAction(current) == .stale)
+        let refreshed = try #require(
+            owner.makePrivacyConfirmation(for: .withdraw)
+        )
+        #expect(owner.confirmPrivacyAction(refreshed) == .accepted)
+        #expect(!owner.isPrivacyConfirmationCurrent(refreshed))
+        await owner.waitUntilIdle()
+    }
+
     @Test func preflightObservationCannotOverwriteQueuedWithdrawal()
         async throws {
         let fixture = try ConsentPresentationFixture()

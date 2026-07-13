@@ -1,68 +1,427 @@
+import Foundation
+import HoldTypeDomain
 import SwiftUI
+import UIKit
 
 struct IOSVoiceHomeView: View {
-    @State private var practiceText = ""
+    @Environment(IOSForegroundVoiceSceneHostOwner.self)
+    private var sceneOwner
+    @Environment(IOSForegroundVoiceLatestResultOwner.self)
+    private var latestResultOwner
+    @Environment(IOSProviderConsentPresentationOwner.self)
+    private var consentOwner
+
+    @Binding var practiceText: String
+    @State private var listeningStartedAt: Date?
+    @State private var pendingVoiceCommand:
+        IOSForegroundVoiceActionCommand?
+    @State private var pendingLatestClearCommand:
+        IOSForegroundVoiceLatestResultClearCommand?
+    @State private var shareItem: IOSVoiceShareItem?
+    @State private var latestActionNotice: String?
+    @FocusState private var practiceFieldIsFocused: Bool
 
     let secureProviderAvailability: IOSSecureProviderAvailability
+    let openSettings: (IOSSettingsRoute) -> Void
 
     var body: some View {
         List {
-            Section("Getting Started") {
-                IOSSetupSummaryRow(
-                    systemImage: "keyboard",
-                    title: "Keyboard practice",
-                    detail: "Use the practice field below with any keyboard."
-                )
-                IOSSetupSummaryRow(
-                    systemImage: "key.fill",
-                    title: openAISetupTitle,
-                    detail: openAISetupDetail
-                )
-                IOSSetupSummaryRow(
-                    systemImage: "mic.slash.fill",
-                    title: "Microphone access",
-                    detail: "Permission is requested only after an explicit Start."
-                )
-            }
+            voiceHeader
 
-            Section("Voice Capture") {
-                Label(
-                    "Voice recording is not available in this build.",
-                    systemImage: "mic.slash"
-                )
-                .foregroundStyle(.secondary)
-
-                Text(
-                    "Opening this screen never requests microphone access, "
-                    + "starts recording, or contacts OpenAI."
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-
-            Section("Keyboard Practice") {
-                TextField(
-                    "Tap here and type with the HoldType keyboard",
-                    text: $practiceText,
-                    axis: .vertical
-                )
-                .lineLimit(4...8)
-                .textInputAutocapitalization(.sentences)
-                .accessibilityIdentifier("ios.voice.practice-field")
-
-                if !practiceText.isEmpty {
-                    Button("Clear Practice Field", role: .destructive) {
-                        practiceText = ""
-                    }
+            if dictationHasPriority {
+                dictationSection
+                if latestSectionIsVisible {
+                    latestResultSection
                 }
+                if showsGettingStarted {
+                    gettingStartedSection
+                }
+            } else {
+                if showsGettingStarted {
+                    gettingStartedSection
+                }
+                dictationSection
+                if latestSectionIsVisible {
+                    latestResultSection
+                }
+            }
 
-                KeyboardBridgeProbeView()
+            keyboardPracticeSection
+        }
+        .listStyle(.insetGrouped)
+        .contentMargins(.top, 0, for: .scrollContent)
+        .navigationTitle("HoldType")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    openSettings(.privacyAndPermissions)
+                } label: {
+                    Label(
+                        "Privacy & Permissions",
+                        systemImage: "info.circle"
+                    )
+                }
+                .accessibilityIdentifier("ios.voice.privacy-info")
             }
         }
-        .navigationTitle("Voice")
         .accessibilityIdentifier(
             IOSContainingAppDestination.voice.accessibilityIdentifier
         )
+        .onChange(
+            of: sceneOwner.presentation.phase,
+            initial: true
+        ) { _, phase in
+            if phase == .listening {
+                listeningStartedAt = listeningStartedAt ?? Date()
+            } else {
+                listeningStartedAt = nil
+            }
+        }
+        .onChange(of: sceneOwner.presentation) { _, presentation in
+            let status = IOSVoiceHomePresentation.resolve(presentation)
+            IOSAccessibilityAnnouncement.post(
+                title: status.title,
+                detail: status.detail
+            )
+        }
+        .onChange(of: sceneOwner.actionCommands) { _, commands in
+            guard let pendingVoiceCommand,
+                  !commands.contains(pendingVoiceCommand) else {
+                return
+            }
+            self.pendingVoiceCommand = nil
+        }
+        .onChange(of: latestResultOwner.presentation) { _, presentation in
+            latestActionNotice = nil
+            let status = IOSVoiceLatestStatusPresentation.resolve(
+                presentation
+            )
+            IOSAccessibilityAnnouncement.post(
+                title: status.title,
+                detail: status.detail
+            )
+            guard let pendingLatestClearCommand,
+                  latestResultOwner.clearCommand
+                    != pendingLatestClearCommand else {
+                return
+            }
+            self.pendingLatestClearCommand = nil
+        }
+        .confirmationDialog(
+            "Discard Recording?",
+            isPresented: Binding(
+                get: { pendingVoiceCommandIsCurrent },
+                set: { if !$0 { pendingVoiceCommand = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Discard Recording", role: .destructive) {
+                guard let command = pendingVoiceCommand,
+                      sceneOwner.actionCommands.contains(command) else {
+                    pendingVoiceCommand = nil
+                    return
+                }
+                pendingVoiceCommand = nil
+                _ = sceneOwner.submit(command)
+            }
+            Button("Keep Recording", role: .cancel) {
+                pendingVoiceCommand = nil
+            }
+        } message: {
+            Text(
+                "This removes only the exact recoverable recording shown "
+                    + "here. It does not clear History or Latest Result."
+            )
+        }
+        .confirmationDialog(
+            "Clear Latest Result?",
+            isPresented: Binding(
+                get: { pendingLatestClearCommandIsCurrent },
+                set: { if !$0 { pendingLatestClearCommand = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Clear Latest Result", role: .destructive) {
+                guard let command = pendingLatestClearCommand,
+                      latestResultOwner.clearCommand == command else {
+                    pendingLatestClearCommand = nil
+                    return
+                }
+                pendingLatestClearCommand = nil
+                _ = latestResultOwner.clear(command)
+            }
+            Button("Keep Result", role: .cancel) {
+                pendingLatestClearCommand = nil
+            }
+        } message: {
+            Text(
+                "This clears only the exact app-private Latest Result. "
+                    + "It does not delete History, recordings, usage, "
+                    + "settings, or your API key."
+            )
+        }
+        .sheet(item: $shareItem) { item in
+            IOSVoiceActivityView(items: [item.text])
+        }
+        .sheet(
+            isPresented: voiceConsentSheetBinding,
+            onDismiss: dismissVisibleVoiceConsent
+        ) {
+            if let prompt = visibleVoiceConsentPrompt {
+                IOSProviderConsentVoiceSheet(
+                    promptID: prompt.id,
+                    sceneOwner: sceneOwner,
+                    consentOwner: consentOwner
+                )
+            }
+        }
+    }
+
+    private var voiceHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Voice")
+                .font(.largeTitle.bold())
+            Text(
+                "Record one dictation in HoldType, then copy, share, or "
+                    + "practice with the result."
+            )
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 8)
+        .listRowInsets(
+            EdgeInsets(top: 8, leading: 4, bottom: 8, trailing: 4)
+        )
+        .listRowBackground(Color.clear)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var showsGettingStarted: Bool {
+        sceneOwner.presentation.setup != .ready
+    }
+
+    private var dictationHasPriority: Bool {
+        sceneOwner.presentation.phase != .inactive
+            || sceneOwner.presentation.recovery != .none
+    }
+
+    private var pendingVoiceCommandIsCurrent: Bool {
+        guard let pendingVoiceCommand else { return false }
+        return sceneOwner.actionCommands.contains(pendingVoiceCommand)
+    }
+
+    private var pendingLatestClearCommandIsCurrent: Bool {
+        guard let pendingLatestClearCommand else { return false }
+        return latestResultOwner.clearCommand == pendingLatestClearCommand
+    }
+
+    private var gettingStartedSection: some View {
+        Section("Getting Started") {
+            IOSVoiceSetupRow(
+                number: 1,
+                systemImage: "keyboard",
+                title: "Keyboard practice",
+                detail: "Learn the basics in a few minutes."
+            ) {
+                practiceFieldIsFocused = true
+            }
+            .accessibilityIdentifier("ios.voice.setup.keyboard")
+
+            IOSVoiceSetupRow(
+                number: 2,
+                systemImage: "key.fill",
+                title: openAISetupTitle,
+                detail: openAISetupDetail
+            ) {
+                openSettings(.openAI)
+            }
+            .accessibilityIdentifier("ios.voice.setup.openai")
+
+            IOSVoiceSetupRow(
+                number: 3,
+                systemImage: "mic.fill",
+                title: "Microphone access",
+                detail: "We’ll ask only when you start."
+            ) {
+                openSettings(.privacyAndPermissions)
+            }
+            .accessibilityIdentifier("ios.voice.setup.microphone")
+        }
+    }
+
+    private var dictationSection: some View {
+        let status = IOSVoiceHomePresentation.resolve(
+            sceneOwner.presentation
+        )
+        let commands = sceneOwner.actionCommands
+
+        return Section("Dictation") {
+            IOSVoiceStatusRow(
+                status: status,
+                listeningStartedAt: listeningStartedAt
+            )
+            .accessibilityIdentifier("ios.voice.status")
+
+            if !commands.isEmpty {
+                IOSVoiceActionLayout(
+                    commands: commands,
+                    perform: performVoiceCommand
+                )
+            } else if let destination = status.setupDestination,
+                      let setupAction = setupAction(for: destination) {
+                Button(setupAction.title) {
+                    setupAction.perform()
+                }
+                .accessibilityIdentifier("ios.voice.setup-action")
+            }
+        }
+    }
+
+    private var latestSectionIsVisible: Bool {
+        switch latestResultOwner.presentation.status {
+        case .notLoaded, .absent:
+            false
+        case .ready, .priorWhileSaving, .savingWithoutPrior, .expired,
+             .clockRollbackAmbiguous, .clearing, .cleanupPending,
+             .unavailable:
+            true
+        }
+    }
+
+    private var latestResultSection: some View {
+        let presentation = latestResultOwner.presentation
+        let status = IOSVoiceLatestStatusPresentation.resolve(presentation)
+
+        return Section("Latest Result") {
+            Label {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(status.title)
+                    Text(status.detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                if status.showsProgress {
+                    ProgressView()
+                } else {
+                    Image(systemName: status.systemImage)
+                        .foregroundStyle(status.color)
+                }
+            }
+            .accessibilityElement(children: .combine)
+
+            if let text = presentation.text {
+                Text(text)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("ios.voice.latest.text")
+            }
+
+            if let command = latestResultOwner.contentCommand {
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        latestContentButtons(command)
+                    }
+                    VStack(alignment: .leading) {
+                        latestContentButtons(command)
+                    }
+                }
+            }
+
+            if let latestActionNotice {
+                Label(latestActionNotice, systemImage: "checkmark.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("ios.voice.latest.action-notice")
+            }
+
+            if let clearCommand = latestResultOwner.clearCommand {
+                Button("Clear Latest Result", role: .destructive) {
+                    pendingLatestClearCommand = clearCommand
+                }
+                .accessibilityIdentifier("ios.voice.latest.clear")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func latestContentButtons(
+        _ command: IOSForegroundVoiceLatestResultContentCommand
+    ) -> some View {
+        Button {
+            guard let text = latestResultOwner.content(for: command) else {
+                return
+            }
+            IOSVoiceClipboard.copy(text)
+            latestActionNotice = "Copied"
+            IOSAccessibilityAnnouncement.post("Latest Result copied")
+        } label: {
+            Label("Copy", systemImage: "doc.on.doc")
+        }
+        .accessibilityIdentifier("ios.voice.latest.copy")
+
+        Button {
+            guard let text = latestResultOwner.content(for: command) else {
+                return
+            }
+            shareItem = IOSVoiceShareItem(text: text)
+            latestActionNotice = nil
+        } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+        .accessibilityIdentifier("ios.voice.latest.share")
+
+        Button {
+            guard let text = latestResultOwner.content(for: command) else {
+                return
+            }
+            practiceText = text
+            practiceFieldIsFocused = true
+            latestActionNotice = "Moved to Practice"
+            IOSAccessibilityAnnouncement.post(
+                "Latest Result moved to Practice"
+            )
+        } label: {
+            Label("Use in Practice", systemImage: "keyboard")
+        }
+        .accessibilityIdentifier("ios.voice.latest.use-in-practice")
+    }
+
+    private var keyboardPracticeSection: some View {
+        Section("Keyboard Practice") {
+            Text(
+                "Try typing or dictating here before returning to another app."
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            TextField(
+                "Tap here and start dictating…",
+                text: $practiceText,
+                axis: .vertical
+            )
+            .lineLimit(4...8)
+            .textInputAutocapitalization(.sentences)
+            .focused($practiceFieldIsFocused)
+            .accessibilityIdentifier("ios.voice.practice-field")
+
+            LabeledContent("Characters", value: "\(practiceText.count)")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            if !practiceText.isEmpty {
+                Button("Clear Practice Field", role: .destructive) {
+                    practiceText = ""
+                }
+                .accessibilityIdentifier("ios.voice.practice-clear")
+            }
+
+            KeyboardBridgeProbeView()
+        }
     }
 
     private var openAISetupTitle: String {
@@ -77,31 +436,407 @@ struct IOSVoiceHomeView: View {
     private var openAISetupDetail: String {
         switch secureProviderAvailability {
         case .available:
-            "Credential status is not checked on this screen."
+            "Connect your OpenAI API key."
         case .unavailable:
             "Secure provider settings are unavailable in this build."
         }
     }
+
+    private func performVoiceCommand(
+        _ command: IOSForegroundVoiceActionCommand
+    ) {
+        let presentation = IOSVoiceActionPresentation.resolve(command.action)
+        if presentation.requiresConfirmation {
+            pendingVoiceCommand = command
+        } else {
+            _ = sceneOwner.submit(command)
+        }
+    }
+
+    private func setupAction(
+        for destination: RecoveryDestination
+    ) -> (title: String, perform: () -> Void)? {
+        switch destination {
+        case .openAI:
+            ("Open OpenAI Settings", { openSettings(.openAI) })
+        case .transcription:
+            (
+                "Review Transcription Settings",
+                { openSettings(.general(.transcription)) }
+            )
+        case .translation:
+            (
+                "Review Translation Settings",
+                { openSettings(.general(.translation)) }
+            )
+        case .microphoneAndPrivacy:
+            (
+                "Review Privacy & Permissions",
+                { openSettings(.privacyAndPermissions) }
+            )
+        case .keyboard:
+            (
+                "Open Practice Field",
+                { practiceFieldIsFocused = true }
+            )
+        case .fullAccess:
+            nil
+        }
+    }
+
+    private var visibleVoiceConsentPrompt:
+        IOSProviderConsentVoicePromptPresentation? {
+        guard let prompt = consentOwner.voicePrompt,
+              consentOwner.isVoicePrompt(prompt.id, ownedBy: sceneOwner) else {
+            return nil
+        }
+        return prompt
+    }
+
+    private var voiceConsentSheetBinding: Binding<Bool> {
+        Binding(
+            get: { visibleVoiceConsentPrompt != nil },
+            set: { isPresented in
+                guard !isPresented else { return }
+                dismissVisibleVoiceConsent()
+            }
+        )
+    }
+
+    private func dismissVisibleVoiceConsent() {
+        guard let prompt = visibleVoiceConsentPrompt else { return }
+        consentOwner.dismissVoicePrompt(prompt.id, from: sceneOwner)
+    }
 }
 
-private struct IOSSetupSummaryRow: View {
+struct IOSVoiceRuntimeUnavailableView: View {
+    var body: some View {
+        ContentUnavailableView {
+            Label("Voice Unavailable", systemImage: "mic.slash")
+        } description: {
+            Text(
+                "Foreground Voice could not be composed safely. Settings, "
+                    + "Library, and ordinary keyboard typing remain available."
+            )
+        }
+        .navigationTitle("Voice")
+        .accessibilityIdentifier("ios.voice.runtime-unavailable")
+    }
+}
+
+private struct IOSVoiceSetupRow: View {
+    let number: Int
     let systemImage: String
     let title: String
     let detail: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(number). \(title)")
+                            .foregroundStyle(.primary)
+                        Text(detail)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            } icon: {
+                Image(systemName: systemImage)
+                    .foregroundStyle(.tint)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+private struct IOSVoiceStatusRow: View {
+    let status: IOSVoiceStatusPresentation
+    let listeningStartedAt: Date?
 
     var body: some View {
         Label {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                Text(detail)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(status.title)
+                    Spacer(minLength: 8)
+                    if let listeningStartedAt {
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            let elapsed = elapsedText(
+                                from: listeningStartedAt,
+                                at: context.date
+                            )
+                            Text(elapsed)
+                                .font(.subheadline.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel("Elapsed time")
+                                .accessibilityValue(elapsed)
+                                .accessibilityAddTraits(.updatesFrequently)
+                        }
+                    }
+                }
+                Text(status.detail)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         } icon: {
-            Image(systemName: systemImage)
-                .foregroundStyle(.tint)
+            if status.showsProgress {
+                ProgressView()
+            } else {
+                Image(systemName: status.systemImage)
+                    .foregroundStyle(status.color)
+            }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private func elapsedText(from start: Date, at now: Date) -> String {
+        let totalSeconds = max(0, Int(now.timeIntervalSince(start)))
+        return String(
+            format: "%d:%02d",
+            totalSeconds / 60,
+            totalSeconds % 60
+        )
+    }
+}
+
+private struct IOSVoiceActionLayout: View {
+    let commands: [IOSForegroundVoiceActionCommand]
+    let perform: (IOSForegroundVoiceActionCommand) -> Void
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                actionButtons
+            }
+            VStack {
+                actionButtons
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        ForEach(Array(commands.enumerated()), id: \.offset) { _, command in
+            actionButton(command)
+        }
+    }
+
+    @ViewBuilder
+    private func actionButton(
+        _ command: IOSForegroundVoiceActionCommand
+    ) -> some View {
+        let presentation = IOSVoiceActionPresentation.resolve(command.action)
+        switch presentation.prominence {
+        case .primary:
+            Button {
+                perform(command)
+            } label: {
+                Label(presentation.title, systemImage: presentation.systemImage)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityIdentifier(presentation.accessibilityIdentifier)
+        case .secondary:
+            Button {
+                perform(command)
+            } label: {
+                Label(presentation.title, systemImage: presentation.systemImage)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .accessibilityIdentifier(presentation.accessibilityIdentifier)
+        case .destructive:
+            Button(role: .destructive) {
+                perform(command)
+            } label: {
+                Label(presentation.title, systemImage: presentation.systemImage)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .accessibilityIdentifier(presentation.accessibilityIdentifier)
+        }
+    }
+}
+
+struct IOSVoiceLatestStatusPresentation {
+    let title: String
+    let detail: String
+    let systemImage: String
+    let tone: IOSVoiceStatusTone
+    let showsProgress: Bool
+
+    var color: Color {
+        tone.color
+    }
+
+    static func resolve(
+        _ presentation: IOSForegroundVoiceLatestResultPresentation
+    ) -> Self {
+        let base: Self = switch presentation.status {
+        case .notLoaded:
+            Self(
+                title: "Checking Latest Result…",
+                detail: "Reading the protected app-private result.",
+                systemImage: "clock",
+                tone: .neutral,
+                showsProgress: true
+            )
+        case .absent:
+            Self(
+                title: "No Latest Result",
+                detail: "A completed dictation result will appear here.",
+                systemImage: "text.page",
+                tone: .neutral,
+                showsProgress: false
+            )
+        case .ready:
+            Self(
+                title: "Latest Result",
+                detail: "Stored privately in the containing app.",
+                systemImage: "checkmark.circle.fill",
+                tone: .success,
+                showsProgress: false
+            )
+        case .priorWhileSaving:
+            Self(
+                title: "Previous Result",
+                detail: "A newer accepted result is still being saved.",
+                systemImage: "clock.arrow.circlepath",
+                tone: .neutral,
+                showsProgress: true
+            )
+        case .savingWithoutPrior:
+            Self(
+                title: "Saving Latest Result…",
+                detail: "No earlier result is available while the save finishes.",
+                systemImage: "externaldrive",
+                tone: .neutral,
+                showsProgress: true
+            )
+        case .expired:
+            Self(
+                title: "Latest Result Expired",
+                detail: "The previous one-shot result is no longer available.",
+                systemImage: "clock.badge.exclamationmark",
+                tone: .warning,
+                showsProgress: false
+            )
+        case .clockRollbackAmbiguous:
+            Self(
+                title: "Latest Result Needs Review",
+                detail: "The device clock changed, so text stays hidden.",
+                systemImage: "clock.badge.questionmark",
+                tone: .warning,
+                showsProgress: false
+            )
+        case .clearing:
+            Self(
+                title: "Clearing Latest Result…",
+                detail: "The exact selected result is being cleared.",
+                systemImage: "trash",
+                tone: .neutral,
+                showsProgress: true
+            )
+        case .cleanupPending:
+            Self(
+                title: "Latest Result Cleared",
+                detail: "Protected cleanup will retry automatically.",
+                systemImage: "checkmark.circle",
+                tone: .success,
+                showsProgress: false
+            )
+        case .unavailable:
+            Self(
+                title: "Latest Result Unavailable",
+                detail: "HoldType could not verify the protected result safely.",
+                systemImage: "exclamationmark.triangle",
+                tone: .failure,
+                showsProgress: false
+            )
+        }
+
+        guard let notice = presentation.notice else { return base }
+        let noticeDetail: String = switch notice {
+        case .loadFailed:
+            "The protected Latest Result could not be verified."
+        case .clearFailed:
+            "Clear did not finish; the exact result remains available."
+        case .clearStateUnknown:
+            "Clear could not be reconciled, so text remains hidden."
+        case .resultChanged:
+            "A newer result replaced the one selected for Clear."
+        }
+        return Self(
+            title: base.title,
+            detail: noticeDetail,
+            systemImage: base.systemImage,
+            tone: notice == .resultChanged ? .warning : .failure,
+            showsProgress: base.showsProgress
+        )
+    }
+}
+
+private struct IOSVoiceShareItem: Identifiable {
+    let id = UUID()
+    let text: String
+}
+
+private struct IOSVoiceActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(
+            activityItems: items,
+            applicationActivities: nil
+        )
+    }
+
+    func updateUIViewController(
+        _ uiViewController: UIActivityViewController,
+        context: Context
+    ) {}
+}
+
+private enum IOSVoiceClipboard {
+    @MainActor
+    static func copy(_ text: String) {
+        UIPasteboard.general.string = text
+    }
+}
+
+private extension IOSVoiceStatusPresentation {
+    var color: Color {
+        tone.color
+    }
+}
+
+private extension IOSVoiceStatusTone {
+    var color: Color {
+        switch self {
+        case .neutral:
+            .secondary
+        case .active:
+            .accentColor
+        case .success:
+            .green
+        case .warning:
+            .orange
+        case .failure:
+            .red
+        }
     }
 }

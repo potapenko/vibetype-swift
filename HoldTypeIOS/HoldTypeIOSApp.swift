@@ -58,6 +58,7 @@ struct HoldTypeIOSRootView: View {
     let openAISettingsStateOwner:
         IOSOpenAICredentialSettingsStateOwner?
     let secureProviderAvailability: IOSSecureProviderAvailability
+    let foregroundVoiceRuntimeAvailable: Bool
     let layout: IOSContainingAppShellLayout
 
     init(
@@ -66,12 +67,15 @@ struct HoldTypeIOSRootView: View {
         openAISettingsStateOwner:
             IOSOpenAICredentialSettingsStateOwner?,
         secureProviderAvailability: IOSSecureProviderAvailability,
+        foregroundVoiceRuntimeAvailable: Bool = false,
         layout: IOSContainingAppShellLayout = .current
     ) {
         self.settingsStateOwner = settingsStateOwner
         self.libraryStateOwner = libraryStateOwner
         self.openAISettingsStateOwner = openAISettingsStateOwner
         self.secureProviderAvailability = secureProviderAvailability
+        self.foregroundVoiceRuntimeAvailable =
+            foregroundVoiceRuntimeAvailable
         self.layout = layout
     }
 
@@ -92,6 +96,8 @@ struct HoldTypeIOSRootView: View {
            let openAISettingsStateOwner {
             IOSContainingAppShell(
                 secureProviderAvailability: secureProviderAvailability,
+                foregroundVoiceRuntimeAvailable:
+                    foregroundVoiceRuntimeAvailable,
                 layout: layout
             )
                 .environment(settingsStateOwner)

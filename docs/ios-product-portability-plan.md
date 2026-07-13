@@ -1,13 +1,11 @@
 # HoldType iOS Full Product Portability Plan
 
-Status: active implementation roadmap; P0, P1, P2, and P3 are complete. The
-native containing app now includes its state owners, shell, Settings editors,
-Dictionary, Voice Emoji Commands, and Replacement Rules. P4A, P4B, P4C,
-P4D-0, P4D-1, and P4D-2A are complete: the app-only foreground contract, Persistence
-transaction, reader-based OpenAI, consent-gated processing, foreground
-audio/storage contracts, shared payload-free Voice orchestration, and the
-descriptor-bound completed-capture transfer into canonical Pending ownership
-are in place. P4D-2C physical-device validation is next; updated 2026-07-13.
+Status: active implementation roadmap; P0, P1, P2, and P3 are complete. P4A,
+P4B, P4C, P4D-0, P4D-1, P4D-2A, P4D-2B, P4D-3, and P4D-4 are complete. The
+containing app now includes the shared foreground Voice runtime and native
+Voice and Privacy presentation on iPhone and iPad. P4D-2C physical-device
+validation and the final P4D-5 release/runtime gates remain pending; updated
+2026-07-13.
 
 This document plans the complete iPhone and iPad companion product around the
 HoldType keyboard. It does not authorize Swift, target, entitlement, or
@@ -1391,9 +1389,8 @@ matrix. Simulator tests and Release builds do not approve it. A failed device
 gate selects a descriptor-backed AudioToolbox/AVAudioEngine writer and does not
 weaken the storage contract.
 
-P4D-2A and P4D-2B completion do not make P4D-2 or P4 release-ready. P4D-2C,
-P4D-3 composition, P4D-4 Voice UI, and the remaining product gates retain their
-own exit criteria.
+P4D-2A and P4D-2B completion do not make P4D-2 or P4 release-ready. P4D-2C and
+the final P4D-5 release/runtime qualification retain their own exit criteria.
 
 P4D-3 is complete. Production composition now retains one passive process Voice
 graph, one controller-bound lifecycle recovery route, one registry-to-scheduler
@@ -1408,8 +1405,26 @@ Voice scene. P4D-3 adds no Voice UI, keyboard dependency, App Group Voice state,
 background audio, Quick Session, or provider auto-retry. Final evidence lives
 in `docs/qa/runs/ios-p4d3-production-composition-2026-07-13.md`.
 
-P4D-4 now owns the native shared Voice and Privacy presentation. P4D-2C and the
-final P4D-5 release/runtime gates remain pending.
+P4D-4 is complete. The native Voice destination binds every iPhone and iPad
+scene to the exact shared process controller, scene facade, Latest Result
+owner, and provider-consent presentation owner. It presents setup, recovery,
+capture, processing, accepted-result, and independent Latest Result state
+without inventing per-window Voice truth. Start, cancel, retry, recover,
+discard, Copy, Share, Use in Practice, and Clear use revision-bound controller
+or content commands; stale destructive confirmations fail closed.
+
+Privacy & Permissions now presents passive microphone and provider-consent
+status, a public System Settings route, the complete provider disclosure, and
+exact confirmation flows for accept, withdraw, and reset. The disclosure states
+what content is sent to OpenAI, what remains local, and the P4 retention
+boundary. Runtime evidence covers iPhone, iPad, accessibility Dynamic Type,
+Privacy navigation, disclosure presentation, and the scene-local practice
+field without requesting microphone permission, contacting OpenAI, accessing a
+live Keychain item, or changing durable consent. Final evidence lives in
+`docs/qa/runs/ios-p4d4-native-voice-privacy-2026-07-13.md`.
+
+P4D-2C physical-device validation and P4D-5 release/runtime qualification
+remain pending. P4 and P4D-2 are not release-ready until those gates pass.
 
 No History toggle, Clear History action, first-use disclosure, Recording Cache,
 App Group publication, or keyboard dependency is exposed by C4.0 alone.
@@ -1690,16 +1705,12 @@ redacted drafts, automation-disabled Keychain access, truthful saved-state
 presentation, Dynamic Type, dark appearance, and keyboard isolation remain
 intact.
 
-P4 is in progress. P4A froze the foreground-only contract, P4B completed its
-canonical Persistence transaction, P4C completed reader-based OpenAI plus
-consent-gated foreground processing, P4D-0 froze foreground audio,
-descriptor-bound capture-source, validity, permission, and explicit relaunch
-Retry contracts, and P4D-1 completed the fake-backed shared Voice controller
-plus payload-free durable progress. P4D-2 is next: implement the frozen
-capture-source and AVFoundation/system adapters, followed by multi-scene
-composition, native Voice UI, and bounded simulator and physical-device QA.
-No P4 slice adds background audio, Quick Session, directional App Group work,
-or keyboard provider dependencies.
+P4 is in progress. P4A through P4D-4 are complete except for the separate
+P4D-2C physical-device recorder and foreground-audio matrix. The remaining P4
+work is P4D-5 release/runtime qualification together with that physical-device
+evidence. No completed P4 slice adds background audio, Quick Session,
+directional App Group Voice state, keyboard provider dependencies, or
+external-app insertion.
 
 Final P3 evidence lives in
 `docs/qa/runs/ios-containing-app-state-owners-2026-07-12.md`,

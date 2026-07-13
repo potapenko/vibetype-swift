@@ -12,6 +12,7 @@ struct IOSContainingAppShell: View {
         NavigationSplitViewColumn = .detail
     @State private var openAIEditorDraft =
         IOSOpenAICredentialEditorDraft()
+    @State private var sceneDraft = IOSContainingAppSceneDraft()
     @State private var hasUnsavedEditor = false
     @State private var hasBlockingEditorOperation = false
     @State private var pendingDestination:
@@ -20,13 +21,17 @@ struct IOSContainingAppShell: View {
     @State private var showsEditorOperationAlert = false
 
     let secureProviderAvailability: IOSSecureProviderAvailability
+    let foregroundVoiceRuntimeAvailable: Bool
     let layout: IOSContainingAppShellLayout
 
     init(
         secureProviderAvailability: IOSSecureProviderAvailability,
+        foregroundVoiceRuntimeAvailable: Bool = false,
         layout: IOSContainingAppShellLayout = .current
     ) {
         self.secureProviderAvailability = secureProviderAvailability
+        self.foregroundVoiceRuntimeAvailable =
+            foregroundVoiceRuntimeAvailable
         self.layout = layout
     }
 
@@ -163,9 +168,16 @@ struct IOSContainingAppShell: View {
     ) -> some View {
         switch destination {
         case .voice:
-            IOSVoiceHomeView(
-                secureProviderAvailability: secureProviderAvailability
-            )
+            if foregroundVoiceRuntimeAvailable {
+                IOSVoiceHomeView(
+                    practiceText: $sceneDraft.practiceText,
+                    secureProviderAvailability:
+                        secureProviderAvailability,
+                    openSettings: openSettings
+                )
+            } else {
+                IOSVoiceRuntimeUnavailableView()
+            }
         case .library:
             IOSLibraryHomeView(
                 hasUnsavedLibraryEditor: $hasUnsavedEditor,
@@ -177,7 +189,9 @@ struct IOSContainingAppShell: View {
             IOSSettingsHomeView(
                 openAIEditorDraft: $openAIEditorDraft,
                 hasUnsavedGeneralSettings:
-                    $hasUnsavedEditor
+                    $hasUnsavedEditor,
+                foregroundVoiceRuntimeAvailable:
+                    foregroundVoiceRuntimeAvailable
             )
         }
     }
@@ -262,6 +276,15 @@ struct IOSContainingAppShell: View {
             preferredCompactColumn = .detail
         }
     }
+
+    private func openSettings(_ route: IOSSettingsRoute) {
+        settingsNavigationPath = NavigationPath([route])
+        requestDestination(.settings)
+    }
+}
+
+struct IOSContainingAppSceneDraft: Equatable {
+    var practiceText = ""
 }
 
 struct IOSContainingAppStorageUnavailableView: View {
