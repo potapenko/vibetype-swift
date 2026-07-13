@@ -57,6 +57,8 @@ The surface includes:
 - minimum 44-point targets and VoiceOver labels;
 - Dynamic Type-safe labels, Increase Contrast, and Reduce Transparency support;
 - bounded iPad content width;
+- a compact-height iPhone layout that preserves the top rail and reflows the
+  voice stage beside the punctuation and editing rows instead of hiding it;
 - no `A`, Refresh, giant Latest button, settings gear, or opaque mode icon.
 
 ## Editing Semantics
@@ -155,7 +157,7 @@ the public-API and App Review no-go.
 | Contract and K1 evidence | Complete; production handoff is a documented no-go |
 | Schema 3 Latest-only snapshot | Complete |
 | Production publisher and app wiring | Complete in code; signed-device proof pending |
-| Brand Stage UI and editing | Complete in code; iPhone Light/Dark and large-text runtime captured, remaining matrix pending |
+| Brand Stage UI and editing | Complete in code; iPhone/iPad Light/Dark, iPhone large text, and bounded real-extension editing captured; compact-landscape runtime capture pending |
 | History app route | App-side complete; keyboard launch not release-qualified |
 | Public HoldType microphone handoff | Not achievable under current Apple contract |
 | Signed-device release evidence | Pending |

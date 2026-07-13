@@ -24,9 +24,13 @@ final class BrandStageKeyboardView: UIView {
     let nextKeyboardButton = UIButton(type: .system)
 
     private let rootStack = UIStackView()
+    private let bodyStack = UIStackView()
+    private let commandStack = UIStackView()
+    private let punctuationRow = UIStackView()
     private let historyButton = UIButton(type: .system)
     private let latestButton = UIButton(type: .system)
     private let statusLabel = UILabel()
+    private let logoImageView = UIImageView()
     private let stageContainer = UIView()
     private let voiceStage = UIStackView()
     private let editingRow = UIStackView()
@@ -37,10 +41,13 @@ final class BrandStageKeyboardView: UIView {
     private let microphoneImageView = UIImageView()
     private let waveformStack = UIStackView()
     private var preferredHeightConstraint: NSLayoutConstraint?
-    private var stageMinimumHeightConstraint: NSLayoutConstraint?
     private var topActionWidthConstraint: NSLayoutConstraint?
-    private var voiceStageConstraints: [NSLayoutConstraint] = []
-    private var voiceStageIsHidden: Bool?
+    private var logoWidthConstraint: NSLayoutConstraint?
+    private var logoHeightConstraint: NSLayoutConstraint?
+    private var rootTopConstraint: NSLayoutConstraint?
+    private var rootBottomConstraint: NSLayoutConstraint?
+    private var compactLayoutConstraints: [NSLayoutConstraint] = []
+    private var usesCompactPhoneLayout: Bool?
     private var editingRowWithGlobeConstraints: [NSLayoutConstraint] = []
     private var editingRowWithoutGlobeConstraints: [NSLayoutConstraint] = []
     private var showsGlobeInEditingRow: Bool?
@@ -86,6 +93,11 @@ final class BrandStageKeyboardView: UIView {
         fatalError("init(coder:) is unavailable")
     }
 
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        updatePreferredHeight(for: traitCollection)
+    }
+
     func render(_ presentation: BrandStageKeyboardPresentation) {
         statusLabel.text = presentation.status.rawValue
         statusLabel.accessibilityValue = presentation.status.rawValue
@@ -107,24 +119,24 @@ final class BrandStageKeyboardView: UIView {
     }
 
     func updatePreferredHeight(for traitCollection: UITraitCollection) {
-        let isCompact = traitCollection.verticalSizeClass == .compact
+        let isCompactPhone = traitCollection.userInterfaceIdiom == .phone
+            && traitCollection.verticalSizeClass == .compact
         topActionWidthConstraint?.constant = traitCollection
             .preferredContentSizeCategory.isAccessibilityCategory ? 104 : 88
-        let hidesVoiceStage = isCompact
-        updateActiveStageConstraints(hidesVoiceStage: hidesVoiceStage)
-        stageMinimumHeightConstraint?.constant = stageContainer.isHidden
-            ? 0
-            : 96
+        updateAdaptiveLayout(isCompactPhone: isCompactPhone)
         let baseHeight: CGFloat
-        if isCompact {
-            baseHeight = 176
+        if isCompactPhone {
+            baseHeight = 176 + safeAreaInsets.bottom
         } else if bounds.width > 0, bounds.width < 600 {
             baseHeight = 302
         } else {
             baseHeight = 284
         }
 
-        let fittingWidth = min(max(bounds.width - 32, 280), 760)
+        let safeWidth = bounds.width
+            - safeAreaInsets.left
+            - safeAreaInsets.right
+        let fittingWidth = min(max(safeWidth - 32, 280), 760)
         let contentSize = rootStack.systemLayoutSizeFitting(
             CGSize(
                 width: fittingWidth,
@@ -133,23 +145,35 @@ final class BrandStageKeyboardView: UIView {
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel
         )
-        let resolvedHeight = max(baseHeight, ceil(contentSize.height + 28))
+        let verticalInsets: CGFloat = isCompactPhone
+            ? 16 + safeAreaInsets.bottom
+            : 28
+        let resolvedHeight = max(
+            baseHeight,
+            ceil(contentSize.height + verticalInsets)
+        )
         if preferredHeightConstraint?.constant != resolvedHeight {
             preferredHeightConstraint?.constant = resolvedHeight
         }
     }
 
-    private func updateActiveStageConstraints(hidesVoiceStage: Bool) {
-        guard voiceStageIsHidden != hidesVoiceStage else { return }
-        voiceStageIsHidden = hidesVoiceStage
-        NSLayoutConstraint.deactivate(voiceStageConstraints)
-        if hidesVoiceStage {
-            stageContainer.isHidden = true
-            return
-        }
+    private func updateAdaptiveLayout(isCompactPhone: Bool) {
+        guard usesCompactPhoneLayout != isCompactPhone else { return }
+        NSLayoutConstraint.deactivate(compactLayoutConstraints)
 
-        stageContainer.isHidden = false
-        NSLayoutConstraint.activate(voiceStageConstraints)
+        rootStack.spacing = isCompactPhone ? 8 : 10
+        bodyStack.axis = isCompactPhone ? .horizontal : .vertical
+        bodyStack.spacing = isCompactPhone ? 8 : 10
+        commandStack.spacing = isCompactPhone ? 8 : 10
+        logoWidthConstraint?.constant = isCompactPhone ? 28 : 34
+        logoHeightConstraint?.constant = isCompactPhone ? 28 : 34
+        rootTopConstraint?.constant = isCompactPhone ? 8 : 10
+        rootBottomConstraint?.constant = isCompactPhone ? -8 : -16
+
+        if isCompactPhone {
+            NSLayoutConstraint.activate(compactLayoutConstraints)
+        }
+        usesCompactPhoneLayout = isCompactPhone
     }
 
     private func updateInputModeSwitchKeyVisibility(_ showsGlobe: Bool) {
@@ -188,7 +212,6 @@ final class BrandStageKeyboardView: UIView {
         let stageMinimumHeight = stageContainer.heightAnchor.constraint(
             greaterThanOrEqualToConstant: 96
         )
-        stageMinimumHeightConstraint = stageMinimumHeight
         let voiceFillsAvailableWidth = voiceStage.widthAnchor.constraint(
             equalTo: stageContainer.widthAnchor
         )
@@ -197,7 +220,7 @@ final class BrandStageKeyboardView: UIView {
             equalToConstant: 520
         )
         voicePrefersMaximumWidth.priority = UILayoutPriority(998)
-        voiceStageConstraints = [
+        let voiceStageConstraints = [
             voiceStage.leadingAnchor.constraint(
                 greaterThanOrEqualTo: stageContainer.leadingAnchor
             ),
@@ -217,16 +240,28 @@ final class BrandStageKeyboardView: UIView {
 
         let punctuationRow = makePunctuationRow()
         let editingRow = makeEditingRow()
+        commandStack.axis = .vertical
+        commandStack.alignment = .fill
+        commandStack.distribution = .fill
+        commandStack.spacing = 10
+        commandStack.addArrangedSubview(punctuationRow)
+        commandStack.addArrangedSubview(editingRow)
+
+        bodyStack.axis = .vertical
+        bodyStack.alignment = .fill
+        bodyStack.distribution = .fill
+        bodyStack.spacing = 10
+        bodyStack.addArrangedSubview(stageContainer)
+        bodyStack.addArrangedSubview(commandStack)
+
         rootStack.addArrangedSubview(topRail)
-        rootStack.addArrangedSubview(stageContainer)
-        rootStack.addArrangedSubview(punctuationRow)
-        rootStack.addArrangedSubview(editingRow)
+        rootStack.addArrangedSubview(bodyStack)
 
         let height = heightAnchor.constraint(equalToConstant: 302)
         height.priority = UILayoutPriority(999)
         preferredHeightConstraint = height
         let fillsAvailableWidth = rootStack.widthAnchor.constraint(
-            equalTo: widthAnchor,
+            equalTo: safeAreaLayoutGuide.widthAnchor,
             constant: -32
         )
         fillsAvailableWidth.priority = UILayoutPriority(999)
@@ -235,24 +270,52 @@ final class BrandStageKeyboardView: UIView {
         )
         prefersMaximumWidth.priority = UILayoutPriority(998)
 
+        let rootTop = rootStack.topAnchor.constraint(
+            equalTo: topAnchor,
+            constant: 10
+        )
+        rootTopConstraint = rootTop
+        let rootBottom = rootStack.bottomAnchor.constraint(
+            equalTo: safeAreaLayoutGuide.bottomAnchor,
+            constant: -16
+        )
+        rootBottomConstraint = rootBottom
+        let compactStageWidth = stageContainer.widthAnchor.constraint(
+            equalToConstant: 300
+        )
+        compactStageWidth.priority = UILayoutPriority(999)
+        let compactSpaceMinimumWidth = spaceButton.widthAnchor.constraint(
+            greaterThanOrEqualToConstant: 120
+        )
+        compactSpaceMinimumWidth.priority = UILayoutPriority(999)
+        compactLayoutConstraints = [
+            stageContainer.widthAnchor.constraint(
+                greaterThanOrEqualToConstant: 296
+            ),
+            compactStageWidth,
+            commandStack.widthAnchor.constraint(
+                greaterThanOrEqualToConstant: 320
+            ),
+            compactSpaceMinimumWidth,
+        ]
+
         NSLayoutConstraint.activate([
             rootStack.leadingAnchor.constraint(
-                greaterThanOrEqualTo: leadingAnchor,
+                greaterThanOrEqualTo: safeAreaLayoutGuide.leadingAnchor,
                 constant: 16
             ),
             rootStack.trailingAnchor.constraint(
-                lessThanOrEqualTo: trailingAnchor,
+                lessThanOrEqualTo: safeAreaLayoutGuide.trailingAnchor,
                 constant: -16
             ),
-            rootStack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            rootStack.centerXAnchor.constraint(
+                equalTo: safeAreaLayoutGuide.centerXAnchor
+            ),
             rootStack.widthAnchor.constraint(lessThanOrEqualToConstant: 760),
             fillsAvailableWidth,
             prefersMaximumWidth,
-            rootStack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            rootStack.bottomAnchor.constraint(
-                equalTo: safeAreaLayoutGuide.bottomAnchor,
-                constant: -16
-            ),
+            rootTop,
+            rootBottom,
             height,
             topRail.heightAnchor.constraint(greaterThanOrEqualToConstant: 48),
             punctuationRow.heightAnchor.constraint(equalToConstant: 44),
@@ -278,14 +341,14 @@ final class BrandStageKeyboardView: UIView {
         )
         latestButton.accessibilityIdentifier = "keyboard.brand-stage.latest"
 
-        let logo = UIImageView(
-            image: UIImage(named: "HoldTypeMark")
-                ?? UIImage(systemName: "waveform.circle.fill")
+        logoImageView.image = UIImage(named: "HoldTypeMark")
+            ?? UIImage(systemName: "waveform.circle.fill")
+        logoImageView.translatesAutoresizingMaskIntoConstraints = false
+        logoImageView.contentMode = .scaleAspectFit
+        logoImageView.image = logoImageView.image?.withRenderingMode(
+            .alwaysOriginal
         )
-        logo.translatesAutoresizingMaskIntoConstraints = false
-        logo.contentMode = .scaleAspectFit
-        logo.image = logo.image?.withRenderingMode(.alwaysOriginal)
-        logo.isAccessibilityElement = false
+        logoImageView.isAccessibilityElement = false
         statusLabel.font = UIFontMetrics(forTextStyle: .caption1).scaledFont(
             for: UIFont.systemFont(ofSize: 12, weight: .semibold),
             maximumPointSize: 15
@@ -300,13 +363,23 @@ final class BrandStageKeyboardView: UIView {
         statusLabel.accessibilityTraits.insert(.updatesFrequently)
         statusLabel.accessibilityIdentifier = "keyboard.brand-stage.status"
 
-        let identity = UIStackView(arrangedSubviews: [logo, statusLabel])
+        let identity = UIStackView(
+            arrangedSubviews: [logoImageView, statusLabel]
+        )
         identity.axis = .vertical
         identity.alignment = .center
         identity.spacing = 2
+        let logoWidth = logoImageView.widthAnchor.constraint(
+            equalToConstant: 34
+        )
+        let logoHeight = logoImageView.heightAnchor.constraint(
+            equalToConstant: 34
+        )
+        logoWidthConstraint = logoWidth
+        logoHeightConstraint = logoHeight
         NSLayoutConstraint.activate([
-            logo.widthAnchor.constraint(equalToConstant: 34),
-            logo.heightAnchor.constraint(equalToConstant: 34),
+            logoWidth,
+            logoHeight,
         ])
 
         let rail = UIStackView(
@@ -369,10 +442,9 @@ final class BrandStageKeyboardView: UIView {
     }
 
     private func makePunctuationRow() -> UIStackView {
-        let row = UIStackView()
-        row.axis = .horizontal
-        row.distribution = .fillEqually
-        row.spacing = 8
+        punctuationRow.axis = .horizontal
+        punctuationRow.distribution = .fillEqually
+        punctuationRow.spacing = 8
         for (character, name) in [
             (".", "Period"),
             (",", "Comma"),
@@ -387,9 +459,9 @@ final class BrandStageKeyboardView: UIView {
                 self?.onPunctuationRequested?(character)
             }, for: .touchUpInside)
             punctuationButtons.append(button)
-            row.addArrangedSubview(button)
+            punctuationRow.addArrangedSubview(button)
         }
-        return row
+        return punctuationRow
     }
 
     private func makeEditingRow() -> UIStackView {

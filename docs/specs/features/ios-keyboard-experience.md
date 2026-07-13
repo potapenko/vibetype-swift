@@ -60,12 +60,20 @@ outside the extension, Space, Delete, and Return retain their relative
 row. Wider iPad layouts keep a centered maximum content width instead of
 stretching fixed controls across the whole screen.
 
+On compact-height iPhone landscape, the full top rail remains visible and the
+lower surface reflows into two columns rather than hiding the voice identity.
+The left column keeps the non-interactive 80-point microphone and waveform;
+the right column stacks the four punctuation keys above the editing row. The
+surface remains approximately 176 points tall plus the system safe-area inset,
+with every action at least 44 by 44 points. Portrait and iPad keep the vertical
+Option 2 composition.
+
 The keyboard is one visually distinct surface with rounded top-left and
 top-right corners. It must not merge into the containing app background.
-`History` and `Latest` use equal 88-point top-rail widths so the brand/status
-column stays exactly centered. The HoldType mark is a full-color transparent
-image with no embedded square background and is identical in Light and Dark
-Mode.
+`History` and `Latest` normally use equal 88-point top-rail widths. At
+accessibility content sizes, both expand equally so the brand/status column
+stays exactly centered. The HoldType mark is a full-color transparent image
+with no embedded square background and is identical in Light and Dark Mode.
 
 The HoldType mark is decorative identity plus status context. It is never an
 unlabelled action. The branded microphone treatment is non-interactive while

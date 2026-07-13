@@ -329,7 +329,7 @@ K3 state while local editing and Globe keep working.
 | H4 Bounded legacy cleanup | Completed 2026-07-13 |
 | P1-P6 Persistence simplification and legacy retirement | Completed 2026-07-13 |
 | K1 Voice activation platform gate | Not qualified for production, 2026-07-13 |
-| K2 Production Brand Stage Adaptive | Engineering complete; runtime matrix pending 2026-07-14 |
+| K2 Production Brand Stage Adaptive | Engineering complete; portrait/iPad runtime and compact-landscape automated matrix complete, landscape/device gates pending 2026-07-14 |
 | K3 Latest snapshot and History route qualification | Latest engineering complete; History/device gate pending 2026-07-14 |
 
 Compact History and the non-launching Brand Stage surface are complete in code.

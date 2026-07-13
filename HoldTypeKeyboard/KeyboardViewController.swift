@@ -1,8 +1,60 @@
 import UIKit
 
+typealias KeyboardHistoryOpener = (
+    URL,
+    @escaping (Bool) -> Void
+) -> Void
+
+typealias KeyboardLatestExpiryScheduler = (
+    Date,
+    @escaping @MainActor () -> Void
+) -> Timer?
+
+@MainActor
+struct KeyboardViewControllerDependencies {
+    let loadSnapshot: () throws -> KeyboardBridgeSnapshot?
+    let now: () -> Date
+    let documentProxyOverride: (any UITextDocumentProxy)?
+    let historyOpener: KeyboardHistoryOpener?
+    let inputModeSwitchKeyOverride: Bool?
+    let scheduleStatusReset: (TimeInterval, DispatchWorkItem) -> Void
+    let scheduleLatestExpiry: KeyboardLatestExpiryScheduler
+
+    static let live = KeyboardViewControllerDependencies(
+        loadSnapshot: {
+            let store = try KeyboardBridgeStore.appGroup()
+            return try store.load()
+        },
+        now: { Date() },
+        documentProxyOverride: nil,
+        historyOpener: nil,
+        inputModeSwitchKeyOverride: nil,
+        scheduleStatusReset: { duration, workItem in
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + duration,
+                execute: workItem
+            )
+        },
+        scheduleLatestExpiry: { fireDate, action in
+            let timer = Timer(
+                fire: fireDate,
+                interval: 0,
+                repeats: false
+            ) { _ in
+                Task { @MainActor in
+                    action()
+                }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            return timer
+        }
+    )
+}
+
 final class KeyboardViewController: UIInputViewController {
-    private let keyboardView = BrandStageKeyboardView()
+    let keyboardView = BrandStageKeyboardView()
     private let deleteRepeater = KeyboardDeleteRepeater()
+    private var dependencies = KeyboardViewControllerDependencies.live
     private var cursorAccumulator = KeyboardCursorDragAccumulator()
     private var previousCursorLocationX: CGFloat?
     private var insertionGate = KeyboardInsertionEventGate()
@@ -13,16 +65,31 @@ final class KeyboardViewController: UIInputViewController {
     private var historyRequestID: UUID?
     private var showsInputModeSwitchKey = true
 
+    convenience init(dependencies: KeyboardViewControllerDependencies) {
+        self.init(nibName: nil, bundle: nil)
+        self.dependencies = dependencies
+    }
+
+    private var activeDocumentProxy: any UITextDocumentProxy {
+        dependencies.documentProxyOverride ?? textDocumentProxy
+    }
+
+    private var shouldShowInputModeSwitchKey: Bool {
+        dependencies.inputModeSwitchKeyOverride
+            ?? needsInputModeSwitchKey
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         hasDictationKey = false
+        showsInputModeSwitchKey = shouldShowInputModeSwitchKey
         configureKeyboardView()
         reloadSharedSnapshot()
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        showsInputModeSwitchKey = needsInputModeSwitchKey
+        showsInputModeSwitchKey = shouldShowInputModeSwitchKey
         reloadSharedSnapshot()
     }
 
@@ -49,7 +116,7 @@ final class KeyboardViewController: UIInputViewController {
 
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
-        showsInputModeSwitchKey = needsInputModeSwitchKey
+        showsInputModeSwitchKey = shouldShowInputModeSwitchKey
         reloadSharedSnapshot()
     }
 
@@ -85,14 +152,14 @@ final class KeyboardViewController: UIInputViewController {
             self?.handleCursorGesture(state: state, locationX: x)
         }
         keyboardView.onCursorStepRequested = { [weak self] offset in
-            self?.textDocumentProxy.adjustTextPosition(
+            self?.activeDocumentProxy.adjustTextPosition(
                 byCharacterOffset: offset
             )
         }
         keyboardView.onDeleteStarted = { [weak self] in
             guard let self else { return }
             deleteRepeater.start { [weak self] in
-                self?.textDocumentProxy.deleteBackward()
+                self?.activeDocumentProxy.deleteBackward()
             }
         }
         keyboardView.onDeleteStopped = { [weak self] in
@@ -105,14 +172,13 @@ final class KeyboardViewController: UIInputViewController {
 
     private func reloadSharedSnapshot() {
         do {
-            let store = try KeyboardBridgeStore.appGroup()
-            guard let snapshot = try store.load() else {
+            guard let snapshot = try dependencies.loadSnapshot() else {
                 setLatestItem(nil)
                 render()
                 return
             }
 
-            let now = Date()
+            let now = dependencies.now()
             setLatestItem(
                 snapshot.latestForInsertion(at: now),
                 now: now
@@ -130,7 +196,7 @@ final class KeyboardViewController: UIInputViewController {
                 latestIsEnabled: latestItem != nil,
                 returnKey: KeyboardReturnKeyPresentation(
                     semantic: Self.returnSemantic(
-                        for: textDocumentProxy.returnKeyType ?? .default
+                        for: activeDocumentProxy.returnKeyType ?? .default
                     )
                 ),
                 returnIsEnabled: returnIsEnabled,
@@ -140,13 +206,12 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private var returnIsEnabled: Bool {
-        !((textDocumentProxy.enablesReturnKeyAutomatically ?? false)
-            && !textDocumentProxy.hasText)
+        !((activeDocumentProxy.enablesReturnKeyAutomatically ?? false)
+            && !activeDocumentProxy.hasText)
     }
 
     private func openHistory() {
-        guard let url = HoldTypeContainingAppRoute.history.url,
-              let extensionContext else {
+        guard let url = HoldTypeContainingAppRoute.history.url else {
             showTemporaryStatus(.openFailed, duration: 1.6)
             return
         }
@@ -156,7 +221,7 @@ final class KeyboardViewController: UIInputViewController {
         statusResetWorkItem?.cancel()
         activeStatusOverride = nil
         render()
-        extensionContext.open(url) { [weak self] opened in
+        let requested = requestHistoryOpen(url) { [weak self] opened in
             Task { @MainActor [weak self] in
                 guard let self,
                       self.historyRequestID == requestID else {
@@ -170,10 +235,33 @@ final class KeyboardViewController: UIInputViewController {
                 )
             }
         }
+        guard requested else {
+            historyRequestID = nil
+            showTemporaryStatus(.openFailed, duration: 1.6)
+            return
+        }
+    }
+
+    private func requestHistoryOpen(
+        _ url: URL,
+        completion: @escaping (Bool) -> Void
+    ) -> Bool {
+        if let historyOpener = dependencies.historyOpener {
+            historyOpener(url, completion)
+            return true
+        }
+
+        guard let extensionContext else {
+            return false
+        }
+        extensionContext.open(url) { opened in
+            completion(opened)
+        }
+        return true
     }
 
     private func insert(_ item: KeyboardBridgeItem) {
-        guard item.expiresAt > Date() else {
+        guard item.expiresAt > dependencies.now() else {
             setLatestItem(nil)
             render()
             return
@@ -184,7 +272,7 @@ final class KeyboardViewController: UIInputViewController {
     private func insertText(_ text: String) {
         guard insertionGate.beginEvent() else { return }
         defer { insertionGate.endEvent() }
-        textDocumentProxy.insertText(text)
+        activeDocumentProxy.insertText(text)
     }
 
     private func showTemporaryStatus(
@@ -199,39 +287,31 @@ final class KeyboardViewController: UIInputViewController {
             self?.reloadSharedSnapshot()
         }
         statusResetWorkItem = workItem
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + duration,
-            execute: workItem
-        )
+        dependencies.scheduleStatusReset(duration, workItem)
     }
 
     private func setLatestItem(
         _ item: KeyboardBridgeItem?,
-        now: Date = Date()
+        now: Date? = nil
     ) {
+        let currentDate = now ?? dependencies.now()
         latestExpiryTimer?.invalidate()
         latestExpiryTimer = nil
         latestItem = item
 
-        guard let item, item.expiresAt > now else {
+        guard let item, item.expiresAt > currentDate else {
             latestItem = nil
             return
         }
 
-        let timer = Timer(
-            fire: item.expiresAt,
-            interval: 0,
-            repeats: false
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.latestItem == item else { return }
-                self.latestExpiryTimer = nil
-                self.latestItem = nil
-                self.render()
-            }
+        latestExpiryTimer = dependencies.scheduleLatestExpiry(
+            item.expiresAt
+        ) { [weak self] in
+            guard let self, self.latestItem == item else { return }
+            self.latestExpiryTimer = nil
+            self.latestItem = nil
+            self.render()
         }
-        latestExpiryTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func handleCursorGesture(
@@ -248,7 +328,7 @@ final class KeyboardViewController: UIInputViewController {
             if let movement = cursorAccumulator.consume(
                 horizontalDelta: Double(locationX - previousCursorLocationX)
             ) {
-                textDocumentProxy.adjustTextPosition(
+                activeDocumentProxy.adjustTextPosition(
                     byCharacterOffset: movement.characterOffset
                 )
             }

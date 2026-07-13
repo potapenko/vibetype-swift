@@ -4,6 +4,14 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct BrandStageKeyboardViewTests {
+    private static let compactLandscapeWidths: [CGFloat] = [
+        667,
+        812,
+        844,
+        852,
+        932,
+    ]
+
     @Test func renderExposesTheApprovedControlsAndRoutesEachActionOnce() throws {
         let view = makeView(width: 393)
         var historyCount = 0
@@ -186,6 +194,176 @@ struct BrandStageKeyboardViewTests {
         #expect(returnButton.bounds.width >= 43.9)
     }
 
+    @Test func compactPhoneLandscapeKeepsVoiceIdentityAndControlsInBounds()
+        throws {
+        for showsGlobe in [true, false] {
+            for width in Self.compactLandscapeWidths {
+                let fixture = makeCompactLandscapeFixture(
+                    width: width,
+                    showsInputModeSwitchKey: showsGlobe
+                )
+                let view = fixture.view
+                let status = try #require(
+                    view.descendant(
+                        UILabel.self,
+                        identifier: "keyboard.brand-stage.status"
+                    )
+                )
+                let identity = try #require(status.superview as? UIStackView)
+                let logo = try #require(
+                    identity.arrangedSubviews.compactMap { subview in
+                        subview as? UIImageView
+                    }.first
+                )
+                let voice = try #require(
+                    view.descendant(
+                        UIView.self,
+                        identifier: "keyboard.brand-stage.voice"
+                    )
+                )
+                let globe = try button(
+                    "keyboard.brand-stage.next-keyboard",
+                    in: view
+                )
+
+                #expect(status.text == "Ready")
+                #expect(
+                    abs(frame(of: status, in: view).midX - view.bounds.midX) < 1
+                )
+                #expect(logo.bounds.width >= 24)
+                #expect(logo.bounds.height >= 24)
+                #expect(!isEffectivelyHidden(logo))
+                #expect(!isEffectivelyHidden(voice))
+                #expect(voice.bounds.width >= 79.9)
+                #expect(voice.bounds.height >= 79.9)
+                #expect(globe.isHidden == !showsGlobe)
+
+                let visibleIdentifiers = compactControlIdentifiers(
+                    showsGlobe: showsGlobe
+                )
+                var boundedViews: [UIView] = [status, logo, voice]
+                for identifier in visibleIdentifiers {
+                    let control = try button(identifier, in: view)
+                    #expect(control.bounds.width >= 43.9)
+                    #expect(control.bounds.height >= 43.9)
+                    #expect(!isEffectivelyHidden(control))
+                    boundedViews.append(control)
+                }
+
+                let period = try button(
+                    "keyboard.brand-stage.punctuation.period",
+                    in: view
+                )
+                #expect(
+                    frame(of: voice, in: view).maxX
+                        < frame(of: period, in: view).minX
+                )
+                assertViewsStayInBounds(boundedViews, of: view)
+                assertVisibleHierarchyHasNoAmbiguity(view)
+            }
+        }
+    }
+
+    @Test func compactPhoneLandscapeKeepsLightAndDarkGeometry() throws {
+        for showsGlobe in [true, false] {
+            for width in Self.compactLandscapeWidths {
+                let fixture = makeCompactLandscapeFixture(
+                    width: width,
+                    showsInputModeSwitchKey: showsGlobe
+                )
+                let view = fixture.view
+                let lightFrames = controlFrames(in: view)
+
+                view.overrideUserInterfaceStyle = .dark
+                view.updatePreferredHeight(
+                    for: compactPhoneTraits(userInterfaceStyle: .dark)
+                )
+                layout(fixture)
+
+                #expect(view.traitCollection.userInterfaceStyle == .dark)
+                #expect(controlFrames(in: view) == lightFrames)
+                let voice = try #require(
+                    view.descendant(
+                        UIView.self,
+                        identifier: "keyboard.brand-stage.voice"
+                    )
+                )
+                #expect(!isEffectivelyHidden(voice))
+                let globe = try button(
+                    "keyboard.brand-stage.next-keyboard",
+                    in: view
+                )
+                #expect(globe.isHidden == !showsGlobe)
+            }
+        }
+    }
+
+    @Test func safeAreaAndCompactRegularRoundTripPreserveTheComposition()
+        throws {
+        let landscapeInsets = UIEdgeInsets(
+            top: 0,
+            left: 44,
+            bottom: 21,
+            right: 44
+        )
+        let fixture = makeCompactLandscapeFixture(
+            width: 844,
+            showsInputModeSwitchKey: true
+        )
+        let view = fixture.view
+        let voice = try #require(
+            view.descendant(
+                UIView.self,
+                identifier: "keyboard.brand-stage.voice"
+            )
+        )
+        let period = try button(
+            "keyboard.brand-stage.punctuation.period",
+            in: view
+        )
+        let initialFrames = controlFrames(in: view)
+
+        #expect(
+            frame(of: voice, in: view).maxX
+                < frame(of: period, in: view).minX
+        )
+
+        fixture.host.frame.size.height = 302
+        view.updatePreferredHeight(
+            for: regularPhoneTraits(userInterfaceStyle: .light)
+        )
+        layout(fixture)
+
+        #expect(
+            frame(of: voice, in: view).maxY
+                < frame(of: period, in: view).minY
+        )
+        #expect(!isEffectivelyHidden(voice))
+
+        fixture.host.frame.size.height = 176
+        view.updatePreferredHeight(
+            for: compactPhoneTraits(userInterfaceStyle: .light)
+        )
+        layout(fixture)
+
+        #expect(controlFrames(in: view) == initialFrames)
+        #expect(
+            frame(of: voice, in: view).maxX
+                < frame(of: period, in: view).minX
+        )
+
+        let safeAreaFixture = makeSafeAreaLandscapeFixture(
+            width: 844,
+            safeAreaInsets: landscapeInsets
+        )
+        defer { safeAreaFixture.window.isHidden = true }
+        #expect(safeAreaFixture.view.safeAreaInsets.left >= 43.9)
+        #expect(safeAreaFixture.view.safeAreaInsets.bottom >= 20.9)
+        assertInteractiveControlsStayInsideHorizontalAndBottomSafeArea(
+            safeAreaFixture.view
+        )
+    }
+
     private func makeView(width: CGFloat) -> BrandStageKeyboardView {
         let view = BrandStageKeyboardView(
             frame: CGRect(x: 0, y: 0, width: width, height: 302)
@@ -194,9 +372,119 @@ struct BrandStageKeyboardViewTests {
         return view
     }
 
+    private func makeCompactLandscapeFixture(
+        width: CGFloat,
+        showsInputModeSwitchKey: Bool
+    ) -> BrandStageLandscapeFixture {
+        let host = UIView(
+            frame: CGRect(x: 0, y: 0, width: width, height: 176)
+        )
+        let view = BrandStageKeyboardView(frame: host.bounds)
+        view.overrideUserInterfaceStyle = .light
+
+        host.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            view.topAnchor.constraint(equalTo: host.topAnchor),
+            view.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+        ])
+        view.render(
+            presentation(
+                latestIsEnabled: true,
+                showsInputModeSwitchKey: showsInputModeSwitchKey
+            )
+        )
+
+        let fixture = BrandStageLandscapeFixture(host: host, view: view)
+        view.updatePreferredHeight(
+            for: compactPhoneTraits(userInterfaceStyle: .light)
+        )
+        layout(fixture)
+        return fixture
+    }
+
+    private func makeSafeAreaLandscapeFixture(
+        width: CGFloat,
+        safeAreaInsets: UIEdgeInsets
+    ) -> BrandStageSafeAreaFixture {
+        let window = UIWindow(
+            frame: CGRect(
+                x: 0,
+                y: 0,
+                width: width,
+                height: 176 + safeAreaInsets.bottom
+            )
+        )
+        let hostController = UIViewController()
+        hostController.additionalSafeAreaInsets = safeAreaInsets
+        window.rootViewController = hostController
+        window.isHidden = false
+        hostController.view.frame = window.bounds
+
+        let view = BrandStageKeyboardView(frame: hostController.view.bounds)
+        hostController.view.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(
+                equalTo: hostController.view.leadingAnchor
+            ),
+            view.trailingAnchor.constraint(
+                equalTo: hostController.view.trailingAnchor
+            ),
+            view.topAnchor.constraint(equalTo: hostController.view.topAnchor),
+            view.bottomAnchor.constraint(
+                equalTo: hostController.view.bottomAnchor
+            ),
+        ])
+        view.render(presentation(latestIsEnabled: true))
+        hostController.view.layoutIfNeeded()
+        view.updatePreferredHeight(
+            for: compactPhoneTraits(userInterfaceStyle: .light)
+        )
+        hostController.view.layoutIfNeeded()
+
+        return BrandStageSafeAreaFixture(
+            window: window,
+            view: view
+        )
+    }
+
     private func layout(_ view: BrandStageKeyboardView) {
         view.setNeedsLayout()
         view.layoutIfNeeded()
+    }
+
+    private func layout(_ fixture: BrandStageLandscapeFixture) {
+        fixture.host.setNeedsLayout()
+        fixture.host.layoutIfNeeded()
+        fixture.view.setNeedsLayout()
+        fixture.view.layoutIfNeeded()
+    }
+
+    private func compactPhoneTraits(
+        userInterfaceStyle: UIUserInterfaceStyle
+    ) -> UITraitCollection {
+        UITraitCollection(
+            traitsFrom: [
+                UITraitCollection(userInterfaceIdiom: .phone),
+                UITraitCollection(horizontalSizeClass: .compact),
+                UITraitCollection(verticalSizeClass: .compact),
+                UITraitCollection(userInterfaceStyle: userInterfaceStyle),
+            ]
+        )
+    }
+
+    private func regularPhoneTraits(
+        userInterfaceStyle: UIUserInterfaceStyle
+    ) -> UITraitCollection {
+        UITraitCollection(
+            traitsFrom: [
+                UITraitCollection(userInterfaceIdiom: .phone),
+                UITraitCollection(horizontalSizeClass: .compact),
+                UITraitCollection(verticalSizeClass: .regular),
+                UITraitCollection(userInterfaceStyle: userInterfaceStyle),
+            ]
+        )
     }
 
     private func presentation(
@@ -233,6 +521,85 @@ struct BrandStageKeyboardViewTests {
         }
         return result
     }
+
+    private func compactControlIdentifiers(showsGlobe: Bool) -> [String] {
+        var identifiers = [
+            "keyboard.brand-stage.history",
+            "keyboard.brand-stage.latest",
+            "keyboard.brand-stage.punctuation.period",
+            "keyboard.brand-stage.punctuation.comma",
+            "keyboard.brand-stage.punctuation.question mark",
+            "keyboard.brand-stage.punctuation.exclamation mark",
+            "keyboard.brand-stage.space",
+            "keyboard.brand-stage.delete",
+            "keyboard.brand-stage.return",
+        ]
+        if showsGlobe {
+            identifiers.append("keyboard.brand-stage.next-keyboard")
+        }
+        return identifiers
+    }
+
+    private func frame(of descendant: UIView, in ancestor: UIView) -> CGRect {
+        descendant.convert(descendant.bounds, to: ancestor)
+    }
+
+    private func isEffectivelyHidden(_ view: UIView) -> Bool {
+        var current: UIView? = view
+        while let candidate = current {
+            if candidate.isHidden || candidate.alpha <= 0.01 {
+                return true
+            }
+            current = candidate.superview
+        }
+        return false
+    }
+
+    private func assertViewsStayInBounds(
+        _ descendants: [UIView],
+        of view: UIView
+    ) {
+        let toleratedBounds = view.bounds.insetBy(dx: -0.5, dy: -0.5)
+        for descendant in descendants {
+            #expect(toleratedBounds.contains(frame(of: descendant, in: view)))
+        }
+    }
+
+    private func assertVisibleHierarchyHasNoAmbiguity(_ view: UIView) {
+        view.visitDescendants { descendant in
+            guard !isEffectivelyHidden(descendant) else { return }
+            #expect(!descendant.hasAmbiguousLayout)
+        }
+    }
+
+    private func assertInteractiveControlsStayInsideHorizontalAndBottomSafeArea(
+        _ view: UIView
+    ) {
+        let safeBounds = view.bounds.inset(by: view.safeAreaInsets)
+            .insetBy(dx: -0.5, dy: -0.5)
+        view.visitDescendants { descendant in
+            guard descendant is UIControl,
+                  !isEffectivelyHidden(descendant) else {
+                return
+            }
+            let controlFrame = frame(of: descendant, in: view)
+            #expect(controlFrame.minX >= safeBounds.minX)
+            #expect(controlFrame.maxX <= safeBounds.maxX)
+            #expect(controlFrame.maxY <= safeBounds.maxY)
+        }
+    }
+}
+
+@MainActor
+private struct BrandStageLandscapeFixture {
+    let host: UIView
+    let view: BrandStageKeyboardView
+}
+
+@MainActor
+private struct BrandStageSafeAreaFixture {
+    let window: UIWindow
+    let view: BrandStageKeyboardView
 }
 
 @MainActor

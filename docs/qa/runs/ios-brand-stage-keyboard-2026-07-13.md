@@ -30,9 +30,9 @@ Approved source:
 | iPhone 16, iOS 18.6 | [Screenshot](assets/ios-brand-stage-keyboard-2026-07-13/iphone-light.png) | [Screenshot](assets/ios-brand-stage-keyboard-2026-07-13/iphone-dark.png) |
 | iPad Pro 11-inch, iOS 26.0 | [Screenshot](assets/ios-brand-stage-keyboard-2026-07-13/ipad-light.png) | [Screenshot](assets/ios-brand-stage-keyboard-2026-07-13/ipad-dark.png) |
 
-The iPhone captures were refreshed from the real extension on 2026-07-14 and
-show the current `Ready` contract in both appearances. The iPad captures predate
-that correction and remain geometry/theme evidence only. The captures verify:
+The iPhone and iPad captures were refreshed from the real extension on
+2026-07-14 and show the current `Ready` contract in both appearances. The
+captures verify:
 
 - equal History and Latest geometry;
 - a centered transparent HoldType mark with no square background;
@@ -89,15 +89,25 @@ also says keyboard extensions must not launch apps other than Settings.
 
 ## Automated Evidence
 
-- Full `HoldType-iOS` iPhone Simulator test run: 1,012 passed, 0 failed,
+- Full `HoldType-iOS` iPhone Simulator test run: 1,023 passed, 0 failed,
   0 skipped.
-- The full run includes five direct UIKit tests of the actual Brand Stage view:
-  control composition and callbacks, 44-point geometry across five phone
-  widths, adaptive top-action sizing, bounded symbols, Light/Dark geometry, and
-  conditional Globe. The real accessibility screenshot verifies that the
-  resulting large text is not clipped.
+- The full run includes eight direct UIKit tests of the actual Brand Stage
+  view: control composition and callbacks, 44-point portrait geometry,
+  adaptive top-action sizing, bounded symbols, conditional Globe, and compact
+  landscape matrices at 667, 812, 844, 852, and 932 points in Light and Dark.
+  The compact matrix keeps the brand, status, and 80-point voice stage visible,
+  verifies the two-column order, and rejects ambiguity or out-of-bounds
+  controls. It also covers horizontal and bottom safe-area insets and a
+  compact-regular-compact trait round trip. The real accessibility screenshot
+  verifies that the resulting large text is not clipped.
+- Eight controller-level tests exercise the actual callback wiring: Latest never
+  inserts on load, each valid tap inserts once, expiry disables insertion,
+  stale expiry cannot clear a replacement, editing and cursor actions reach the
+  document proxy, Return and Globe follow host traits, and synchronous or
+  asynchronous History failure shows only `Open failed` before returning to
+  `Ready`.
 - Focused publisher and command-surface run: 12 passed, 0 failed. Focused real
-  keyboard-view run: 5 passed, 0 failed.
+  keyboard-view and controller run: 16 passed, 0 failed.
 - `HoldType-iOS` generic Simulator Release build: passed.
 - `HoldType` macOS build: passed.
 - `git diff --check`: passed.
@@ -105,11 +115,30 @@ also says keyboard extensions must not launch apps other than Settings.
 All automated launches used the sanitized UI-test environment. No live
 Keychain prompt, microphone capture, or OpenAI request was used.
 
+## Simulator Interaction Evidence
+
+The refreshed real iPad extension has Light and Dark screenshot evidence. Its
+accessibility tree was inspected in Dark appearance: the centered status value
+was exactly `Ready`, and the keyboard exposed no transcript or History data.
+Bounded simulator taps then verified the production callbacks in the host
+practice field:
+
+- `.`, `,`, `?`, `!`, and Space produced the exact value `.,?! `;
+- one Delete changed that value to `.,?!`;
+- Return appended one line break.
+
+This interaction pass does not qualify long-press cursor movement, Delete
+repeat, Globe switching, Latest App Group signing, or physical-device host
+fallbacks. Those remain covered only by deterministic tests or the device gate
+listed below.
+
 ## Remaining Gate
 
 A signed physical iPhone still must verify matching App Group signing,
 restricted-mode Latest reading and insertion, host-app fallbacks, and process
-eviction. Compact-landscape and iPad accessibility-setting captures remain.
+eviction. A real-extension compact-landscape capture and the iPad accessibility
+settings capture remain; compact landscape is currently qualified only by the
+direct UIKit geometry matrix.
 
 The public History-launch result remains a separate technical observation and
 review gate. Apple documents `NSExtensionContext.open` support on iOS for Today
