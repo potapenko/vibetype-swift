@@ -294,7 +294,7 @@ struct IOSVoiceRecorderAdapterTests {
     }
 
     @Test func completedPayloadDropReleasesWhileAdapterRemainsAlive()
-        async {
+        async throws {
         let fixture = VoiceRecorderFixture()
         let adapter = fixture.makeAdapter()
         let token = IOSVoiceRecorderAttemptToken()
@@ -311,8 +311,10 @@ struct IOSVoiceRecorderAdapterTests {
             #expect(fixture.source.completedReleaseCount == 0)
         }
 
-        #expect(weakCapture == nil)
-        #expect(fixture.source.completedReleaseCount == 1)
+        try await recorderEventually {
+            weakCapture == nil
+                && fixture.source.completedReleaseCount == 1
+        }
         #expect(
             (await adapter.stop(for: token, reason: .done)).isStale
         )
@@ -386,7 +388,7 @@ struct IOSVoiceRecorderAdapterTests {
         weak let weakUnclaimed = unclaimed
         unclaimed = nil
         #expect(weakUnclaimed == nil)
-        #expect(beforeClaim.releaseCount == 1)
+        try await recorderEventually { beforeClaim.releaseCount == 1 }
 
         let afterClaim = CompletedCaptureHandoffFixture()
         var completed: IOSVoiceRecorderCompletedCapture? =
@@ -399,7 +401,7 @@ struct IOSVoiceRecorderAdapterTests {
         #expect(afterClaim.releaseCount == 0)
         handoff = nil
         #expect(weakHandoff == nil)
-        #expect(afterClaim.releaseCount == 1)
+        try await recorderEventually { afterClaim.releaseCount == 1 }
     }
 
     @Test func releaseDuringPrepareConvergesExactlyOnceForSuccessAndFailure()
@@ -579,6 +581,39 @@ struct IOSVoiceRecorderAdapterTests {
         )
     }
 
+    @Test func maximumWatchdogFailureStopsFailClosedAndDiscardsExactlyOnce()
+        async throws {
+        let fixture = VoiceRecorderFixture()
+        let adapter = fixture.makeAdapter()
+        let token = IOSVoiceRecorderAttemptToken()
+        #expect(await adapter.start(for: token) == .recording)
+        let terminalTask = Task {
+            await adapter.waitForTerminal(for: token).value()
+        }
+        try await recorderEventually { fixture.sleep.waiterCount == 1 }
+
+        fixture.sleep.fail()
+
+        let terminal = await terminalTask.value
+        #expect(terminal.cause == .maximumDuration)
+        #expect(terminal.result.invalidReason == .maximumDurationReached)
+        #expect(fixture.recorder.stopCount == 1)
+        #expect(fixture.source.releaseCount == 0)
+        #expect(
+            fixture.log.calls.filter { $0 == .beginDiscarding }.count == 1
+        )
+        #expect(fixture.log.calls.filter { $0 == .stop }.count == 1)
+        #expect(
+            fixture.log.calls.filter { $0 == .finishDiscard }.count == 1
+        )
+        #expect(!fixture.log.calls.contains(.beginFinalizing))
+        #expect(!fixture.log.calls.contains(.complete))
+        #expect(
+            (await adapter.stop(for: token, reason: .done)).invalidReason
+                == .maximumDurationReached
+        )
+    }
+
     @Test func delegateTerminalWakesOneWaiterAndRejectsSecondClaim()
         async throws {
         let fixture = VoiceRecorderFixture()
@@ -674,6 +709,7 @@ struct IOSVoiceRecorderAdapterTests {
         )
         abandoned = nil
         #expect(weakAbandoned == nil)
+        await Task.yield()
 
         let replacement = adapter.waitForTerminal(for: token)
         fixture.recorder.emit(.encodeError)
@@ -859,6 +895,205 @@ struct IOSVoiceRecorderAdapterTests {
         #expect(captureFixture.releaseCount == 1)
     }
 }
+
+struct IOSVoiceRecorderCrossExecutorLifetimeTests {
+    @Test func activeAdapterDeinitHopsToMainActorAndPreservesAttempt()
+        async throws {
+        let setup = try await makeActiveAdapterDropSetup()
+        let terminalTask = Task {
+            await setup.terminalWait.value()
+        }
+
+        await dropLastReferenceOffMain(setup.adapter)
+
+        #expect((await terminalTask.value).cause == .stale)
+        try await crossExecutorEventually {
+            await MainActor.run {
+                setup.fixture.recorder.stopCount == 1
+                    && setup.fixture.source.releaseCount == 1
+            }
+        }
+        await MainActor.run {
+            #expect(setup.fixture.recorder.stopCount == 1)
+            #expect(setup.fixture.source.releaseCount == 1)
+        }
+    }
+
+    @Test func handleDeinitHopsToMainActorExactlyOnce() async throws {
+        let completed = await MainActor.run {
+            let probe = CrossExecutorReleaseProbe()
+            let value = IOSVoiceRecorderCompletedCapture(
+                durationMilliseconds: 1_000,
+                byteCount: 2_000,
+                release: { probe.record() }
+            )
+            return (probe, CrossExecutorDropBox(value))
+        }
+        let handoff = await MainActor.run {
+            let probe = CrossExecutorReleaseProbe()
+            let value = IOSVoiceRecorderCompletedCaptureHandoff(
+                preparePending: { _, _ in
+                    throw IOSVoiceRecorderCompletedCaptureHandoffError
+                        .unavailable
+                },
+                release: { probe.record() }
+            )
+            return (probe, CrossExecutorDropBox(value))
+        }
+        let terminalWait = await MainActor.run {
+            let probe = CrossExecutorReleaseProbe()
+            let value = IOSVoiceRecorderTerminalWait(
+                wait: { .stale },
+                cancel: { probe.record() }
+            )
+            return (probe, CrossExecutorDropBox(value))
+        }
+
+        await dropLastReferenceOffMain(completed.1)
+        await dropLastReferenceOffMain(handoff.1)
+        await dropLastReferenceOffMain(terminalWait.1)
+
+        try await crossExecutorEventually {
+            await MainActor.run {
+                completed.0.count == 1
+                    && handoff.0.count == 1
+                    && terminalWait.0.count == 1
+            }
+        }
+        await MainActor.run {
+            #expect(completed.0.count == 1)
+            #expect(handoff.0.count == 1)
+            #expect(terminalWait.0.count == 1)
+        }
+    }
+
+    @Test func finishDelegatePayloadHopsFromOffMainToMainActor()
+        async throws {
+        let setup = await MainActor.run {
+            let probe = CrossExecutorRecorderEventProbe()
+            let bridge = IOSVoiceAVAudioRecorderDelegateBridge(
+                receive: probe.record
+            )
+            return (probe, bridge)
+        }
+
+        await Task.detached {
+            setup.1.recorderDidFinish(successfully: false)
+        }.value
+
+        try await crossExecutorEventually {
+            await MainActor.run {
+                setup.0.events == [.finished(successfully: false)]
+            }
+        }
+        await MainActor.run {
+            #expect(setup.0.events == [.finished(successfully: false)])
+        }
+    }
+
+    @Test func encodeDelegatePayloadHopsFromOffMainToMainActor()
+        async throws {
+        let setup = await MainActor.run {
+            let probe = CrossExecutorRecorderEventProbe()
+            let bridge = IOSVoiceAVAudioRecorderDelegateBridge(
+                receive: probe.record
+            )
+            return (probe, bridge)
+        }
+
+        await Task.detached {
+            setup.1.recorderEncodeFailed()
+        }.value
+
+        try await crossExecutorEventually {
+            await MainActor.run {
+                setup.0.events == [.encodeError]
+            }
+        }
+        await MainActor.run {
+            #expect(setup.0.events == [.encodeError])
+        }
+    }
+}
+
+private struct CrossExecutorAdapterDropSetup: Sendable {
+    let fixture: VoiceRecorderFixture
+    let adapter: CrossExecutorDropBox<IOSVoiceRecorderAdapter>
+    let terminalWait: IOSVoiceRecorderTerminalWait
+}
+
+@MainActor
+private func makeActiveAdapterDropSetup() async throws
+    -> CrossExecutorAdapterDropSetup {
+    let fixture = VoiceRecorderFixture()
+    let adapter = fixture.makeAdapter()
+    let token = IOSVoiceRecorderAttemptToken()
+    guard await adapter.start(for: token) == .recording else {
+        throw VoiceRecorderFixtureError()
+    }
+    return CrossExecutorAdapterDropSetup(
+        fixture: fixture,
+        adapter: CrossExecutorDropBox(adapter),
+        terminalWait: adapter.waitForTerminal(for: token)
+    )
+}
+
+@MainActor
+private final class CrossExecutorReleaseProbe {
+    private(set) var count = 0
+
+    func record() {
+        count += 1
+    }
+}
+
+@MainActor
+private final class CrossExecutorRecorderEventProbe {
+    private(set) var events: [IOSVoiceRecorderEvent] = []
+
+    func record(_ event: IOSVoiceRecorderEvent) {
+        events.append(event)
+    }
+}
+
+private final class CrossExecutorDropBox<Value: Sendable>:
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Value?
+
+    init(_ value: Value) {
+        self.value = value
+    }
+
+    func take() -> Value? {
+        lock.lock()
+        defer { lock.unlock() }
+        let value = value
+        self.value = nil
+        return value
+    }
+}
+
+private func dropLastReferenceOffMain<Value: Sendable>(
+    _ box: CrossExecutorDropBox<Value>
+) async {
+    await Task.detached {
+        let value = box.take()
+        withExtendedLifetime(value) {}
+    }.value
+}
+
+private func crossExecutorEventually(
+    _ predicate: @escaping @Sendable () async -> Bool
+) async throws {
+    for _ in 0..<300 {
+        if await predicate() { return }
+        await Task.yield()
+    }
+    throw IOSVoiceRecorderCrossExecutorTestTimeout()
+}
+
+private struct IOSVoiceRecorderCrossExecutorTestTimeout: Error {}
 
 @MainActor
 private final class CompletedCaptureHandoffFixture {
@@ -1205,6 +1440,14 @@ private final class VoiceRecorderSleepFixture {
         let waiters = waiters.values
         self.waiters.removeAll()
         for waiter in waiters { waiter.continuation.resume() }
+    }
+
+    func fail() {
+        let waiters = waiters.values
+        self.waiters.removeAll()
+        for waiter in waiters {
+            waiter.continuation.resume(throwing: VoiceRecorderFixtureError())
+        }
     }
 
     private func cancel(_ id: UUID) {

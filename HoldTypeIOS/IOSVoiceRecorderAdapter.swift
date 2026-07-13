@@ -80,7 +80,7 @@ nonisolated enum IOSVoiceRecorderDiagnostic: String, Equatable, Sendable {
 }
 
 @MainActor
-final class IOSVoiceRecorderCompletedCaptureHandoff: @unchecked Sendable {
+final class IOSVoiceRecorderCompletedCaptureHandoff {
     typealias PreparePending = @MainActor @Sendable (
         IOSForegroundVoicePersistenceOwner,
         TranscriptionConfiguration
@@ -94,7 +94,7 @@ final class IOSVoiceRecorderCompletedCaptureHandoff: @unchecked Sendable {
     }
 
     private let preparePendingAction: PreparePending
-    private var releaseAction: (@MainActor @Sendable () -> Void)?
+    private let releaseToken: IOSVoiceRecorderMainActorActionToken
     private var state = State.available
     private var releaseWasRequested = false
 
@@ -103,7 +103,7 @@ final class IOSVoiceRecorderCompletedCaptureHandoff: @unchecked Sendable {
         release: @escaping @MainActor @Sendable () -> Void
     ) {
         preparePendingAction = preparePending
-        releaseAction = release
+        releaseToken = IOSVoiceRecorderMainActorActionToken(release)
     }
 
     func preparePending(
@@ -149,22 +149,12 @@ final class IOSVoiceRecorderCompletedCaptureHandoff: @unchecked Sendable {
     }
 
     private func releaseOnce() {
-        let action = releaseAction
-        releaseAction = nil
-        action?()
-    }
-
-    deinit {
-        MainActor.assumeIsolated {
-            guard case .available = state else { return }
-            state = .released
-            releaseOnce()
-        }
+        releaseToken.run()
     }
 }
 
 @MainActor
-final class IOSVoiceRecorderCompletedCapture: @unchecked Sendable {
+final class IOSVoiceRecorderCompletedCapture {
     let durationMilliseconds: Int64
     let byteCount: Int64
 
@@ -216,12 +206,6 @@ final class IOSVoiceRecorderCompletedCapture: @unchecked Sendable {
         handoff = nil
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            handoff?.release()
-            handoff = nil
-        }
-    }
 }
 
 nonisolated enum IOSVoiceRecorderStopResult: Sendable {
@@ -253,7 +237,7 @@ nonisolated struct IOSVoiceRecorderTerminalEvent: Sendable {
 /// handle never keeps the recorder adapter alive. Dropping or cancelling it
 /// releases an unfulfilled claim so a replacement workflow waiter can attach.
 @MainActor
-final class IOSVoiceRecorderTerminalWait: @unchecked Sendable {
+final class IOSVoiceRecorderTerminalWait {
     typealias Wait = @MainActor @Sendable () async ->
         IOSVoiceRecorderTerminalEvent
     typealias Cancel = @MainActor @Sendable () -> Void
@@ -265,7 +249,7 @@ final class IOSVoiceRecorderTerminalWait: @unchecked Sendable {
     }
 
     private let waitAction: Wait
-    private var cancelAction: Cancel?
+    private let cancelToken: IOSVoiceRecorderMainActorActionToken
     private var state = State.available
 
     init(
@@ -273,7 +257,7 @@ final class IOSVoiceRecorderTerminalWait: @unchecked Sendable {
         cancel: Cancel? = nil
     ) {
         waitAction = wait
-        cancelAction = cancel
+        cancelToken = IOSVoiceRecorderMainActorActionToken(cancel)
     }
 
     func value() async -> IOSVoiceRecorderTerminalEvent {
@@ -287,22 +271,52 @@ final class IOSVoiceRecorderTerminalWait: @unchecked Sendable {
             }
         }
         state = .resolved
-        cancelAction = nil
+        cancelToken.discard()
         return event
     }
 
     func cancel() {
         if case .resolved = state { return }
         state = .resolved
-        let action = cancelAction
-        cancelAction = nil
-        action?()
+        cancelToken.run()
+    }
+}
+
+/// Thread-safe exact-once storage for a MainActor cleanup action. The normal
+/// owner path calls `run()` synchronously on MainActor. If the last reference
+/// instead disappears on another executor, token deinitialization performs one
+/// supported asynchronous hop without assuming executor identity.
+private nonisolated final class IOSVoiceRecorderMainActorActionToken:
+    @unchecked Sendable {
+    typealias Action = @MainActor @Sendable () -> Void
+
+    private let lock = NSLock()
+    private var action: Action?
+
+    init(_ action: Action?) {
+        self.action = action
+    }
+
+    @MainActor
+    func run() {
+        take()?()
+    }
+
+    func discard() {
+        _ = take()
+    }
+
+    private func take() -> Action? {
+        lock.lock()
+        defer { lock.unlock() }
+        let pendingAction: Action? = action
+        self.action = nil
+        return pendingAction
     }
 
     deinit {
-        MainActor.assumeIsolated {
-            cancel()
-        }
+        guard let action = take() else { return }
+        Task { @MainActor in action() }
     }
 }
 
@@ -530,6 +544,7 @@ final class IOSVoiceRecorderAdapter {
     private var nextGeneration: UInt64 = 0
     private var nextTerminalWaiterIdentifier: UInt64 = 0
     private var lastTerminal: LastTerminal?
+    private var activeAttemptTeardown: IOSVoiceRecorderMainActorActionToken?
 
     private struct LastTerminal {
         let token: IOSVoiceRecorderAttemptToken
@@ -573,9 +588,10 @@ final class IOSVoiceRecorderAdapter {
         self.diagnose = diagnose
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            guard let attempt = activeAttempt else { return }
+    private func installTeardown(for attempt: Attempt) {
+        let captureSource = captureSource
+        activeAttemptTeardown = IOSVoiceRecorderMainActorActionToken {
+            [attempt, captureSource] in
             attempt.maximumDurationTask?.cancel()
             attempt.maximumDurationTask = nil
             attempt.terminalWaiter?.resolve(with: .stale)
@@ -585,6 +601,11 @@ final class IOSVoiceRecorderAdapter {
                 _ = attempt.releaseSourceOnce(captureSource)
             }
         }
+    }
+
+    private func retireTeardown() {
+        activeAttemptTeardown?.discard()
+        activeAttemptTeardown = nil
     }
 
     func start(
@@ -597,6 +618,7 @@ final class IOSVoiceRecorderAdapter {
             generation: makeGeneration()
         )
         activeAttempt = attempt
+        installTeardown(for: attempt)
         lastTerminal = nil
         phase = .arming
         let generation = attempt.generation
@@ -1068,6 +1090,7 @@ final class IOSVoiceRecorderAdapter {
         guard activeAttempt === attempt else { return }
         attempt.stopTask = nil
         activeAttempt = nil
+        retireTeardown()
         phase = .idle
         let event = IOSVoiceRecorderTerminalEvent(
             cause: attempt.terminalCause ?? .failed(.recorderEndedUnexpectedly),
@@ -1156,7 +1179,9 @@ final class IOSVoiceRecorderAdapter {
             do {
                 try await sleep(Self.maximumDurationWatchdog)
             } catch {
-                return
+                guard !Task.isCancelled, !(error is CancellationError) else {
+                    return
+                }
             }
             guard let self,
                   self.activeAttempt === attempt,
@@ -1223,13 +1248,52 @@ private final class IOSVoiceRecorderCaptureSourceLeaseSystem:
 }
 
 @MainActor
-private final class IOSVoiceAVAudioRecorder:
+final class IOSVoiceAVAudioRecorderDelegateBridge:
     NSObject,
-    @preconcurrency AVAudioRecorderDelegate,
-    IOSVoiceAudioRecorder
+    AVAudioRecorderDelegate
 {
-    private let recorder: AVAudioRecorder
     private let receive: IOSVoiceRecorderClient.EventHandler
+
+    init(
+        receive: @escaping IOSVoiceRecorderClient.EventHandler
+    ) {
+        self.receive = receive
+        super.init()
+    }
+
+    nonisolated func audioRecorderDidFinishRecording(
+        _ recorder: AVAudioRecorder,
+        successfully flag: Bool
+    ) {
+        recorderDidFinish(successfully: flag)
+    }
+
+    nonisolated func audioRecorderEncodeErrorDidOccur(
+        _ recorder: AVAudioRecorder,
+        error: Error?
+    ) {
+        recorderEncodeFailed()
+    }
+
+    nonisolated func recorderDidFinish(successfully flag: Bool) {
+        enqueue(.finished(successfully: flag))
+    }
+
+    nonisolated func recorderEncodeFailed() {
+        enqueue(.encodeError)
+    }
+
+    private nonisolated func enqueue(_ event: IOSVoiceRecorderEvent) {
+        Task { @MainActor [receive] in
+            receive(event)
+        }
+    }
+}
+
+@MainActor
+private final class IOSVoiceAVAudioRecorder: IOSVoiceAudioRecorder {
+    private let recorder: AVAudioRecorder
+    private let delegateBridge: IOSVoiceAVAudioRecorderDelegateBridge
 
     init(
         url: URL,
@@ -1245,9 +1309,8 @@ private final class IOSVoiceAVAudioRecorder:
                 AVEncoderAudioQualityKey: settings.encoderAudioQuality,
             ]
         )
-        self.receive = receive
-        super.init()
-        recorder.delegate = self
+        delegateBridge = IOSVoiceAVAudioRecorderDelegateBridge(receive: receive)
+        recorder.delegate = delegateBridge
     }
 
     var currentTime: TimeInterval { recorder.currentTime }
@@ -1260,20 +1323,6 @@ private final class IOSVoiceAVAudioRecorder:
     }
 
     func stop() { recorder.stop() }
-
-    func audioRecorderDidFinishRecording(
-        _ recorder: AVAudioRecorder,
-        successfully flag: Bool
-    ) {
-        receive(.finished(successfully: flag))
-    }
-
-    func audioRecorderEncodeErrorDidOccur(
-        _ recorder: AVAudioRecorder,
-        error: Error?
-    ) {
-        receive(.encodeError)
-    }
 }
 
 extension IOSVoiceRecorderAttemptToken:
