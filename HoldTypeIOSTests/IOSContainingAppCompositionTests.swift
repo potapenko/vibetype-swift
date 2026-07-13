@@ -133,18 +133,13 @@ struct IOSContainingAppCompositionTests {
                     capturedForegroundProcessor = processor
                     return processor
                 },
-                makeKeyboardSnapshotPublisher: {
-                    persistenceOwner,
-                    historyRepository in
+                makeKeyboardSnapshotPublisher: { persistenceOwner in
                     events.append("keyboard-publisher")
                     keyboardPublisherFactoryCount += 1
                     return IOSKeyboardSnapshotPublisher(
                         store: keyboardStore,
                         loadLatest: {
                             try await persistenceOwner.loadLatestResult()
-                        },
-                        loadHistory: {
-                            try await historyRepository.load()
                         }
                     )
                 }
@@ -332,8 +327,6 @@ struct IOSContainingAppCompositionTests {
         let keyboardSnapshot = try #require(try keyboardStore.load())
         #expect(keyboardSnapshot.revision == 1)
         #expect(keyboardSnapshot.latest == nil)
-        #expect(keyboardSnapshot.historyEnabled)
-        #expect(keyboardSnapshot.recentResults.isEmpty)
         let markerURL = IOSCredentialPresenceMarkerStorageLocation.fileURL(
             in: root
         )

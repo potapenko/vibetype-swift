@@ -29,8 +29,7 @@ struct IOSKeyboardSnapshotPublisherTests {
         #endif
     }
 
-    @Test func publishesExactLatestAndBoundedOrderedRecentProjection()
-        async throws {
+    @Test func publishesExactLatestWithSourceBasedExpiry() async throws {
         let fixture = try PublisherStoreFixture()
         defer { fixture.remove() }
 
@@ -39,46 +38,14 @@ struct IOSKeyboardSnapshotPublisherTests {
             text: "Exact line one\n\tExact line two 😀",
             createdAt: now.addingTimeInterval(-30)
         )
-        let offsets: [TimeInterval] = [
-            -60,
-            -300,
-            -120,
-            -180,
-            -240,
-            -360,
-            -KeyboardBridgeConfiguration.recentResultLifetime,
-            -(KeyboardBridgeConfiguration.recentResultLifetime + 1),
-        ]
-        let entries = try offsets.enumerated().map { index, offset in
-            try publisherHistoryEntry(
-                text: "Exact recent \(index)\nsecond line",
-                createdAt: now.addingTimeInterval(offset)
-            )
-        }
-        let history = IOSAcceptedTextHistoryRecord(
-            isEnabled: true,
-            entries: entries
-        )
-        let source = PublisherSource(
-            latest: .resultReady(latest),
-            history: history
-        )
+        let source = PublisherSource(latest: .resultReady(latest))
         let publisher = makePublisher(fixture: fixture, source: source)
 
         #expect(await publisher.publishCurrent(at: now))
         let snapshot = try #require(try fixture.readerStore.load())
-        let expectedRecent = entries
-            .filter {
-                $0.createdAt.addingTimeInterval(
-                    KeyboardBridgeConfiguration.recentResultLifetime
-                ) > now
-            }
-            .sorted(by: publisherHistoryOrder)
-            .prefix(KeyboardBridgeConfiguration.maximumRecentResults)
 
         #expect(snapshot.revision == 1)
         #expect(snapshot.publishedAt == now)
-        #expect(snapshot.historyEnabled)
         #expect(snapshot.latest?.resultID == latest.resultID)
         #expect(snapshot.latest?.text == latest.acceptedText)
         #expect(snapshot.latest?.createdAt == latest.createdAt)
@@ -87,17 +54,9 @@ struct IOSKeyboardSnapshotPublisherTests {
                 KeyboardBridgeConfiguration.latestLifetime
             )
         )
-        #expect(
-            snapshot.recentResults.map(\.resultID)
-                == expectedRecent.map(\.resultID)
-        )
-        #expect(
-            snapshot.recentResults.map(\.text)
-                == expectedRecent.map(\.text)
-        )
     }
 
-    @Test func disabledHistoryStaysEmptyAndRepublishingDoesNotExtendLatest()
+    @Test func republishingExpiredLatestDoesNotExtendItsInsertionLifetime()
         async throws {
         let fixture = try PublisherStoreFixture()
         defer { fixture.remove() }
@@ -109,24 +68,12 @@ struct IOSKeyboardSnapshotPublisherTests {
                 -(KeyboardBridgeConfiguration.latestLifetime + 1)
             )
         )
-        let hiddenEntry = try publisherHistoryEntry(
-            text: "Must not be projected",
-            createdAt: now.addingTimeInterval(-60)
-        )
-        let source = PublisherSource(
-            latest: .resultReady(latest),
-            history: IOSAcceptedTextHistoryRecord(
-                isEnabled: false,
-                entries: [hiddenEntry]
-            )
-        )
+        let source = PublisherSource(latest: .resultReady(latest))
         let publisher = makePublisher(fixture: fixture, source: source)
 
         #expect(await publisher.publishCurrent(at: now))
         let snapshot = try #require(try fixture.readerStore.load())
 
-        #expect(!snapshot.historyEnabled)
-        #expect(snapshot.recentResults.isEmpty)
         #expect(
             snapshot.latest?.expiresAt == latest.createdAt.addingTimeInterval(
                 KeyboardBridgeConfiguration.latestLifetime
@@ -144,8 +91,7 @@ struct IOSKeyboardSnapshotPublisherTests {
         let source = PublisherSource(
             latest: .resultReady(
                 try publisherLatestRecord(text: "Valid", createdAt: now)
-            ),
-            history: .enabledEmpty
+            )
         )
         let publisher = makePublisher(fixture: fixture, source: source)
 
@@ -170,19 +116,14 @@ struct IOSKeyboardSnapshotPublisherTests {
 
     @Test func unavailableReadAndWriteBoundariesReturnFalse() async throws {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
-        let source = PublisherSource(
-            latest: .absent,
-            history: .enabledEmpty
-        )
+        let source = PublisherSource(latest: .absent)
         let unavailable = IOSKeyboardSnapshotPublisher(
             store: nil,
-            loadLatest: { try await source.loadLatest() },
-            loadHistory: { await source.loadHistory() }
+            loadLatest: { try await source.loadLatest() }
         )
 
         #expect(!(await unavailable.publishCurrent(at: now)))
         #expect(await source.latestLoadCount == 0)
-        #expect(await source.historyLoadCount == 0)
 
         let corrupt = try PublisherStoreFixture()
         defer { corrupt.remove() }
@@ -207,10 +148,12 @@ struct IOSKeyboardSnapshotPublisherTests {
                 directoryURL: blockedDirectory,
                 writingOptions: .atomic
             ),
-            loadLatest: { try await source.loadLatest() },
-            loadHistory: { await source.loadHistory() }
+            loadLatest: { try await source.loadLatest() }
         )
         #expect(!(await blockedPublisher.publishCurrent(at: now)))
+
+        try corrupt.write(Data("{\"revision\":3,\"schemaVersion\":99}".utf8))
+        #expect(!(await corruptPublisher.publishCurrent(at: now)))
     }
 
     @Test func concurrentRequestsSerializeWholePublicationsAndIncreaseRevision()
@@ -222,13 +165,11 @@ struct IOSKeyboardSnapshotPublisherTests {
         let source = BlockingPublisherSource(
             latest: .resultReady(
                 try publisherLatestRecord(text: "Latest", createdAt: now)
-            ),
-            history: .enabledEmpty
+            )
         )
         let publisher = IOSKeyboardSnapshotPublisher(
             store: fixture.publisherStore,
-            loadLatest: { await source.loadLatest() },
-            loadHistory: { await source.loadHistory() }
+            loadLatest: { await source.loadLatest() }
         )
 
         let first = Task {
@@ -252,10 +193,8 @@ struct IOSKeyboardSnapshotPublisherTests {
             await source.events == [
                 "latest-1-start",
                 "latest-1-finish",
-                "history-1",
                 "latest-2-start",
                 "latest-2-finish",
-                "history-2",
             ]
         )
         let snapshot = try #require(try fixture.readerStore.load())
@@ -270,17 +209,11 @@ private enum PublisherTestError: Error {
 
 private actor PublisherSource {
     private var latest: IOSV1ForegroundVoiceLatestResultObservation
-    private let history: IOSAcceptedTextHistoryRecord
     private var shouldFailNextLatestLoad = false
     private(set) var latestLoadCount = 0
-    private(set) var historyLoadCount = 0
 
-    init(
-        latest: IOSV1ForegroundVoiceLatestResultObservation,
-        history: IOSAcceptedTextHistoryRecord
-    ) {
+    init(latest: IOSV1ForegroundVoiceLatestResultObservation) {
         self.latest = latest
-        self.history = history
     }
 
     func loadLatest() throws -> IOSV1ForegroundVoiceLatestResultObservation {
@@ -290,11 +223,6 @@ private actor PublisherSource {
             throw PublisherTestError.injected
         }
         return latest
-    }
-
-    func loadHistory() -> IOSAcceptedTextHistoryRecord {
-        historyLoadCount += 1
-        return history
     }
 
     func setLatest(_ latest: IOSV1ForegroundVoiceLatestResultObservation) {
@@ -308,20 +236,14 @@ private actor PublisherSource {
 
 private actor BlockingPublisherSource {
     private let latest: IOSV1ForegroundVoiceLatestResultObservation
-    private let history: IOSAcceptedTextHistoryRecord
     private var firstLatestLoadStarted = false
     private var firstLatestLoadRelease: CheckedContinuation<Void, Never>?
     private var firstLatestLoadStartWaiters: [CheckedContinuation<Void, Never>] = []
     private(set) var latestLoadCount = 0
-    private var historyLoadCount = 0
     private(set) var events: [String] = []
 
-    init(
-        latest: IOSV1ForegroundVoiceLatestResultObservation,
-        history: IOSAcceptedTextHistoryRecord
-    ) {
+    init(latest: IOSV1ForegroundVoiceLatestResultObservation) {
         self.latest = latest
-        self.history = history
     }
 
     func loadLatest() async -> IOSV1ForegroundVoiceLatestResultObservation {
@@ -340,12 +262,6 @@ private actor BlockingPublisherSource {
 
         events.append("latest-\(call)-finish")
         return latest
-    }
-
-    func loadHistory() -> IOSAcceptedTextHistoryRecord {
-        historyLoadCount += 1
-        events.append("history-\(historyLoadCount)")
-        return history
     }
 
     func waitUntilFirstLatestLoadStarts() async {
@@ -409,8 +325,7 @@ private func makePublisher(
 ) -> IOSKeyboardSnapshotPublisher {
     IOSKeyboardSnapshotPublisher(
         store: fixture.publisherStore,
-        loadLatest: { try await source.loadLatest() },
-        loadHistory: { await source.loadHistory() }
+        loadLatest: { try await source.loadLatest() }
     )
 }
 
@@ -424,25 +339,4 @@ private func publisherLatestRecord(
         acceptedText: text,
         createdAt: createdAt
     )
-}
-
-private func publisherHistoryEntry(
-    text: String,
-    createdAt: Date
-) throws -> IOSAcceptedTextHistoryEntry {
-    try IOSAcceptedTextHistoryEntry(
-        resultID: UUID(),
-        text: text,
-        createdAt: createdAt
-    )
-}
-
-private func publisherHistoryOrder(
-    _ lhs: IOSAcceptedTextHistoryEntry,
-    _ rhs: IOSAcceptedTextHistoryEntry
-) -> Bool {
-    if lhs.createdAt != rhs.createdAt {
-        return lhs.createdAt > rhs.createdAt
-    }
-    return lhs.resultID.uuidString < rhs.resultID.uuidString
 }

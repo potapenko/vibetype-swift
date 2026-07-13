@@ -65,22 +65,10 @@ struct KeyboardBridgeIOSTests {
             text: "Latest exact text",
             createdAt: now
         )
-        let newerRecent = try KeyboardBridgeItem.recent(
-            resultID: UUID(),
-            text: "Newer",
-            createdAt: now.addingTimeInterval(-60)
-        )
-        let olderRecent = try KeyboardBridgeItem.recent(
-            resultID: UUID(),
-            text: "Older",
-            createdAt: now.addingTimeInterval(-120)
-        )
         let snapshot = try KeyboardBridgeSnapshot(
             revision: 42,
             publishedAt: now,
-            historyEnabled: true,
-            latest: latest,
-            recentResults: [newerRecent, olderRecent]
+            latest: latest
         )
 
         try fixture.store.save(snapshot)
@@ -93,27 +81,17 @@ struct KeyboardBridgeIOSTests {
             ) == latest
         )
         #expect(loaded.latestForInsertion(at: latest.expiresAt) == nil)
-        #expect(
-            loaded.validRecentResults(at: olderRecent.expiresAt).map(\.resultID) == [
-                newerRecent.resultID
-            ]
+
+        let object = try #require(
+            JSONSerialization.jsonObject(with: fixture.data()) as? [String: Any]
         )
-        #expect(loaded.validRecentResults(at: newerRecent.expiresAt).isEmpty)
+        #expect(object["schemaVersion"] as? Int == 3)
+        #expect(object["historyEnabled"] == nil)
+        #expect(object["recentResults"] == nil)
     }
 
-    @Test func snapshotRejectsInvalidHistoryShapeAndExtendedLifetimes() throws {
+    @Test func snapshotRejectsInvalidRevisionAndExtendedLatestLifetime() throws {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
-        let recentID = UUID()
-        let recent = try KeyboardBridgeItem.recent(
-            resultID: recentID,
-            text: "Recent",
-            createdAt: now
-        )
-        let older = try KeyboardBridgeItem.recent(
-            resultID: UUID(),
-            text: "Older",
-            createdAt: now.addingTimeInterval(-60)
-        )
         let extendedLatest = try KeyboardBridgeItem(
             resultID: UUID(),
             text: "Latest",
@@ -122,94 +100,22 @@ struct KeyboardBridgeIOSTests {
                 KeyboardBridgeConfiguration.latestLifetime + 1
             )
         )
-        let extendedRecent = try KeyboardBridgeItem(
-            resultID: UUID(),
-            text: "Extended recent",
-            createdAt: now,
-            expiresAt: now.addingTimeInterval(
-                KeyboardBridgeConfiguration.recentResultLifetime + 1
-            )
-        )
 
         #expect(throws: KeyboardBridgeSnapshot.ValidationError.invalidLatestLifetime) {
             try KeyboardBridgeSnapshot(
                 revision: 1,
-                historyEnabled: true,
-                latest: extendedLatest,
-                recentResults: []
+                latest: extendedLatest
             )
         }
-        #expect(
-            throws: KeyboardBridgeSnapshot.ValidationError.invalidRecentResultLifetime(
-                extendedRecent.resultID
-            )
-        ) {
+        #expect(throws: KeyboardBridgeSnapshot.ValidationError.invalidRevision) {
             try KeyboardBridgeSnapshot(
-                revision: 1,
-                historyEnabled: true,
-                latest: nil,
-                recentResults: [extendedRecent]
+                revision: 0,
+                latest: nil
             )
         }
-        #expect(
-            throws: KeyboardBridgeSnapshot.ValidationError.historyDisabledWithRecentResults
-        ) {
-            try KeyboardBridgeSnapshot(
-                revision: 1,
-                historyEnabled: false,
-                latest: nil,
-                recentResults: [recent]
-            )
-        }
-        #expect(
-            throws: KeyboardBridgeSnapshot.ValidationError.duplicateRecentResult(recentID)
-        ) {
-            try KeyboardBridgeSnapshot(
-                revision: 1,
-                historyEnabled: true,
-                latest: nil,
-                recentResults: [recent, recent]
-            )
-        }
-        #expect(throws: KeyboardBridgeSnapshot.ValidationError.recentResultsNotNewestFirst) {
-            try KeyboardBridgeSnapshot(
-                revision: 1,
-                historyEnabled: true,
-                latest: nil,
-                recentResults: [older, recent]
-            )
-        }
-
-        let tooMany = try (0...KeyboardBridgeConfiguration.maximumRecentResults).map {
-            try KeyboardBridgeItem.recent(
-                resultID: UUID(),
-                text: "Item \($0)",
-                createdAt: now.addingTimeInterval(TimeInterval(-$0))
-            )
-        }
-        #expect(
-            throws: KeyboardBridgeSnapshot.ValidationError.tooManyRecentResults(
-                maximum: KeyboardBridgeConfiguration.maximumRecentResults
-            )
-        ) {
-            try KeyboardBridgeSnapshot(
-                revision: 1,
-                historyEnabled: true,
-                latest: nil,
-                recentResults: tooMany
-            )
-        }
-
-        let disabled = try KeyboardBridgeSnapshot(
-            revision: 1,
-            historyEnabled: false,
-            latest: nil,
-            recentResults: []
-        )
-        #expect(disabled.validRecentResults(at: now).isEmpty)
     }
 
-    @Test func missingCorruptOversizedAndIncompatibleFilesStayDistinct() throws {
+    @Test func missingCorruptOversizedLegacyAndFutureFilesStayDistinct() throws {
         let fixture = try BridgeStoreFixture()
         defer { fixture.remove() }
 
@@ -235,49 +141,80 @@ struct KeyboardBridgeIOSTests {
             try fixture.store.load()
         }
 
-        try fixture.write(Data("{\"revision\":3,\"schemaVersion\":99}".utf8))
-        #expect(
-            throws: KeyboardBridgeStoreError.incompatibleSchemaVersion(
-                found: 99,
-                supported: KeyboardBridgeSnapshot.currentSchemaVersion
+        for schemaVersion in [1, 2, 99] {
+            try fixture.write(
+                Data(
+                    "{\"revision\":3,\"schemaVersion\":\(schemaVersion)}".utf8
+                )
             )
-        ) {
-            try fixture.store.load()
+            #expect(
+                throws: KeyboardBridgeStoreError.incompatibleSchemaVersion(
+                    found: schemaVersion,
+                    supported: KeyboardBridgeSnapshot.currentSchemaVersion
+                )
+            ) {
+                try fixture.store.load()
+            }
         }
     }
 
-    @Test func firstV2SaveReplacesV1AndRevisionsIncreaseStrictly() throws {
+    @Test func v3SaveAtomicallyReplacesLegacySchemasAndRevisionsIncreaseStrictly()
+        throws {
         let fixture = try BridgeStoreFixture()
         defer { fixture.remove() }
 
         try fixture.write(Data("{\"revision\":41,\"schemaVersion\":1}".utf8))
         #expect(try fixture.store.nextRevision() == 42)
 
-        let snapshot = try KeyboardBridgeSnapshot(
+        let firstSnapshot = try KeyboardBridgeSnapshot(
             revision: 42,
             publishedAt: Date(timeIntervalSince1970: 1_750_000_000),
-            historyEnabled: false,
-            latest: nil,
-            recentResults: []
+            latest: nil
         )
-        try fixture.store.save(snapshot)
+        try fixture.store.save(firstSnapshot)
 
-        #expect(try fixture.store.load() == snapshot)
+        #expect(try fixture.store.load() == firstSnapshot)
         #expect(try fixture.store.nextRevision() == 43)
+
+        try fixture.write(
+            Data(
+                """
+                {
+                  "schemaVersion": 2,
+                  "revision": 73,
+                  "historyEnabled": true,
+                  "recentResults": [{"text": "must disappear"}]
+                }
+                """.utf8
+            )
+        )
+        #expect(try fixture.store.nextRevision() == 74)
+
+        let replacement = try KeyboardBridgeSnapshot(
+            revision: 74,
+            publishedAt: Date(timeIntervalSince1970: 1_750_000_001),
+            latest: nil
+        )
+        try fixture.store.save(replacement)
+        #expect(try fixture.store.load() == replacement)
+
+        let storedData = try fixture.data()
         #expect(
             throws: KeyboardBridgeStoreError.nonIncreasingRevision(
-                current: 42,
-                proposed: 42
+                current: 74,
+                proposed: 74
             )
         ) {
-            try fixture.store.save(snapshot)
+            try fixture.store.save(replacement)
         }
+        #expect(try fixture.data() == storedData)
 
         let object = try #require(
-            JSONSerialization.jsonObject(with: fixture.data()) as? [String: Any]
+            JSONSerialization.jsonObject(with: storedData) as? [String: Any]
         )
-        #expect(object["schemaVersion"] as? Int == 2)
-        #expect(object["phase"] == nil)
+        #expect(object["schemaVersion"] as? Int == 3)
+        #expect(object["historyEnabled"] == nil)
+        #expect(object["recentResults"] == nil)
     }
 
     @Test func canonicalWriterRepairsCorruptCacheButNotFutureSchema()
@@ -287,9 +224,7 @@ struct KeyboardBridgeIOSTests {
         let replacement = try KeyboardBridgeSnapshot(
             revision: 1,
             publishedAt: Date(timeIntervalSince1970: 1_750_000_000),
-            historyEnabled: false,
-            latest: nil,
-            recentResults: []
+            latest: nil
         )
 
         try fixture.write(Data("not-json".utf8))
