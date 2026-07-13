@@ -343,11 +343,11 @@ enum IOSVoiceHomePresentation {
         _ warning: IOSForegroundVoiceWarning
     ) -> IOSVoiceStatusPresentation {
         switch warning {
-        case .historyRecoveryPending:
+        case .historySaveFailed:
             status(
                 "Result ready",
-                detail: "Latest Result is ready. History recovery will continue locally.",
-                image: "clock.arrow.circlepath",
+                detail: "Latest Result is ready, but HoldType couldn't save it to History.",
+                image: "exclamationmark.arrow.triangle.2.circlepath",
                 tone: .warning
             )
         }

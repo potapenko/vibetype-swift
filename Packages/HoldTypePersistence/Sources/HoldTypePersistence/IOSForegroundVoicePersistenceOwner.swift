@@ -50,21 +50,43 @@ public struct IOSForegroundVoicePersistenceOwner: Sendable {
     public init(applicationSupportDirectoryURL: URL) {
         self.init(
             applicationSupportDirectoryURL: applicationSupportDirectoryURL,
-            registry: .shared
+            acceptedTextHistoryRepository: IOSAcceptedTextHistoryRepository(
+                applicationSupportDirectoryURL: applicationSupportDirectoryURL
+            )
+        )
+    }
+
+    public init(
+        applicationSupportDirectoryURL: URL,
+        acceptedTextHistoryRepository: IOSAcceptedTextHistoryRepository
+    ) {
+        self.init(
+            applicationSupportDirectoryURL: applicationSupportDirectoryURL,
+            registry: .shared,
+            acceptedTextHistoryRepository: acceptedTextHistoryRepository
         )
     }
 
     init(
         applicationSupportDirectoryURL: URL,
-        registry: IOSAcceptedHistoryCoordinatorProcessContextRegistry
+        registry: IOSAcceptedHistoryCoordinatorProcessContextRegistry,
+        acceptedTextHistoryRepository:
+            IOSAcceptedTextHistoryRepository? = nil
     ) {
         let context = registry.context(for: applicationSupportDirectoryURL)
+        let acceptedTextHistoryRepository =
+            acceptedTextHistoryRepository
+            ?? IOSAcceptedTextHistoryRepository(
+                applicationSupportDirectoryURL:
+                    applicationSupportDirectoryURL
+            )
         pendingRecordingStore = context.pendingRecordingStore
         captureSourceOwner = context.foregroundVoiceCaptureSourceOwner
         acceptedOutputPersistence = IOSForegroundVoicePersistence(
             applicationSupportDirectoryURL: applicationSupportDirectoryURL,
             registry: registry,
-            context: context
+            context: context,
+            acceptedTextHistoryRepository: acceptedTextHistoryRepository
         )
     }
 

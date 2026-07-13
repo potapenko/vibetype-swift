@@ -176,20 +176,23 @@ struct IOSVoiceHomePresentationTests {
         #expect(recovery.setupDestination == nil)
     }
 
-    @Test func historyRecoveryWarningPreservesReadyResultCopy() {
+    @Test func historySaveWarningPreservesReadyResultCopy() {
         let resolved = IOSVoiceHomePresentation.resolve(
             voicePresentation(
                 outcome: .resultReady,
-                warning: .historyRecoveryPending
+                warning: .historySaveFailed
             )
         )
 
         #expect(resolved.title == "Result ready")
         #expect(
             resolved.detail
-                == "Latest Result is ready. History recovery will continue locally."
+                == "Latest Result is ready, but HoldType couldn't save it to History."
         )
-        #expect(resolved.systemImage == "clock.arrow.circlepath")
+        #expect(
+            resolved.systemImage ==
+                "exclamationmark.arrow.triangle.2.circlepath"
+        )
         #expect(resolved.tone == .warning)
         #expect(!resolved.showsProgress)
         #expect(resolved.setupDestination == nil)
@@ -299,7 +302,7 @@ private func voiceStatusFixtures() -> [IOSForegroundVoicePresentation] {
     values.append(
         voicePresentation(
             outcome: .resultReady,
-            warning: .historyRecoveryPending
+            warning: .historySaveFailed
         )
     )
     return values

@@ -2455,7 +2455,7 @@ private func processorErrorName(_ error: IOSPendingRecordingError) -> String {
 
 private extension IOSForegroundVoiceProcessingResolution {
     func requireReady() throws -> IOSAcceptedOutputDeliveryRecord {
-        guard case .acceptance(.resultReady(let record)) = self else {
+        guard case .acceptance(.resultReady(let record, _)) = self else {
             throw ProcessorFixtureError.injectedFailure
         }
         return record

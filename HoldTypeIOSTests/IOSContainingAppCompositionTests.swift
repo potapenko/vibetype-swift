@@ -25,6 +25,8 @@ struct IOSContainingAppCompositionTests {
         var capturedLibraryStateOwner: IOSLibraryStateOwner?
         var capturedProviderConsentCoordinator:
             IOSProviderConsentCoordinator?
+        var capturedAcceptedTextHistoryRepository:
+            IOSAcceptedTextHistoryRepository?
         var capturedUsageRepository: IOSTranscriptionUsageRepository?
         var capturedFailedUsageClient:
             IOSTranscriptionUsageRecordingClient?
@@ -134,11 +136,17 @@ struct IOSContainingAppCompositionTests {
                     capturedProviderConsentCoordinator = coordinator
                     return coordinator
                 },
-                makeForegroundVoicePersistenceOwner: { resolvedRoot in
+                makeForegroundVoicePersistenceOwner: {
+                    resolvedRoot,
+                    acceptedTextHistoryRepository in
                     events.append("foreground-persistence")
                     foregroundPersistenceFactoryCount += 1
+                    capturedAcceptedTextHistoryRepository =
+                        acceptedTextHistoryRepository
                     return IOSForegroundVoicePersistenceOwner(
-                        applicationSupportDirectoryURL: resolvedRoot
+                        applicationSupportDirectoryURL: resolvedRoot,
+                        acceptedTextHistoryRepository:
+                            acceptedTextHistoryRepository
                     )
                 },
                 makeTranscriptionUsageRepository: { resolvedRoot in
@@ -235,6 +243,10 @@ struct IOSContainingAppCompositionTests {
                 === capturedProviderConsentCoordinator
         )
         #expect(composition.foregroundVoicePersistenceOwner != nil)
+        #expect(
+            composition.acceptedTextHistoryRepository ===
+                capturedAcceptedTextHistoryRepository
+        )
         #expect(
             composition.transcriptionUsageRepository
                 === capturedUsageRepository
@@ -423,10 +435,14 @@ struct IOSContainingAppCompositionTests {
                         applicationSupportDirectoryURL: resolvedRoot
                     )
                 },
-                makeForegroundVoicePersistenceOwner: { resolvedRoot in
+                makeForegroundVoicePersistenceOwner: {
+                    resolvedRoot,
+                    acceptedTextHistoryRepository in
                     foregroundPersistenceFactoryCalls += 1
                     return IOSForegroundVoicePersistenceOwner(
-                        applicationSupportDirectoryURL: resolvedRoot
+                        applicationSupportDirectoryURL: resolvedRoot,
+                        acceptedTextHistoryRepository:
+                            acceptedTextHistoryRepository
                     )
                 },
                 makeTranscriptionUsageRepository: { resolvedRoot in
@@ -565,10 +581,14 @@ struct IOSContainingAppCompositionTests {
                         applicationSupportDirectoryURL: resolvedRoot
                     )
                 },
-                makeForegroundVoicePersistenceOwner: { resolvedRoot in
+                makeForegroundVoicePersistenceOwner: {
+                    resolvedRoot,
+                    acceptedTextHistoryRepository in
                     foregroundPersistenceFactoryCalls += 1
                     return IOSForegroundVoicePersistenceOwner(
-                        applicationSupportDirectoryURL: resolvedRoot
+                        applicationSupportDirectoryURL: resolvedRoot,
+                        acceptedTextHistoryRepository:
+                            acceptedTextHistoryRepository
                     )
                 },
                 makeTranscriptionUsageRepository: { resolvedRoot in
@@ -671,7 +691,7 @@ struct IOSContainingAppCompositionTests {
                         "Consent must not be constructed."
                     )
                 },
-                makeForegroundVoicePersistenceOwner: { _ in
+                makeForegroundVoicePersistenceOwner: { _, _ in
                     foregroundPersistenceFactoryCalls += 1
                     preconditionFailure(
                         "Foreground persistence must not be constructed."

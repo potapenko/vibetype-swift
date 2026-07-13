@@ -21,7 +21,7 @@ enum IOSForegroundVoiceFailure: Equatable, Sendable {
 }
 
 enum IOSForegroundVoiceWarning: Equatable, Sendable {
-    case historyRecoveryPending
+    case historySaveFailed
 }
 
 enum IOSForegroundVoiceRecovery: Equatable, Sendable {

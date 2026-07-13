@@ -109,8 +109,15 @@ public struct IOSForegroundVoiceSavingResultExpectation: Equatable, Sendable {
     }
 }
 
+public enum IOSForegroundVoiceAcceptanceNotice: Equatable, Sendable {
+    case historyWriteFailed
+}
+
 public enum IOSForegroundVoiceAcceptanceResult: Equatable, Sendable {
-    case resultReady(IOSAcceptedOutputDeliveryRecord)
+    case resultReady(
+        IOSAcceptedOutputDeliveryRecord,
+        notice: IOSForegroundVoiceAcceptanceNotice? = nil
+    )
     case savingResult(IOSForegroundVoiceSavingResultExpectation)
     case expired(IOSAcceptedOutputDeliveryExpectation)
     case clockRollbackAmbiguous(IOSAcceptedOutputDeliveryExpectation)
@@ -448,38 +455,56 @@ private extension IOSAcceptedOutputDeliveryObservation {
     }
 }
 
-/// Canonical P4 app-only accepted-output and PendingRecording transaction.
-/// It performs no History, outbox, bridge, or keyboard operation.
+/// Canonical app-only accepted-output and PendingRecording transaction.
+/// Compact successful-text History is best-effort after durable Latest.
 public struct IOSForegroundVoicePersistence: Sendable {
     private let operationGate: IOSPersistenceOperationGate
     private let pendingRecordingStore: IOSPendingRecordingStore
     private let deliveryStore: IOSAcceptedOutputDeliveryStore
     private let state: IOSForegroundVoicePersistenceOperationState
+    private let acceptedTextHistoryRepository:
+        IOSAcceptedTextHistoryRepository?
     private let productionContext:
         IOSAcceptedHistoryCoordinatorProcessContext?
     private let repositoryRegistration:
         IOSAcceptedHistoryCoordinatorRepositoryRegistration?
 
     public init(applicationSupportDirectoryURL: URL) {
+        self.init(
+            applicationSupportDirectoryURL: applicationSupportDirectoryURL,
+            acceptedTextHistoryRepository: IOSAcceptedTextHistoryRepository(
+                applicationSupportDirectoryURL: applicationSupportDirectoryURL
+            )
+        )
+    }
+
+    public init(
+        applicationSupportDirectoryURL: URL,
+        acceptedTextHistoryRepository: IOSAcceptedTextHistoryRepository
+    ) {
         let registry = IOSAcceptedHistoryCoordinatorProcessContextRegistry
             .shared
         let context = registry.context(for: applicationSupportDirectoryURL)
         self.init(
             applicationSupportDirectoryURL: applicationSupportDirectoryURL,
             registry: registry,
-            context: context
+            context: context,
+            acceptedTextHistoryRepository: acceptedTextHistoryRepository
         )
     }
 
     init(
         applicationSupportDirectoryURL: URL,
         registry: IOSAcceptedHistoryCoordinatorProcessContextRegistry,
-        context: IOSAcceptedHistoryCoordinatorProcessContext
+        context: IOSAcceptedHistoryCoordinatorProcessContext,
+        acceptedTextHistoryRepository: IOSAcceptedTextHistoryRepository
     ) {
         operationGate = context.operationGate
         pendingRecordingStore = context.pendingRecordingStore
         deliveryStore = context.deliveryStore
         state = context.foregroundVoicePersistenceState
+        self.acceptedTextHistoryRepository =
+            acceptedTextHistoryRepository
         productionContext = context
         repositoryRegistration =
             IOSAcceptedHistoryCoordinatorRepositoryRegistration(
@@ -495,12 +520,16 @@ public struct IOSForegroundVoicePersistence: Sendable {
         pendingRecordingStore: IOSPendingRecordingStore,
         deliveryStore: IOSAcceptedOutputDeliveryStore,
         state: IOSForegroundVoicePersistenceOperationState =
-            IOSForegroundVoicePersistenceOperationState()
+            IOSForegroundVoicePersistenceOperationState(),
+        acceptedTextHistoryRepository:
+            IOSAcceptedTextHistoryRepository? = nil
     ) {
         self.operationGate = operationGate
         self.pendingRecordingStore = pendingRecordingStore
         self.deliveryStore = deliveryStore
         self.state = state
+        self.acceptedTextHistoryRepository =
+            acceptedTextHistoryRepository
         productionContext = nil
         repositoryRegistration = nil
     }
@@ -620,7 +649,7 @@ public struct IOSForegroundVoicePersistence: Sendable {
                             matching: retainedWork.expectation
                         )
                         switch completed {
-                        case .resultReady(let record):
+                        case .resultReady(let record, _):
                             return .resultReady(record)
                         case .expired(let expectation):
                             return .expired(expectation)
@@ -829,9 +858,11 @@ public struct IOSForegroundVoicePersistence: Sendable {
         if try await state.hasCompletedRetirement(
             matching: work.expectation
         ) {
-            let result = try await loadCompletedResult(
-                for: work,
-                operationLeaseAuthorization: lease
+            let result = await addingHistoryNotice(
+                to: try await loadCompletedResult(
+                    for: work,
+                    operationLeaseAuthorization: lease
+                )
             )
             try await state.clear(matching: work.expectation)
             return result
@@ -859,6 +890,9 @@ public struct IOSForegroundVoicePersistence: Sendable {
                     operationLeaseAuthorization: lease
                 )
         }
+        let historyNotice = await appendHistory(
+            from: firstDestination.record
+        )
         let audioRemoval: IOSForegroundVoicePendingAudioRemovalAuthorization
         switch work.retirementOrigin {
         case .liveProcess:
@@ -902,7 +936,62 @@ public struct IOSForegroundVoicePersistence: Sendable {
             operationLeaseAuthorization: lease
         )
         try await state.clear(matching: work.expectation)
-        return result
+        return attaching(historyNotice, to: result)
+    }
+
+    private func appendHistory(
+        from record: IOSAcceptedOutputDeliveryRecord
+    ) async -> IOSForegroundVoiceAcceptanceNotice? {
+        guard let acceptedTextHistoryRepository else {
+            return nil
+        }
+        guard let acceptedText = record.acceptedText else {
+            return .historyWriteFailed
+        }
+
+        do {
+            let entry = try IOSAcceptedTextHistoryEntry(
+                resultID: record.deliveryID,
+                text: acceptedText,
+                createdAt: record.createdAt
+            )
+            _ = try await acceptedTextHistoryRepository.append(entry)
+            return nil
+        } catch {
+            return .historyWriteFailed
+        }
+    }
+
+    private func addingHistoryNotice(
+        to result: IOSForegroundVoiceAcceptanceResult
+    ) async -> IOSForegroundVoiceAcceptanceResult {
+        switch result {
+        case .resultReady(let record, let priorNotice):
+            let notice: IOSForegroundVoiceAcceptanceNotice?
+            if let priorNotice {
+                notice = priorNotice
+            } else {
+                notice = await appendHistory(from: record)
+            }
+            return .resultReady(record, notice: notice)
+        case .savingResult, .expired, .clockRollbackAmbiguous:
+            return result
+        }
+    }
+
+    private func attaching(
+        _ notice: IOSForegroundVoiceAcceptanceNotice?,
+        to result: IOSForegroundVoiceAcceptanceResult
+    ) -> IOSForegroundVoiceAcceptanceResult {
+        switch result {
+        case .resultReady(let record, let existingNotice):
+            return .resultReady(
+                record,
+                notice: existingNotice ?? notice
+            )
+        case .savingResult, .expired, .clockRollbackAmbiguous:
+            return result
+        }
     }
 
     private func loadCompletedResult(

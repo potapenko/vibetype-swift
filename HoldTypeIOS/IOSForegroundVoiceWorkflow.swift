@@ -2239,10 +2239,13 @@ final class IOSForegroundVoiceWorkflow {
     ) async -> IOSForegroundVoiceResolution {
         let observation = await observe()
         switch acceptance {
-        case .resultReady:
+        case .resultReady(_, let notice):
             return IOSForegroundVoiceResolution(
                 observation: observation,
-                outcome: .resultReady
+                outcome: .resultReady,
+                warning: notice == .historyWriteFailed
+                    ? .historySaveFailed
+                    : nil
             )
         case .savingResult(let expectation):
             savingResultExpectation = expectation

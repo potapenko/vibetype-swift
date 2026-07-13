@@ -77,7 +77,7 @@ struct IOSForegroundVoiceControllerTests {
         #expect(fixture.cancellationAuthorities.isEmpty)
     }
 
-    @Test func historyRecoveryWarningKeepsResultAndNextStartAvailable()
+    @Test func historySaveWarningKeepsResultAndNextStartAvailable()
         async throws {
         let fixture = IOSForegroundVoiceClientFixture(
             observation: voiceObservation()
@@ -98,7 +98,7 @@ struct IOSForegroundVoiceControllerTests {
             with: IOSForegroundVoiceResolution(
                 observation: voiceObservation(latest: .available),
                 outcome: .resultReady,
-                warning: .historyRecoveryPending
+                warning: .historySaveFailed
             )
         )
         try await voiceEventually {
@@ -106,7 +106,7 @@ struct IOSForegroundVoiceControllerTests {
         }
 
         #expect(controller.presentation.outcome == .resultReady)
-        #expect(controller.presentation.warning == .historyRecoveryPending)
+        #expect(controller.presentation.warning == .historySaveFailed)
         #expect(controller.presentation.recovery == .none)
         #expect(controller.presentation.latestAvailability == .available)
         #expect(
@@ -1067,7 +1067,7 @@ struct IOSForegroundVoiceControllerTests {
                 "IOSForegroundVoiceFailure(<redacted>)"
             ),
             (
-                IOSForegroundVoiceWarning.historyRecoveryPending,
+                IOSForegroundVoiceWarning.historySaveFailed,
                 "IOSForegroundVoiceWarning(<redacted>)"
             ),
             (

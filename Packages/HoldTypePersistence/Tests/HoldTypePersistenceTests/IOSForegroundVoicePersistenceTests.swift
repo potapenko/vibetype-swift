@@ -488,6 +488,103 @@ struct IOSForegroundVoicePersistenceTests {
         )
     }
 
+    @Test func durableLatestAppendsCompactHistoryBeforePendingCleanup()
+        async throws {
+        let root = try temporaryHistoryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let historyRepository = IOSAcceptedTextHistoryRepository(
+            applicationSupportDirectoryURL: root
+        )
+        let fixture = ForegroundVoicePersistenceFixture(
+            acceptedTextHistoryRepository: historyRepository
+        )
+        let output = try await fixture.makeOutputDelivery()
+        let result = try await fixture.facade.accept(
+            try fixture.preparation(
+                for: output,
+                acceptedText: "compact history text"
+            ),
+            expectedPending: IOSPendingRecordingCASExpectation(
+                recording: output
+            )
+        )
+        let (record, notice) = try result.requireReadyWithNotice()
+
+        #expect(notice == nil)
+        let history = try await historyRepository.load()
+        #expect(history.entries.count == 1)
+        #expect(history.entries.first?.resultID == record.deliveryID)
+        #expect(history.entries.first?.text == "compact history text")
+        #expect(fixture.pendingJournal.recording == nil)
+        #expect(!fixture.audio.isPresent)
+    }
+
+    @Test func compactHistoryFailureWarnsWithoutHoldingPendingOrLatest()
+        async throws {
+        let root = try temporaryHistoryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let historyURL = IOSAcceptedTextHistoryStorageLocation.fileURL(
+            in: root
+        )
+        try FileManager.default.createDirectory(
+            at: historyURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("not-json".utf8).write(to: historyURL)
+        let historyRepository = IOSAcceptedTextHistoryRepository(
+            applicationSupportDirectoryURL: root
+        )
+        let fixture = ForegroundVoicePersistenceFixture(
+            acceptedTextHistoryRepository: historyRepository
+        )
+        let output = try await fixture.makeOutputDelivery()
+        let result = try await fixture.facade.accept(
+            try fixture.preparation(for: output),
+            expectedPending: IOSPendingRecordingCASExpectation(
+                recording: output
+            )
+        )
+        let (record, notice) = try result.requireReadyWithNotice()
+
+        #expect(notice == .historyWriteFailed)
+        #expect(fixture.pendingJournal.recording == nil)
+        #expect(!fixture.audio.isPresent)
+        #expect(
+            try await fixture.facade.loadLatestResult()
+                == .resultReady(record)
+        )
+    }
+
+    @Test func localCleanupRetryDoesNotDuplicateCompactHistory()
+        async throws {
+        let root = try temporaryHistoryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let historyRepository = IOSAcceptedTextHistoryRepository(
+            applicationSupportDirectoryURL: root
+        )
+        let fixture = ForegroundVoicePersistenceFixture(
+            acceptedTextHistoryRepository: historyRepository
+        )
+        let output = try await fixture.makeOutputDelivery()
+        fixture.audio.failNextRemove = .removeFailed
+        let saving = try await fixture.facade.accept(
+            try fixture.preparation(for: output),
+            expectedPending: IOSPendingRecordingCASExpectation(
+                recording: output
+            )
+        ).requireSaving()
+        #expect(try await historyRepository.load().entries.count == 1)
+
+        let result = try await fixture.facade.retrySavingResult(
+            expected: saving
+        )
+        let (_, notice) = try result.requireReadyWithNotice()
+        #expect(notice == nil)
+        #expect(try await historyRepository.load().entries.count == 1)
+        #expect(fixture.pendingJournal.recording == nil)
+        #expect(fixture.executor.callCount == 1)
+    }
+
     @Test func processOwnerKeepsTheExactPendingActorAcrossProviderStages()
         async throws {
         let fixture = ForegroundVoicePersistenceFixture()
@@ -1562,10 +1659,20 @@ struct IOSForegroundVoicePersistenceTests {
 
 private extension IOSForegroundVoiceAcceptanceResult {
     func requireReady() throws -> IOSAcceptedOutputDeliveryRecord {
-        guard case .resultReady(let record) = self else {
+        guard case .resultReady(let record, _) = self else {
             throw ForegroundVoiceTestError.unexpectedResult
         }
         return record
+    }
+
+    func requireReadyWithNotice() throws -> (
+        IOSAcceptedOutputDeliveryRecord,
+        IOSForegroundVoiceAcceptanceNotice?
+    ) {
+        guard case .resultReady(let record, let notice) = self else {
+            throw ForegroundVoiceTestError.unexpectedResult
+        }
+        return (record, notice)
     }
 
     func requireSaving() throws
@@ -1575,6 +1682,20 @@ private extension IOSForegroundVoiceAcceptanceResult {
         }
         return expectation
     }
+}
+
+private func temporaryHistoryRoot() throws -> URL {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(
+            "ios-compact-history-\(UUID().uuidString)",
+            isDirectory: true
+        )
+    try FileManager.default.createDirectory(
+        at: root,
+        withIntermediateDirectories: false,
+        attributes: [.posixPermissions: 0o700]
+    )
+    return root
 }
 
 private enum ForegroundVoiceTestError: Error {
@@ -1643,6 +1764,8 @@ private final class ForegroundVoicePersistenceFixture: @unchecked Sendable {
     let clock = ForegroundVoiceClock(
         date: Date(timeIntervalSince1970: 1_800_000_000)
     )
+    let acceptedTextHistoryRepository:
+        IOSAcceptedTextHistoryRepository?
     lazy var pendingStore = IOSPendingRecordingStore(
         journal: pendingJournal,
         audioFileSystem: audio,
@@ -1661,10 +1784,20 @@ private final class ForegroundVoicePersistenceFixture: @unchecked Sendable {
         operationGate: operationGate,
         pendingRecordingStore: pendingStore,
         deliveryStore: deliveryStore,
-        state: state
+        state: state,
+        acceptedTextHistoryRepository:
+            acceptedTextHistoryRepository
     )
 
     private var sequence: UInt8 = 1
+
+    init(
+        acceptedTextHistoryRepository:
+            IOSAcceptedTextHistoryRepository? = nil
+    ) {
+        self.acceptedTextHistoryRepository =
+            acceptedTextHistoryRepository
+    }
 
     func makeOutputDelivery(
         outputIntent: DictationOutputIntent = .standard,
@@ -1783,7 +1916,9 @@ private final class ForegroundVoicePersistenceFixture: @unchecked Sendable {
             operationGate: operationGate,
             pendingRecordingStore: pendingStore,
             deliveryStore: deliveryStore,
-            state: state
+            state: state,
+            acceptedTextHistoryRepository:
+                acceptedTextHistoryRepository
         )
     }
 
@@ -1792,7 +1927,9 @@ private final class ForegroundVoicePersistenceFixture: @unchecked Sendable {
             operationGate: operationGate,
             pendingRecordingStore: pendingStore,
             deliveryStore: deliveryStore,
-            state: IOSForegroundVoicePersistenceOperationState()
+            state: IOSForegroundVoicePersistenceOperationState(),
+            acceptedTextHistoryRepository:
+                acceptedTextHistoryRepository
         )
     }
 
@@ -1808,7 +1945,9 @@ private final class ForegroundVoicePersistenceFixture: @unchecked Sendable {
             operationGate: operationGate,
             pendingRecordingStore: pendingStore,
             deliveryStore: freshDeliveryStore,
-            state: IOSForegroundVoicePersistenceOperationState()
+            state: IOSForegroundVoicePersistenceOperationState(),
+            acceptedTextHistoryRepository:
+                acceptedTextHistoryRepository
         )
     }
 }

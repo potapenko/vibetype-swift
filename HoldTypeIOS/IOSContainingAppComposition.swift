@@ -43,7 +43,8 @@ final class IOSContainingAppComposition {
             URL
         ) -> IOSProviderConsentCoordinator
         let makeForegroundVoicePersistenceOwner: @MainActor (
-            URL
+            URL,
+            IOSAcceptedTextHistoryRepository
         ) -> IOSForegroundVoicePersistenceOwner
         let makeTranscriptionUsageRepository: @MainActor (
             URL
@@ -132,10 +133,13 @@ final class IOSContainingAppComposition {
                 )
             },
             makeForegroundVoicePersistenceOwner: {
-                applicationSupportDirectoryURL in
+                applicationSupportDirectoryURL,
+                acceptedTextHistoryRepository in
                 IOSForegroundVoicePersistenceOwner(
                     applicationSupportDirectoryURL:
-                        applicationSupportDirectoryURL
+                        applicationSupportDirectoryURL,
+                    acceptedTextHistoryRepository:
+                        acceptedTextHistoryRepository
                 )
             },
             makeTranscriptionUsageRepository: {
@@ -168,6 +172,8 @@ final class IOSContainingAppComposition {
     let openAISettingsStateOwner: IOSOpenAICredentialSettingsStateOwner?
     let failedHistoryService: IOSFailedHistoryService?
     let providerConsentCoordinator: IOSProviderConsentCoordinator?
+    let acceptedTextHistoryRepository:
+        IOSAcceptedTextHistoryRepository?
     let foregroundVoicePersistenceOwner:
         IOSForegroundVoicePersistenceOwner?
     let transcriptionUsageRepository: IOSTranscriptionUsageRepository?
@@ -201,6 +207,7 @@ final class IOSContainingAppComposition {
             openAISettingsStateOwner = nil
             failedHistoryService = nil
             providerConsentCoordinator = nil
+            acceptedTextHistoryRepository = nil
             foregroundVoicePersistenceOwner = nil
             transcriptionUsageRepository = nil
             usageEstimateStateOwner = nil
@@ -239,9 +246,17 @@ final class IOSContainingAppComposition {
                 applicationSupportDirectoryURL
             )
         self.providerConsentCoordinator = providerConsentCoordinator
+        let acceptedTextHistoryRepository =
+            IOSAcceptedTextHistoryRepository(
+                applicationSupportDirectoryURL:
+                    applicationSupportDirectoryURL
+            )
+        self.acceptedTextHistoryRepository =
+            acceptedTextHistoryRepository
         let foregroundVoicePersistenceOwner = factories
             .makeForegroundVoicePersistenceOwner(
-                applicationSupportDirectoryURL
+                applicationSupportDirectoryURL,
+                acceptedTextHistoryRepository
             )
         self.foregroundVoicePersistenceOwner =
             foregroundVoicePersistenceOwner
@@ -341,6 +356,7 @@ final class IOSContainingAppComposition {
         openAISettingsStateOwner = nil
         failedHistoryService = nil
         providerConsentCoordinator = nil
+        acceptedTextHistoryRepository = nil
         foregroundVoicePersistenceOwner = nil
         transcriptionUsageRepository = nil
         usageEstimateStateOwner = nil
