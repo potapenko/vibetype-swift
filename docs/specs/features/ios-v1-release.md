@@ -9,6 +9,12 @@ This spec supersedes conflicting P5H-P8 behavior for V1.1. Detailed legacy iOS
 specs remain research and implementation evidence, but they do not expand this
 release unless this file explicitly links to that behavior.
 
+K1 update, 2026-07-13: current Apple documentation and App Review Guideline
+4.4.1 do not qualify a review-safe keyboard-to-containing-app launch. The
+non-blocked keyboard UI, editing, Latest, and recent-result work may proceed, but
+the keyboard-plus-voice V1.1 release claim remains unresolved until an explicit
+product rescope, new Apple guidance, or explicit acceptance of the review risk.
+
 ## Goal
 
 Ship one coherent iPhone product: a useful containing app for foreground voice
@@ -209,9 +215,9 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
 
 - The microphone button performs only a physically verified action.
 - The extension never records audio or contacts OpenAI itself.
-- After K1 proves supported containing-app handoff, the button opens or
-  activates that documented app voice flow; it does not display `Listening`
-  before the containing app actually owns a recording.
+- Current K1 evidence does not prove a supported containing-app handoff. The
+  production extension therefore adds no custom URL/private launch path and
+  exposes no actionable microphone or optimistic `Listening` state.
 - The user explicitly returns to the host app and invokes `Insert Result`.
   V1.1 does not promise private automatic return or automatic insertion.
 - The app may publish one bounded keyboard snapshot to App Group storage only
@@ -303,7 +309,7 @@ V1.1 is not release-complete until a recorded device pass proves:
   third-party apps;
 - Full Access off and on behavior;
 - secure-field, phone-pad, and host-opt-out fallback;
-- the exact microphone-button handoff and honest unavailable state;
+- the honest unavailable microphone state and absence of an undocumented launch;
 - app foreground recording, Done, Cancel, interruption, and provider timeout;
 - explicit return and Latest/History insertion exactly once per tap, with no
   automatic or wrong-field replay;
@@ -316,10 +322,11 @@ V1.1 is not release-complete until a recorded device pass proves:
 
 Simulator evidence cannot pass this gate.
 
-The signed device gate must prove a supported containing-app handoff from the
-microphone control. If it cannot, the keyboard-plus-voice V1.1 defined here is a
-no-go and requires an explicitly approved, renamed app-only scope; an
-instruction-only microphone button is not successful completion of V1.1.
+The current public documentation does not qualify the supported containing-app
+handoff requirement. The keyboard-plus-voice V1.1 defined here remains no-go
+until an explicitly approved product rescope, new Apple guidance, or explicit
+acceptance of the review risk; an instruction-only microphone button is not
+successful completion of V1.1.
 
 ## Complexity Guardrails
 
@@ -342,14 +349,11 @@ instruction-only microphone button is not successful completion of V1.1.
 - Historical physical keyboard evidence remains under `docs/qa/runs/` but does
   not pass the V1.1 device gate.
 
-## Physical Spike Decision
+## Voice Activation Decision
 
-The first physical spike decides whether supported app handoff plus explicit
-manual return and Insert Result is feasible. It uses only public API and a
-minimal signed probe. It may not introduce background Quick Session
-architecture to manufacture a positive result.
-
-A positive result fixes that interaction as the V1.1 voice mode. A negative
-result stops keyboard-plus-voice V1.1 before persistence or keyboard expansion;
-continuing as an app-only product requires an explicit scope and product-name
-decision.
+Physical evidence may qualify App Group, editing, insertion, fallback, and
+metadata behavior. It may also show whether a one-way custom URL happens to work
+on a specific iOS version, but it cannot alone make undocumented keyboard
+behavior App-Review-safe. No production spike adds a private host-return path or
+fabricates recording state. Continuing as an app-only product or changing the
+keyboard's role requires an explicit scope and product-name decision.

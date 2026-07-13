@@ -1,9 +1,10 @@
 # iOS Keyboard Feasibility
 
-Status: physical-device feasibility evidence. The current product scope and
-implementation order are `ios-v1-release.md` and
-`docs/ios-v1-development-plan.md`. The former full-replacement QWERTY and Quick
-Session hypotheses are superseded by Brand Stage Adaptive.
+Status: active feasibility evidence; K1 voice activation is not qualified for
+production as of 2026-07-13. The current product scope and implementation order
+are `ios-v1-release.md` and `docs/ios-v1-development-plan.md`. The former full-
+replacement QWERTY and Quick Session hypotheses are superseded by Brand Stage
+Adaptive.
 
 ## Goal
 
@@ -27,10 +28,12 @@ reuse Apple's keyboard. Its supported architecture is:
 - the extension is read-only and never records audio, reads Keychain, calls
   OpenAI, or mutates canonical History.
 
-Apple provides no public API that reliably opens the containing app, identifies
-the previous host app, and returns the user to the same text field. The exact
-voice action therefore remains a signed-device K1 gate. HoldType does not use a
-private app-launch or automatic-return workaround.
+Apple documents `NSExtensionContext.open` on iOS for Today and iMessage
+extension points, not custom keyboards. App Review Guideline 4.4.1 also says a
+keyboard extension must not launch apps other than Settings. Apple provides no
+public host-identity or automatic-return contract. A one-way custom URL may work
+on some iOS versions, but that alone does not make it a documented or review-safe
+production action. HoldType does not use a private launch or return workaround.
 
 ## Selected Product Direction
 
@@ -97,13 +100,17 @@ the current `en-US` value is not a product language promise.
 - A negative App Review or platform result does not authorize private APIs or a
   surprise QWERTY project. It triggers an explicit product rescope.
 
-## K1 Go / No-Go Gate
+## K1 Go / No-Go Result
 
-Do not claim keyboard voice readiness until a signed physical iPhone proves:
+K1 is not qualified for the specified production keyboard-started voice action
+under current public documentation and App Review rules. Do not add a custom
+URL, hidden host lookup, responder-chain launch, or instruction-only microphone
+and call it complete.
 
-- the public microphone action and every state shown before, during, and after
-  containing-app handoff;
-- manual return and one explicit Latest insertion without wrong-field replay;
+Signed physical iPhone qualification is still required for the non-blocked
+keyboard behavior:
+
+- one explicit Latest insertion without wrong-field replay;
 - the bounded recent-results projection and explicit insertion of one selected
   item;
 - Globe, punctuation, Space cursor movement, Delete repeat, and adaptive Return
@@ -115,8 +122,10 @@ Do not claim keyboard voice readiness until a signed physical iPhone proves:
 - `PrimaryLanguage`, `IsASCIICapable`, `RequestsOpenAccess`, and
   `hasDictationKey` produce truthful system and review behavior.
 
-If supported handoff fails, the keyboard-plus-voice V1.1 is a no-go. The fallback
-is the containing-app Voice flow plus Copy and the user's system keyboard; an
+The existing fallback is the containing-app Voice flow plus Copy and the user's
+system keyboard. Brand Stage editing and result insertion may be completed, but
+shipping it as keyboard-plus-voice V1.1 requires an explicit product rescope,
+new Apple guidance, or an explicit acceptance of the remaining review risk. An
 instruction-only microphone is not successful completion.
 
 ## Verification
@@ -138,6 +147,10 @@ physical-device QA recorded in `docs/qa/runs/`.
   `https://developer.apple.com/documentation/uikit/configuring-open-access-for-a-custom-keyboard`
 - Apple App Review Guidelines 4.4.1, reviewed 2026-07-13:
   `https://developer.apple.com/app-store/review/guidelines/`
+- Apple `NSExtensionContext.open` support discussion, reviewed 2026-07-13:
+  `https://developer.apple.com/documentation/foundation/nsextensioncontext/open(_:completionhandler:)`
+- Apple App Extension Programming Guide, reviewed 2026-07-13:
+  `https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/ExtensionOverview.html`
 - Apple DTS on the absence of a public keyboard-to-host round trip, reviewed
   2026-07-09: `https://developer.apple.com/forums/thread/826851`
 

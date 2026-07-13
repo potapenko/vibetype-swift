@@ -3,6 +3,13 @@
 Status: active V1.1 UX contract; Brand Stage Adaptive selected 2026-07-13.
 `ios-v1-release.md` wins any conflict.
 
+Current K1 result: Apple does not document containing-app launch for custom
+keyboard extensions, and App Review 4.4.1 forbids keyboard extensions from
+launching apps other than Settings. Until the product is explicitly rescoped,
+Apple clarifies the rule, or the remaining review risk is explicitly accepted,
+the microphone stage is visibly unavailable and non-interactive; it is not an
+instruction-only fake action.
+
 ## Goal
 
 Provide a polished HoldType voice-command keyboard that complements the user's
@@ -96,6 +103,10 @@ waveform animation into a static level/status treatment.
 - If no supported handoff exists, the keyboard-plus-voice release is a no-go and
   requires an explicit product rescope; implementation does not grow a QWERTY
   engine to compensate.
+- Under the current unresolved K1 result, production code adds no custom URL
+  launch and shows no `ready`, `handoffRequested`, `recording`, or `processing`
+  state. The branded voice stage is disabled, explains that dictation starts in
+  the containing app, and is ignored as an action by assistive technology.
 
 ## Latest And Keyboard History
 
@@ -163,9 +174,9 @@ explicit insertion per tap.
 
 Signed-device evidence must additionally prove Globe, Full Access off/on,
 cursor movement, Delete repeat, host field traits, secure/phone-field fallback,
-public microphone handoff, manual return, Latest, recent-result insertion, and
-process eviction. App Review 4.4.1 remains a release risk to validate; the
-punctuation/editing surface is real keyboard input, but approval is not assumed.
+Latest, recent-result insertion, and process eviction. Current documentation
+does not qualify public microphone handoff; the punctuation/editing surface is
+real keyboard input, but approval is not assumed.
 
 After K1, the production controller may set `hasDictationKey = true` only if
 physical QA confirms that HoldType's dedicated voice control should suppress a
