@@ -27,6 +27,10 @@ finishing app-private History.
 Working and retained:
 
 - foreground Voice, Done, Cancel, Retry, Discard, and Latest Result actions;
+- always-on, non-expiring app-private Latest Result;
+- compact, app-private History for up to 20 successful texts, including list,
+  detail, Copy, Share, Delete, Clear All, and the default-on `Save History`
+  control;
 - Dictionary, Voice Emoji Commands, and Replacement Rules;
 - API key, transcription, correction, translation, recording, privacy, and
   Usage Estimate settings;
@@ -34,16 +38,13 @@ Working and retained:
   document-proxy editing, App Group sample, and explicit insertion work in the
   simulator.
 
-Not finished:
+Remaining release work:
 
-1. History is a static `History Unavailable` placeholder with no production
-   append, repository owner, list, detail, actions, or `Save History` control.
-2. Latest still carries the old 24-hour expiry and `keepLatestResult` setting,
-   contrary to the V1.1 always-on contract.
-3. The keyboard is a Phase-0 probe, not a production QWERTY keyboard.
-4. The keyboard microphone action, containing-app handoff, and production
+1. The keyboard is a Phase-0 probe, not a production QWERTY keyboard.
+2. The keyboard microphone action, containing-app handoff, and production
    Latest-to-App-Group writer do not exist.
-5. Final setup/privacy copy and signed physical-iPhone qualification remain.
+3. Final keyboard setup/privacy copy and signed physical-iPhone qualification
+   remain.
 
 ## Execution Rules
 
@@ -181,6 +182,24 @@ Exit:
 - the cleanup checkpoint is materially net-negative in source and test lines;
 - macOS and iOS remain green.
 
+Completion evidence, 2026-07-13:
+
+- production composition no longer starts the legacy accepted/failed History
+  coordinator or failed-History retry providers;
+- compact History repository, Voice acceptance, state owner, settings, and
+  presentation paths pass their focused tests;
+- signed iPhone and iPad Simulator builds launch with the sanitized automation
+  environment, and macOS plus generic iOS builds succeed;
+- H1-H4 changed 58 files with 2,833 insertions and 6,810 deletions: a net
+  reduction of 3,977 lines;
+- the broad persistence run executed 1,118 tests and reported 18 pre-existing
+  issues in untouched legacy/timing paths; each timing-sensitive case passes
+  in isolation, and no observed issue exercises the H4 changes.
+
+The remaining deep persistence interlocks used by Pending and Latest are not a
+user-visible History service. They stay in place until a separately specified,
+smaller replacement is proven.
+
 ## K1 — Signed Keyboard Voice Gate
 
 Build the smallest physical-device probe:
@@ -227,13 +246,13 @@ Only after a positive K1 result, replace the probe with:
 | Slice | Status |
 | --- | --- |
 | R0 Scope reset and stable baseline | Completed 2026-07-13 |
-| H1 Compact History repository | In progress |
+| H1 Compact History repository | Completed 2026-07-13 |
 | H2 Production append and Latest semantics | Completed 2026-07-13 |
-| H3 Finished History surface | Not started |
-| H4 Bounded legacy cleanup | Not started |
+| H3 Finished History surface | Completed 2026-07-13 |
+| H4 Bounded legacy cleanup | Completed 2026-07-13 |
 | K1 Signed keyboard voice gate | Not started |
 | K2 Production `en-US` keyboard | Not started |
 | K3 Bridge, copy, and qualification | Not started |
 
-History is complete only when H1-H4 pass. V1.1 is complete only when K1-K3
-also pass their signed-device gates.
+Compact History is complete. V1.1 is complete only when K1-K3 also pass their
+signed-device gates.
