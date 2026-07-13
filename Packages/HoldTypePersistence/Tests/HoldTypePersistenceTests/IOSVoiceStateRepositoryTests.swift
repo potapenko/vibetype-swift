@@ -222,6 +222,31 @@ struct IOSVoiceStateRepositoryTests {
         )
     }
 
+    @Test func retryAtomicallyUsesCurrentTranscriptionSettings() async throws {
+        let repository = makeRepository()
+        let pending = try makePending()
+        _ = try await repository.installPending(pending)
+        _ = try await repository.markFailed(attemptID: pending.attemptID)
+
+        let retry = try await repository.beginRetry(
+            attemptID: pending.attemptID,
+            operationID: IDs.otherOperation,
+            transcriptionConfiguration: TranscriptionConfiguration(
+                model: "new-model",
+                language: .russian
+            )
+        )
+
+        #expect(retry.transcriptionModel == "new-model")
+        #expect(retry.transcriptionLanguageCode == "ru")
+        #expect(
+            retry.status == .processing(
+                .transcription,
+                operationID: IDs.otherOperation
+            )
+        )
+    }
+
     @Test func acceptedCommitAtomicallyPublishesLatestAndCleanupOwner() async throws {
         let fileSystem = VoiceStateFileSystem()
         let repository = makeRepository(fileSystem: fileSystem)

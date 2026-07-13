@@ -176,6 +176,30 @@ struct IOSVoiceStatePending: Equatable, Sendable {
             status: status
         )
     }
+
+    func replacing(
+        transcriptionConfiguration: TranscriptionConfiguration,
+        status: IOSVoiceStatePendingStatus,
+        updatedAt: Date
+    ) throws -> Self {
+        guard !transcriptionConfiguration.customLanguageCodeValidation
+            .isInvalid else {
+            throw IOSVoiceStateRepositoryError.invalidRecord
+        }
+        return try Self(
+            attemptID: attemptID,
+            audioRelativeIdentifier: audioRelativeIdentifier,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            outputIntent: outputIntent,
+            transcriptionModel: transcriptionConfiguration.resolvedModel,
+            transcriptionLanguageCode:
+                transcriptionConfiguration.resolvedLanguageCode,
+            durationMilliseconds: durationMilliseconds,
+            byteCount: byteCount,
+            status: status
+        )
+    }
 }
 
 struct IOSVoiceStateLatest: Equatable, Sendable {
@@ -433,6 +457,30 @@ actor IOSVoiceStateRepository {
     }
 
     @discardableResult
+    func beginRetry(
+        attemptID: UUID,
+        operationID: UUID,
+        transcriptionConfiguration: TranscriptionConfiguration
+    ) throws -> IOSVoiceStatePending {
+        var snapshot = try load()
+        let pending = try requirePending(attemptID, in: snapshot)
+        guard pending.status == .failed else {
+            throw IOSVoiceStateRepositoryError.invalidTransition
+        }
+        let updated = try pending.replacing(
+            transcriptionConfiguration: transcriptionConfiguration,
+            status: .processing(
+                .transcription,
+                operationID: operationID
+            ),
+            updatedAt: mutationDate(after: pending.updatedAt)
+        )
+        snapshot.pending = updated
+        try replace(snapshot)
+        return updated
+    }
+
+    @discardableResult
     func advanceProcessing(
         attemptID: UUID,
         operationID: UUID,
@@ -440,8 +488,14 @@ actor IOSVoiceStateRepository {
     ) throws -> IOSVoiceStatePending {
         var snapshot = try load()
         let pending = try requirePending(attemptID, in: snapshot)
-        guard case .processing(_, let currentOperationID) = pending.status,
-              currentOperationID == operationID else {
+        guard case .processing(
+                  let currentStage,
+                  let currentOperationID
+              ) = pending.status,
+              currentOperationID == operationID,
+              (currentStage, stage) == (.transcription, .postProcessing)
+                || (currentStage, stage) == (.postProcessing, .outputDelivery)
+                || currentStage == stage else {
             throw IOSVoiceStateRepositoryError.invalidTransition
         }
         let updated = try pending.replacing(

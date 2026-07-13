@@ -241,7 +241,7 @@ private enum IOSAcceptedTextHistoryWireCodec {
                     resultID: entry.resultID.uuidString,
                     text: entry.text,
                     createdAtMilliseconds:
-                        try IOSAcceptedOutputDeliveryTimestampCodec
+                        try IOSAcceptedTextHistoryTimestampCodec
                             .milliseconds(from: entry.createdAt)
                 )
             }
@@ -354,7 +354,7 @@ private enum IOSAcceptedTextHistoryWireCodec {
             }
 
             let text = try string("text", in: entryObject, path: path)
-            guard IOSAcceptedOutputDeliveryValidation.isStoredAcceptedText(text) else {
+            guard IOSAcceptedTextHistoryValidation.isStoredText(text) else {
                 throw IOSAcceptedTextHistoryRepositoryError
                     .invalidValue(path: "\(path).text")
             }
@@ -366,7 +366,7 @@ private enum IOSAcceptedTextHistoryWireCodec {
             let date = Date(
                 timeIntervalSince1970: Double(milliseconds) / 1_000
             )
-            guard (try? IOSAcceptedOutputDeliveryTimestampCodec
+            guard (try? IOSAcceptedTextHistoryTimestampCodec
                 .milliseconds(from: date)) == milliseconds else {
                 throw IOSAcceptedTextHistoryRepositoryError
                     .invalidValue(path: "\(path).createdAtMilliseconds")
