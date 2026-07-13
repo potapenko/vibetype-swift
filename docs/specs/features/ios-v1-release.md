@@ -141,6 +141,13 @@ release-complete until the finished History destination is restored.
 - History append, Delete, and Clear All are serialized by one repository owner.
 - History storage failure is a nonblocking local warning after Voice success;
   it never turns a successful provider result into a failed dictation.
+- Latest is committed before the History append is attempted. Exact Pending
+  metadata and audio cleanup always continue after the attempt, including when
+  History storage fails.
+- If the app relaunches after Latest was committed but before local acceptance
+  cleanup completed, reconciliation may append that same result idempotently
+  when `Save History` is still on. It never repeats provider work and never
+  keeps Pending solely because History is unavailable.
 - History never owns audio and never contains failed provider attempts.
 - A new install enables `Save History` by default. Setup and Privacy state that
   up to 20 successful texts are stored locally on this device.
@@ -150,6 +157,12 @@ release-complete until the finished History destination is restored.
   previous enabled record and entries unchanged.
 - Turning it on affects later successful results only. V1.1 does not use a
   History generation or cutover protocol.
+- The History destination has explicit loading, disabled, empty, list, and
+  unavailable states. Only a genuine load failure uses `History Unavailable`
+  and offers Retry; an enabled empty record shows `No History Yet`.
+- A failed Delete, Clear All, enable, or disable operation keeps the last
+  confirmed presentation and shows a nonblocking local warning. Destructive
+  actions report success only after the atomic record replacement succeeds.
 
 ## Keyboard Typing
 
