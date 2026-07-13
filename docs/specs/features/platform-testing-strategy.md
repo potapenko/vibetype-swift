@@ -5,10 +5,10 @@
 Keep HoldType development verifiable on each small backlog task while avoiding
 fragile full-app checks for every change.
 
-The active product phase is the native macOS menu bar MVP. iOS companion,
-simulator, keyboard-extension, and shared cross-platform QA remain future v2
-scope unless a direct user request or explicitly v2-labeled task opts into
-deferred lanes.
+The native macOS app remains shipped behavior that must not regress. The current
+iOS V1.1 containing app and Brand Stage keyboard are an active, explicitly
+selected delivery lane. Ordinary macOS-only work does not require iOS checks;
+iOS checks are required when the selected task touches that lane.
 
 Testing must prove the changed behavior at the smallest useful layer, then add
 platform smoke evidence when a task touches the platform surface or a
@@ -80,23 +80,23 @@ Every implementation run must report a runtime QA decision:
   within the bounded run; report the blocker and the last successful
   build/test evidence.
 
-### v2 iOS Simulator Checks
+### iOS Simulator Checks
 
-Use XcodeBuildMCP / Build iOS Apps only for explicit future v2 iOS targets:
+Use XcodeBuildMCP / Build iOS Apps, or the documented `xcodebuild` fallback, for
+explicit iOS targets:
 
 - simulator build
 - simulator test
 - screenshot capture
 - UI snapshot or simple interaction when available
 
-iOS checks should apply to iOS-specific targets once a v2 task explicitly opts
-into deferred iOS lanes. They are not required for ordinary macOS MVP work,
-including shared SwiftUI files used by the macOS app, unless the selected task
-is explicitly scoped as cross-platform v2 verification. Operational MCP usage
-and fallbacks live in `docs/agent-tooling.md`.
+iOS checks apply when a task touches an iOS-specific target. They are not
+required for ordinary macOS work, including shared SwiftUI files used only by
+the macOS app. Operational MCP usage and fallbacks live in
+`docs/agent-tooling.md`.
 
-When an explicit v2 shared SwiftUI surface changes, verification should
-include:
+When an explicit shared SwiftUI surface changes across platforms, verification
+should include:
 
 - typechecking or building the shared source against both macOS and iOS SDKs;
 - an iOS simulator build/run/screenshot through XcodeBuildMCP when the build
@@ -104,7 +104,7 @@ include:
 - a QA blocker note when the simulator build or launch times out before a
   screenshot can be captured.
 
-## v2 iOS Keyboard Constraints
+## iOS Keyboard Constraints
 
 The iOS keyboard path is a separate platform architecture, not a direct port of
 the macOS menu bar flow. The product split is defined in
@@ -114,8 +114,9 @@ Product constraints:
 
 - an iOS custom keyboard must provide a way to switch to the next keyboard
 - it is unavailable in secure text fields and some phone-pad contexts
-- keyboard extensions are sandboxed and may need Open Access for network or
-  shared-container behavior
+- keyboard extensions are sandboxed; HoldType requests no Full Access and uses
+  only Apple's documented restricted read access to an app-written App Group
+  snapshot
 - dictation must not be assumed to run directly inside the keyboard extension
   because Apple's custom keyboard guidance documents microphone restrictions
 
@@ -129,7 +130,7 @@ The likely iOS product split is:
 This split is confirmed by `ios-keyboard-feasibility.md`,
 `ios-keyboard-experience.md`, and `ios-keyboard-shared-state.md`. The active
 implementation sequence and physical-device gates live in
-`docs/ios-keyboard-development-plan.md`.
+`docs/ios-v1-development-plan.md`.
 
 ## Required Evidence By Task Type
 
@@ -142,17 +143,18 @@ implementation sequence and physical-device gates live in
   no live provider call in normal automation
 - Permission or microphone behavior: fake-backed tests for app logic; bounded
   runtime smoke only when the selected task asks for platform evidence
-- v2 iOS behavior: XcodeBuildMCP simulator build/test/screenshot only when
-  deferred iOS lanes were explicitly included and the selected task touches
+- iOS behavior: simulator build/test/screenshot when the selected task touches
   that surface; if full `xcodebuild` or MCP build/run times out without
   compiler diagnostics, record the timeout and keep SDK typecheck evidence
   explicit
 
-For the Phase 0 keyboard spike, simulator verification must additionally prove
-that the containing app embeds the `.appex` and that the processed extension
-plist declares `com.apple.keyboard-service`. Full Access, secure-field fallback,
-keyboard switching, app return, microphone lifecycle, process eviction, and
-iPad floating layout remain physical-device evidence.
+For the Brand Stage keyboard, simulator verification must additionally prove
+that the containing app embeds the `.appex`, the processed extension plist
+declares `com.apple.keyboard-service`, the actual keyboard view composes its
+approved controls, and current Light/Dark captures match the concise status
+contract. Restricted App Group access, secure-field fallback, keyboard
+switching, host-app rejection, process eviction, and iPad floating layout
+remain physical-device evidence.
 
 ## Sources
 

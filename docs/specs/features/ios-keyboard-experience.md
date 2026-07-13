@@ -156,7 +156,15 @@ handoff must revise this spec before adding any new keyboard status vocabulary.
   item: result id, exact accepted text, creation date, and 10-minute expiry.
 - An already-expired app result is omitted rather than copied into the shared
   snapshot. An item that expires after publication becomes ineligible for
-  insertion immediately and is removed on the next app publication.
+  insertion immediately; the open keyboard disables `Latest` at that expiry
+  even if no lifecycle event or new publication occurs.
+- If the current canonical Latest cannot be shared safely, the app atomically
+  publishes an empty current-schema snapshot instead of leaving an older result
+  presented as Latest. The cache publication reports failure without invalidating
+  the canonical accepted result.
+- If canonical state cannot be loaded at all, the publisher does not overwrite
+  the last-known cache with an invented empty state. The normal 10-minute expiry
+  still prevents indefinite insertion.
 - App startup atomically replaces legacy schema 1/2 cache payloads with an
   empty schema 3 snapshot. Legacy History or recent-result fields are never
   retained for later keyboard use.

@@ -1,7 +1,7 @@
 # iOS Keyboard Feasibility
 
 Status: active feasibility evidence; K1 voice activation is not qualified for
-production as of 2026-07-13. The current product scope and implementation order
+production as of 2026-07-14. The current product scope and implementation order
 are `ios-v1-release.md` and `docs/ios-v1-development-plan.md`. The former full-
 replacement QWERTY and Quick Session hypotheses are superseded by Brand Stage
 Adaptive.
@@ -60,21 +60,23 @@ URL alone. The containing app may implement and test its public History route;
 the extension must not use a private responder-chain or automatic-return
 workaround if the public extension request is rejected.
 
-## Phase 0 Evidence
+## Current Implementation Evidence
 
-The existing internal spike includes:
+The current production-shaped extension includes:
 
 - an embedded `com.apple.keyboard-service` extension;
-- one `insertText` probe key;
-- a required next-keyboard control using the system input-mode API;
-- read-only loading of a harmless accepted-transcript sample from an App Group;
-- explicit sample insertion through `UITextDocumentProxy`;
+- Brand Stage Adaptive with `History`, `Latest`, punctuation, Space, Delete,
+  adaptive Return, and a conditional system input-mode switcher;
+- read-only loading of one bounded, expiring Latest item from App Group;
+- explicit Latest insertion through `UITextDocumentProxy`;
+- `Ready` as the normal status and only a brief `Open failed` problem state;
 - no microphone, background audio, Speech framework, provider request, shared
-  Keychain access, or containing-app launch from the extension.
+  Keychain access, private app-launch path, or qualified app-launch dependency.
+  The separate public History request remains an explicit no-go gate.
 
-This proves target composition and simulator interaction only. The probe `A`,
-manual `Refresh`, and large `Insert latest` button are not product UI and are
-removed by K2.
+Simulator runtime evidence proves target composition, Light/Dark adaptation,
+large-text layout, and local interaction only. The former probe `A`, manual
+`Refresh`, large `Insert latest` button, and Full Access instruction are removed.
 
 `hasDictationKey` remains false so iOS may supply its own system Dictation key.
 That key is Apple-owned speech entry, not a HoldType/OpenAI action.
@@ -89,15 +91,19 @@ the current `en-US` value is not a product language promise.
 - The extension reads only schema/revision metadata and one optional Latest
   result identifier, exact accepted text, creation date, and 10-minute expiry.
 - Expired source results are omitted, and app startup replaces obsolete schema
-  1/2 cache payloads with an empty current-schema snapshot even while Latest
-  publication remains release-gated.
+  1/2 cache payloads with an empty current-schema snapshot. Production Latest
+  publication is enabled.
+- If the current canonical Latest cannot be projected safely, an empty
+  current-schema snapshot replaces older shared text. If canonical state cannot
+  be loaded, the bounded last-known snapshot is preserved until normal expiry.
 - Raw audio, API keys, prompts, keystrokes, host identity, provider payloads,
   canonical settings, recent results, and the History repository never enter
   App Group.
 - Publication is not a wake-up mechanism. Missing, stale, corrupt, oversized,
   or incompatible state is unavailable and never causes insertion.
-- Full Access requirements and actual shared-container behavior are established
-  by signed provisioning evidence, not simulator assumptions.
+- `RequestsOpenAccess` is false. Apple documents read-only access to the
+  containing app's shared containers without Full Access; matching effective
+  App Group entitlements still require signed-device evidence.
 
 ## System And Review Limits
 
@@ -127,8 +133,9 @@ keyboard behavior:
 - one explicit Latest insertion without wrong-field replay;
 - Globe, punctuation, Space cursor movement, Delete repeat, and adaptive Return
   in representative first- and third-party hosts;
-- Full Access off/on, real App Group entitlements, app and extension eviction,
-  and missing/corrupt snapshot behavior;
+- restricted-mode App Group reading with no Full Access request, real effective
+  entitlements, app and extension eviction, and missing/corrupt snapshot
+  behavior;
 - secure fields, phone fields, host rejection, interruption, and provider timeout
   fail safely;
 - `PrimaryLanguage`, `IsASCIICapable`, `RequestsOpenAccess`, and
@@ -143,12 +150,12 @@ instruction-only microphone is not successful completion.
 
 ## Verification
 
-Automated checks cover snapshot schema/limits, pure state transitions, editing
-semantics, appearance, accessibility labels, and insertion idempotency per tap.
-Simulator builds prove embedding and rendering only. Full Access, keyboard
-switching, microphone lifecycle, app return, secure-field fallback, process
-eviction, effective Data Protection, and review-facing metadata require bounded
-physical-device QA recorded in `docs/qa/runs/`.
+Automated checks cover snapshot schema/limits, pure state transitions, the real
+keyboard view hierarchy, editing geometry, appearance, accessibility labels,
+and insertion idempotency per tap. Simulator builds prove embedding and
+rendering only. Restricted App Group access, keyboard switching, secure-field
+fallback, process eviction, effective Data Protection, and review-facing
+metadata require bounded physical-device QA recorded in `docs/qa/runs/`.
 
 ## Evidence
 

@@ -38,6 +38,7 @@ final class BrandStageKeyboardView: UIView {
     private let waveformStack = UIStackView()
     private var preferredHeightConstraint: NSLayoutConstraint?
     private var stageMinimumHeightConstraint: NSLayoutConstraint?
+    private var topActionWidthConstraint: NSLayoutConstraint?
     private var voiceStageConstraints: [NSLayoutConstraint] = []
     private var voiceStageIsHidden: Bool?
     private var editingRowWithGlobeConstraints: [NSLayoutConstraint] = []
@@ -45,6 +46,7 @@ final class BrandStageKeyboardView: UIView {
     private var showsGlobeInEditingRow: Bool?
     private var punctuationButtons: [UIButton] = []
     private var reduceTransparencyObserver: NSObjectProtocol?
+    private var renderedStatus: KeyboardTopRailStatus?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -86,16 +88,28 @@ final class BrandStageKeyboardView: UIView {
 
     func render(_ presentation: BrandStageKeyboardPresentation) {
         statusLabel.text = presentation.status.rawValue
+        statusLabel.accessibilityValue = presentation.status.rawValue
         latestButton.isEnabled = presentation.latestIsEnabled
         updateInputModeSwitchKeyVisibility(
             presentation.showsInputModeSwitchKey
         )
         returnButton.isEnabled = presentation.returnIsEnabled
         renderReturnKey(presentation.returnKey)
+
+        if renderedStatus != presentation.status,
+           let announcement = presentation.status.accessibilityAnnouncement {
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: announcement
+            )
+        }
+        renderedStatus = presentation.status
     }
 
     func updatePreferredHeight(for traitCollection: UITraitCollection) {
         let isCompact = traitCollection.verticalSizeClass == .compact
+        topActionWidthConstraint?.constant = traitCollection
+            .preferredContentSizeCategory.isAccessibilityCategory ? 104 : 88
         let hidesVoiceStage = isCompact
         updateActiveStageConstraints(hidesVoiceStage: hidesVoiceStage)
         stageMinimumHeightConstraint?.constant = stageContainer.isHidden
@@ -281,6 +295,9 @@ final class BrandStageKeyboardView: UIView {
         statusLabel.minimumScaleFactor = 0.8
         statusLabel.textAlignment = .center
         statusLabel.numberOfLines = 1
+        statusLabel.isAccessibilityElement = true
+        statusLabel.accessibilityLabel = "Keyboard status"
+        statusLabel.accessibilityTraits.insert(.updatesFrequently)
         statusLabel.accessibilityIdentifier = "keyboard.brand-stage.status"
 
         let identity = UIStackView(arrangedSubviews: [logo, statusLabel])
@@ -299,8 +316,12 @@ final class BrandStageKeyboardView: UIView {
         rail.alignment = .center
         rail.distribution = .equalCentering
         rail.spacing = 8
+        let topActionWidth = historyButton.widthAnchor.constraint(
+            equalToConstant: 88
+        )
+        topActionWidthConstraint = topActionWidth
         NSLayoutConstraint.activate([
-            historyButton.widthAnchor.constraint(equalToConstant: 88),
+            topActionWidth,
             latestButton.widthAnchor.constraint(equalTo: historyButton.widthAnchor),
             historyButton.heightAnchor.constraint(equalToConstant: 44),
             latestButton.heightAnchor.constraint(equalToConstant: 44),
@@ -438,6 +459,27 @@ final class BrandStageKeyboardView: UIView {
                 multiplier: 1.07
             ),
         ]
+        for constraint in editingRowWithGlobeConstraints
+            + editingRowWithoutGlobeConstraints {
+            constraint.priority = .defaultHigh
+        }
+        let minimumEditingKeyWidths = [
+            nextKeyboardButton.widthAnchor.constraint(
+                greaterThanOrEqualToConstant: 44
+            ),
+            deleteButton.widthAnchor.constraint(
+                greaterThanOrEqualToConstant: 44
+            ),
+            returnButton.widthAnchor.constraint(
+                greaterThanOrEqualToConstant: 44
+            ),
+        ]
+        for constraint in minimumEditingKeyWidths {
+            // The Globe may become a hidden arranged subview when iOS supplies
+            // its own input-mode switcher below the extension.
+            constraint.priority = UILayoutPriority(999)
+        }
+        NSLayoutConstraint.activate(minimumEditingKeyWidths)
         updateInputModeSwitchKeyVisibility(true)
         return editingRow
     }
@@ -560,6 +602,8 @@ final class BrandStageKeyboardView: UIView {
         configuration.title = title
         configuration.image = systemImage.flatMap(UIImage.init(systemName:))
         configuration.imagePadding = 6
+        configuration.preferredSymbolConfigurationForImage =
+            UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)
         configuration.cornerStyle = .medium
         configuration.contentInsets = NSDirectionalEdgeInsets(
             top: 0,

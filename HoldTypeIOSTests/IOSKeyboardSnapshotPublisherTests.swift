@@ -54,7 +54,7 @@ struct IOSKeyboardSnapshotPublisherTests {
         #expect(snapshot.latestForInsertion(at: now) == nil)
     }
 
-    @Test func loadOrValidationFailurePreservesLastValidSnapshot()
+    @Test func unprojectableLatestReplacesPreviousSharedTextWithEmptySnapshot()
         async throws {
         let fixture = try PublisherStoreFixture()
         defer { fixture.remove() }
@@ -69,6 +69,7 @@ struct IOSKeyboardSnapshotPublisherTests {
 
         #expect(await publisher.publishCurrent(at: now))
         let lastValid = try #require(try fixture.readerStore.load())
+        #expect(lastValid.latest?.text == "Valid")
 
         let oversized = try publisherLatestRecord(
             text: String(
@@ -79,11 +80,30 @@ struct IOSKeyboardSnapshotPublisherTests {
         )
         await source.setLatest(.resultReady(oversized))
         #expect(!(await publisher.publishCurrent(at: now.addingTimeInterval(1))))
-        #expect(try fixture.readerStore.load() == lastValid)
+        let cleared = try #require(try fixture.readerStore.load())
+        #expect(cleared.revision == lastValid.revision + 1)
+        #expect(cleared.latest == nil)
+    }
+
+    @Test func canonicalLoadFailurePreservesLastKnownSnapshot()
+        async throws {
+        let fixture = try PublisherStoreFixture()
+        defer { fixture.remove() }
+
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let source = PublisherSource(
+            latest: .resultReady(
+                try publisherLatestRecord(text: "Valid", createdAt: now)
+            )
+        )
+        let publisher = makePublisher(fixture: fixture, source: source)
+
+        #expect(await publisher.publishCurrent(at: now))
+        let lastKnown = try #require(try fixture.readerStore.load())
 
         await source.failNextLatestLoad()
-        #expect(!(await publisher.publishCurrent(at: now.addingTimeInterval(2))))
-        #expect(try fixture.readerStore.load() == lastValid)
+        #expect(!(await publisher.publishCurrent(at: now.addingTimeInterval(1))))
+        #expect(try fixture.readerStore.load() == lastKnown)
     }
 
     @Test func unavailableReadAndWriteBoundariesReturnFalse() async throws {

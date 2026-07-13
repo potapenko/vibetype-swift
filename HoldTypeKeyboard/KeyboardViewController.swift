@@ -7,7 +7,9 @@ final class KeyboardViewController: UIInputViewController {
     private var previousCursorLocationX: CGFloat?
     private var insertionGate = KeyboardInsertionEventGate()
     private var latestItem: KeyboardBridgeItem?
+    private var latestExpiryTimer: Timer?
     private var statusResetWorkItem: DispatchWorkItem?
+    private var activeStatusOverride: KeyboardTopRailStatus?
     private var historyRequestID: UUID?
     private var showsInputModeSwitchKey = true
 
@@ -26,7 +28,10 @@ final class KeyboardViewController: UIInputViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         deleteRepeater.stop()
+        latestExpiryTimer?.invalidate()
+        latestExpiryTimer = nil
         statusResetWorkItem?.cancel()
+        activeStatusOverride = nil
         historyRequestID = nil
         super.viewWillDisappear(animated)
     }
@@ -39,6 +44,7 @@ final class KeyboardViewController: UIInputViewController {
     override func textWillChange(_ textInput: UITextInput?) {
         super.textWillChange(textInput)
         statusResetWorkItem?.cancel()
+        activeStatusOverride = nil
     }
 
     override func textDidChange(_ textInput: UITextInput?) {
@@ -101,22 +107,26 @@ final class KeyboardViewController: UIInputViewController {
         do {
             let store = try KeyboardBridgeStore.appGroup()
             guard let snapshot = try store.load() else {
-                latestItem = nil
+                setLatestItem(nil)
                 render()
                 return
             }
 
-            latestItem = snapshot.latestForInsertion(at: Date())
+            let now = Date()
+            setLatestItem(
+                snapshot.latestForInsertion(at: now),
+                now: now
+            )
         } catch {
-            latestItem = nil
+            setLatestItem(nil)
         }
         render()
     }
 
-    private func render(statusOverride: KeyboardTopRailStatus? = nil) {
+    private func render() {
         keyboardView.render(
             BrandStageKeyboardPresentation(
-                status: statusOverride ?? .ready,
+                status: activeStatusOverride ?? .ready,
                 latestIsEnabled: latestItem != nil,
                 returnKey: KeyboardReturnKeyPresentation(
                     semantic: Self.returnSemantic(
@@ -144,6 +154,7 @@ final class KeyboardViewController: UIInputViewController {
         let requestID = UUID()
         historyRequestID = requestID
         statusResetWorkItem?.cancel()
+        activeStatusOverride = nil
         render()
         extensionContext.open(url) { [weak self] opened in
             Task { @MainActor [weak self] in
@@ -163,7 +174,8 @@ final class KeyboardViewController: UIInputViewController {
 
     private func insert(_ item: KeyboardBridgeItem) {
         guard item.expiresAt > Date() else {
-            reloadSharedSnapshot()
+            setLatestItem(nil)
+            render()
             return
         }
         insertText(item.text)
@@ -180,8 +192,10 @@ final class KeyboardViewController: UIInputViewController {
         duration: TimeInterval
     ) {
         statusResetWorkItem?.cancel()
-        render(statusOverride: status)
+        activeStatusOverride = status
+        render()
         let workItem = DispatchWorkItem { [weak self] in
+            self?.activeStatusOverride = nil
             self?.reloadSharedSnapshot()
         }
         statusResetWorkItem = workItem
@@ -189,6 +203,35 @@ final class KeyboardViewController: UIInputViewController {
             deadline: .now() + duration,
             execute: workItem
         )
+    }
+
+    private func setLatestItem(
+        _ item: KeyboardBridgeItem?,
+        now: Date = Date()
+    ) {
+        latestExpiryTimer?.invalidate()
+        latestExpiryTimer = nil
+        latestItem = item
+
+        guard let item, item.expiresAt > now else {
+            latestItem = nil
+            return
+        }
+
+        let timer = Timer(
+            fire: item.expiresAt,
+            interval: 0,
+            repeats: false
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.latestItem == item else { return }
+                self.latestExpiryTimer = nil
+                self.latestItem = nil
+                self.render()
+            }
+        }
+        latestExpiryTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func handleCursorGesture(

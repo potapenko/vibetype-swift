@@ -90,7 +90,11 @@ latest?
 Rules:
 
 - publication is enabled in production and occurs from canonical Latest state;
-- an already-expired result is omitted and republishing never extends expiry;
+- an already-expired result is omitted, republishing never extends expiry, and
+  the open keyboard disables Latest when its published item expires;
+- an unsafe current canonical Latest atomically clears older shared text rather
+  than leaving it presented as current; a canonical-load failure preserves the
+  bounded last-known cache until normal expiry;
 - exact accepted text is preserved subject to bounded size and safe-control
   validation;
 - schema 1/2 payloads are atomically replaced with an empty schema 3 cache;
@@ -151,7 +155,7 @@ the public-API and App Review no-go.
 | Contract and K1 evidence | Complete; production handoff is a documented no-go |
 | Schema 3 Latest-only snapshot | Complete |
 | Production publisher and app wiring | Complete in code; signed-device proof pending |
-| Brand Stage UI and editing | Complete in code; runtime matrix pending |
+| Brand Stage UI and editing | Complete in code; iPhone Light/Dark and large-text runtime captured, remaining matrix pending |
 | History app route | App-side complete; keyboard launch not release-qualified |
 | Public HoldType microphone handoff | Not achievable under current Apple contract |
 | Signed-device release evidence | Pending |

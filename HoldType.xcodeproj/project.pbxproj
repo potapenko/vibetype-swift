@@ -124,6 +124,16 @@
 			);
 			target = 9DB749A62FE7A0000053C3F3 /* HoldType-iOS */;
 		};
+		D4A175112FF0000000000011 /* Exceptions for "HoldTypeKeyboard" folder in "HoldTypeIOSTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+				HoldTypeKeyboard.entitlements,
+				Info.plist,
+				PrivacyInfo.xcprivacy,
+			);
+			target = 9DB749B52FE800000053C3F3 /* HoldTypeIOSTests */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -187,6 +197,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				D4A175022FF0000000000002 /* Exceptions for "HoldTypeKeyboard" folder in "HoldTypeKeyboard" target */,
+				D4A175112FF0000000000011 /* Exceptions for "HoldTypeKeyboard" folder in "HoldTypeIOSTests" target */,
 			);
 			path = HoldTypeKeyboard;
 			sourceTree = "<group>";
@@ -413,6 +424,7 @@
 			fileSystemSynchronizedGroups = (
 				9DB749AA2FE7B0000053C3F3 /* Shared */,
 				D4A175042FF0000000000004 /* KeyboardShared */,
+				D4A175032FF0000000000003 /* HoldTypeKeyboard */,
 				9DB749B12FE800000053C3F3 /* HoldTypeIOSTests */,
 				D4A177012FF2000000000001 /* HoldTypeDomainTests */,
 				D4A179012FF4000000000001 /* HoldTypeOpenAITests */,

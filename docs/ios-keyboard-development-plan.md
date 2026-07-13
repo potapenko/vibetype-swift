@@ -19,10 +19,10 @@ voice-command surface with punctuation and essential editing controls, no
 alphabetic or locale-specific typing engine, and system keyboards available via
 Globe.
 
-The still-valid rule is that voice readiness, Full Access, bridge behavior, and
-accepted-text insertion require a signed physical-device gate. Do not modify
-Apple's keyboard, record audio inside the extension, or depend on a private
-automatic-return trick.
+The still-valid rule is that voice readiness, effective App Group behavior, and
+accepted-text insertion require a signed physical-device gate. HoldType does
+not request Full Access. Do not modify Apple's keyboard, record audio inside the
+extension, or depend on a private automatic-return trick.
 
 ## Product And Architecture
 
@@ -45,8 +45,8 @@ Target dependency rule:
 
 Canonical History policy, full rows, retry-audio ownership, receipts, cleanup,
 Delete, Clear All, and retention settings remain permanently app-private. The
-current release contract permits only a derived, read-only projection of at most
-five recent accepted texts in the bounded App Group snapshot.
+current release contract permits only a derived, read-only projection of one
+optional 10-minute Latest item in the bounded App Group snapshot.
 
 The long-term code boundaries are `HoldTypeDomain`, `HoldTypeOpenAI`,
 `HoldTypePersistence`, app-only `HoldTypeIOSCore`, and

@@ -38,13 +38,13 @@ actor IOSKeyboardSnapshotPublisher {
             try Task.checkCancellation()
 
             let revision = try store.nextRevision()
-            let snapshot = try Self.makeSnapshot(
+            let projection = try Self.makeSnapshot(
                 revision: revision,
                 publishedAt: publishedAt,
                 latest: latest
             )
-            try store.save(snapshot)
-            return true
+            try store.save(projection.snapshot)
+            return projection.representsCanonicalLatest
         } catch {
             return false
         }
@@ -54,24 +54,42 @@ actor IOSKeyboardSnapshotPublisher {
         revision: UInt64,
         publishedAt: Date,
         latest: IOSV1ForegroundVoiceLatestResultObservation
-    ) throws -> KeyboardBridgeSnapshot {
+    ) throws -> (
+        snapshot: KeyboardBridgeSnapshot,
+        representsCanonicalLatest: Bool
+    ) {
         let latestItem: KeyboardBridgeItem?
+        let representsCanonicalLatest: Bool
         switch latest {
         case .absent:
             latestItem = nil
+            representsCanonicalLatest = true
         case .resultReady(let record):
-            let candidate = try KeyboardBridgeItem.latest(
-                resultID: record.resultID,
-                text: record.acceptedText,
-                createdAt: record.createdAt
-            )
-            latestItem = candidate.expiresAt > publishedAt ? candidate : nil
+            do {
+                let candidate = try KeyboardBridgeItem.latest(
+                    resultID: record.resultID,
+                    text: record.acceptedText,
+                    createdAt: record.createdAt
+                )
+                latestItem = candidate.expiresAt > publishedAt
+                    ? candidate
+                    : nil
+                representsCanonicalLatest = true
+            } catch is KeyboardBridgeItem.ValidationError {
+                // Never leave a previous result presented as Latest when the
+                // current canonical result is unsafe to share.
+                latestItem = nil
+                representsCanonicalLatest = false
+            }
         }
 
-        return try KeyboardBridgeSnapshot(
-            revision: revision,
-            publishedAt: publishedAt,
-            latest: latestItem
+        return try (
+            KeyboardBridgeSnapshot(
+                revision: revision,
+                publishedAt: publishedAt,
+                latest: latestItem
+            ),
+            representsCanonicalLatest
         )
     }
 

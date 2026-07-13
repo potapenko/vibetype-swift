@@ -10,6 +10,15 @@ import Foundation
 enum KeyboardTopRailStatus: String, CaseIterable, Equatable, Sendable {
     case ready = "Ready"
     case openFailed = "Open failed"
+
+    var accessibilityAnnouncement: String? {
+        switch self {
+        case .ready:
+            nil
+        case .openFailed:
+            rawValue
+        }
+    }
 }
 
 enum KeyboardCursorDirection: Equatable, Sendable {

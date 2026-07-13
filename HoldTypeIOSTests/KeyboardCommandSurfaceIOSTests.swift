@@ -14,6 +14,11 @@ struct KeyboardCommandSurfaceIOSTests {
             "Ready",
             "Open failed",
         ])
+        #expect(KeyboardTopRailStatus.ready.accessibilityAnnouncement == nil)
+        #expect(
+            KeyboardTopRailStatus.openFailed.accessibilityAnnouncement
+                == "Open failed"
+        )
     }
 
     @Test func cursorDragAccumulatesThresholdsAndReportsDirection() {

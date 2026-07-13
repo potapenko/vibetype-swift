@@ -238,8 +238,13 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
   with a 10-minute insertion expiry. It contains only result id, exact accepted
   text, creation time, and expiry. No History row, secret, audio, prompt,
   dictionary, provider response, setting, or host context enters the snapshot.
-- An already-expired result is omitted from publication. Legacy schema 1/2
-  cache files are atomically replaced by an empty schema 3 cache at app startup.
+- An already-expired result is omitted from publication. A published result is
+  disabled at its 10-minute expiry even while the keyboard remains open. If the
+  current canonical Latest is unsafe to project, an empty schema 3 snapshot
+  replaces any older shared text rather than presenting it as current.
+- A failure to load canonical state preserves the last-known bounded cache;
+  ordinary expiry still limits insertion. Legacy schema 1/2 cache files are
+  atomically replaced by an empty schema 3 cache at app startup.
 - `Latest` inserts only a valid unexpired item and the keyboard never renders or
   previews its text. Full 20-entry History, detail, Share, Delete, Clear All,
   and retention settings remain in the containing app.
