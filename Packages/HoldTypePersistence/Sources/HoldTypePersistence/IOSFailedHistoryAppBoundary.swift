@@ -292,6 +292,8 @@ public actor IOSFailedHistoryAppBoundary {
             switch execution {
             case .failed:
                 return .recoverableFailure
+            case .authorizationUnavailable:
+                return .setupRequired(.microphoneAndPrivacy)
             case .accepted(let output):
                 switch try await output.accept() {
                 case .committed, .cancelled, .notRequested:

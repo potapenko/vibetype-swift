@@ -591,6 +591,50 @@ struct IOSFailedHistoryRetryCoordinatorTests {
         #expect(fixture.audioExists(for: retained))
     }
 
+    @Test func pipelineAuthorizationLossPreservesPriorFailureAndReturnsPrivacyRoute()
+        async throws {
+        let fixture = try RetryCoordinatorFixture()
+        let original = try await fixture.prepareReadyFailure()
+        let provider = RetryCoordinatorPipelineProvider(
+            transcription: .failure(.authorizationUnavailable)
+        )
+        let boundary = IOSFailedHistoryAppBoundary(
+            coordinator: fixture.coordinator,
+            retrySessionProvider: RetryCoordinatorSessionProvider(
+                resolution: .ready(
+                    IOSFailedHistoryRetrySession(
+                        configuration: try publicRetryConfiguration(),
+                        provider: provider
+                    )
+                )
+            ),
+            usageRecorder: RetryCoordinatorUsageRecorder()
+        )
+        guard case .available(let items) = await boundary.loadFailedHistory(),
+              let item = items.first else {
+            Issue.record("Expected one retryable failed-History item.")
+            return
+        }
+
+        #expect(
+            await boundary.retryFailedHistory(item.id)
+                == .setupRequired(.microphoneAndPrivacy)
+        )
+        let retained = try #require(
+            try await fixture.context.failedHistoryStore.load()?.entries.first
+        )
+        #expect(retained.retryOperation == nil)
+        #expect(retained.retryCount == 1)
+        #expect(retained.failureCategory == original.failureCategory)
+        #expect(retained.pipelineStage == original.pipelineStage)
+        #expect(retained.updatedAt > original.updatedAt)
+        #expect(fixture.audioExists(for: retained))
+        #expect(await provider.transcriptionCallCount() == 1)
+        #expect(
+            await fixture.context.failedHistoryRetryState.hasLiveOwner() == false
+        )
+    }
+
     @Test func translationFailureUsesItsActualStageAfterUsage()
         async throws {
         let fixture = try RetryCoordinatorFixture()
@@ -659,7 +703,7 @@ struct IOSFailedHistoryRetryCoordinatorTests {
         switch try #require(result) {
         case .accepted(let output):
             acceptedOutput = output
-        case .failed:
+        case .failed, .authorizationUnavailable:
             Issue.record("A valid provider result must be accepted.")
             return
         }

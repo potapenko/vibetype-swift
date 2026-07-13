@@ -5,7 +5,7 @@ import Testing
 
 struct IOSFailedHistoryRetryPipelineTests {
     @Test func runtimeFailureMappingIsTotalAndPayloadFree() {
-        #expect(IOSFailedHistoryRetryRuntimeFailure.allCases.count == 20)
+        #expect(IOSFailedHistoryRetryRuntimeFailure.allCases.count == 21)
 
         for failure in IOSFailedHistoryRetryRuntimeFailure.allCases {
             #expect(
@@ -250,6 +250,7 @@ struct IOSFailedHistoryRetryPipelineTests {
         let outcomes: [IOSFailedHistoryRetryProviderTextOutcome] = [
             .failure(.networkFailure),
             .failure(.credentialRejected),
+            .failure(.authorizationUnavailable),
             .failure(.cancelled),
             .success("   \n"),
             .success("x"),
@@ -291,6 +292,64 @@ struct IOSFailedHistoryRetryPipelineTests {
             }
             #expect(accepted.text == original)
             #expect(await provider.correctionCallCount() == 1)
+        }
+    }
+
+    @Test func authorizationLossIsDistinctForRequiredProviderStages()
+        async throws {
+        do {
+            let audio = retryPipelineAudio()
+            let pipeline = IOSFailedHistoryRetryPipeline(
+                provider: RetryPipelineProviderFake(
+                    expectedAudio: audio,
+                    transcription: .failure(.authorizationUnavailable),
+                    correction: .success("unused"),
+                    translation: .success("unused")
+                ),
+                usageRecorder: RetryPipelineUsageRecorderFake()
+            )
+
+            #expect(
+                try await pipeline.run(
+                    IOSFailedHistoryRetryProviderInvocation(
+                        audio: audio,
+                        setup: try retryPipelineSetup(),
+                        transcriptionID: UUID(),
+                        outputIntent: .standard
+                    )
+                ) == .authorizationUnavailable
+            )
+        }
+
+        do {
+            let audio = retryPipelineAudio()
+            let pipeline = IOSFailedHistoryRetryPipeline(
+                provider: RetryPipelineProviderFake(
+                    expectedAudio: audio,
+                    transcription: .success("authorized transcription"),
+                    correction: .failure(.authorizationUnavailable),
+                    translation: .failure(.authorizationUnavailable)
+                ),
+                usageRecorder: RetryPipelineUsageRecorderFake()
+            )
+
+            #expect(
+                try await pipeline.run(
+                    IOSFailedHistoryRetryProviderInvocation(
+                        audio: audio,
+                        setup: try retryPipelineSetup(
+                            correction: TextCorrectionConfiguration(
+                                isEnabled: true
+                            ),
+                            translation: TranslationConfiguration(
+                                targetLanguage: .english
+                            )
+                        ),
+                        transcriptionID: UUID(),
+                        outputIntent: .translate
+                    )
+                ) == .authorizationUnavailable
+            )
         }
     }
 
@@ -787,7 +846,8 @@ private func expectedCategory(
     case .dictionaryEcho, .contextEcho:
         stage == .transcription ? .echoRejected : nil
     case .invalidRecording, .invalidRequest, .multipartMetadataTooLarge,
-            .invalidTranslationRoute, .cancelled, .unknown:
+            .invalidTranslationRoute, .authorizationUnavailable, .cancelled,
+            .unknown:
         nil
     }
 }

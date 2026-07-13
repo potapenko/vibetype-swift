@@ -184,6 +184,7 @@ extension IOSFailedHistoryRetryAcceptedProviderOutput:
 enum IOSFailedHistoryRetryPipelineExecutionResult: Sendable {
     case accepted(IOSFailedHistoryRetryAcceptedProviderOutput)
     case failed
+    case authorizationUnavailable
 }
 
 extension IOSFailedHistoryRetryPipelineExecutionResult:
@@ -259,6 +260,12 @@ final class IOSFailedHistoryRetryHandoff: @unchecked Sendable {
                     terminalRelay: cancellationRelay
                 )
             )
+        case .authorizationUnavailable:
+            try await cancellationRelay.completeProviderFailure(
+                claim: completion.claim,
+                disposition: .preservePrevious
+            )
+            return .authorizationUnavailable
         case .failed(let failure):
             let disposition: IOSFailedHistoryRetryFailureDisposition
             if let category = failure.durableCategory {

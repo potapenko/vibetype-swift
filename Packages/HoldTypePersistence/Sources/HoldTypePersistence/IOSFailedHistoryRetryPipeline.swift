@@ -27,6 +27,7 @@ public enum IOSFailedHistoryRetryRuntimeFailure:
     case invalidRequest
     case multipartMetadataTooLarge
     case invalidTranslationRoute
+    case authorizationUnavailable
     case cancelled
     case unknown
 
@@ -57,7 +58,7 @@ public enum IOSFailedHistoryRetryRuntimeFailure:
             stage == .transcription ? .echoRejected : nil
         case .invalidRecording, .invalidRequest,
                 .multipartMetadataTooLarge, .invalidTranslationRoute,
-                .cancelled, .unknown:
+                .authorizationUnavailable, .cancelled, .unknown:
             nil
         }
     }
@@ -220,6 +221,7 @@ struct IOSFailedHistoryRetryPipelineFailure: Equatable, Sendable {
 enum IOSFailedHistoryRetryPipelineTerminal: Equatable, Sendable {
     case accepted(AcceptedTranscript)
     case failed(IOSFailedHistoryRetryPipelineFailure)
+    case authorizationUnavailable
 }
 
 /// Provider-only C4.4B pipeline. It owns ordering and normalized outcomes but
@@ -279,6 +281,8 @@ struct IOSFailedHistoryRetryPipeline: Sendable {
                 return failure(.emptyResult, at: .transcription)
             }
             transcribed = accepted
+        case .provider(.failure(.authorizationUnavailable)):
+            return .authorizationUnavailable
         case .provider(.failure(let failure)):
             return self.failure(failure, at: .transcription)
         case .deadline:
@@ -360,6 +364,8 @@ struct IOSFailedHistoryRetryPipeline: Sendable {
                     return failure(.emptyResult, at: .translation)
                 }
                 return .accepted(final)
+            case .provider(.failure(.authorizationUnavailable)):
+                return .authorizationUnavailable
             case .provider(.failure(let failure)):
                 return self.failure(failure, at: .translation)
             case .deadline:
