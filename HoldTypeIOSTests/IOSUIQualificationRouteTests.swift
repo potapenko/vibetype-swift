@@ -85,13 +85,13 @@ struct IOSUIQualificationRouteTests {
     }
 
     @Test func privacyQualificationObservationsAreDeterministicAndContentFree() {
-        let ready = IOSProviderConsentQualificationFixture
+        let ready = IOSV1ProviderConsentQualificationFixture
             .notReviewedObservation()
-        let failure = IOSProviderConsentQualificationFixture
+        let failure = IOSV1ProviderConsentQualificationFixture
             .localDataUnavailableObservation()
-        let accepted = IOSProviderConsentQualificationFixture
+        let accepted = IOSV1ProviderConsentQualificationFixture
             .acceptedObservation()
-        let unreadable = IOSProviderConsentQualificationFixture
+        let unreadable = IOSV1ProviderConsentQualificationFixture
             .resettableUnreadableObservation()
 
         #expect(ready.status == .notReviewed)
@@ -100,17 +100,17 @@ struct IOSUIQualificationRouteTests {
         #expect(failure.status == .localDataUnavailable)
         #expect(accepted.status == .acceptedCurrentDisclosure)
         #expect(
-            IOSProviderConsentQualificationFixture
+            IOSV1ProviderConsentQualificationFixture
                 .isAuthorizationReady(for: accepted)
         )
         #expect(unreadable.status == .localDataUnavailable)
         #expect(unreadable.canResetUnreadableData)
         #expect(
-            IOSProviderConsentQualificationFixture
+            IOSV1ProviderConsentQualificationFixture
                 .hasSameObservationAuthority(ready, as: ready)
         )
         #expect(
-            !IOSProviderConsentQualificationFixture
+            !IOSV1ProviderConsentQualificationFixture
                 .isAuthorizationReady(for: ready)
         )
     }

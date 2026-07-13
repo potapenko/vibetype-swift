@@ -42,6 +42,9 @@ response, or accepted/failed History transaction capability.
   until the first attempt is accepted and cleaned up or explicitly discarded.
 - Provider failure leaves the exact Pending attempt available for Retry or
   Discard when the audio is still usable.
+- Cancellation never silently discards a durable Pending attempt. If the
+  interrupted flow reports recoverable Pending audio, the UI exposes the same
+  Retry or Discard choice.
 - Retry is always explicit, uses current settings, and starts one fresh
   provider operation.
 - Discard removes only the exact Pending metadata and audio. It never changes

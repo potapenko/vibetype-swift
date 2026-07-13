@@ -215,6 +215,26 @@ conditions, and verification gates are defined in
 `docs/ios-v1-persistence-simplification-plan.md`. This cleanup precedes K1 so
 the keyboard work builds on the intended V1.1 persistence boundary.
 
+Completion evidence, 2026-07-13:
+
+- the private persistence lab is preserved at archive commit `b684741` and tag
+  `archive-2026-07-13`;
+- production now owns one compact Pending/Latest record, exact capture audio,
+  standalone provider consent, and separate compact successful-text History;
+- relaunch performs local reconciliation only, while provider Retry and
+  Discard remain explicit user actions;
+- `HoldTypePersistence` moved from 79 source and 55 test files to 23 source and
+  12 test files;
+- package Swift moved from 66,064 source plus 66,898 test lines to 9,254 source
+  plus 8,030 test lines, a net reduction of 115,678 lines;
+- the deletion checkpoint removed 107 obsolete files and 122,165 lines before
+  the compact replacement was accounted for;
+- the iOS scheme moved from 1,957 tests before deletion to 990 focused and
+  surviving tests, all passing; package tests pass 193 plus 53;
+- iOS Debug/Release, release-bundle isolation, and macOS builds pass; physical
+  Data Protection, eviction, and App Group entitlement claims remain device
+  gates.
+
 ## K1 — Signed Keyboard Voice Gate
 
 Build the smallest physical-device probe:
@@ -265,7 +285,7 @@ Only after a positive K1 result, replace the probe with:
 | H2 Production append and Latest semantics | Completed 2026-07-13 |
 | H3 Finished History surface | Completed 2026-07-13 |
 | H4 Bounded legacy cleanup | Completed 2026-07-13 |
-| P1-P6 Persistence simplification and legacy retirement | In progress |
+| P1-P6 Persistence simplification and legacy retirement | Completed 2026-07-13 |
 | K1 Signed keyboard voice gate | Not started |
 | K2 Production `en-US` keyboard | Not started |
 | K3 Bridge, copy, and qualification | Not started |

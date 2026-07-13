@@ -605,7 +605,7 @@ struct IOSForegroundVoiceControllerTests {
                 terminalRecovery: .pendingRetryOrDiscard,
                 terminalStage: .postProcessing,
                 resolutionOutcome: .recoverableFailure,
-                terminalOutcome: nil,
+                terminalOutcome: .recoverableFailure,
                 terminalFailure: .operationFailed,
                 terminalLatest: .available
             ),

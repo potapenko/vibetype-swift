@@ -1,6 +1,6 @@
 # iOS V1.1 Persistence Simplification Plan
 
-Status: active execution plan; approved 2026-07-13.
+Status: completed 2026-07-13.
 
 Product behavior is fixed by
 `docs/specs/features/ios-v1-release.md` and
@@ -34,6 +34,46 @@ At the start of this plan, `HoldTypePersistence` contains:
 The delete set is 105,771 Swift lines. It cannot be removed first because the
 current process context still creates Pending, Latest, provider consent, and
 capture services through the legacy accepted-History graph.
+
+## Completion Evidence
+
+The transactional research system is preserved in the private
+`holdtype-persistence-lab` repository at commit
+`b68474179e8576b4c1b31a6cbc7905327f61acc8` and tag
+`archive-2026-07-13`.
+
+The production package finished inside every complexity budget:
+
+| Area | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| Source files | 79 | 23 | -56 |
+| Test files | 55 | 12 | -43 |
+| Source lines | 66,064 | 9,254 | -56,810 |
+| Test lines | 66,898 | 8,030 | -58,868 |
+| Total Swift lines | 132,962 | 17,284 | -115,678 |
+
+The compact voice-state repository, capture owner, and foreground facade use
+3,527 production lines against the 4,000-line budget. Their focused tests use
+1,697 lines against the 3,000-line budget. Standalone provider consent adds
+937 production and 255 test lines outside that voice-state budget.
+
+The final deletion removed 60 legacy source files and 47 specialized test
+files, totaling 122,165 lines. Searches over production and tests contain no
+types declared by those deleted files and no old provider-consent symbols.
+
+Qualification completed with:
+
+- 193 `HoldTypePersistence` tests and its production build;
+- 53 `HoldTypeIOSCore` tests and its production build;
+- 990 tests in the `HoldType-iOS` scheme;
+- iOS Simulator Debug and Release builds, including the keyboard extension;
+- release-bundle privacy, identifier, dependency, forbidden-marker, and
+  signature checks, with processed App Group entitlements correctly left as a
+  physical signed-device gate;
+- the macOS `HoldType` build and clean diff checks.
+
+Physical Data Protection, eviction, and App Group entitlement claims remain
+device gates and were not inferred from Simulator evidence.
 
 ## Complexity Budget
 

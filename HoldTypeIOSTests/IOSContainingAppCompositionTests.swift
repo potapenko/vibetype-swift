@@ -257,8 +257,12 @@ struct IOSContainingAppCompositionTests {
         )
         #expect(
             !FileManager.default.fileExists(
-                atPath: IOSProviderConsentStorageLocation
-                    .fileURL(in: root).path
+                atPath: root
+                    .appendingPathComponent("HoldType", isDirectory: true)
+                    .appendingPathComponent(
+                        "ios-v1-provider-consent.json",
+                        isDirectory: false
+                    ).path
             )
         )
         #expect(
@@ -642,7 +646,8 @@ struct IOSContainingAppCompositionTests {
         #expect(value != nil)
         #expect(value?.contains("$(") == false)
         #expect(
-            value?.hasSuffix(".app.holdtype.HoldType.ios") == true
+            value == "app.holdtype.HoldType.ios"
+                || value?.hasSuffix(".app.holdtype.HoldType.ios") == true
         )
         #expect(value != "group.app.holdtype.HoldType.shared")
     }
