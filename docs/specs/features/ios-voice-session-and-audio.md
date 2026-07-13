@@ -274,6 +274,28 @@ microphone activity or losing completed recordings.
   no-active-playback implementation. The preflight still performs the same
   stop-and-deactivate handoff through that boundary before recording-session
   activation, so later History playback cannot bypass or reorder the contract.
+- The process credential bridge resolves only the canonical `.voicePreflight`
+  purpose. A successful preflight returns an opaque process-local proof bound
+  to the exact credential generation, never the credential itself. The proof,
+  controller, workflow request, UI state, reflection, and diagnostics contain
+  no API key or traversable credential owner.
+- Immediately before an initial provider call or provider-authorized local
+  Retry, the bridge resolves `.voicePreflight` again and materializes only the
+  exact current credential. Replacement, removal, coordinator-known provider
+  rejection, coordinator loss, access failure, or a mismatched or already-
+  consumed proof fails before Core receives a provider request. A replacement
+  from generation A to B cannot use A's proof, even when both keys are otherwise
+  valid. A rejection first learned from the current network request remains a
+  Core/provider outcome rather than a preflight promise.
+- Missing credential coordination does not prevent construction of the Voice
+  graph. Explicit provider preflight reports unavailable, a confirmed missing
+  item reports setup required, and provider-free observation and local Retry
+  remain available. A provider-free local Retry bypasses credential resolution
+  completely and cannot read Keychain as a side effect.
+- The credential bridge only validates authority and maps the frozen workflow
+  request or fresh Retry authorization into the Core processor. It adds no
+  connectivity probe, provider call, retry loop, or timeout; external timeout
+  and cancellation ownership remain inside the Core/provider boundary.
 - P4 boundary haptics are always enabled. Audible start and success cues follow
   the existing Voice & Recording cue preference; P4D-3 adds no haptic setting.
 - After aggregate foreground loss, bounded local finalization may protect the
