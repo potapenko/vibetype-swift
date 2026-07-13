@@ -1396,8 +1396,11 @@ P4D-3 is complete. Production composition now retains one passive process Voice
 graph, one controller-bound lifecycle recovery route, one registry-to-scheduler
 aggregate binding, and a different exact scene facade for every SwiftUI window.
 Lifecycle recovery is serialized behind current Voice work and runs Capture,
-History, Pending, Latest Result, Settings, and Library in the frozen order with
-cancellation gates. App-level `scenePhase` ownership has been replaced by a
+History, one launch-only Capture recheck when the first result is blocked
+unknown and History completes, then Pending, Latest Result, Settings, and
+Library in the frozen order with cancellation gates. The conditional recheck
+runs at most once and starts no scheduler signal or loop. App-level
+`scenePhase` ownership has been replaced by a
 per-window host, while the first aggregate activation remains covered by launch
 and later multi-window foreground returns coalesce once per process. Missing
 credentials keep provider-free recovery available; storage failure creates no
@@ -1425,6 +1428,28 @@ live Keychain item, or changing durable consent. Final evidence lives in
 
 P4D-2C physical-device validation and P4D-5 release/runtime qualification
 remain pending. P4 and P4D-2 are not release-ready until those gates pass.
+
+P4D-5 proceeds in two explicit qualification checkpoints. P4D-5A is the local
+technical Release gate: one full signed and serialized iOS simulator regression,
+strict package and macOS regressions, generic Debug and Release simulator
+builds, exact app/extension plist and privacy-manifest inspection, app-icon
+presence, Release keyboard binary isolation, no-downgrade review, and bounded
+iPhone/iPad runtime plus accessibility evidence. Internal Phase-0 bridge tools
+must be absent from the Release UI. P4D-5A does not make the Phase-0 keyboard or
+the app App Store-ready.
+
+P4D-5B is the physical-device gate. It includes P4D-2C recorder/source identity,
+real permission/route/interruption/lock/cue/finalization behavior, effective
+Data Protection and signed Keychain accessibility, the physical App Privacy
+Report, manual VoiceOver/Voice Control/Switch Control/Full Keyboard Access, and
+one bounded app-only Start-to-result-or-recovery scenario. It does not silently
+require a live OpenAI call. M0B/M0C keyboard constraints, production typing,
+TestFlight dogfood, battery/performance, and App Review remain in their own P6
+through P8 gates.
+
+P4D-5 passes only when P4D-5A and P4D-5B both pass. If no qualifying device or
+operator-local signing assets are available, complete and checkpoint P4D-5A,
+publish one combined device checklist, and keep P4 and P4D-5 explicitly open.
 
 No History toggle, Clear History action, first-use disclosure, Recording Cache,
 App Group publication, or keyboard dependency is exposed by C4.0 alone.
@@ -1706,8 +1731,8 @@ presentation, Dynamic Type, dark appearance, and keyboard isolation remain
 intact.
 
 P4 is in progress. P4A through P4D-4 are complete except for the separate
-P4D-2C physical-device recorder and foreground-audio matrix. The remaining P4
-work is P4D-5 release/runtime qualification together with that physical-device
+P4D-2C physical-device recorder and foreground-audio matrix. P4D-5A local
+technical Release qualification is active; P4D-5B retains that physical-device
 evidence. No completed P4 slice adds background audio, Quick Session,
 directional App Group Voice state, keyboard provider dependencies, or
 external-app insertion.

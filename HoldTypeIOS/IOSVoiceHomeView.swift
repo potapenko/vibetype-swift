@@ -4,6 +4,11 @@ import SwiftUI
 import UIKit
 
 struct IOSVoiceHomeView: View {
+    #if DEBUG
+    @Environment(\.showsKeyboardBridgeProbe)
+    private var showsKeyboardBridgeProbe
+    #endif
+
     @Environment(IOSForegroundVoiceSceneHostOwner.self)
     private var sceneOwner
     @Environment(IOSForegroundVoiceLatestResultOwner.self)
@@ -19,6 +24,9 @@ struct IOSVoiceHomeView: View {
         IOSForegroundVoiceLatestResultClearCommand?
     @State private var shareItem: IOSVoiceShareItem?
     @State private var latestActionNotice: String?
+    @State private var accessibilityAnnouncementTask: Task<Void, Never>?
+    @State private var accessibilityAnnouncementCandidate:
+        IOSAccessibilityAnnouncementCandidate?
     @FocusState private var practiceFieldIsFocused: Bool
 
     let secureProviderAvailability: IOSSecureProviderAvailability
@@ -78,11 +86,20 @@ struct IOSVoiceHomeView: View {
                 listeningStartedAt = nil
             }
         }
-        .onChange(of: sceneOwner.presentation) { _, presentation in
-            let status = IOSVoiceHomePresentation.resolve(presentation)
-            IOSAccessibilityAnnouncement.post(
-                title: status.title,
-                detail: status.detail
+        .onChange(of: sceneOwner.presentation) { old, new in
+            let oldStatus = IOSVoiceHomePresentation.resolve(old)
+            let newStatus = IOSVoiceHomePresentation.resolve(new)
+            guard let message = IOSAccessibilityAnnouncement.transitionMessage(
+                oldTitle: oldStatus.title,
+                oldDetail: oldStatus.detail,
+                newTitle: newStatus.title,
+                newDetail: newStatus.detail
+            ) else {
+                return
+            }
+            scheduleAccessibilityAnnouncement(
+                message,
+                priority: .status
             )
         }
         .onChange(of: sceneOwner.actionCommands) { _, commands in
@@ -92,21 +109,39 @@ struct IOSVoiceHomeView: View {
             }
             self.pendingVoiceCommand = nil
         }
-        .onChange(of: latestResultOwner.presentation) { _, presentation in
+        .onChange(of: latestResultOwner.presentation) { old, new in
             latestActionNotice = nil
-            let status = IOSVoiceLatestStatusPresentation.resolve(
-                presentation
-            )
-            IOSAccessibilityAnnouncement.post(
-                title: status.title,
-                detail: status.detail
-            )
+            let oldStatus = IOSVoiceLatestStatusPresentation.resolve(old)
+            let newStatus = IOSVoiceLatestStatusPresentation.resolve(new)
+            if let message = IOSAccessibilityAnnouncement.transitionMessage(
+                oldTitle: oldStatus.title,
+                oldDetail: oldStatus.detail,
+                newTitle: newStatus.title,
+                newDetail: newStatus.detail
+            ) {
+                scheduleAccessibilityAnnouncement(
+                    message,
+                    priority: old.text != nil || new.text != nil
+                        ? .content
+                        : .passive
+                )
+            } else if old.text != new.text, new.text != nil {
+                scheduleAccessibilityAnnouncement(
+                    "Latest Result updated",
+                    priority: .content
+                )
+            }
             guard let pendingLatestClearCommand,
                   latestResultOwner.clearCommand
                     != pendingLatestClearCommand else {
                 return
             }
             self.pendingLatestClearCommand = nil
+        }
+        .onDisappear {
+            accessibilityAnnouncementTask?.cancel()
+            accessibilityAnnouncementTask = nil
+            accessibilityAnnouncementCandidate = nil
         }
         .confirmationDialog(
             "Discard Recording?",
@@ -182,6 +217,7 @@ struct IOSVoiceHomeView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Voice")
                 .font(.largeTitle.bold())
+                .accessibilityAddTraits(.isHeader)
             Text(
                 "Record one dictation in HoldType, then copy, share, or "
                     + "practice with the result."
@@ -195,7 +231,6 @@ struct IOSVoiceHomeView: View {
             EdgeInsets(top: 8, leading: 4, bottom: 8, trailing: 4)
         )
         .listRowBackground(Color.clear)
-        .accessibilityElement(children: .combine)
     }
 
     private var showsGettingStarted: Bool {
@@ -361,6 +396,8 @@ struct IOSVoiceHomeView: View {
         } label: {
             Label("Copy", systemImage: "doc.on.doc")
         }
+        .buttonStyle(.borderless)
+        .frame(minHeight: 44)
         .accessibilityIdentifier("ios.voice.latest.copy")
 
         Button {
@@ -372,6 +409,8 @@ struct IOSVoiceHomeView: View {
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
+        .buttonStyle(.borderless)
+        .frame(minHeight: 44)
         .accessibilityIdentifier("ios.voice.latest.share")
 
         Button {
@@ -385,8 +424,15 @@ struct IOSVoiceHomeView: View {
                 "Latest Result moved to Practice"
             )
         } label: {
-            Label("Use in Practice", systemImage: "keyboard")
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Image(systemName: "keyboard")
+                Text("Use in Practice")
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .buttonStyle(.borderless)
+        .frame(minHeight: 44)
         .accessibilityIdentifier("ios.voice.latest.use-in-practice")
     }
 
@@ -420,7 +466,39 @@ struct IOSVoiceHomeView: View {
                 .accessibilityIdentifier("ios.voice.practice-clear")
             }
 
-            KeyboardBridgeProbeView()
+            #if DEBUG
+            if showsKeyboardBridgeProbe {
+                KeyboardBridgeProbeView()
+            }
+            #endif
+        }
+    }
+
+    private func scheduleAccessibilityAnnouncement(
+        _ message: String,
+        priority: IOSAccessibilityAnnouncementCandidate.Priority
+    ) {
+        let incoming = IOSAccessibilityAnnouncementCandidate(
+            message: message,
+            priority: priority
+        )
+        let preferred = IOSAccessibilityAnnouncementCandidate.preferred(
+            current: accessibilityAnnouncementCandidate,
+            incoming: incoming
+        )
+        guard preferred != accessibilityAnnouncementCandidate else { return }
+
+        accessibilityAnnouncementCandidate = preferred
+        accessibilityAnnouncementTask?.cancel()
+        accessibilityAnnouncementTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled,
+                  accessibilityAnnouncementCandidate == preferred else {
+                return
+            }
+            accessibilityAnnouncementCandidate = nil
+            accessibilityAnnouncementTask = nil
+            IOSAccessibilityAnnouncement.post(preferred.message)
         }
     }
 
@@ -564,24 +642,44 @@ private struct IOSVoiceStatusRow: View {
     let listeningStartedAt: Date?
 
     var body: some View {
+        if let listeningStartedAt {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let totalSeconds = elapsedSeconds(
+                    from: listeningStartedAt,
+                    at: context.date
+                )
+                statusContent(elapsedText: elapsedText(totalSeconds))
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(status.title)
+                    .accessibilityValue(
+                        IOSAccessibilityAnnouncement.message(
+                            title: status.detail,
+                            detail: "Elapsed time "
+                                + IOSAccessibilityAnnouncement
+                                .spokenElapsedTime(
+                                    totalSeconds: totalSeconds
+                                )
+                        )
+                    )
+            }
+        } else {
+            statusContent(elapsedText: nil)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(status.title)
+                .accessibilityValue(status.detail)
+        }
+    }
+
+    private func statusContent(elapsedText: String?) -> some View {
         Label {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(status.title)
                     Spacer(minLength: 8)
-                    if let listeningStartedAt {
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            let elapsed = elapsedText(
-                                from: listeningStartedAt,
-                                at: context.date
-                            )
-                            Text(elapsed)
-                                .font(.subheadline.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                                .accessibilityLabel("Elapsed time")
-                                .accessibilityValue(elapsed)
-                                .accessibilityAddTraits(.updatesFrequently)
-                        }
+                    if let elapsedText {
+                        Text(elapsedText)
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(.secondary)
                     }
                 }
                 Text(status.detail)
@@ -597,12 +695,14 @@ private struct IOSVoiceStatusRow: View {
                     .foregroundStyle(status.color)
             }
         }
-        .accessibilityElement(children: .combine)
     }
 
-    private func elapsedText(from start: Date, at now: Date) -> String {
-        let totalSeconds = max(0, Int(now.timeIntervalSince(start)))
-        return String(
+    private func elapsedSeconds(from start: Date, at now: Date) -> Int {
+        max(0, Int(now.timeIntervalSince(start)))
+    }
+
+    private func elapsedText(_ totalSeconds: Int) -> String {
+        String(
             format: "%d:%02d",
             totalSeconds / 60,
             totalSeconds % 60

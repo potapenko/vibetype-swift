@@ -742,7 +742,7 @@ final class IOSForegroundVoiceWorkflow {
         isRunningRecoveryOperation = true
         defer { isRunningRecoveryOperation = false }
 
-        let capture = await dependencies.reconcileCaptureSources()
+        var capture = await dependencies.reconcileCaptureSources()
         guard !Task.isCancelled else {
             return cancelledLifecycleRefresh(capture: capture)
         }
@@ -750,6 +750,14 @@ final class IOSForegroundVoiceWorkflow {
             .recoverContainingAppLifecycle(opportunity)
         guard !Task.isCancelled else {
             return cancelledLifecycleRefresh(capture: capture)
+        }
+        if opportunity == .processLaunch,
+           historyDisposition == .complete,
+           capture.status == .blockedUnknown {
+            capture = await dependencies.reconcileCaptureSources()
+            guard !Task.isCancelled else {
+                return cancelledLifecycleRefresh(capture: capture)
+            }
         }
         let durable = await loadDurableObservation(
             capture: capture,

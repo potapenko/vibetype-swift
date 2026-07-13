@@ -244,6 +244,21 @@ Before routing the user to enable Full Access, HoldType states:
   unrelated surrounding text is retained.
 - Every executable bundle includes the privacy manifest required by the APIs it
   actually uses.
+- P4D-5 freezes the containing-app manifest as non-tracking collection of
+  `Audio Data` and `Other User Content` for App Functionality. Both categories
+  are conservatively marked linked because each provider request is
+  authenticated to the user's configured OpenAI account. The containing app
+  also declares File Timestamp reason `C617.1` for `stat`, `fstat`, and `lstat`
+  metadata checks restricted to its app and App Group containers.
+- The P4 keyboard manifest declares no tracking domains, collected data, or
+  required-reason API category. It reads only the local Phase-0 App Group
+  snapshot and sends nothing off-device. A future keyboard API or bridge change
+  must update this contract before its Release build is approved.
+- System Boot Time reason `35F9.1` is not declared merely because HoldType uses
+  monotonic deadlines: the current production sources call `clock_gettime`,
+  which is not in Apple's current System Boot Time required-reason list. If the
+  generated Xcode privacy report detects a covered API, this spec and manifest
+  must be updated together before release.
 - App Store privacy answers describe the real Audio Data and Other User Content
   path plus OpenAI as the third-party processor.
 - Nearby Text Context is unavailable on iOS in the first release.

@@ -388,8 +388,8 @@ struct IOSContainingAppCompositionTests {
         #expect(composition.historyCoordinator != nil)
         #expect(composition.settingsStateOwner != nil)
         #expect(composition.libraryStateOwner != nil)
-        #expect(composition.settingsStateOwner?.state == .notLoaded)
-        #expect(composition.libraryStateOwner?.state == .notLoaded)
+        #expect(composition.settingsStateOwner?.state == .ready(.defaults))
+        #expect(composition.libraryStateOwner?.state == .ready(.defaults))
         #expect(composition.credentialCoordinator == nil)
         #expect(
             composition.openAISettingsStateOwner?.state == .unavailable
@@ -524,8 +524,8 @@ struct IOSContainingAppCompositionTests {
         #expect(composition.historyCoordinator != nil)
         #expect(composition.settingsStateOwner != nil)
         #expect(composition.libraryStateOwner != nil)
-        #expect(composition.settingsStateOwner?.state == .notLoaded)
-        #expect(composition.libraryStateOwner?.state == .notLoaded)
+        #expect(composition.settingsStateOwner?.state == .ready(.defaults))
+        #expect(composition.libraryStateOwner?.state == .ready(.defaults))
         #expect(composition.credentialCoordinator == nil)
         #expect(
             composition.openAISettingsStateOwner?.state == .unavailable

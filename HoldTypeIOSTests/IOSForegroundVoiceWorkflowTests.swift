@@ -164,6 +164,119 @@ struct IOSForegroundVoiceWorkflowTests {
     }
 
     @Test
+    func freshRootProcessLaunchPublishesReadyOnItsFirstOpportunity()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            preRecoverHistory: false,
+            useActualLifecycleRecovery: true
+        )
+
+        let result = await fixture.workflow.recoverLifecycle(.processLaunch)
+
+        #expect(result.disposition == .complete)
+        #expect(result.observation.setup == .ready)
+        #expect(result.observation.recovery == .none)
+        #expect(result.observation.latestAvailability == .absent)
+        assertOrdered(
+            [
+                "capture-reconcile",
+                "lifecycle-recover-process-launch",
+                "capture-reconcile",
+                "pending-load",
+                "latest-load",
+                "settings-load",
+                "library-load",
+            ],
+            in: fixture.events.values
+        )
+        #expect(fixture.events.count("capture-reconcile") == 2)
+        for forbidden in [
+            "consent-observe",
+            "credential-resolve",
+            "permission-read",
+            "permission-request",
+            "audio-activate",
+            "recording-make",
+            "provider-process",
+        ] {
+            #expect(fixture.events.count(forbidden) == 0)
+        }
+    }
+
+    @Test
+    func pendingHistoryDoesNotRecheckBlockedFreshCapture() async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            preRecoverHistory: false,
+            lifecycleRecoveryDisposition: .pendingLocalRecovery
+        )
+
+        let result = await fixture.workflow.recoverLifecycle(.processLaunch)
+
+        #expect(result.disposition == .pendingLocalRecovery)
+        #expect(result.observation.recovery == .blocked)
+        #expect(fixture.events.count("capture-reconcile") == 1)
+        #expect(
+            fixture.events.count("lifecycle-recover-process-launch") == 1
+        )
+    }
+
+    @Test
+    func secondBlockedUnknownCaptureRemainsBlockedWithoutLoop() async throws {
+        let blocked = IOSForegroundVoiceCaptureRecoveryObservation(
+            status: .blockedUnknown,
+            examinedEntryCount: 0,
+            removedEntryCount: 0,
+            removedLogicalByteCount: 0
+        )
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            captureRecoveryObservations: [blocked, blocked]
+        )
+
+        let result = await fixture.workflow.recoverLifecycle(.processLaunch)
+
+        #expect(result.disposition == .pendingLocalRecovery)
+        #expect(result.observation.recovery == .blocked)
+        #expect(fixture.events.count("capture-reconcile") == 2)
+        #expect(fixture.events.count("pending-load") == 1)
+        #expect(fixture.events.count("latest-load") == 1)
+        #expect(fixture.events.count("settings-load") == 0)
+        #expect(fixture.events.count("library-load") == 0)
+    }
+
+    @Test
+    func cancellationDuringSecondCaptureRecheckStopsBeforeDurableLoads()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            suspensionTrigger: WorkflowEventTrigger(
+                "capture-reconcile",
+                occurrence: 2
+            ),
+            preRecoverHistory: false,
+            useActualLifecycleRecovery: true
+        )
+        let task = Task {
+            await fixture.workflow.recoverLifecycle(.processLaunch)
+        }
+        try await waitUntil {
+            fixture.events.count("capture-reconcile") == 2
+        }
+
+        task.cancel()
+        let result = await task.value
+
+        #expect(result.disposition == .pendingLocalRecovery)
+        #expect(fixture.events.contains("capture-reconcile-cancelled"))
+        #expect(fixture.events.count("pending-load") == 0)
+        #expect(fixture.events.count("latest-load") == 0)
+        #expect(fixture.events.count("settings-load") == 0)
+        #expect(fixture.events.count("library-load") == 0)
+    }
+
+    @Test
     func cancelledCaptureReconcileCannotStartHistoryOrDurableLoads()
         async throws {
         let fixture = try await WorkflowFixture(
@@ -2673,7 +2786,13 @@ private final class WorkflowFixture {
         suspensionTrigger: WorkflowEventTrigger? = nil,
         consentWithdrawalTrigger: WorkflowEventTrigger? = nil,
         preacceptConsent: Bool = false,
-        acquireLease: Bool = true
+        acquireLease: Bool = true,
+        preRecoverHistory: Bool = true,
+        useActualLifecycleRecovery: Bool = false,
+        lifecycleRecoveryDisposition:
+            IOSContainingAppRecoveryDisposition = .complete,
+        captureRecoveryObservations:
+            [IOSForegroundVoiceCaptureRecoveryObservation]? = nil
     ) async throws {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -2681,24 +2800,33 @@ private final class WorkflowFixture {
             at: root,
             withIntermediateDirectories: true
         )
+        let processContextRegistry =
+            IOSAcceptedHistoryCoordinatorProcessContextRegistry(
+                retryRecoveryScanRequiredOnContextCreation: true
+            )
         persistenceOwner = IOSForegroundVoicePersistenceOwner(
-            applicationSupportDirectoryURL: root
+            applicationSupportDirectoryURL: root,
+            registry: processContextRegistry
         )
         historyCoordinator = IOSAcceptedHistoryCoordinator(
-            applicationSupportDirectoryURL: root
+            applicationSupportDirectoryURL: root,
+            registry: processContextRegistry
         )
-        var lifecycleDisposition = await historyCoordinator
-            .recoverContainingAppLifecycle(.processLaunch)
-        for _ in 0..<12
-        where lifecycleDisposition == .pendingLocalRecovery {
-            lifecycleDisposition = await historyCoordinator
+        if preRecoverHistory {
+            var lifecycleDisposition = await historyCoordinator
                 .recoverContainingAppLifecycle(.processLaunch)
-        }
-        guard lifecycleDisposition == .complete else {
-            throw WorkflowFixtureError.unsupportedTestPath
+            for _ in 0..<12
+            where lifecycleDisposition == .pendingLocalRecovery {
+                lifecycleDisposition = await historyCoordinator
+                    .recoverContainingAppLifecycle(.processLaunch)
+            }
+            guard lifecycleDisposition == .complete else {
+                throw WorkflowFixtureError.unsupportedTestPath
+            }
         }
         consentCoordinator = IOSProviderConsentCoordinator(
-            applicationSupportDirectoryURL: root
+            applicationSupportDirectoryURL: root,
+            registry: processContextRegistry
         )
         registry = IOSVoiceSceneRegistry()
         facade = registry.registerScene(initialActivity: .active)
@@ -2739,6 +2867,9 @@ private final class WorkflowFixture {
         let recordingActiveSequence = WorkflowValueSequence(
             recordingActiveValues ?? [recordingIsActive]
         )
+        let captureRecoverySequence = captureRecoveryObservations.map(
+            WorkflowValueSequence.init
+        )
         let hook = WorkflowEventHook(
             lossReactivation: lossReactivationTrigger,
             pendingMutation: pendingMutationTrigger,
@@ -2753,6 +2884,7 @@ private final class WorkflowFixture {
 
         let events = events
         let owner = persistenceOwner
+        let history = historyCoordinator
         let pendingBox = pendingBox
         let consent = consentCoordinator
         let registry = registry
@@ -2798,6 +2930,9 @@ private final class WorkflowFixture {
                             removedLogicalByteCount: 0
                         )
                     }
+                    if let captureRecoverySequence {
+                        return captureRecoverySequence.next()
+                    }
                     return await owner.reconcileCaptureSourcesAtLaunch()
                 },
                 recoverContainingAppLifecycle: { opportunity in
@@ -2808,7 +2943,12 @@ private final class WorkflowFixture {
                     let event = "lifecycle-recover-\(name)"
                     events.record(event)
                     await applyHook(event)
-                    return .complete
+                    if useActualLifecycleRecovery {
+                        return await history.recoverContainingAppLifecycle(
+                            opportunity
+                        )
+                    }
+                    return lifecycleRecoveryDisposition
                 },
                 loadPending: {
                     events.record("pending-load")

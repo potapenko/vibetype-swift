@@ -48,8 +48,16 @@ public struct IOSForegroundVoicePersistenceOwner: Sendable {
     private let captureSourceOwner: IOSForegroundVoiceCaptureSourceOwner?
 
     public init(applicationSupportDirectoryURL: URL) {
-        let registry = IOSAcceptedHistoryCoordinatorProcessContextRegistry
-            .shared
+        self.init(
+            applicationSupportDirectoryURL: applicationSupportDirectoryURL,
+            registry: .shared
+        )
+    }
+
+    init(
+        applicationSupportDirectoryURL: URL,
+        registry: IOSAcceptedHistoryCoordinatorProcessContextRegistry
+    ) {
         let context = registry.context(for: applicationSupportDirectoryURL)
         pendingRecordingStore = context.pendingRecordingStore
         captureSourceOwner = context.foregroundVoiceCaptureSourceOwner

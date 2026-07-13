@@ -13,6 +13,16 @@ struct HoldTypeIOSApp: App {
     let composition: IOSContainingAppComposition
 
     init() {
+        #if DEBUG
+        if IOSUIQualificationRoute.current != nil {
+            composition = IOSContainingAppComposition(
+                scheduleProviderStartupMaintenance: {},
+                scheduleRetryScratchStartupMaintenance: {},
+                recoverContainingAppLifecycle: { _ in .complete }
+            )
+            return
+        }
+        #endif
         composition = IOSContainingAppComposition()
     }
 
@@ -47,7 +57,15 @@ struct HoldTypeIOSApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG
+            if let qualificationRoute = IOSUIQualificationRoute.current {
+                IOSUIQualificationRootView(route: qualificationRoute)
+            } else {
+                IOSContainingAppSceneHost(composition: composition)
+            }
+            #else
             IOSContainingAppSceneHost(composition: composition)
+            #endif
         }
     }
 }

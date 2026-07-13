@@ -1,9 +1,9 @@
 # HoldType iOS Keyboard Development Plan
 
-Status: active feasibility work; canonical roadmap P3 is complete and P4 is in
-progress. Its app-only foreground voice contract and Persistence transaction
-are complete; reader-based, consent-gated containing-app processing is next.
-Started 2026-07-09 and updated 2026-07-12.
+Status: active feasibility work; canonical roadmap P3 and P4A through P4D-4 are
+complete. P4D-5A local technical Release qualification is active, while
+P4D-2C, P4D-5B, and keyboard M0B/M0C remain physical-device gates. Started
+2026-07-09 and updated 2026-07-13.
 
 The complete containing-app, settings, data, privacy, and macOS feature
 portability roadmap lives in `docs/ios-product-portability-plan.md`. This file

@@ -265,10 +265,15 @@ microphone activity or losing completed recordings.
 - Process-launch recovery is provider-free and ordered: first reconcile the
   capture-source namespace, then run the existing containing-app lifecycle
   recovery, then derive one combined source-and-Pending observation before
-  Start can be offered. A later foreground opportunity repeats only the bounded
-  reconciliation allowed by those owners. It never reads Keychain, requests
-  permission, activates audio, constructs a provider request, or automatically
-  retries retained work.
+  Start can be offered. If that first capture observation is blocked unknown
+  and containing-app lifecycle recovery completes, the same process-launch
+  opportunity reconciles the capture-source namespace exactly once more before
+  deriving the combined observation. The second capture observation is final
+  for that opportunity: another blocked-unknown result remains blocked and
+  starts no loop, timer, or follow-up signal. A later foreground opportunity
+  repeats only the bounded reconciliation allowed by those owners. Recovery
+  never reads Keychain, requests permission, activates audio, constructs a
+  provider request, or automatically retries retained work.
 - The workflow depends on one process-owned History-playback arbitration
   protocol. Until History playback UI exists, production supplies an explicit
   no-active-playback implementation. The preflight still performs the same
@@ -809,9 +814,12 @@ session as inactive, and must not label setup-dependent behavior as ready.
   points, including History-playback stop before audio activation and no new
   provider dispatch after aggregate foreground loss.
 - Verify passive launch ordering as capture-source reconciliation, existing
-  containing-app lifecycle recovery, and combined source/Pending observation;
-  prove it performs no Keychain, permission, audio, provider, App Group, or
-  keyboard work.
+  containing-app lifecycle recovery, the one conditional second Capture read,
+  and combined source/Pending observation. Prove History pending performs no
+  recheck, a second blocked result remains blocked without a loop, cancellation
+  at either Capture boundary stops later loads, and the whole opportunity
+  performs no Keychain, permission, audio, provider, App Group, or keyboard
+  work.
 - Test every action in every phase, including Stop Voice Session during ready,
   listening, Finish-triggered finalizing, and processing, with valid/invalid
   partial artifacts and no accidental provider cancellation.

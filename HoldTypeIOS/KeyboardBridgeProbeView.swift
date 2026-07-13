@@ -5,8 +5,20 @@
 //  Created by Codex on 7/9/26.
 //
 
+#if DEBUG
 import SwiftUI
 import UIKit
+
+private struct KeyboardBridgeProbeVisibilityKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var showsKeyboardBridgeProbe: Bool {
+        get { self[KeyboardBridgeProbeVisibilityKey.self] }
+        set { self[KeyboardBridgeProbeVisibilityKey.self] = newValue }
+    }
+}
 
 struct KeyboardBridgeProbeView: View {
     @State private var statusMessage =
@@ -84,3 +96,4 @@ struct KeyboardBridgeProbeView: View {
         .padding()
         .background(Color(.systemGroupedBackground))
 }
+#endif

@@ -118,4 +118,74 @@ struct IOSNativeVoicePresentationTests {
             ) == "Latest Result copied"
         )
     }
+
+    @Test func accessibilityAnnouncementSuppressesIdenticalTransitions() {
+        #expect(
+            IOSAccessibilityAnnouncement.transitionMessage(
+                oldTitle: "Listening",
+                oldDetail: "Tap Stop when you finish.",
+                newTitle: "Listening",
+                newDetail: "Tap Stop when you finish."
+            ) == nil
+        )
+    }
+
+    @Test func accessibilityAnnouncementDescribesChangedTransitions() {
+        #expect(
+            IOSAccessibilityAnnouncement.transitionMessage(
+                oldTitle: "Listening",
+                oldDetail: "Tap Stop when you finish.",
+                newTitle: "Transcribing",
+                newDetail: "Sending the retained recording to OpenAI."
+            )
+                == "Transcribing. Sending the retained recording to OpenAI."
+        )
+    }
+
+    @Test func elapsedTimeUsesSpokenUnitsForAccessibility() {
+        #expect(
+            IOSAccessibilityAnnouncement.spokenElapsedTime(totalSeconds: -1)
+                == "0 seconds"
+        )
+        #expect(
+            IOSAccessibilityAnnouncement.spokenElapsedTime(totalSeconds: 1)
+                == "1 second"
+        )
+        #expect(
+            IOSAccessibilityAnnouncement.spokenElapsedTime(totalSeconds: 65)
+                == "1 minute, 5 seconds"
+        )
+        #expect(
+            IOSAccessibilityAnnouncement.spokenElapsedTime(totalSeconds: 120)
+                == "2 minutes"
+        )
+    }
+
+    @Test func accessibilityAnnouncementCoalescingPrefersContent() {
+        let status = IOSAccessibilityAnnouncementCandidate(
+            message: "Ready to dictate",
+            priority: .status
+        )
+        let content = IOSAccessibilityAnnouncementCandidate(
+            message: "Latest Result available",
+            priority: .content
+        )
+        let passive = IOSAccessibilityAnnouncementCandidate(
+            message: "No Latest Result",
+            priority: .passive
+        )
+
+        #expect(
+            IOSAccessibilityAnnouncementCandidate.preferred(
+                current: status,
+                incoming: content
+            ) == content
+        )
+        #expect(
+            IOSAccessibilityAnnouncementCandidate.preferred(
+                current: content,
+                incoming: passive
+            ) == content
+        )
+    }
 }

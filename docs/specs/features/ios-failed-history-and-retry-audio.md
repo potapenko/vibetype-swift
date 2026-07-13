@@ -1013,9 +1013,12 @@ Each lifecycle opportunity is bounded and provider-free:
    and convert one process-lost provider phase to explicit recovery; ordinary
    foreground opportunities never manufacture process-loss authority.
 
-There is no automatic second pass, timer, polling loop, detached task,
-`BGTaskScheduler` job, or promise of background completion. A later ordinary
-lifecycle opportunity or explicit user action may try again. Passive recovery
+There is no automatic second History/lifecycle pass, timer, polling loop,
+detached task, `BGTaskScheduler` job, or promise of background completion. The
+Voice owner may perform the single same-opportunity capture-namespace recheck
+defined by `ios-voice-session-and-audio.md` after this History opportunity
+completes; that bounded read is not another History pass or scheduler retry. A
+later ordinary lifecycle opportunity or explicit user action may try again. Passive recovery
 does not read Keychain, request microphone or another permission, construct a
 Retry provider session, contact OpenAI, accept new provider output, publish to
 App Group, or insert text. Its public result is only `complete` or

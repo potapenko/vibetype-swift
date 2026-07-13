@@ -285,6 +285,13 @@ The app guides setup in this order:
   consent truth. Navigation and practice drafts remain scene-local. Dynamic
   Type may stack actions vertically; text and recovery explanations are never
   clipped to preserve a card height.
+- Voice, Latest Result, and Privacy announce only content-free presentation
+  transitions. Changes produced by the same UI update are coalesced into one
+  announcement, with actionable content taking priority over passive status;
+  an old notice must not be announced again after an unrelated reload. The
+  listening status exposes its spoken elapsed value when focused, but elapsed
+  ticks do not generate a new announcement every second. Headings, action
+  labels, status values, and hints remain distinct at accessibility sizes.
 
 ## Quick Session Gate
 

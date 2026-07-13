@@ -11,6 +11,9 @@ struct IOSPrivacyPermissionsView: View {
         IOSPrivacyConsentConfirmation?
     @State private var disclosureReview:
         IOSPrivacyConsentConfirmation?
+    @State private var accessibilityAnnouncementTask: Task<Void, Never>?
+    @State private var accessibilityAnnouncementCandidate:
+        IOSAccessibilityAnnouncementCandidate?
 
     var body: some View {
         List {
@@ -41,21 +44,36 @@ struct IOSPrivacyPermissionsView: View {
         }
         .onChange(of: consentOwner.privacyState) { _, state in
             guard case .ready(let snapshot) = state else { return }
-            let presentation = IOSConsentPrivacyPresentation.resolve(
-                snapshot
+            let presentation = IOSConsentPrivacyPresentation.resolve(snapshot)
+            scheduleAccessibilityAnnouncement(
+                IOSAccessibilityAnnouncement.message(
+                    title: presentation.title,
+                    detail: presentation.detail
+                ),
+                priority: .status
             )
-            IOSAccessibilityAnnouncement.post(
-                title: presentation.title,
-                detail: presentation.detail
+        }
+        .onChange(of: consentOwner.failure) { _, failure in
+            guard let failure else { return }
+            scheduleAccessibilityAnnouncement(
+                IOSAccessibilityAnnouncement.message(
+                    title: "Consent action failed",
+                    detail: failure.detail
+                ),
+                priority: .content
             )
         }
         .onChange(of: consentOwner.notice) { _, notice in
             guard let notice else { return }
-            IOSAccessibilityAnnouncement.post(notice.title)
+            scheduleAccessibilityAnnouncement(
+                notice.title,
+                priority: .content
+            )
         }
-        .onChange(of: consentOwner.failure) { _, failure in
-            guard let failure else { return }
-            IOSAccessibilityAnnouncement.post(failure.detail)
+        .onDisappear {
+            accessibilityAnnouncementTask?.cancel()
+            accessibilityAnnouncementTask = nil
+            accessibilityAnnouncementCandidate = nil
         }
         .sheet(item: $disclosureReview) { confirmation in
             IOSProviderConsentPrivacyReviewSheet(
@@ -158,7 +176,7 @@ struct IOSPrivacyPermissionsView: View {
                                 )
                             )
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                         }
                     }
                 } icon: {
@@ -209,8 +227,12 @@ struct IOSPrivacyPermissionsView: View {
             }
 
             if let notice = consentOwner.notice {
-                Label(notice.title, systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                Label {
+                    Text(notice.title)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
                     .accessibilityIdentifier("ios.privacy.consent.notice")
             }
 
@@ -301,6 +323,34 @@ struct IOSPrivacyPermissionsView: View {
                 .foregroundStyle(.tint)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private func scheduleAccessibilityAnnouncement(
+        _ message: String,
+        priority: IOSAccessibilityAnnouncementCandidate.Priority
+    ) {
+        let incoming = IOSAccessibilityAnnouncementCandidate(
+            message: message,
+            priority: priority
+        )
+        let preferred = IOSAccessibilityAnnouncementCandidate.preferred(
+            current: accessibilityAnnouncementCandidate,
+            incoming: incoming
+        )
+        guard preferred != accessibilityAnnouncementCandidate else { return }
+
+        accessibilityAnnouncementCandidate = preferred
+        accessibilityAnnouncementTask?.cancel()
+        accessibilityAnnouncementTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled,
+                  accessibilityAnnouncementCandidate == preferred else {
+                return
+            }
+            accessibilityAnnouncementCandidate = nil
+            accessibilityAnnouncementTask = nil
+            IOSAccessibilityAnnouncement.post(preferred.message)
+        }
     }
 }
 
