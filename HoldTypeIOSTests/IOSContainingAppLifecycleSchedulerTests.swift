@@ -60,6 +60,58 @@ struct IOSContainingAppLifecycleSchedulerTests {
         #expect(scheduler.latestDisposition == .complete)
     }
 
+    @Test func aggregateForegroundRequiresValidatedFalseToTrueTransition()
+        async {
+        let recorder = LifecycleRecoveryRecorder(
+            results: [.complete, .complete]
+        )
+        let scheduler = IOSContainingAppLifecycleScheduler { opportunity in
+            await recorder.recover(opportunity)
+        }
+
+        scheduler.observeAggregateForeground(
+            isActive: false,
+            isInitialObservation: true
+        )
+        scheduler.scheduleProcessLaunch()
+        await scheduler.waitUntilIdle()
+
+        // The launch pass covers the first aggregate activation even when the
+        // initial process snapshot did not yet contain an active scene.
+        scheduler.observeAggregateForeground(
+            isActive: true,
+            isInitialObservation: false
+        )
+        scheduler.observeAggregateForeground(
+            isActive: true,
+            isInitialObservation: false
+        )
+        await scheduler.waitUntilIdle()
+        #expect(await recorder.opportunities() == [.processLaunch])
+
+        scheduler.observeAggregateForeground(
+            isActive: false,
+            isInitialObservation: false
+        )
+        scheduler.observeAggregateForeground(
+            isActive: false,
+            isInitialObservation: false
+        )
+        scheduler.observeAggregateForeground(
+            isActive: true,
+            isInitialObservation: false
+        )
+        scheduler.observeAggregateForeground(
+            isActive: true,
+            isInitialObservation: false
+        )
+        await scheduler.waitUntilIdle()
+        #expect(
+            await recorder.opportunities()
+                == [.processLaunch, .foreground]
+        )
+    }
+
     @Test func foregroundBurstDuringActiveRecoveryCoalescesOnce()
         async throws {
         let firstPass = LifecycleRecoveryLatch()

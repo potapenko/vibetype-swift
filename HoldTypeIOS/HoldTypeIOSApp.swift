@@ -10,8 +10,6 @@ import SwiftUI
 
 @main
 struct HoldTypeIOSApp: App {
-    @Environment(\.scenePhase) private var scenePhase
-
     let composition: IOSContainingAppComposition
 
     init() {
@@ -49,21 +47,7 @@ struct HoldTypeIOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            HoldTypeIOSRootView(
-                settingsStateOwner: composition.settingsStateOwner,
-                libraryStateOwner: composition.libraryStateOwner,
-                openAISettingsStateOwner:
-                    composition.openAISettingsStateOwner,
-                secureProviderAvailability: .resolve(
-                    compositionAvailability: composition.availability
-                )
-            )
-        }
-        .onChange(of: scenePhase, initial: true) { oldPhase, newPhase in
-            composition.lifecycleScheduler.observeScenePhase(
-                newPhase,
-                isInitialObservation: oldPhase == newPhase
-            )
+            IOSContainingAppSceneHost(composition: composition)
         }
     }
 }

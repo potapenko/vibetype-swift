@@ -1392,8 +1392,24 @@ gate selects a descriptor-backed AudioToolbox/AVAudioEngine writer and does not
 weaken the storage contract.
 
 P4D-2A and P4D-2B completion do not make P4D-2 or P4 release-ready. P4D-2C,
-P4D-3 composition, Voice UI, and the remaining product gates retain their own
-exit criteria.
+P4D-3 composition, P4D-4 Voice UI, and the remaining product gates retain their
+own exit criteria.
+
+P4D-3 is complete. Production composition now retains one passive process Voice
+graph, one controller-bound lifecycle recovery route, one registry-to-scheduler
+aggregate binding, and a different exact scene facade for every SwiftUI window.
+Lifecycle recovery is serialized behind current Voice work and runs Capture,
+History, Pending, Latest Result, Settings, and Library in the frozen order with
+cancellation gates. App-level `scenePhase` ownership has been replaced by a
+per-window host, while the first aggregate activation remains covered by launch
+and later multi-window foreground returns coalesce once per process. Missing
+credentials keep provider-free recovery available; storage failure creates no
+Voice scene. P4D-3 adds no Voice UI, keyboard dependency, App Group Voice state,
+background audio, Quick Session, or provider auto-retry. Final evidence lives
+in `docs/qa/runs/ios-p4d3-production-composition-2026-07-13.md`.
+
+P4D-4 now owns the native shared Voice and Privacy presentation. P4D-2C and the
+final P4D-5 release/runtime gates remain pending.
 
 No History toggle, Clear History action, first-use disclosure, Recording Cache,
 App Group publication, or keyboard dependency is exposed by C4.0 alone.

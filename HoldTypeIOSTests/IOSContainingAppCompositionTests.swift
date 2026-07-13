@@ -231,6 +231,9 @@ struct IOSContainingAppCompositionTests {
         let voiceRuntime = try #require(
             composition.foregroundVoiceRuntime
         )
+        #expect(composition.voiceSceneLifecycleBinding != nil)
+        #expect(voiceRuntime.sceneRegistry.activeEventSubscriptionCount == 1)
+        #expect(voiceRuntime.sceneRegistry.snapshot.registeredSceneCount == 0)
         #expect(
             voiceRuntime.controller.sceneRegistry
                 === voiceRuntime.sceneRegistry
@@ -399,6 +402,8 @@ struct IOSContainingAppCompositionTests {
         let voiceRuntime = try #require(
             composition.foregroundVoiceRuntime
         )
+        #expect(composition.voiceSceneLifecycleBinding != nil)
+        #expect(voiceRuntime.sceneRegistry.activeEventSubscriptionCount == 1)
         guard case .unavailable = await voiceRuntime.providerBridge
                 .resolveCredential() else {
             Issue.record("Expected unavailable Voice credential owner.")
@@ -530,6 +535,7 @@ struct IOSContainingAppCompositionTests {
         #expect(composition.transcriptionUsageRepository != nil)
         #expect(composition.foregroundVoiceProcessor == nil)
         #expect(composition.foregroundVoiceRuntime != nil)
+        #expect(composition.voiceSceneLifecycleBinding != nil)
         #expect(providerConsentFactoryCalls == 1)
         #expect(foregroundPersistenceFactoryCalls == 1)
         #expect(usageRepositoryFactoryCalls == 1)
@@ -640,6 +646,7 @@ struct IOSContainingAppCompositionTests {
         #expect(composition.transcriptionUsageRepository == nil)
         #expect(composition.foregroundVoiceProcessor == nil)
         #expect(composition.foregroundVoiceRuntime == nil)
+        #expect(composition.voiceSceneLifecycleBinding == nil)
         #expect(
             composition.lifecycleScheduler.latestDisposition
                 == .pendingLocalRecovery
@@ -679,6 +686,7 @@ struct IOSContainingAppCompositionTests {
         #expect(app.composition.transcriptionUsageRepository == nil)
         #expect(app.composition.foregroundVoiceProcessor == nil)
         #expect(app.composition.foregroundVoiceRuntime == nil)
+        #expect(app.composition.voiceSceneLifecycleBinding == nil)
         #expect(app.composition.lifecycleScheduler.latestDisposition == .complete)
     }
 

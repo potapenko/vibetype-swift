@@ -14,7 +14,8 @@ final class IOSContainingAppLifecycleScheduler {
     private var pendingOpportunity:
         IOSContainingAppRecoveryOpportunity?
     private var processLaunchRecoveryCompleted = false
-    private var observedInitialScenePhase = false
+    private var observedInitialAggregateForeground = false
+    private var aggregateForegroundIsActive = false
     private var initialActivationCoveredByLaunch = false
 
     private(set) var latestDisposition:
@@ -36,18 +37,34 @@ final class IOSContainingAppLifecycleScheduler {
         _ phase: ScenePhase,
         isInitialObservation: Bool
     ) {
-        if !observedInitialScenePhase {
-            observedInitialScenePhase = true
-            initialActivationCoveredByLaunch = phase == .active
+        observeAggregateForeground(
+            isActive: phase == .active,
+            isInitialObservation: isInitialObservation
+        )
+    }
+
+    func observeAggregateForeground(
+        isActive: Bool,
+        isInitialObservation: Bool
+    ) {
+        if !observedInitialAggregateForeground {
+            observedInitialAggregateForeground = true
+            aggregateForegroundIsActive = isActive
+            initialActivationCoveredByLaunch = isActive
             return
         }
+
+        // A process binding seeds exactly one initial aggregate snapshot. The
+        // compatibility ScenePhase source may repeat initial observations, so
+        // refresh its baseline without scheduling lifecycle work.
         if isInitialObservation {
-            if phase == .active {
-                initialActivationCoveredByLaunch = true
-            }
+            aggregateForegroundIsActive = isActive
+            if isActive { initialActivationCoveredByLaunch = true }
             return
         }
-        guard phase == .active else { return }
+        guard aggregateForegroundIsActive != isActive else { return }
+        aggregateForegroundIsActive = isActive
+        guard isActive else { return }
         guard initialActivationCoveredByLaunch else {
             initialActivationCoveredByLaunch = true
             return

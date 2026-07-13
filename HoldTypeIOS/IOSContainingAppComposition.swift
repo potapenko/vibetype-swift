@@ -167,6 +167,7 @@ final class IOSContainingAppComposition {
     let foregroundVoiceProcessor: IOSForegroundVoiceProcessor?
     let foregroundVoiceRuntime: IOSForegroundVoiceRuntime?
     let lifecycleScheduler: IOSContainingAppLifecycleScheduler
+    let voiceSceneLifecycleBinding: IOSVoiceSceneLifecycleBinding?
     let availability: IOSContainingAppCompositionAvailability
 
     init(
@@ -200,6 +201,7 @@ final class IOSContainingAppComposition {
             lifecycleScheduler = IOSContainingAppLifecycleScheduler { _ in
                 .pendingLocalRecovery
             }
+            voiceSceneLifecycleBinding = nil
             scheduleStartup(
                 scheduleProviderStartupMaintenance:
                     scheduleProviderStartupMaintenance,
@@ -285,9 +287,14 @@ final class IOSContainingAppComposition {
             factories: factories.voiceFactories
         )
         self.foregroundVoiceRuntime = foregroundVoiceRuntime
-        lifecycleScheduler = IOSContainingAppLifecycleScheduler(
+        let lifecycleScheduler = IOSContainingAppLifecycleScheduler(
             recover: foregroundVoiceRuntime.lifecycleCoordinator
                 .schedulerRecovery
+        )
+        self.lifecycleScheduler = lifecycleScheduler
+        voiceSceneLifecycleBinding = IOSVoiceSceneLifecycleBinding(
+            registry: foregroundVoiceRuntime.sceneRegistry,
+            scheduler: lifecycleScheduler
         )
         scheduleStartup(
             scheduleProviderStartupMaintenance:
@@ -321,6 +328,7 @@ final class IOSContainingAppComposition {
         lifecycleScheduler = IOSContainingAppLifecycleScheduler(
             recover: recoverContainingAppLifecycle
         )
+        voiceSceneLifecycleBinding = nil
         scheduleStartup(
             scheduleProviderStartupMaintenance:
                 scheduleProviderStartupMaintenance,
