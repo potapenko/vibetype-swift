@@ -37,10 +37,10 @@ extension IOSForegroundVoiceTranscriptionDispatch:
     public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
-/// Process-owned Persistence boundary for one foreground attempt lifetime.
+/// Process-owned Persistence boundary for one P4 foreground attempt lifetime.
 /// Every operation is routed through the exact canonical Pending actor and the
-/// matching app-only or coordinator-captured accepted-output transaction from
-/// one physical-root process context.
+/// matching app-only accepted-output transaction from one physical-root
+/// process context.
 @_spi(HoldTypeIOSCore)
 public struct IOSForegroundVoicePersistenceOwner: Sendable {
     private let pendingRecordingStore: IOSPendingRecordingStore
@@ -207,18 +207,10 @@ public struct IOSForegroundVoicePersistenceOwner: Sendable {
         _ preparation: IOSForegroundVoiceAcceptedOutputPreparation,
         expectedPending: IOSPendingRecordingCASExpectation
     ) async throws -> IOSForegroundVoiceAcceptanceResult {
-        switch preparation.historyMode {
-        case .appOnly:
-            try await acceptedOutputPersistence.accept(
-                preparation,
-                expectedPending: expectedPending
-            )
-        case .captured:
-            try await acceptedOutputPersistence.acceptCapturedHistory(
-                preparation,
-                expectedPending: expectedPending
-            )
-        }
+        try await acceptedOutputPersistence.accept(
+            preparation,
+            expectedPending: expectedPending
+        )
     }
 
     public func retrySavingResult(

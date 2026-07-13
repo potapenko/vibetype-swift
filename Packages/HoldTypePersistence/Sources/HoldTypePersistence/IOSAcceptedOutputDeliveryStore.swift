@@ -2459,36 +2459,6 @@ public actor IOSAcceptedOutputDeliveryStore {
         return observation(for: current.record)
     }
 
-    /// Read-only P5H observation for the containing app's mandatory
-    /// foreground destination. A retained History decision may still own a
-    /// snapshot-bound mutation capability, so this path deliberately performs
-    /// no identical rewrite and does not reconcile or clear History state.
-    func loadForegroundVoiceLatestResultIncludingCapturedHistory(
-        operationLeaseAuthorization:
-            IOSPersistenceOperationLeaseAuthorization
-    ) throws -> IOSAcceptedOutputDeliveryObservation? {
-        guard operationGateBinding.proves(operationLeaseAuthorization) else {
-            throw IOSAcceptedOutputDeliveryError.compareAndSwapFailed
-        }
-        try requireFailedRetryRelationDisposition(
-            nil,
-            operationLeaseAuthorization: operationLeaseAuthorization
-        )
-        guard let current = try journal.load() else {
-            try journal.confirmCanonicalAbsence()
-            foregroundVoiceCleanupPending = false
-            return nil
-        }
-        guard current.record.isForegroundVoiceAppOnlyRecord
-                || current.record.isForegroundVoiceCapturedLatestRecord else {
-            throw IOSAcceptedOutputDeliveryError.invalidTransition
-        }
-        if current.record.deliveryState == .discarded {
-            return .active(current.record)
-        }
-        return observation(for: current.record)
-    }
-
     private func resolutionIsCoherentForCapturedForegroundRetirement(
         _ resolution: IOSAcceptedHistoryAcceptanceResolution,
         acceptanceRecord: IOSAcceptedOutputDeliveryRecord,
