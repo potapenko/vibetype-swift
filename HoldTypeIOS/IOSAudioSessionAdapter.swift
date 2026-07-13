@@ -590,7 +590,7 @@ private struct NotificationRegistration {
     let object: AnyObject
 }
 
-final class IOSAudioSessionNotificationBridge: @unchecked Sendable {
+nonisolated final class IOSAudioSessionNotificationBridge: @unchecked Sendable {
     private let receive: @MainActor @Sendable (
         IOSAudioSessionSystemEvent
     ) -> Void
