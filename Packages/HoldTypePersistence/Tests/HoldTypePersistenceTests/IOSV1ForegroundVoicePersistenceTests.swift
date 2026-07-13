@@ -97,6 +97,35 @@ struct IOSV1ForegroundVoicePersistenceTests {
         #expect(try await fixture.history.load().entries.isEmpty)
     }
 
+    @Test func cleanupFailureKeepsLatestReadyForTheUser() async throws {
+        let fixture = FacadeFixture()
+        let expected = try await fixture.moveToOutputDelivery()
+        fixture.audio.failNextUnlink = true
+
+        let result = try await fixture.owner.accept(
+            try fixture.acceptance(),
+            expectedPending: expected
+        )
+
+        guard case .resultReady(let record, let notice) = result else {
+            Issue.record("Expected the durable Latest result")
+            return
+        }
+        #expect(record.resultID == FacadeIDs.result)
+        #expect(notice == .localCleanupPending)
+        let state = try await fixture.repository.load()
+        #expect(state.latest?.resultID == FacadeIDs.result)
+        #expect(state.pending?.status == .acceptedCleanup(
+            IOSVoiceStateAcceptedResult(
+                resultID: FacadeIDs.result,
+                sourceAttemptID: FacadeIDs.attempt,
+                text: "accepted text",
+                createdAt: FacadeDates.accepted
+            )
+        ))
+        #expect(fixture.audio.contains(FacadeIDs.attempt))
+    }
+
     @Test func failedAttemptRetriesWithCurrentSettingsAndDiscardsExactly()
         async throws {
         let fixture = FacadeFixture()
@@ -474,11 +503,18 @@ private final class FacadeAudioStore: @unchecked Sendable {
     func contains(_ id: UUID) -> Bool { lock.withLock { files[id] != nil } }
 }
 
-private struct FacadeAudioFileSystem:
+private final class FacadeAudioFileSystem:
     IOSV1ForegroundVoiceAudioFileSystem,
-    Sendable {
+    @unchecked Sendable {
     let store: FacadeAudioStore
     let events: FacadeEventLog
+    private let lock = NSLock()
+    var failNextUnlink = false
+
+    init(store: FacadeAudioStore, events: FacadeEventLog) {
+        self.store = store
+        self.events = events
+    }
 
     func contains(_ id: UUID) -> Bool { store.contains(id) }
 
@@ -522,6 +558,12 @@ private struct FacadeAudioFileSystem:
     }
 
     func unlink(_ handle: IOSV1ForegroundVoiceAudioHandle) throws {
+        try lock.withLock {
+            if failNextUnlink {
+                failNextUnlink = false
+                throw IOSV1ForegroundVoicePersistenceError.cleanupUncertain
+            }
+        }
         guard store.contains(handle.attemptID) else { return }
         events.append("audio-unlink")
         store.remove(handle.attemptID)

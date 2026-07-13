@@ -168,6 +168,25 @@ public struct IOSV1AcceptedOutputDeliveryRecord: Equatable, Sendable {
     public var deliveryID: UUID { resultID }
     public var attemptID: UUID { sourceAttemptID }
 
+    public init(
+        resultID: UUID,
+        sourceAttemptID: UUID,
+        acceptedText: String,
+        createdAt: Date
+    ) throws {
+        guard !acceptedText.isEmpty,
+              acceptedText.utf8.count <= 1_000_000,
+              acceptedText == acceptedText.trimmingCharacters(
+                  in: .whitespacesAndNewlines
+              ) else {
+            throw IOSV1ForegroundVoicePersistenceError.invalidAcceptedOutput
+        }
+        self.resultID = resultID
+        self.sourceAttemptID = sourceAttemptID
+        self.acceptedText = acceptedText
+        self.createdAt = createdAt
+    }
+
     init(_ latest: IOSVoiceStateLatest) {
         resultID = latest.resultID
         sourceAttemptID = latest.sourceAttemptID
@@ -197,6 +216,8 @@ public struct IOSV1AcceptedOutputDeliveryExpectation: Equatable, Sendable {
 @_spi(HoldTypeIOSCore)
 public enum IOSV1ForegroundVoiceAcceptanceNotice: Equatable, Sendable {
     case historyWriteFailed
+    case localCleanupPending
+    case historyWriteFailedAndLocalCleanupPending
 }
 
 @_spi(HoldTypeIOSCore)
@@ -989,8 +1010,12 @@ public actor IOSV1ForegroundVoicePersistenceOwner {
             )
         } catch { throw mapRepositoryError(error) }
         let record = IOSV1AcceptedOutputDeliveryRecord(accepted)
-        let notice = await appendHistory(record)
-        try await finishAcceptedCleanup(pending: pending, record: record)
+        var notice = await appendHistory(record)
+        do {
+            try await finishAcceptedCleanup(pending: pending, record: record)
+        } catch {
+            notice = Self.addCleanupNotice(to: notice)
+        }
         return .resultReady(record, notice: notice)
     }
 
@@ -1015,10 +1040,14 @@ public actor IOSV1ForegroundVoicePersistenceOwner {
            accepted.resultID == record.resultID,
            accepted.sourceAttemptID == record.sourceAttemptID {
             notice = await appendHistory(record)
-            try await finishAcceptedCleanup(
-                pending: IOSV1PendingRecording(state),
-                record: record
-            )
+            do {
+                try await finishAcceptedCleanup(
+                    pending: IOSV1PendingRecording(state),
+                    record: record
+                )
+            } catch {
+                notice = Self.addCleanupNotice(to: notice)
+            }
         }
         return .resultReady(record, notice: notice)
     }
@@ -1217,6 +1246,19 @@ public actor IOSV1ForegroundVoicePersistenceOwner {
                 resultID: record.resultID
             )
         } catch { throw mapRepositoryError(error) }
+    }
+
+    private static func addCleanupNotice(
+        to notice: IOSV1ForegroundVoiceAcceptanceNotice?
+    ) -> IOSV1ForegroundVoiceAcceptanceNotice {
+        switch notice {
+        case .historyWriteFailed:
+            return .historyWriteFailedAndLocalCleanupPending
+        case .historyWriteFailedAndLocalCleanupPending:
+            return .historyWriteFailedAndLocalCleanupPending
+        case .localCleanupPending, nil:
+            return .localCleanupPending
+        }
     }
 
     private func discardCaptureUnlocked(
