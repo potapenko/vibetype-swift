@@ -4,7 +4,8 @@ Status: superseded as an implementation roadmap on 2026-07-13. This file is
 historical research and implementation evidence only. Do not continue P5H or
 use the P0-P8 order for current work. The canonical product contract is
 `docs/specs/features/ios-v1-release.md`; the current implementation order is
-`docs/ios-v1-development-plan.md`.
+`docs/ios-v1-development-plan.md`. In particular, the former P7/full-QWERTY
+direction is retired; V1.1 uses the Brand Stage Adaptive voice-command surface.
 
 This document plans the complete iPhone and iPad companion product around the
 HoldType keyboard. It does not authorize Swift, target, entitlement, or

@@ -30,8 +30,8 @@ matching feature spec, then verify exact source ownership with `rg --files`.
 | Backlog grooming | `features/backlog-grooming-automation.md` | Backlog task creation/refinement behavior |
 | Blocked tasks | `features/blocked-task-resolution-automation.md` | Blocked-task resolver behavior and resolution contracts |
 | Automation recovery | `features/automation-prompt-recovery.md` | Installed automation/runbook recovery behavior |
-| iOS feasibility evidence | `features/ios-keyboard-feasibility.md` | Historical platform findings supporting the immediate V1.1 signed-device gate |
-| iOS keyboard UX appendix | `features/ios-keyboard-experience.md` | Detailed typing research that does not expand V1.1 voice, prediction, or iPad scope |
+| iOS feasibility evidence | `features/ios-keyboard-feasibility.md` | Platform findings and the signed K1 gate for the Brand Stage voice-command keyboard |
+| iOS keyboard UX | `features/ios-keyboard-experience.md` | Active Brand Stage Adaptive composition, editing controls, voice states, Latest/History, accessibility, and appearance |
 | iOS shared state (legacy) | `features/ios-keyboard-shared-state.md` | Historical Phase-0 App Group and automatic-delivery evidence; current snapshot is in the V1.1 release contract |
 | iOS containing app (legacy) | `features/ios-containing-app-experience.md` | Historical expanded iPhone/iPad, Quick Session, and navigation contract; current scope is in V1.1 |
 | iOS settings/secrets | `features/ios-settings-and-secret-storage.md` | iOS defaults, persistence, migrations, Keychain, truthful setup status |
@@ -40,7 +40,7 @@ matching feature spec, then verify exact source ownership with `rg --files`.
 | iOS privacy (legacy) | `features/ios-privacy-and-permissions.md` | Historical Quick Session and disclosure contract; use V1.1 for current History, Full Access, and App Group behavior |
 | iOS provider consent (legacy schema) | `features/ios-provider-consent-record.md` | Historical strict schema; V1.1 keeps provider-stage authorization in one standalone record |
 | iOS diagnostics | `features/ios-diagnostics.md` | Redacted runtime events, app-owned diagnostics, explicit local export |
-| iOS keyboard settings | `features/ios-keyboard-settings-snapshot.md` | One-way non-secret preference snapshot, fallback, M0B read gate |
+| iOS keyboard settings (deferred) | `features/ios-keyboard-settings-snapshot.md` | Historical typing-preference snapshot; V1.1 Brand Stage uses bundled presentation defaults |
 | iOS output actions (legacy) | `features/ios-output-actions.md` | Historical automatic insertion and acknowledgement contract; use V1.1 for Latest and explicit Insert |
 | iOS accepted output delivery (legacy) | `features/ios-accepted-output-delivery-record.md` | Historical capability train; use V1.1 compact Pending, Latest, and History instead |
 | iOS accepted History foundation (deferred) | `features/ios-accepted-history-foundation.md` | Historical app-private policy, accepted-row, outbox, and generation-cutover contract; do not continue for V1.1 |

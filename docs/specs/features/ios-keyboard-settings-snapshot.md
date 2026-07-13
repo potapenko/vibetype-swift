@@ -1,10 +1,16 @@
 # iOS Keyboard Settings Snapshot
 
+Status: deferred historical typing-preference contract. V1.1 Brand Stage uses
+bundled presentation and editing defaults and does not implement this snapshot.
+The schema below is retained as research only and does not authorize layout,
+autocorrection, prediction, automatic-insertion, or translation controls in the
+extension.
+
 ## Goal
 
-Publish the smallest non-secret, immutable preference record the keyboard needs
-for ordinary typing without exposing the containing app's canonical settings or
-user content repositories.
+Record the former proposal for a non-secret immutable typing-preference snapshot
+without exposing the containing app's canonical settings or user content
+repositories.
 
 ## Ownership
 
@@ -155,7 +161,7 @@ mutable snapshot fields.
 - Test bundled fallback without App Group, network, app process, or Full Access.
 - Record M0B device evidence before treating read-only publication as supported.
 
-## Unknowns requiring confirmation
+## Superseded Unknowns
 
-- First production layout identifiers and locale tags are chosen at the typing
-  gate. Dictionary publication requires a separate future decision.
+- V1.1 has no production typing-layout or locale-tag gate. Any future alphabetic
+  keyboard or dictionary publication requires a new approved product spec.

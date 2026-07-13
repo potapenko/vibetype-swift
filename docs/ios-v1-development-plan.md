@@ -1,6 +1,7 @@
 # HoldType iOS V1.1 Completion Plan
 
-Status: canonical execution plan; reduced and reprioritized 2026-07-13.
+Status: canonical execution plan; reduced, reprioritized, and updated for Brand
+Stage Adaptive on 2026-07-13.
 
 Product behavior is governed by
 `docs/specs/features/ios-v1-release.md`. Historical P0-P8, P5H, accepted-
@@ -14,12 +15,13 @@ Finish the visible iPhone product without another architecture expansion:
 - foreground Voice with Pending and Latest Result;
 - Library and core Settings;
 - compact successful-text History;
-- one usable `en-US` keyboard;
-- a physically verified keyboard voice handoff and explicit Insert Result;
+- one production Brand Stage Adaptive voice-command keyboard;
+- a physically verified keyboard voice handoff and explicit Latest/History
+  insertion;
 - signed-device qualification.
 
 The user explicitly reprioritized working History ahead of the keyboard device
-gate. D0 still gates keyboard-plus-voice release claims, but it does not block
+gate. K1 still gates keyboard-plus-voice release claims, but it did not block
 finishing app-private History.
 
 ## Current Product State
@@ -40,11 +42,12 @@ Working and retained:
 
 Remaining release work:
 
-1. The keyboard is a Phase-0 probe, not a production QWERTY keyboard.
+1. The keyboard is a Phase-0 probe, not the selected Brand Stage surface.
 2. The keyboard microphone action, containing-app handoff, and production
-   Latest-to-App-Group writer do not exist.
-3. Final keyboard setup/privacy copy and signed physical-iPhone qualification
-   remain.
+   Latest/Recent-results App Group writer do not exist.
+3. Cursor Space, Delete repeat, punctuation, adaptive Return, voice states,
+   Light/Dark polish, final setup/privacy copy, and signed physical-iPhone
+   qualification remain.
 
 ## Execution Rules
 
@@ -108,8 +111,8 @@ Also align Latest with V1.1:
 
 - Latest is always on;
 - remove the iOS `keepLatestResult` control and ignore its persisted value;
-- remove the 24-hour Latest expiry without changing the short-lived keyboard
-  App Group snapshot;
+- remove the 24-hour Latest expiry without changing the short-lived Latest item
+  inside the keyboard App Group snapshot;
 - do not change macOS behavior.
 
 Verification:
@@ -235,35 +238,57 @@ Completion evidence, 2026-07-13:
   Data Protection, eviction, and App Group entitlement claims remain device
   gates.
 
-## K1 — Signed Keyboard Voice Gate
+## K1 — Signed Voice And Platform Gate
 
 Build the smallest physical-device probe:
 
 - one microphone control in the current extension;
 - one public-API containing-app handoff;
 - explicit manual return and Insert Result;
-- Full Access off/on and App Group observations.
+- Globe plus the minimal punctuation/editing controls without Full Access or
+  network;
+- Full Access off/on and real App Group observations;
+- secure fields, phone pads, host opt-out, eviction, and interruption;
+- `PrimaryLanguage`, `IsASCIICapable`, `RequestsOpenAccess`, `hasDictationKey`,
+  and App Review 4.4.1 behavior.
 
 A supported handoff advances the keyboard work. A negative result stops the
 keyboard-plus-voice release claim and requires explicit app-only rescoping.
 Simulator evidence cannot pass this gate.
 
-## K2 — Production `en-US` Keyboard
+## K2 — Production Brand Stage Adaptive
 
-Only after a positive K1 result, replace the probe with:
+After the product scope is fixed and before the final signed matrix, replace the
+probe with the selected composition:
 
-- alphabetic, number, and symbol layouts;
-- Shift/Caps, Delete repeat, Space, Return, mode keys, and Globe;
-- cursor movement on long-press Space;
-- field traits, double-space period, callouts, appearance, haptics, and
-  accessibility;
-- a dedicated voice action bar and explicit Insert Result.
+- top rail with History, centered HoldType identity/status, and Latest;
+- one medium microphone action plus honest waveform/progress states;
+- `.`, `,`, `?`, and `!` correction keys;
+- Globe, wide Space, Delete repeat, and adaptive Return;
+- long-press and drag cursor movement on Space;
+- identical geometry with system-adaptive Light and Dark materials;
+- 44-point targets, VoiceOver, Reduce Motion, Increase Contrast, and Dynamic
+  Type-safe labels;
+- removal of `A`, manual Refresh, and the giant Insert Latest probe control.
 
-## K3 — Bridge, Copy, And Qualification
+K2 adds no alphabet, number deck, Shift/Caps, predictions, autocorrection,
+keyboard dictionaries, or locale-layout engine. App-dependent microphone and
+result actions remain honestly gated by K1/K3 state while local editing and Globe
+keep working.
 
-- publish real accepted Latest text to the bounded App Group snapshot;
+## K3 — Latest/Recent Results Bridge And Qualification
+
+- publish real accepted Latest with a 10-minute expiry plus at most five accepted
+  texts with a 24-hour expiry to one bounded app-written,
+  extension-read-only App Group snapshot;
+- keep full 20-entry History and every destructive History action app-private;
+- keep the projection as one replaceable cache with one app writer; add no
+  outbox, receipt, acknowledgement, tombstone, or delivery transaction;
+- implement explicit one-call-per-tap insertion for Latest and a selected recent
+  result, with no automatic replay;
 - finalize setup, Full Access, privacy, and fallback copy;
-- run Debug/Release dependency checks and the signed physical-iPhone matrix;
+- run Debug/Release dependency checks, simulator appearance/accessibility checks,
+  and the signed physical-iPhone matrix;
 - perform one explicitly authorized live Standard smoke only when a configured
   provider key is available.
 
@@ -272,7 +297,8 @@ Only after a positive K1 result, replace the probe with:
 - failed-attempt History and retry audio;
 - accepted audio playback or Recording Cache;
 - background Quick Session and Live Activity;
-- predictions or Apple-level autocorrection claims;
+- QWERTY, alphabet/number layouts, predictions, autocorrection, and typing
+  dictionaries;
 - production iPad floating keyboard and Stage Manager qualification;
 - cloud sync, accounts, analytics, profiles, modes, and billing.
 
@@ -286,9 +312,9 @@ Only after a positive K1 result, replace the probe with:
 | H3 Finished History surface | Completed 2026-07-13 |
 | H4 Bounded legacy cleanup | Completed 2026-07-13 |
 | P1-P6 Persistence simplification and legacy retirement | Completed 2026-07-13 |
-| K1 Signed keyboard voice gate | Not started |
-| K2 Production `en-US` keyboard | Not started |
-| K3 Bridge, copy, and qualification | Not started |
+| K1 Signed voice and platform gate | Not started |
+| K2 Production Brand Stage Adaptive | Not started |
+| K3 Latest/recent results bridge and qualification | Not started |
 
 Compact History is complete. V1.1 is complete only when K1-K3 also pass their
 signed-device gates.

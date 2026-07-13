@@ -2,159 +2,131 @@
 
 Status: physical-device feasibility evidence. The current product scope and
 implementation order are `ios-v1-release.md` and
-`docs/ios-v1-development-plan.md`; this file does not reactivate P0-P8 work.
+`docs/ios-v1-development-plan.md`. The former full-replacement QWERTY and Quick
+Session hypotheses are superseded by Brand Stage Adaptive.
 
 ## Goal
 
-Establish the supported product boundary for an iOS HoldType keyboard before
-building a full replacement keyboard.
-
-This direct user request activates the iOS feasibility lane. The first delivery
-is a device-validation spike, not a production keyboard and not a promise of a
-seamless Wispr-style round trip.
-
-The phased implementation plan lives in `docs/ios-keyboard-development-plan.md`.
+Establish whether HoldType can ship a public-API, App-Review-compatible voice-
+command keyboard with honest app handoff and explicit result insertion. This is
+not a promise to reproduce Apple's keyboard or build multilingual typing layouts.
 
 ## Platform Decision
 
 HoldType may ship a custom keyboard extension, but it cannot add a button to or
-reuse Apple's keyboard. A production keyboard must implement its own typing
-experience and use `UITextDocumentProxy` for host-field interaction.
+reuse Apple's keyboard. Its supported architecture is:
 
-The supported architecture is:
-
-- the containing iOS app owns onboarding, microphone permission, audio capture,
-  OpenAI requests, recovery, settings, and secrets;
-- the keyboard extension owns ordinary character input, keyboard switching,
-  compact voice-session presentation, and accepted-text insertion;
-- a minimal versioned App Group record carries non-secret session state and an
-  accepted transcript between the two processes;
-- the keyboard extension does not record audio, store the API key, or call
-  OpenAI.
+- the containing app owns onboarding, microphone permission, audio capture,
+  OpenAI requests, recovery, settings, secrets, Library, Latest, and canonical
+  History;
+- the extension owns punctuation, Space, Delete, Return, keyboard switching,
+  voice-state presentation, and explicit accepted-text insertion through
+  `UITextDocumentProxy`;
+- the app is the only writer of a small versioned App Group snapshot containing
+  a 10-minute Latest item and at most five accepted texts with a 24-hour expiry;
+- the extension is read-only and never records audio, reads Keychain, calls
+  OpenAI, or mutates canonical History.
 
 Apple provides no public API that reliably opens the containing app, identifies
-the previous host app, and returns the user to the same text field. The product
-must validate the app-switch and background-session alternatives on physical
-devices before implementing a full QWERTY engine.
+the previous host app, and returns the user to the same text field. The exact
+voice action therefore remains a signed-device K1 gate. HoldType does not use a
+private app-launch or automatic-return workaround.
 
-The selected product hypothesis for that validation is an explicit, five-minute
-Quick Session started in the containing app. The user returns manually to the
-host app and may need to reselect HoldType with Globe. While the session is
-active, a future Full-Access bridge may carry start, stop, and insertion-
-acknowledgement commands. HoldType does not use a private app-launch or automatic
-return API.
+## Selected Product Direction
 
-The M0C hypothesis keeps the containing app's microphone/audio engine visibly
-active for those five minutes so iOS can continue the background session. In
-the armed `ready` state, incoming samples are immediately discarded in memory;
-they are not written or uploaded. Only audio after an explicit keyboard mic tap
-is retained for the current utterance. If this behavior is rejected in review,
-uses unacceptable battery, or cannot be made unambiguous, the Quick Session
-gate fails and HoldType falls back to manual one-shot recording.
+The production target is the Brand Stage Adaptive command surface defined in
+`ios-keyboard-experience.md`:
 
-## Product Direction
+- one dedicated microphone action with app-confirmed state;
+- compact History and Latest actions;
+- `.`, `,`, `?`, `!`, Globe, wide Space, Delete, and adaptive Return;
+- long-press and drag on Space for cursor movement;
+- system-driven Light and Dark appearances with stable composition;
+- no alphabetic, numeric, symbol-deck, Shift/Caps, prediction, autocorrection,
+  or keyboard-locale engine.
 
-The target is system-conforming and familiar, not a pixel-identical Apple
-clone.
+The surface provides real local character/editing input without network or Full
+Access. Ordinary alphabetic typing, other language layouts, and system emoji
+remain available through Globe. Accepted result text may contain arbitrary
+Unicode and is independent of the keyboard metadata locale.
 
-- Ordinary typing remains usable without network access and without Full
-  Access.
-- Voice input uses a dedicated control in a compact action bar after the voice
-  handoff is proven.
-- Long press on Space remains reserved for cursor movement.
-- Literal transcription with punctuation is the default; semantic rewriting
-  is an explicit option.
-- Finished audio is recoverable until provider processing either produces
-  app-private durable accepted text or the user explicitly discards the
-  attempt. After durable acceptance, insertion recovery depends on accepted
-  text rather than raw audio; later audio retention follows the separate cache
-  setting.
-- The initial product milestone is iPhone. iPad is a separate product milestone
-  because floating layouts, Stage Manager, and hardware keyboards change the
-  interaction model.
+## Phase 0 Evidence
 
-Detailed keyboard behavior is defined in `ios-keyboard-experience.md`.
-
-## Phase 0 Spike Contract
-
-The first buildable spike must include:
+The existing internal spike includes:
 
 - an embedded `com.apple.keyboard-service` extension;
-- one ordinary character key that calls `insertText`;
+- one `insertText` probe key;
 - a required next-keyboard control using the system input-mode API;
 - read-only loading of a harmless accepted-transcript sample from an App Group;
-- insertion of that sample through `UITextDocumentProxy`;
-- a containing-app probe that publishes the sample;
-- no microphone, background audio, Speech framework, provider network request,
-  Keychain sharing, or containing-app launch from the extension.
+- explicit sample insertion through `UITextDocumentProxy`;
+- no microphone, background audio, Speech framework, provider request, shared
+  Keychain access, or containing-app launch from the extension.
 
-`hasDictationKey` remains false in this phase so the spike does not suppress a
-system dictation control. `RequestsOpenAccess` remains false until a later
-device test demonstrates a justified write requirement.
+This proves target composition and simulator interaction only. The probe `A`,
+manual `Refresh`, and large `Insert latest` button are not product UI and are
+removed by K2.
 
-The spike is internal validation code. It is not expected to satisfy the final
-App Store requirement for a complete ordinary typing experience.
+`hasDictationKey` remains false in the spike. `RequestsOpenAccess`,
+`PrimaryLanguage`, and `IsASCIICapable` are release metadata to verify in K1;
+the current `en-US` value is not a product language promise.
 
 ## App Group Boundary
 
-The shared record contract is defined in `ios-keyboard-shared-state.md`.
+- The containing app is the only writer and replaces the bounded snapshot
+  atomically.
+- The extension reads only schema/revision metadata, accepted result identifiers,
+  accepted text, creation dates, Latest expiry, and compact voice status proven
+  necessary by K1.
+- Raw audio, API keys, prompts, keystrokes, host identity, provider payloads,
+  canonical settings, and the 20-entry History repository never enter App Group.
+- Publication is not a wake-up mechanism. Missing, stale, corrupt, oversized,
+  or incompatible state is unavailable and never causes insertion.
+- Full Access requirements and actual shared-container behavior are established
+  by signed provisioning evidence, not simulator assumptions.
 
-The containing app is the only writer in Phase 0. The extension reads only a
-schema version, revision, session metadata, short status, and accepted
-transcript. Raw audio, API keys, prompts, keystrokes, host-app identity, and
-provider payloads never enter the shared record.
+## System And Review Limits
 
-The App Group is state transport, not a wake-up mechanism. File replacement is
-atomic, records expire, and stale or incompatible records are treated as
-unavailable.
-
-## System Limits
-
-- Third-party keyboards are unavailable in secure text fields and selected
-  phone-pad contexts.
-- A host app may reject all third-party keyboards.
+- Custom keyboards are unavailable in secure text fields and selected phone-pad
+  contexts, and a host app may reject all third-party keyboards.
 - Full Access does not grant a documented microphone entitlement to a custom
   keyboard.
-- A keyboard must expose the next-keyboard control whenever the system requires
-  it.
-- A production keyboard must still enter ordinary Unicode characters without
-  Full Access and without network access.
-- Apple emoji artwork is not embedded in the custom keyboard; the Globe route
-  provides system emoji access in the initial product.
+- A keyboard must expose the next-keyboard control whenever iOS requires it.
+- App Review 4.4.1 requires keyboard input functionality, a next-keyboard path,
+  and useful behavior without network access; punctuation and editing controls
+  satisfy the intended product behavior but do not guarantee review approval.
+- A negative App Review or platform result does not authorize private APIs or a
+  surprise QWERTY project. It triggers an explicit product rescope.
 
-These are platform limitations, not failed HoldType sessions.
+## K1 Go / No-Go Gate
 
-## Go / No-Go Gate
+Do not claim keyboard voice readiness until a signed physical iPhone proves:
 
-Do not begin the full typing engine until physical-device evidence shows that:
+- the public microphone action and every state shown before, during, and after
+  containing-app handoff;
+- manual return and one explicit Latest insertion without wrong-field replay;
+- the bounded recent-results projection and explicit insertion of one selected
+  item;
+- Globe, punctuation, Space cursor movement, Delete repeat, and adaptive Return
+  in representative first- and third-party hosts;
+- Full Access off/on, real App Group entitlements, app and extension eviction,
+  and missing/corrupt snapshot behavior;
+- secure fields, phone fields, host rejection, interruption, and provider timeout
+  fail safely;
+- `PrimaryLanguage`, `IsASCIICapable`, `RequestsOpenAccess`, and
+  `hasDictationKey` produce truthful system and review behavior.
 
-- the extension can read and insert accepted text reliably in representative
-  host apps;
-- no completed recording is lost during the proposed containing-app or bounded
-  background-session flow;
-- the user is never silently returned to or inserted into the wrong field;
-- microphone activation and shutdown remain visible and bounded;
-- after tapping Start in HoldType, returning to a HoldType-ready host field takes
-  at most two clear actions: return to the host and, when needed, reselect the
-  keyboard with Globe;
-- secure fields, phone fields, host rejection, process eviction, and expired
-  state fail safely.
-
-If the gate fails, retain Apple Dictation as the keyboard fallback and consider
-an app/Shortcut voice workflow instead of a default-keyboard replacement.
-
-Apple Dictation fallback is conditional: iOS may expose a system dictation
-control while HoldType is active, but otherwise the user switches with Globe to
-Apple's keyboard and starts Dictation there.
+If supported handoff fails, the keyboard-plus-voice V1.1 is a no-go. The fallback
+is the containing-app Voice flow plus Copy and the user's system keyboard; an
+instruction-only microphone is not successful completion.
 
 ## Verification
 
-Automated checks cover the versioned shared record and pure state transitions.
-Simulator builds prove target composition and extension embedding, but they do
-not prove Full Access, keyboard switching, microphone lifecycle, app return,
-secure-field fallback, iPad floating layout, or process eviction.
-
-Those behaviors require bounded physical-device QA recorded in `docs/qa/runs/`.
+Automated checks cover snapshot schema/limits, pure state transitions, editing
+semantics, appearance, accessibility labels, and insertion idempotency per tap.
+Simulator builds prove embedding and rendering only. Full Access, keyboard
+switching, microphone lifecycle, app return, secure-field fallback, process
+eviction, effective Data Protection, and review-facing metadata require bounded
+physical-device QA recorded in `docs/qa/runs/`.
 
 ## Evidence
 
@@ -164,18 +136,16 @@ Those behaviors require bounded physical-device QA recorded in `docs/qa/runs/`.
   `https://developer.apple.com/documentation/uikit/creating-a-custom-keyboard`
 - Apple Configuring Open Access, reviewed 2026-07-09:
   `https://developer.apple.com/documentation/uikit/configuring-open-access-for-a-custom-keyboard`
-- Apple App Review Guidelines 4.4.1, reviewed 2026-07-09:
+- Apple App Review Guidelines 4.4.1, reviewed 2026-07-13:
   `https://developer.apple.com/app-store/review/guidelines/`
 - Apple DTS on the absence of a public keyboard-to-host round trip, reviewed
-  2026-07-09:
-  `https://developer.apple.com/forums/thread/826851`
+  2026-07-09: `https://developer.apple.com/forums/thread/826851`
 
 ## Invariants
 
-- No direct audio recording or OpenAI call from the keyboard extension.
-- No API key or raw audio in the App Group.
+- No direct audio recording or OpenAI call from the extension.
+- No API key, raw audio, canonical History, or settings repository in App Group.
 - No hidden, indefinite, or ambiguous microphone session.
 - No reliance on private app-return APIs.
-- No voice gesture that replaces the Space cursor gesture or another standard
-  keyboard action.
-- No full QWERTY investment before the device feasibility gate passes.
+- No voice gesture that replaces Space cursor movement or another editing key.
+- No QWERTY, locale-layout, prediction, or autocorrection expansion in V1.1.

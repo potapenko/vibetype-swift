@@ -8,7 +8,9 @@ architecture imbalance, and the parts that V1.1 will keep, simplify,
 quarantine, or remove.
 
 The release contract is `docs/specs/features/ios-v1-release.md`. The executable
-roadmap is `docs/ios-v1-development-plan.md`.
+roadmap is `docs/ios-v1-development-plan.md`. This audit preserves the old
+baseline snapshot; the later Brand Stage Adaptive decision replaces its implied
+full-typing keyboard direction.
 
 ## Baseline And Limits
 

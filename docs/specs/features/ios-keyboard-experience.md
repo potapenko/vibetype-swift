@@ -1,213 +1,172 @@
 # iOS Keyboard Experience
 
-Status: detailed design appendix. For V1.1, `ios-v1-release.md` controls the
-required first locale, prediction/autocorrection scope, voice handoff, explicit
-insertion, and background-session exclusions. Do not resume the Quick Session
-state train from this file without a new approved spec.
+Status: active V1.1 UX contract; Brand Stage Adaptive selected 2026-07-13.
+`ios-v1-release.md` wins any conflict.
 
 ## Goal
 
-Make HoldType feel like a dependable everyday iPhone keyboard with an added
-voice-input action, while presenting iOS platform limits honestly.
+Provide a polished HoldType voice-command keyboard that complements the user's
+system keyboards. It starts only the physically verified voice flow, exposes
+accepted results for explicit insertion, and keeps the small editing controls
+needed to finish a sentence without building a multilingual QWERTY engine.
 
-## Experience Principles
+## Product Role
 
-- Keyboard first, voice second: voice features must not weaken ordinary typing.
-- Familiar, not cloned: follow iOS conventions without copying Apple trade dress
-  or embedding Apple emoji artwork.
-- Preserve Space cursor movement; use a dedicated microphone control.
-- Keep the total height close to a normal keyboard by placing voice controls in
-  one compact prediction/action bar.
-- Use literal transcription with punctuation by default. AI polishing requires
-  an explicit user choice.
-- Never discard a completed recording before provider success or an explicit
-  attempt discard. Once final accepted text is durable, insertion failure must
-  preserve that text; raw-audio retention then follows the independent cache
-  setting.
+- HoldType is selected with Globe when the user wants voice input or a recent
+  HoldType result.
+- The system keyboard remains the normal alphabetic, numeric, emoji, and
+  language-layout keyboard.
+- HoldType inserts accepted Unicode text in any transcription language supported
+  by the containing app. It has no keyboard-locale promise.
+- The extension never records audio, contacts OpenAI, reads Keychain, or owns
+  app settings, Library data, Pending audio, or canonical History.
+- Voice is the only primary action. `History` and `Latest` are compact secondary
+  actions, not competing call-to-action buttons.
 
-## Required Keyboard Behavior
+## Brand Stage Adaptive Composition
 
-A production iPhone keyboard must provide:
+The keyboard keeps one stable composition in Light and Dark Mode:
 
-- alphabetic, number, and symbol layouts;
-- Shift, Caps Lock, Delete with repeat, Space, Return, `123`, and Globe;
-- field-appropriate Return presentation and basic auto-capitalization;
-- double-space period, key callouts, useful hit targets, and light/dark appearance;
-- cursor movement from a long press on Space;
-- local autocorrection, a prediction row while voice is idle, and a clear Undo
-  path for an unwanted correction;
-- VoiceOver labels and actions that describe purpose and current state;
-- a typing fallback that works without Full Access and without network access.
+1. Top rail: `History` at leading, the HoldType mark and current state centered,
+   and `Latest` at trailing.
+2. Voice stage: one medium circular microphone control with a restrained
+   waveform or progress treatment.
+3. Correction row: `.`, `,`, `?`, and `!`.
+4. Editing row: Globe, wide Space, Delete, and adaptive Return.
 
-System emoji remains available through keyboard switching in the first product
-version. A custom emoji surface is not an initial requirement.
+The HoldType mark is decorative identity plus status context. It is never an
+unlabelled action. The microphone is visually primary but does not fill the
+keyboard width. The interface contains no `A` probe key, manual `Refresh`,
+alphabet layout, number deck, Shift, Caps Lock, `123`, prediction row, settings
+gear, or opaque mode icon.
 
-User-editable typing preferences reach the extension only through
-`ios-keyboard-settings-snapshot.md`. Missing or invalid preferences fall back to
-bundled ordinary typing and never block Globe or Unicode entry.
+Light Mode uses system-light surfaces, neutral keycaps, and restrained shadows.
+Dark Mode uses deep navy system-dark surfaces and lighter translucent keycaps.
+Geometry, order, labels, and touch targets do not change between appearances.
+HoldType blue `#5165E8` and purple `#844DF2` are reserved for the microphone,
+focus, and small active-state accents; the whole background is never a gradient.
 
-The Phase 0 extension declares `en-US` only as feasibility metadata. Before the
-typing-engine milestone starts, the product must approve the first-release
-typing layouts, their autocorrection dictionaries, supported dictation
-languages, and whether automatic language detection is enabled. Dictation
-language and typing layout are separate user choices; QWERTY alone is not a
-language contract.
+## Editing Controls
+
+- `.`, `,`, `?`, and `!` insert their literal Unicode scalar locally.
+- A short Space tap inserts one space.
+- Long-press then horizontal drag on Space moves the insertion cursor through
+  `UITextDocumentProxy`; beginning a cursor gesture does not insert a space.
+- Delete removes one unit on tap and repeats with bounded acceleration while
+  held. Releasing, cancelling, or losing view ownership stops repeat immediately.
+- Return inserts the host-appropriate return action and uses a label or symbol
+  derived from current text-input traits when that information is available.
+- Globe uses the system input-mode API and remains reachable whenever iOS
+  requires it.
+- Punctuation, Space, Delete, Return, and Globe work without network, provider
+  setup, Full Access, or a running containing app.
 
 ## Voice States
 
-The compact action bar presents one of these product states:
+The centered brand/status and voice stage show only these user-visible states:
 
-- `needsSetup`: keyboard, privacy, API key, or microphone setup is incomplete;
-- `needsActivation`: the containing-app voice session is not active;
-- `arming`: HoldType is activating the explicit Quick Session; no utterance
-  action is available yet;
-- `ready`: an already-active bounded Quick Session is armed and an utterance
-  can start;
-- `listening`: waveform, elapsed time, Cancel, and Done are visible;
-- `finalizing`: HoldType is validating and durably saving the completed
-  recording; neither Cancel Utterance nor Cancel Processing is available;
-- `processing`: recording is safe locally while transcription completes;
-- `confirmedInserted`: the same document/context confirms the submitted suffix
-  and a short safe Undo opportunity is available;
-- `deliveryUnverified`: `insertText` was submitted or durably claimed but its
-  void result cannot be confirmed; inspect the field or recover in HoldType,
-  with no automatic replay;
-- `recoverableFailure`: available recovery is explained, with Retry or Insert
-  only where its gate has passed and instructions to open Latest Result or
-  History in HoldType;
-- `interrupted`: a call, Siri, route change, or lock stopped work;
-- `expired`: the bounded Quick Session reached its independent deadline.
+- `needsSetup`: required app-owned setup is incomplete; the keyboard explains
+  the next app step without requesting credentials or microphone permission;
+- `ready`: the verified voice action can begin now;
+- `handoffRequested`: a supported public handoff was requested, but the keyboard
+  does not claim recording has started;
+- `recording`: shown only after the containing app confirms that it owns an
+  active recording; waveform, Cancel, and Finish are unambiguous;
+- `processing`: capture has stopped and an accepted result is not ready yet;
+- `resultReady`: a valid Latest snapshot can be inserted;
+- `inserted`: brief non-blocking confirmation after one explicit insertion;
+- `recoverableFailure`: compact Retry or recovery guidance for a known failure;
+- `stale`: shared state is expired, incompatible, or no longer eligible.
 
-`interrupted` and `expired` may share a compact recovery layout, but remain
-distinct reasons and must not be relabelled as each other.
-Reaching the separate five-minute utterance maximum is a visible recording
-failure, not Quick Session expiry, and its maximum-duration artifact is not
-uploaded.
-
-The UI must never label a state `ready` when tapping the microphone will first
-require an unexplained app switch.
+The UI never uses `Ready`, `Recording`, or `Listening` as optimism. Each label
+must correspond to app-confirmed state. Cancel and Finish are visually separate
+and cannot be mistaken for History, Latest, or editing keys. Reduce Motion turns
+waveform animation into a static level/status treatment.
 
 ## Voice Activation Contract
 
-The initial product hypothesis is a five-minute Quick Session that the user
-explicitly starts in the containing app. It never starts automatically. The app
-shows the active duration and provides an immediate Stop action; expiry, app
-termination, interruption, and force quit stop the session.
+- The microphone performs only the public, App-Review-compatible action proven
+  by the signed K1 device gate.
+- The keyboard does not open the containing app through private APIs and does
+  not promise automatic return to the previous host field.
+- The user manually returns to the host app and may need to reselect HoldType
+  with Globe.
+- An instruction-only microphone, fabricated recording state, or private URL
+  workaround does not pass K1.
+- If no supported handoff exists, the keyboard-plus-voice release is a no-go and
+  requires an explicit product rescope; implementation does not grow a QWERTY
+  engine to compensate.
 
-During Quick Session, the microphone/audio engine remains visibly active and
-the system microphone indicator remains present. In `ready`, samples are
-discarded immediately in memory and are never persisted or uploaded. Tapping
-the keyboard microphone changes the state to `listening` and only then starts
-retaining the current utterance. The keyboard and onboarding must call this
-armed state `Voice session on`, not imply that the microphone is inactive.
+## Latest And Keyboard History
 
-After activation, the user manually returns to the host app. iOS may leave
-Apple's keyboard selected, so onboarding teaches Globe re-selection. HoldType
-does not attempt a private automatic return.
-
-With Full Access off, ordinary typing, read-only insertion of a transcript
-published by the app, and conditional Apple Dictation fallback remain
-available. The keyboard cannot send voice-action commands or insertion
-acknowledgement to the containing app.
-
-After an explicit Full Access disclosure, an active Quick Session may support
-the phase-valid named voice actions and acknowledgement through the shared
-bridge. When the session is inactive, the keyboard shows `needsActivation`; it
-does not pretend the microphone is ready and does not launch the containing app.
-
-The compact bar keeps Normal dictation as the primary voice action. Translate
-remains visible but unavailable with instructions to configure Translation in
-HoldType until its target is valid. The extension never claims it can launch or
-deep-link into the containing app. Retry, explicit Insert, Copy, and History
-recovery follow
-`ios-output-actions.md`; they do not overload Space or another standard key.
-
-The action bar uses the same distinct `Finish Utterance`, `Cancel Utterance`,
-`Stop Voice Session`, and `Cancel Processing` semantics as
-`ios-voice-session-and-audio.md`. It shows only actions valid for the published
-phase and never makes session Stop look like utterance Done or provider Cancel.
-
-While a visible voice attempt is listening or processing, the extension uses
-the bounded observation cadence in `ios-output-actions.md`; App Group
-publication does not wake an evicted keyboard.
-
-## Insertion Safety
-
-The extension inserts only a non-empty accepted transcript.
-
-When a voice session is tied to a `documentIdentifier`, the extension compares
-the current identifier before automatic insertion. If it changed or is absent,
-HoldType keeps the transcript recoverable and asks for an explicit Insert or
-Copy action instead of guessing.
-
-Repeated refreshes or late provider results must not insert the same transcript
-twice.
-
-The first production accepted-result snapshot expires 10 minutes after it
-becomes ready. Expiry removes keyboard delivery eligibility but does not delete
-app-owned latest result or durable History. The app physically clears the
-expired transient snapshot at the first bounded maintenance opportunity.
+- The containing app is the only writer of the bounded App Group keyboard
+  snapshot. The extension is read-only.
+- `Latest` is enabled only for a valid unexpired accepted item. One tap performs
+  one `insertText` call. It never inserts on appearance, refresh, app return, or
+  host-field change.
+- `History` opens an in-keyboard recent-results view, newest first, containing at
+  most five app-published accepted texts from the previous 24 hours. Expired
+  items are never rendered. Selecting an item is an explicit one-tap insertion.
+- The recent-results view replaces the voice stage temporarily; the editing row
+  stays available and an explicit close action restores the voice stage.
+- Full 20-entry History, detail, Share, Delete, Clear All, and Save History
+  controls remain in the containing app.
+- The projection contains result id, text, creation date, and expiry only. It
+  contains no audio, Pending metadata, prompt, provider payload, settings,
+  dictionary, deletion command, or canonical History file.
+- Save History off produces a truthful disabled History state. A missing,
+  corrupt, unsupported, or inaccessible projection produces a compact retry or
+  setup state; it is never labelled as an empty successful History and never
+  says merely `Unavailable in this build`.
+- A new Latest item or recent-results projection is observed at normal extension
+  lifecycle boundaries. There is no manual Refresh button and App Group
+  publication is not treated as a wake-up mechanism.
 
 ## Failure And Fallback
 
-- Secure fields, selected phone pads, and host-app keyboard rejection fall back
-  to the system keyboard.
-- Offline or provider failure does not block ordinary typing.
-- Expired or corrupt shared state shows a compact unavailable state and does not
-  insert text.
-- Revoked microphone permission routes setup to the containing app.
-- The keyboard never asks for credentials, microphone permission, or lengthy
-  onboarding inline.
-- Apple Dictation may appear as a system-provided control in some configurations.
-  Otherwise the fallback is Globe, Apple keyboard, then Dictation.
+- Secure fields, selected phone pads, and host-app rejection fall back to system
+  behavior; HoldType does not claim to bypass iOS policy.
+- Offline, provider failure, or missing Full Access disables only app-dependent
+  voice/result actions. Local editing and Globe remain usable.
+- Expired or invalid Latest never inserts. Repeated lifecycle refreshes never
+  replay a previous result.
+- The keyboard never requests an API key, microphone permission, long-form
+  consent, or destructive History action inline.
+- System emoji and ordinary typing remain available by switching with Globe.
 
-## Keyboard Education Contract
+## Accessibility And Appearance
 
-`ios-containing-app-experience.md` is the single source of truth for setup
-order, microphone requests, provider setup, and Quick Session availability.
-Keyboard-specific education must additionally demonstrate:
-
-- Globe re-selection and the required next-keyboard control;
-- system emoji through keyboard switching;
-- long-press Space cursor movement;
-- ordinary typing plus M0B-proven explicit Insert without Full Access;
-- secure-field, selected phone-field, and host opt-out fallback to the system
-  keyboard;
-- conditional Apple Dictation fallback when HoldType voice is unavailable.
-
-The keyboard never requests microphone permission, asks the user to choose an
-unapproved Quick Session behavior, or promises Copy without its own gate.
+- Every interactive target is at least 44 by 44 points.
+- VoiceOver names the action and current state, including `Insert latest`,
+  `Open recent results`, `Start voice input`, `Next keyboard`, `Space`, `Delete`,
+  and the adaptive Return action.
+- Recording, processing, success, and failure do not rely on color alone.
+- Increase Contrast strengthens boundaries without changing hierarchy. Reduce
+  Transparency replaces material effects with opaque system colors.
+- Dynamic Type may enlarge labels without moving or shrinking the editing row;
+  truncation never hides whether an action is History, Latest, Cancel, or Finish.
+- Theme follows system appearance automatically. There is no keyboard-local
+  Light/Dark toggle.
 
 ## iPhone And iPad
 
-The first production milestone is iPhone in portrait and landscape.
+The first qualified surface is iPhone portrait and landscape. iPad containing-
+app compatibility does not imply keyboard qualification. Docked/floating iPad,
+Stage Manager, multiple windows, and hardware-keyboard workflows remain a later
+milestone with their own layout and signed-device evidence.
 
-iPad begins only after the iPhone typing and voice gates pass. It requires
-separate validation for docked and floating keyboards, Stage Manager, multiple
-windows, and Magic Keyboard/Bluetooth-keyboard workflows. A stretched iPhone
-layout is not considered iPad support.
+## Release Acceptance
 
-## Non-Goals For The First Product Version
+Automated and simulator coverage must prove composition, Light/Dark adaptation,
+editing semantics, honest state reduction, bounded snapshot decoding, and one
+explicit insertion per tap.
 
-- pixel-identical reproduction of Apple's keyboard;
-- GIFs, stickers, or custom Apple-style emoji artwork;
-- dozens of typing layouts;
-- always-on background microphone by default;
-- hidden semantic rewriting;
-- a promised seamless return to the previous app through private APIs.
+Signed-device evidence must additionally prove Globe, Full Access off/on,
+cursor movement, Delete repeat, host field traits, secure/phone-field fallback,
+public microphone handoff, manual return, Latest, recent-result insertion, and
+process eviction. App Review 4.4.1 remains a release risk to validate; the
+punctuation/editing surface is real keyboard input, but approval is not assumed.
 
-## Acceptance Gate
-
-Before positioning HoldType as a default keyboard, dogfood must show that a
-user can type for a normal working day without repeated fallback caused by tap
-accuracy, Space, Delete, Return, Globe, cursor movement, or basic field types.
-Autocorrection and predictions must also be useful enough that users do not
-disable HoldType to repair routine typing.
-
-Voice QA must show that completed speech is recoverable, Stop always stops the
-microphone, and no late result is silently inserted into the wrong field.
-
-When the production keyboard ships its own dedicated voice key, its controller
-sets `hasDictationKey = true` so iOS does not add a duplicate system Dictation
-key. Phase 0 keeps the value false. The transition must be verified on physical
-iPhone and iPad hardware with supported OS versions before release.
+After K1, the production controller may set `hasDictationKey = true` only if
+physical QA confirms that HoldType's dedicated voice control should suppress a
+duplicate system Dictation key. Until then it remains false.

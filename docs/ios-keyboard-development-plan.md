@@ -1,30 +1,34 @@
-# HoldType iOS Keyboard Development Plan
+# HoldType iOS Keyboard Development Plan (Historical Feasibility Roadmap)
 
 Status: feasibility and physical-device appendix as of 2026-07-13. This file no
-longer defines implementation order. Preserve its platform findings and gate
-evidence, but use `docs/specs/features/ios-v1-release.md` for product behavior
-and `docs/ios-v1-development-plan.md` for current work.
+longer defines implementation order. Its former full-QWERTY, Quick Session, and
+M1-M5 product direction is superseded by Brand Stage Adaptive. Preserve platform
+findings and gate evidence, but use `docs/specs/features/ios-v1-release.md` for
+product behavior and `docs/ios-v1-development-plan.md` for current work.
 
 The historical complete portability roadmap lives in
 `docs/ios-product-portability-plan.md`. This file keeps platform evidence and
 the detailed keyboard feasibility record, but its milestones are not the
 current delivery sequence.
 
-## Decision
+## Superseded Decision
 
-Build toward a familiar, full custom iPhone keyboard with a compact voice
-action. Do not try to modify Apple's keyboard, record audio inside the keyboard
-extension, or depend on a private automatic-return trick.
+The historical decision was to build a full custom iPhone keyboard with a
+compact voice action. That decision is retired. V1.1 now builds a specialized
+voice-command surface with punctuation and essential editing controls, no
+alphabetic or locale-specific typing engine, and system keyboards available via
+Globe.
 
-The expensive typing engine begins only after a physical-device spike proves
-that the voice handoff and accepted-text insertion are reliable enough to be a
-product.
+The still-valid rule is that voice readiness, Full Access, bridge behavior, and
+accepted-text insertion require a signed physical-device gate. Do not modify
+Apple's keyboard, record audio inside the extension, or depend on a private
+automatic-return trick.
 
 ## Product And Architecture
 
 ```mermaid
 flowchart LR
-    H["Host app text field"] <-->|"UITextDocumentProxy"| K["HoldType Keyboard Extension<br/>typing + compact voice UI"]
+    H["Host app text field"] <-->|"UITextDocumentProxy"| K["HoldType Keyboard Extension<br/>editing + voice command UI"]
     K <-->|"Versioned, expiring snapshot"| B["App Group Keyboard Bridge"]
     C["HoldType iOS App<br/>permissions + audio + recovery"] <--> B
     C --> O["OpenAI transcription"]
@@ -39,10 +43,10 @@ Target dependency rule:
 - keyboard extension: keyboard UI, `UITextDocumentProxy`, and bridge only;
 - no OpenAI, Keychain, raw audio, or microphone code linked into the extension.
 
-History policy, generation, rows, retry-audio ownership, receipts, and cleanup
-status remain permanently app-private. They are not keyboard settings, bridge
-commands, or App Group snapshots even after the production directional bridge
-exists; Clear History and the History toggle belong only to the containing app.
+Canonical History policy, full rows, retry-audio ownership, receipts, cleanup,
+Delete, Clear All, and retention settings remain permanently app-private. The
+current release contract permits only a derived, read-only projection of at most
+five recent accepted texts in the bounded App Group snapshot.
 
 The long-term code boundaries are `HoldTypeDomain`, `HoldTypeOpenAI`,
 `HoldTypePersistence`, app-only `HoldTypeIOSCore`, and

@@ -1,6 +1,6 @@
 # HoldType iOS V1.1 Release Contract
 
-Status: canonical iOS product contract; approved 2026-07-13.
+Status: canonical iOS product contract; approved and revised 2026-07-13.
 
 `V1.1` is the first planned iOS release designation. It does not imply that an
 iOS V1.0 was previously shipped.
@@ -12,12 +12,14 @@ release unless this file explicitly links to that behavior.
 ## Goal
 
 Ship one coherent iPhone product: a useful containing app for foreground voice
-input and personal writing rules, plus a usable custom keyboard with a dedicated
-voice action and explicit result insertion.
+input and personal writing rules, plus a polished custom voice-command keyboard
+for starting the verified voice flow, correcting text, and explicitly inserting
+accepted results.
 
 V1.1 optimizes for a trustworthy daily path, not maximum platform coverage. It
-must finish the keyboard and visible product before adding another recovery,
-storage, or background subsystem.
+must finish the visible product before adding another recovery, storage, or
+background subsystem. HoldType Keyboard complements the user's system keyboards;
+it is not a replacement QWERTY engine.
 
 ## Release Scope
 
@@ -29,15 +31,19 @@ V1.1 includes:
 - one recoverable pending recording;
 - one Latest Result;
 - up to 20 successful text-only History entries;
-- one production-quality iPhone typing layout;
+- one production-quality iPhone voice-command keyboard surface;
 - a dedicated keyboard voice action and explicit Insert Result path;
+- a bounded keyboard projection of Latest and up to five accepted texts from the
+  previous 24 hours;
 - the existing Usage Estimate kept unchanged as an informational Settings
   route;
 - the existing iPad containing-app adaptation as best-effort compatibility UI,
   not a marketed or release-qualified V1.1 surface.
 
-The first keyboard locale is `en-US`. A second locale is a later release unless
-it can be added without delaying or weakening the physical-device V1.1 gate.
+The command surface has no product typing locale. It inserts accepted Unicode
+text in any transcription language supported by the containing app. Keyboard
+chrome localization is independent of transcription language and does not add
+alphabetic layouts.
 
 ## Non-goals
 
@@ -48,8 +54,9 @@ it can be added without delaying or weakening the physical-device V1.1 gate.
 - automatic provider retry after relaunch;
 - automatic insertion into an unverified or changed host field;
 - microphone, API key, prompts, OpenAI code, or raw audio in the extension;
+- alphabetic QWERTY, number or symbol decks, Shift, Caps Lock, predictions,
+  autocorrection, or locale-specific typing dictionaries;
 - pixel-identical Apple keyboard trade dress or Apple emoji assets;
-- full Apple-quality autocorrection and predictions in the first V1.1 build;
 - background Quick Session or a keyboard-started background recording flow;
 - cloud sync, accounts, analytics, profiles, modes, Live Activity, or billing;
 - production iPad floating keyboard, Stage Manager, or hardware-keyboard
@@ -78,8 +85,10 @@ release-complete until the finished History destination is restored.
 - The app exposes one practice field for keyboard switching and insertion.
 - Setup never claims that voice can start from the keyboard until a signed
   physical-device test proves the exact action.
-- Ordinary keyboard typing remains available when provider setup, microphone
-  permission, network, or Full Access is unavailable.
+- Setup explains that normal typing remains on the user's system keyboard and
+  that Globe switches between it and HoldType.
+- Punctuation, Space, Delete, Return, and Globe remain available when provider
+  setup, microphone permission, network, or Full Access is unavailable.
 
 ## Foreground Voice
 
@@ -124,7 +133,8 @@ release-complete until the finished History destination is restored.
 - Latest Result contains no provider payload, prompt, credential, or raw audio.
 - Relaunch preserves the most recent accepted text until Clear or replacement.
 - V1.1 intentionally removes the old 24-hour app-private Latest expiry. Only
-  the App Group keyboard snapshot is short-lived.
+  the Latest item inside the App Group keyboard snapshot has a short insertion
+  expiry of 10 minutes.
 - Latest Result is always on for V1.1. The old iOS `keepLatestResult` preference
   is removed from the UI and ignored by a scoped migration; macOS behavior is
   unchanged.
@@ -164,50 +174,73 @@ release-complete until the finished History destination is restored.
   confirmed presentation and shows a nonblocking local warning. Destructive
   actions report success only after the atomic record replacement succeeds.
 
-## Keyboard Typing
+## Keyboard Command Surface
 
-The first-release keyboard provides:
+The selected production composition is **Brand Stage**. Geometry and hierarchy
+stay identical in Light and Dark Mode; only system materials, key colors,
+shadows, and contrast adapt to the active iOS appearance. The HoldType blue and
+purple are reserved for the microphone and small active-state accents.
 
-- alphabetic, number, and symbol layouts for `en-US`;
-- Shift, double-tap Caps Lock, Delete with repeat, Space, Return, `123`, symbol
-  switching, and Globe;
-- field-appropriate Return labeling and basic auto-capitalization;
-- double-space period;
-- cursor movement from a long press on Space;
-- key callouts, useful touch targets, light/dark appearance, and optional
-  haptics that follow the current preference;
-- VoiceOver labels, traits, and state announcements;
-- ordinary Unicode typing without network and without Full Access.
+The first-release surface provides:
 
-Long-press Space remains cursor movement. Voice uses a separate microphone
-control in a compact action bar.
+- a compact top row with `History` on the left, the HoldType mark plus honest
+  status in the center, and `Latest` on the right;
+- one medium microphone control and a restrained waveform/status stage; the
+  microphone is the only primary action and never becomes a full-width button;
+- one correction row containing `.`, `,`, `?`, and `!`;
+- one editing row containing Globe, a wide Space key, Delete, and adaptive
+  Return;
+- short-tap Space insertion plus long-press and drag cursor movement without an
+  inserted space;
+- Delete repeat with bounded acceleration and Return behavior derived from the
+  current text-input traits;
+- minimum 44-point targets, VoiceOver labels and state announcements, Dynamic
+  Type-safe labels, Reduce Motion support, and sufficient contrast in both
+  appearances;
+- local punctuation and editing controls that work without network or Full
+  Access.
 
-V1.1 may use a small bundled correction lexicon and explicit Undo if it is
-ready, but it must not present unfinished predictions or claim Apple-level
-autocorrection quality. A later keyboard-quality milestone may add predictions
-without changing the voice safety contract.
+The HoldType mark is identity and status, not an unlabeled button. The keyboard
+contains no alphabet, number deck, `A` probe key, `Refresh`, Shift, Caps Lock,
+`123`, predictions, or autocorrection. Accepted results may contain arbitrary
+Unicode; ordinary free typing and system emoji remain available through Globe.
 
 ## Keyboard Voice And Insertion
 
 - The microphone button performs only a physically verified action.
 - The extension never records audio or contacts OpenAI itself.
-- After D0 proves supported containing-app handoff, the button opens or
+- After K1 proves supported containing-app handoff, the button opens or
   activates that documented app voice flow; it does not display `Listening`
   before the containing app actually owns a recording.
 - The user explicitly returns to the host app and invokes `Insert Result`.
   V1.1 does not promise private automatic return or automatic insertion.
-- The app may publish one short-lived accepted-text snapshot to App Group
-  storage only after the physical gate proves the required Full Access state.
-- The snapshot contains only version, result identifier, accepted text,
-  creation time, and expiry. It contains no secret, audio, prompt, dictionary,
-  provider response, or host context.
-- Insert is available only for a valid unexpired snapshot. One button tap calls
-  `textDocumentProxy` once; re-entrant handling of that tap is suppressed.
+- The app may publish one bounded keyboard snapshot to App Group storage only
+  after the physical gate proves the required Full Access state. The extension
+  is read-only.
+- The projection is a replaceable cache, not a second History repository or a
+  delivery transaction. It has one app writer and no outbox, receipt,
+  acknowledgement, tombstone, or replay protocol.
+- The snapshot contains schema version, revision, one Latest item with a
+  10-minute insertion expiry, and up to five recent accepted-text items with a
+  24-hour expiry. Each item contains only result id, accepted text, creation
+  time, and expiry. No secret, audio, prompt, dictionary, provider response,
+  setting, or host context enters the snapshot.
+- `Latest` inserts only a valid unexpired Latest item. `History` presents the
+  bounded recent projection newest first; full 20-entry History, Delete, Clear
+  All, and retention settings remain in the containing app.
+- Turning Save History off or deleting app History removes the affected recent
+  projection before that destructive action reports success. A projection-clear
+  failure is visible and does not pretend the shared copy was removed. Every
+  projected recent item expires after 24 hours regardless. Missing or invalid
+  shared state is never rendered as an empty successful History.
+- Every Latest or recent-result selection is an explicit insertion. One tap
+  calls `textDocumentProxy` once; re-entrant handling of that tap is suppressed.
 - The same still-valid result may be inserted again only after another explicit
   user tap. Relaunch, refresh, host-field change, or app return never inserts or
   replays it automatically; V1.1 therefore needs no durable consumed-ID log.
-- If App Group or Full Access is unavailable, the keyboard explains the
-  fallback and preserves ordinary typing and Globe.
+- If App Group or Full Access is unavailable, app-dependent actions show an
+  honest compact fallback while punctuation, editing controls, and Globe remain
+  usable.
 - Secure fields, phone pads, and hosts that reject custom keyboards fall back
   to system behavior. HoldType does not claim to bypass that policy.
 
@@ -219,9 +252,14 @@ without changing the voice safety contract.
 - The History-aware local-retention disclosure is contract version `2`.
   Acceptance of the former no-History version `1` requires explicit review
   before another provider request.
+- Keyboard setup and Privacy explain that, after the qualified Full Access path
+  is enabled, one 10-minute Latest item and up to five accepted texts from the
+  previous 24 hours may be copied into the local shared container for explicit
+  keyboard insertion.
 - The extension receives no API key or provider client.
-- Pending audio and History remain app-private, protected, and backup-excluded
-  according to their data type.
+- Pending audio and the canonical 20-entry History remain app-private, protected,
+  and backup-excluded according to their data type. Only the bounded derived
+  accepted-text projection described above enters App Group storage.
 - Product logs contain no accepted text, prompt, dictionary content, API key,
   provider body, raw audio, or host document context.
 - External calls have bounded timeouts.
@@ -235,7 +273,7 @@ without changing the voice safety contract.
   result can be recovered or safely retried locally.
 - Keyboard handoff failure never fabricates recording progress.
 - A temporarily unavailable qualified voice path degrades to clear instructions,
-  app Voice, Copy, and Globe; ordinary typing remains functional.
+  app Voice, Copy, and Globe; local editing controls remain functional.
 - A process restart never uploads automatically and never inserts text
   automatically.
 
@@ -251,8 +289,9 @@ without changing the voice safety contract.
 - Library and core Settings persist.
 - Compact History append, Delete, Clear All, cap, and failure isolation pass.
 - Release navigation contains no placeholder destination.
-- Keyboard engine tests cover layout changes, Shift/Caps, Delete repeat, Space
-  cursor movement, field traits, expiry, and explicit insertion.
+- Keyboard tests cover both appearances, punctuation, Delete repeat, Space
+  cursor movement, Return traits, voice-state honesty, snapshot validation,
+  bounded recent results, expiry, and explicit insertion.
 
 ### Signed Physical iPhone
 
@@ -260,13 +299,14 @@ V1.1 is not release-complete until a recorded device pass proves:
 
 - app and extension install with matching signing and App Group configuration;
 - keyboard enablement and Globe switching;
-- ordinary typing in Notes, Messages, Mail, Safari, and two third-party apps;
+- punctuation and editing controls in Notes, Messages, Mail, Safari, and two
+  third-party apps;
 - Full Access off and on behavior;
 - secure-field, phone-pad, and host-opt-out fallback;
 - the exact microphone-button handoff and honest unavailable state;
 - app foreground recording, Done, Cancel, interruption, and provider timeout;
-- explicit return and Insert Result exactly once per tap, with no automatic or
-  wrong-field replay;
+- explicit return and Latest/History insertion exactly once per tap, with no
+  automatic or wrong-field replay;
 - process termination preserves Latest or the one pending attempt;
 - effective Keychain and Data Protection behavior.
 - after explicit user authorization with a configured provider key, one manual
@@ -287,6 +327,8 @@ instruction-only microphone button is not successful completion of V1.1.
   release gate.
 - Do not add a failed-history, outbox, policy-generation, receipt, lease, or
   capability family to V1.1.
+- Do not grow a QWERTY, locale-layout, prediction, or autocorrection engine under
+  the command-surface milestone.
 - Prefer one owner and one record for one product concept.
 - Tests protect product invariants and semantic failure boundaries, not every
   implementation micro-state.

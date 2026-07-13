@@ -1,5 +1,9 @@
 # iOS Settings And Secret Storage
 
+Status: current settings/secrets reference where it agrees with
+`ios-v1-release.md`. Legacy Quick Session, typing-layout, automatic-insertion,
+and expanded storage sections do not enlarge V1.1.
+
 ## Goal
 
 Provide a complete native iPhone and iPad configuration surface while keeping
@@ -85,13 +89,14 @@ and the OpenAI API key.
 - voice start/stop cues: on
 - recording tail: Off
 - per-utterance maximum: five minutes
-- Quick Session: fixed five minutes once its gate passes; no duration editor
-- durable local history: on under `ios-history-and-storage.md`
+- Quick Session: unavailable and deferred in V1.1; no control
+- compact successful-text History: on under `ios-v1-release.md`
 - recording cache: off; when enabled keep last 10 by default, with unlimited
   available only as an explicit choice
 
-The Phase 0 `en-US` keyboard metadata is not a production typing-layout
-default. Typing layouts and dictionaries appear only after their entry gate.
+The Phase 0 `en-US` extension metadata is not a product language or typing-layout
+default. V1.1 has no alphabetic layouts or keyboard dictionaries; transcription
+language remains an app-owned voice setting.
 
 ## OpenAI API key
 
@@ -876,5 +881,6 @@ result after the operation returns.
 
 ## Unknowns requiring confirmation
 
-- Exact first production typing layouts and dictionaries are settled by the
-  production keyboard entry gate, not by the Phase 0 locale.
+- K1 must verify the release values of `PrimaryLanguage`, `IsASCIICapable`,
+  `RequestsOpenAccess`, and `hasDictationKey`; none defines the user's supported
+  transcription languages.
