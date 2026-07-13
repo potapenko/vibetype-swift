@@ -387,13 +387,12 @@ Keep the existing explicit external timeouts. Add mobile-safe cancellation,
 retry classification, offline behavior, and reuse of a completed local audio
 artifact rather than re-recording.
 
-The existing `Shared/KeyboardSessionState.swift` and its open-containing-app
-actions are an M0A spike prototype, not the production session contract. They
-conflict with the approved no-launch, already-active Quick Session bridge and
-must not enter `HoldTypeDomain`. Replace them only inside the P6 bridge slice
-after M0B/M0C gates. P1 began with the deliberately isolated
-`AcceptedTranscript` move; subsequent completed slices keep the same
-behavior-neutral, test-first boundary.
+The former `Shared/KeyboardSessionState.swift` and its open-containing-app
+actions were an M0A spike prototype, not the production session contract. They
+were removed on 2026-07-13 when Brand Stage replaced them with the bounded
+read-only keyboard snapshot and local editing semantics. No launching,
+optimistic Listening, transcript-confirmation, or inline-settings state from
+that prototype enters `HoldTypeDomain` or the keyboard extension.
 
 ### Extract a platform-neutral context type
 

@@ -47,7 +47,8 @@ request or v2-labeled task opts in.
     hotkeys, diagnostics, recording cache, setup preflight, transcript history,
     runtime orchestration, and active text context.
 - `Shared/`
-  - shared setup/status and keyboard session state used by deferred iOS work.
+  - shared setup/status presentation and containing-app startup seams; the
+    obsolete keyboard-session spike was removed after Brand Stage cutover.
 - `HoldTypeTests/`
   - focused unit coverage for services, settings view models, setup status,
     hotkeys, text insertion, OpenAI request handling, history, and diagnostics.
