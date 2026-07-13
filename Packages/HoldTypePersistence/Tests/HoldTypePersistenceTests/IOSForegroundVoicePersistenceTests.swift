@@ -17,11 +17,103 @@ struct IOSForegroundVoicePersistenceTests {
         )
         #expect(preparation.deliveryPreparation.historyWrite == nil)
         #expect(preparation.deliveryPreparation.historyCapture == nil)
+        #expect(preparation.historyMode == .appOnly)
         #expect(
             String(describing: preparation)
                 == "IOSForegroundVoiceAcceptedOutputPreparation(redacted)"
         )
         #expect(preparation.customMirror.children.isEmpty)
+    }
+
+    @Test func capturedPreparationPropagatesEnabledAndDisabledHistoryCaptures()
+        async throws {
+        let captures = try await makeForegroundHistoryCaptures()
+        let enabledMode = IOSForegroundVoiceHistoryMode.captured(
+            captures.enabled
+        )
+        let enabled = try IOSForegroundVoiceAcceptedOutputPreparation(
+            deliveryID: UUID(),
+            sessionID: UUID(),
+            attemptID: UUID(),
+            transcriptID: UUID(),
+            rawAcceptedText: "MODE-SECRET-TEXT",
+            outputIntent: .standard,
+            keepLatestResult: true,
+            historyMode: enabledMode
+        )
+        #expect(enabled.historyMode == enabledMode)
+        #expect(enabled.deliveryPreparation.historyCapture == captures.enabled)
+        #expect(enabled.deliveryPreparation.historyWrite != nil)
+        #expect(
+            !enabled.deliveryPreparation
+                .automaticInsertionPreferenceEnabled
+        )
+
+        let disabledMode = IOSForegroundVoiceHistoryMode.captured(
+            captures.disabled
+        )
+        let disabled = try IOSForegroundVoiceAcceptedOutputPreparation(
+            deliveryID: UUID(),
+            sessionID: UUID(),
+            attemptID: UUID(),
+            transcriptID: UUID(),
+            rawAcceptedText: "accepted",
+            outputIntent: .translate,
+            keepLatestResult: false,
+            historyMode: disabledMode
+        )
+        #expect(disabled.historyMode == disabledMode)
+        #expect(
+            disabled.deliveryPreparation.historyCapture == captures.disabled
+        )
+        #expect(disabled.deliveryPreparation.historyWrite == nil)
+
+        func requireSendable<Value: Sendable>(_ value: Value) -> Value {
+            value
+        }
+        #expect(requireSendable(enabledMode) == enabledMode)
+        let rendered = String(describing: enabledMode)
+            + String(reflecting: enabledMode)
+            + String(describing: Mirror(reflecting: enabledMode))
+        #expect(rendered.contains("redacted"))
+        #expect(!rendered.contains("MODE-SECRET"))
+        #expect(enabledMode.customMirror.children.isEmpty)
+        let erasedMode: Any = enabledMode
+        #expect(!(erasedMode is any Codable))
+    }
+
+    @Test func p4FacadeRejectsCapturedPreparationBeforeDurableMutation()
+        async throws {
+        let capture = try await makeForegroundHistoryCaptures().enabled
+        let fixture = ForegroundVoicePersistenceFixture()
+        let output = try await fixture.makeOutputDelivery()
+        let preparation = try IOSForegroundVoiceAcceptedOutputPreparation(
+            deliveryID: UUID(),
+            sessionID: UUID(),
+            attemptID: output.attemptID,
+            transcriptID: try #require(output.transcriptionID),
+            rawAcceptedText: "captured accepted text",
+            outputIntent: output.outputIntent,
+            keepLatestResult: true,
+            historyMode: .captured(capture)
+        )
+
+        await #expect(
+            throws: IOSAcceptedOutputDeliveryError.invalidPreparation
+        ) {
+            _ = try await fixture.facade.accept(
+                preparation,
+                expectedPending: IOSPendingRecordingCASExpectation(
+                    recording: output
+                )
+            )
+        }
+        #expect(await fixture.state.current() == nil)
+        #expect(fixture.deliveryJournal.createCallCount == 0)
+        #expect(fixture.deliveryJournal.record == nil)
+        #expect(fixture.pendingJournal.recording == output)
+        #expect(fixture.pendingJournal.removeCallCount == 0)
+        #expect(fixture.audio.isPresent)
     }
 
     @Test func happyPathCommitsGenerationZeroThenRetiresExactPending()
@@ -1162,6 +1254,38 @@ private func makeForegroundPreparation(
         outputIntent: outputIntent,
         keepLatestResult: true
     )
+}
+
+private func makeForegroundHistoryCaptures() async throws -> (
+    enabled: IOSAcceptedOutputHistoryCapture,
+    disabled: IOSAcceptedOutputHistoryCapture
+) {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "ios-foreground-history-mode-\(UUID().uuidString)",
+        isDirectory: true
+    )
+    try FileManager.default.createDirectory(
+        at: root,
+        withIntermediateDirectories: false,
+        attributes: [.posixPermissions: 0o700]
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    let coordinator = IOSAcceptedHistoryCoordinator(
+        applicationSupportDirectoryURL: root,
+        registry: IOSAcceptedHistoryCoordinatorProcessContextRegistry()
+    )
+    let enabled = try await coordinator.capture(
+        transcriptionModel: "MODE-SECRET-MODEL",
+        transcriptionLanguageCode: "en",
+        durationMilliseconds: 1_250
+    )
+    _ = try await coordinator.setHistoryEnabled(false)
+    let disabled = try await coordinator.capture(
+        transcriptionModel: "MODE-SECRET-MODEL",
+        transcriptionLanguageCode: "en",
+        durationMilliseconds: 1_250
+    )
+    return (enabled, disabled)
 }
 
 private final class ForegroundVoicePersistenceFixture: @unchecked Sendable {

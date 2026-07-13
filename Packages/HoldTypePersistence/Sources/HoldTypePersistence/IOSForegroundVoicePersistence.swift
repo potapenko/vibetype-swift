@@ -1,8 +1,16 @@
 import Foundation
 import HoldTypeDomain
 
-/// The P4-only accepted-output input. Callers cannot opt into History or
-/// automatic insertion through this surface.
+/// Opaque foreground History ownership carried between Core and Persistence.
+/// The captured value exposes no policy generation or mutable History state.
+@_spi(HoldTypeIOSCore)
+public enum IOSForegroundVoiceHistoryMode: Equatable, Sendable {
+    case appOnly
+    case captured(IOSAcceptedOutputHistoryCapture)
+}
+
+/// The foreground accepted-output input. Its public initializer remains
+/// strictly P4 app-only; Core may carry only a coordinator-minted capture.
 public struct IOSForegroundVoiceAcceptedOutputPreparation: Equatable, Sendable {
     let deliveryPreparation: IOSAcceptedOutputDeliveryPreparation
 
@@ -15,6 +23,14 @@ public struct IOSForegroundVoiceAcceptedOutputPreparation: Equatable, Sendable {
     }
     public var keepLatestResult: Bool {
         deliveryPreparation.keepLatestResult
+    }
+
+    @_spi(HoldTypeIOSCore)
+    public var historyMode: IOSForegroundVoiceHistoryMode {
+        guard let capture = deliveryPreparation.historyCapture else {
+            return .appOnly
+        }
+        return .captured(capture)
     }
 
     public init(
@@ -37,6 +53,45 @@ public struct IOSForegroundVoiceAcceptedOutputPreparation: Equatable, Sendable {
             keepLatestResult: keepLatestResult,
             historyWrite: nil
         )
+    }
+
+    @_spi(HoldTypeIOSCore)
+    public init(
+        deliveryID: UUID,
+        sessionID: UUID,
+        attemptID: UUID,
+        transcriptID: UUID,
+        rawAcceptedText: String,
+        outputIntent: DictationOutputIntent,
+        keepLatestResult: Bool,
+        historyMode: IOSForegroundVoiceHistoryMode
+    ) throws {
+        switch historyMode {
+        case .appOnly:
+            deliveryPreparation = try IOSAcceptedOutputDeliveryPreparation(
+                deliveryID: deliveryID,
+                sessionID: sessionID,
+                attemptID: attemptID,
+                transcriptID: transcriptID,
+                rawAcceptedText: rawAcceptedText,
+                outputIntent: outputIntent,
+                automaticInsertionPreferenceEnabled: false,
+                keepLatestResult: keepLatestResult,
+                historyWrite: nil
+            )
+        case .captured(let capture):
+            deliveryPreparation = try IOSAcceptedOutputDeliveryPreparation(
+                deliveryID: deliveryID,
+                sessionID: sessionID,
+                attemptID: attemptID,
+                transcriptID: transcriptID,
+                rawAcceptedText: rawAcceptedText,
+                outputIntent: outputIntent,
+                automaticInsertionPreferenceEnabled: false,
+                keepLatestResult: keepLatestResult,
+                historyCapture: capture
+            )
+        }
     }
 }
 
@@ -382,7 +437,10 @@ public struct IOSForegroundVoicePersistence: Sendable {
         _ preparation: IOSForegroundVoiceAcceptedOutputPreparation,
         expectedPending: IOSPendingRecordingCASExpectation
     ) async throws -> IOSForegroundVoiceAcceptanceResult {
-        try await performRootOperation { lease in
+        guard preparation.historyMode == .appOnly else {
+            throw IOSAcceptedOutputDeliveryError.invalidPreparation
+        }
+        return try await performRootOperation { lease in
             let pending = try await requireOutputDeliveryPending(
                 expected: expectedPending,
                 preparation: preparation.deliveryPreparation,
@@ -1086,6 +1144,17 @@ private extension IOSForegroundVoicePersistence {
     var context: IOSAcceptedHistoryCoordinatorProcessContext? {
         productionContext
     }
+}
+
+extension IOSForegroundVoiceHistoryMode:
+    CustomStringConvertible,
+    CustomDebugStringConvertible,
+    CustomReflectable {
+    public var description: String {
+        "IOSForegroundVoiceHistoryMode(redacted)"
+    }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
 extension IOSForegroundVoiceAcceptedOutputPreparation:
