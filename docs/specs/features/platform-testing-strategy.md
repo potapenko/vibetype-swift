@@ -95,6 +95,17 @@ required for ordinary macOS work, including shared SwiftUI files used only by
 the macOS app. Operational MCP usage and fallbacks live in
 `docs/agent-tooling.md`.
 
+The iOS scheme keeps hosted unit-test products isolated from the app used by
+Run and Archive:
+
+- Test uses its dedicated `Debug-Tests` build configuration and product path;
+- the test-host copy may temporarily contain `HoldTypeIOSTests.xctest` while
+  XCTest is executing;
+- the ordinary `Debug` and `Release` app products contain no `.xctest`, test
+  dSYM, or XCTest support framework left by a previous test run;
+- running tests must not make the next normal Xcode launch install a test-sized
+  app bundle.
+
 When an explicit shared SwiftUI surface changes across platforms, verification
 should include:
 
