@@ -35,7 +35,8 @@ For direct-chat work:
 5. Use `docs/specs/brownfield-discovery.md` only as a current repo map when
    ownership is unclear.
 6. Read `docs/agent-tooling.md` only when choosing Xcode, MCP, runtime QA, or
-   Computer Use tooling.
+   Computer Use tooling. Its `iOS Simulator, Mirroring, And Physical Device QA`
+   section is mandatory before any iOS interactive or device qualification.
 7. Implement the requested scope directly without creating backlog files.
 8. Run task-appropriate verification.
 9. Stage and commit only files changed for the current task.

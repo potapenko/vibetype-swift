@@ -57,6 +57,12 @@ Baseline routing:
 9. Read `references/README.md` only before using copied OpenWhispr source, then
    open exact reference files rather than scanning `references/`.
 
+Before any iOS Simulator, iPhone Mirroring, or signed physical-device runtime
+QA, agents must read and follow `iOS Simulator, Mirroring, And Physical Device
+QA` in `docs/agent-tooling.md`. That section is the repository-wide authority
+for tool setup, the Simulator/Mirroring/device evidence boundary, microphone
+qualification, signing checks, and cleanup.
+
 For backlog selection, prefer compact readback:
 
 ```sh
@@ -283,6 +289,12 @@ Use smoke unless the user explicitly asks for a live OpenAI debug session.
 
 For microphone, transcription, permissions, or external-service behavior, tests
 must avoid indefinite waits and must use bounded timeouts or controllable fakes.
+
+iOS runtime evidence must keep the three lanes separate: Simulator proves the
+actual extension and simulated host interaction; iPhone Mirroring may operate
+and observe only the containing app; a signed physical iPhone proves real
+microphone ownership, recording lifecycle, and device signing. One lane must
+never be reported as proof for another.
 
 For Swift behavior changes, the baseline verification is:
 

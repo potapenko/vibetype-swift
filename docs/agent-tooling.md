@@ -183,6 +183,144 @@ Use Build iOS Apps / simulator tools only when a v2 iOS task is explicitly
 selected with deferred lanes included. Normal macOS MVP runs must not spend
 bounded verification time proving iOS simulator state.
 
+## iOS Simulator, Mirroring, And Physical Device QA
+
+Read this section before every explicit iOS interactive or device qualification
+task. It defines workflow and evidence ownership; a feature plan may narrow a
+lane further but must not silently broaden what that lane proves.
+
+### Start And Tool Setup
+
+Before the first UI action, start a scoped idle guard and record its PID:
+
+```sh
+caffeinate -dimsu >/dev/null 2>&1 &
+echo $!
+```
+
+Keep that exact process alive for the complete Computer Use session. Stop it by
+PID after all run-owned UI windows and previews are closed. Do not use a broad
+`killall caffeinate` because another session may own a different guard.
+
+```sh
+kill <recorded-caffeinate-PID>
+```
+
+Use CLI or Xcode tooling for device discovery, builds, installation, launch
+arguments, deterministic preparation, tests, and console capture. Use Computer
+Use for every Mac-visible interaction that it can perform. Inspect fresh app
+state before acting and after each meaningful action; prefer accessibility
+elements and use coordinates only when no accessible control exists. Ask the
+operator only for a genuinely unavailable physical or authentication gesture,
+such as unlocking, trusting, or reconnecting the iPhone.
+
+All waits, builds, launches, and log captures must be bounded. Never introduce
+an unbounded poll while waiting for an app, Simulator, device, or UI state.
+
+### Simulator Lane: Actual Keyboard And Host Interaction
+
+Use Simulator for the custom-keyboard interaction lane unless the governing
+task explicitly requires a signed-device keyboard matrix:
+
+- build and install the current `HoldType-iOS` product with its embedded
+  `HoldTypeKeyboard` extension;
+- launch through a sanitized automation path so QA cannot read live Keychain
+  credentials or call a live provider;
+- enable and present the actual HoldType extension in a real editable host
+  field, not a mock keyboard view or isolated rendering;
+- use Notes when the selected Simulator runtime contains it; otherwise use the
+  containing app's standard Keyboard Practice field only when the governing
+  plan permits that substitution, and name the host honestly in evidence;
+- record the observed Full Access setting before testing it. With Full Access
+  off, exercise punctuation, Space, Delete, Return, and the system Globe on the
+  real extension; with Full Access on, exercise only the bounded shared-
+  container behavior required by the task;
+- use focused tests for command/state reduction, expiry, stale request
+  rejection, and the exact `UITextDocumentProxy` insertion count, but do not
+  replace the interactive extension pass with those tests;
+- capture screenshots only after the corresponding interaction and verify that
+  visible labels are not clipped at the tested host width.
+
+Simulator evidence does not prove physical microphone behavior, effective
+device signing, device privacy indicators, secure-field substitution, or a
+signed Notes-host release matrix.
+
+### iPhone Mirroring Lane: Containing App Inspection Only
+
+iPhone Mirroring is an optional Computer Use surface for operating and
+observing the containing app. It is not a custom-keyboard qualification
+surface: the Mac is treated as an external keyboard and may suppress the iPhone
+onscreen keyboard. Do not spend time trying to present or test HoldType Keyboard
+through Mirroring.
+
+Do not use Mirroring as real-recording evidence when macOS reports
+`iPhone microphone is not available from Mac`. Disconnect Mirroring before the
+recording pass and drive the signed containing app directly on the iPhone with
+an in-app DEBUG qualification control, a physical-device UI test, or a bounded
+CoreDevice launch route. Mirroring screenshots may document containing-app
+state only; they cannot substitute for recorder logs or device checks.
+
+### Physical iPhone Lane: Signing And Real Recorder
+
+Before implementation or qualification, confirm that a physical iPhone is
+connected, paired, trusted, in Developer Mode, and available for development
+services. Start with bounded read-only discovery such as:
+
+```sh
+xcrun devicectl list devices
+xcrun xcdevice list
+```
+
+Build the current iOS scheme for the discovered UDID with the configured team
+and automatic development signing. Do not hardcode a developer team, UDID,
+profile, or device name in repository files:
+
+```sh
+xcodebuild -project HoldType.xcodeproj -scheme HoldType-iOS \
+  -configuration Debug -destination 'id=<physical-device-UDID>' \
+  DEVELOPMENT_TEAM=<configured-team> CODE_SIGN_STYLE=Automatic \
+  -allowProvisioningUpdates build
+```
+
+Inspect the signed app and embedded extension products, not only source
+settings. Record bundle identifiers, signing team/profile, OS/device model, and
+matching App Group entitlements. Confirm that the microphone purpose string,
+audio-session owner, and recorder exist only in the containing app; confirm the
+extension's `RequestsOpenAccess` declaration separately.
+
+For real recording, use bounded containing-app instrumentation that exercises
+the same recorder lifecycle as the feature without requiring the keyboard:
+
+1. Start an explicit session with a fixed deadline.
+2. Publish Listening only after the real recording start call succeeds and the
+   recorder reports that it is recording.
+3. Drive Finish and confirm recording plus the audio session stop before any
+   deterministic result becomes ready.
+4. Run Cancel separately and confirm capture stops without a result or
+   insertion.
+5. Stop or expire the session and confirm there is no idle recorder, silent-
+   audio keepalive, or retained temporary audio.
+
+Use device console evidence for lifecycle transitions. Record the system
+microphone indicator only when the selected wired capture surface exposes it;
+if QuickTime or another preview omits the indicator while device logs confirm
+recording, report the visual observation as unavailable rather than inventing
+it. A physical containing-app probe does not by itself prove keyboard insertion
+in Notes.
+
+### Evidence And Cleanup
+
+Keep Simulator keyboard results, Mirroring containing-app observations, and
+physical-device signing/recording results in separate QA sections. Every result
+must name commit/build, device or Simulator, OS, starting state, action,
+expected result, actual result, and privacy/energy observations. Never call a
+physical gate passed from Simulator-only evidence, and never reuse a bounded
+feasibility split to waive a later signed-device release matrix.
+
+At the end, close only run-owned Mirroring, QuickTime preview, Simulator, Xcode,
+and helper sessions; preserve user-owned app state and durable QA artifacts.
+Stop the recorded `caffeinate` PID and report any lane that remained blocked.
+
 ## Local Xcode Recovery
 
 Agents repair local tooling problems themselves. Before stopping on a local
