@@ -170,6 +170,17 @@ handoff must revise this spec before adding any new keyboard status vocabulary.
   publishes an empty current-schema snapshot instead of leaving an older result
   presented as Latest. The cache publication reports failure without invalidating
   the canonical accepted result.
+- A failed cache publication is a nonblocking containing-app warning. It remains
+  pending until a later publication actually succeeds; a load, a failed Clear,
+  or another path that does not publish the cache must not clear it.
+- Canonical Latest and Clear notices take display priority without discarding a
+  pending cache warning. When the canonical notice is gone, the cache warning is
+  shown again until publication succeeds.
+- If publishing an empty snapshot after Clear fails, the containing app keeps a
+  visible Latest section warning even though canonical Latest is absent, because
+  an older unexpired keyboard item may still remain in the shared container.
+- Cache-warning-only fail or recovery updates do not invalidate an already
+  visible canonical Latest action or dismiss its pending Clear confirmation.
 - If canonical state cannot be loaded at all, the publisher does not overwrite
   the last-known cache with an invented empty state. The normal 10-minute expiry
   still prevents indefinite insertion.

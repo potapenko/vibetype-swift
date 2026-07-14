@@ -23,7 +23,7 @@ struct IOSForegroundVoiceRuntimeTests {
 
         let preserved = await IOSKeyboardSnapshotAcceptancePublication.apply(
             to: acceptance,
-            publish: { await publication.publish() }
+            publish: { _ = await publication.publish() }
         )
         #expect(preserved == acceptance)
         #expect(await publication.callCount == 1)
@@ -33,7 +33,7 @@ struct IOSForegroundVoiceRuntimeTests {
         )
         let unchanged = await IOSKeyboardSnapshotAcceptancePublication.apply(
             to: notStarted,
-            publish: { await publication.publish() }
+            publish: { _ = await publication.publish() }
         )
         #expect(unchanged == notStarted)
         #expect(await publication.callCount == 1)

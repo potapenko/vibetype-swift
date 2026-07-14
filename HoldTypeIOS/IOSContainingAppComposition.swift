@@ -298,7 +298,8 @@ final class IOSContainingAppComposition {
             let disposition = await foregroundVoiceRuntime
                 .lifecycleCoordinator
                 .recover(opportunity)
-            _ = await publishKeyboardSnapshot()
+            await foregroundVoiceRuntime.latestResultOwner
+                .refreshKeyboardProjection()
             return disposition
         }
         self.lifecycleScheduler = lifecycleScheduler

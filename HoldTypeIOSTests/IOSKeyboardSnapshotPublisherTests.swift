@@ -1,10 +1,163 @@
 import Foundation
+import HoldTypeDomain
 import Testing
 @_spi(HoldTypeIOSCore) @testable import HoldTypePersistence
 @testable import HoldTypeIOS
 
 @MainActor
 struct IOSKeyboardSnapshotPublisherTests {
+    @Test func productionContainerQualificationSeedsCanonicalLatest()
+        async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let usesProductionContainers = environment["HOLDTYPE_AUTOMATION"] == "1"
+            && environment[
+                "HOLDTYPE_AUTOMATION_SEED_KEYBOARD_LATEST"
+            ] == "1"
+        let temporaryRoot = usesProductionContainers ? nil : FileManager
+            .default.temporaryDirectory.appendingPathComponent(
+                UUID().uuidString,
+                isDirectory: true
+            )
+        defer {
+            if let temporaryRoot {
+                try? FileManager.default.removeItem(at: temporaryRoot)
+            }
+        }
+        let applicationSupportDirectoryURL: URL
+        let publisherStore: HoldTypeIOS.KeyboardBridgeStore
+        let readerStore: KeyboardBridgeStore
+        if usesProductionContainers {
+            applicationSupportDirectoryURL = try FileManager.default.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            publisherStore = try HoldTypeIOS.KeyboardBridgeStore.appGroup()
+            readerStore = try KeyboardBridgeStore.appGroup()
+        } else {
+            let temporaryRoot = try #require(temporaryRoot)
+            applicationSupportDirectoryURL = temporaryRoot
+                .appendingPathComponent("app-support", isDirectory: true)
+            let bridgeDirectoryURL = temporaryRoot.appendingPathComponent(
+                "app-group",
+                isDirectory: true
+            )
+            publisherStore = HoldTypeIOS.KeyboardBridgeStore(
+                directoryURL: bridgeDirectoryURL,
+                writingOptions: .atomic
+            )
+            readerStore = KeyboardBridgeStore(
+                directoryURL: bridgeDirectoryURL,
+                writingOptions: .atomic
+            )
+        }
+        let historyRepository = IOSAcceptedTextHistoryRepository(
+            applicationSupportDirectoryURL: applicationSupportDirectoryURL
+        )
+        if usesProductionContainers {
+            let existingHistory = try await historyRepository.load()
+            guard existingHistory == .enabledEmpty else {
+                Issue.record(
+                    "Qualification seeding requires an empty compact History."
+                )
+                return
+            }
+        }
+        let persistenceOwner = IOSV1ForegroundVoicePersistenceOwner(
+            applicationSupportDirectoryURL: applicationSupportDirectoryURL,
+            acceptedTextHistoryRepository: historyRepository
+        )
+        let existingLatest = try await persistenceOwner.loadLatestResult()
+        let existingPending = try await persistenceOwner.load()
+        guard existingLatest == .absent, existingPending == nil else {
+            Issue.record(
+                "Qualification seeding requires an empty canonical Voice state."
+            )
+            return
+        }
+
+        let attemptID = try #require(
+            UUID(uuidString: "8D6148F8-7D2C-446A-A407-E7DC092B23F4")
+        )
+        let transcriptID = try #require(
+            UUID(uuidString: "58AD706F-0C9F-41DF-A2A8-AF80A97B7467")
+        )
+        let deliveryID = try #require(
+            UUID(uuidString: "1B53FA50-53D7-453D-A88D-33E01C72750D")
+        )
+        let acceptedText = "HoldType canonical Latest qualification"
+        let createdAt = Date(
+            timeIntervalSince1970: floor(Date().timeIntervalSince1970)
+        )
+        let pending = try IOSV1PendingRecording.qualificationFixture(
+            attemptID: attemptID,
+            outputIntent: .standard,
+            phase: .outputDelivery,
+            transcriptionID: transcriptID,
+            createdAt: createdAt,
+            durationMilliseconds: 1_000,
+            byteCount: 1_024
+        )
+        let repository = IOSVoiceStateRepository(
+            applicationSupportDirectoryURL: applicationSupportDirectoryURL
+        )
+        _ = try await repository.installPending(pending.state)
+        let preparation = try IOSV1ForegroundVoiceAcceptedOutputPreparation(
+            deliveryID: deliveryID,
+            sessionID: UUID(),
+            attemptID: attemptID,
+            transcriptID: transcriptID,
+            rawAcceptedText: acceptedText,
+            outputIntent: .standard
+        )
+        let acceptance = try await persistenceOwner.accept(
+            preparation,
+            expectedPending: IOSV1PendingRecordingExpectation(
+                recording: pending
+            )
+        )
+        guard case .resultReady(let accepted, _) = acceptance else {
+            Issue.record("Expected a canonical accepted result.")
+            return
+        }
+        #expect(try await persistenceOwner.load() == nil)
+        guard case .resultReady(let canonical) = try await persistenceOwner
+            .loadLatestResult() else {
+            Issue.record("Expected persisted canonical Latest.")
+            return
+        }
+        #expect(canonical.resultID == accepted.resultID)
+        #expect(canonical.sourceAttemptID == accepted.sourceAttemptID)
+        #expect(canonical.acceptedText == accepted.acceptedText)
+        let persistedHistory = try await historyRepository.load()
+        #expect(persistedHistory.entries.count == 1)
+        #expect(persistedHistory.entries.first?.resultID == canonical.resultID)
+        #expect(persistedHistory.entries.first?.text == acceptedText)
+
+        let publisher = IOSKeyboardSnapshotPublisher(
+            store: publisherStore,
+            loadLatest: {
+                try await persistenceOwner.loadLatestResult()
+            }
+        )
+        #expect(await publisher.publishCurrent())
+
+        let snapshot = try #require(try readerStore.load())
+        #expect(snapshot.schemaVersion == 3)
+        #expect(snapshot.latest?.resultID == canonical.resultID)
+        #expect(snapshot.latest?.text == acceptedText)
+        #expect(snapshot.latest?.createdAt == canonical.createdAt)
+        #expect(
+            abs(
+                (snapshot.latest?.expiresAt.timeIntervalSince(
+                    canonical.createdAt
+                ) ?? 0) - KeyboardBridgeConfiguration.latestLifetime
+            ) <= 0.001
+        )
+        #expect(snapshot.latestForInsertion() != nil)
+    }
+
     @Test func publishesExactLatestWithSourceBasedExpiry() async throws {
         let fixture = try PublisherStoreFixture()
         defer { fixture.remove() }

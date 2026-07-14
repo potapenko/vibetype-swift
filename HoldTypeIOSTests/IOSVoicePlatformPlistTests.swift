@@ -3,6 +3,15 @@ import Testing
 
 @MainActor
 struct IOSVoicePlatformPlistTests {
+    @Test func hostedTestActionDisablesLiveKeychainAccess() {
+        let environment = ProcessInfo.processInfo.environment
+
+        #expect(environment["HOLDTYPE_AUTOMATION"] == "1")
+        #expect(
+            environment["HOLDTYPE_KEYCHAIN_AUTHENTICATION_UI"] == "skip"
+        )
+    }
+
     @Test func containingAppOwnsOnlyTheApprovedMicrophonePurposeString()
         throws {
         let app = try sourcePlist(at: "HoldTypeIOS/Info.plist")

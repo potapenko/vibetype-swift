@@ -32,7 +32,6 @@ struct IOSNativeVoicePresentationTests {
             .clearFailed,
             .clearStateUnknown,
             .resultChanged,
-            .keyboardProjectionUpdateFailed,
         ] {
             let resolved = IOSVoiceLatestStatusPresentation.resolve(
                 IOSForegroundVoiceLatestResultPresentation(
@@ -43,6 +42,39 @@ struct IOSNativeVoicePresentationTests {
             )
             #expect(!resolved.detail.isEmpty)
         }
+
+        let failedEmptyProjection = IOSVoiceLatestStatusPresentation.resolve(
+            IOSForegroundVoiceLatestResultPresentation(
+                status: .absent,
+                text: nil,
+                notice: nil,
+                keyboardProjectionUpdateFailed: true
+            )
+        )
+        #expect(
+            failedEmptyProjection.detail
+                == "The keyboard copy couldn't be refreshed; an older item may remain until it expires."
+        )
+        #expect(failedEmptyProjection.tone == .failure)
+        #expect(
+            IOSVoiceLatestStatusPresentation.sectionIsVisible(
+                for: IOSForegroundVoiceLatestResultPresentation(
+                    status: .absent,
+                    text: nil,
+                    notice: nil,
+                    keyboardProjectionUpdateFailed: true
+                )
+            )
+        )
+        #expect(
+            !IOSVoiceLatestStatusPresentation.sectionIsVisible(
+                for: IOSForegroundVoiceLatestResultPresentation(
+                    status: .absent,
+                    text: nil,
+                    notice: nil
+                )
+            )
+        )
     }
 
     @Test func microphoneStatesRemainPassiveAndDistinct() {

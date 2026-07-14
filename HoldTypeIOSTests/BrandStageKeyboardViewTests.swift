@@ -49,6 +49,11 @@ struct BrandStageKeyboardViewTests {
         #expect(status.accessibilityValue == "Ready")
 
         let history = try button("keyboard.brand-stage.history", in: view)
+        #expect(history.accessibilityLabel == "Open History in HoldType")
+        #expect(
+            history.accessibilityHint
+                == "Requests HoldType History. If the request fails, this keyboard stays open."
+        )
         let latest = try button("keyboard.brand-stage.latest", in: view)
         let period = try button(
             "keyboard.brand-stage.punctuation.period",
@@ -280,7 +285,7 @@ struct BrandStageKeyboardViewTests {
                 )
                 layout(fixture)
 
-                #expect(view.traitCollection.userInterfaceStyle == .dark)
+                #expect(view.overrideUserInterfaceStyle == .dark)
                 #expect(controlFrames(in: view) == lightFrames)
                 let voice = try #require(
                     view.descendant(

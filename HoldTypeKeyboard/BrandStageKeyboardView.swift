@@ -332,7 +332,7 @@ final class BrandStageKeyboardView: UIView {
         )
         historyButton.accessibilityIdentifier = "keyboard.brand-stage.history"
         historyButton.accessibilityHint =
-            "Opens HoldType and shows your transcription history."
+            "Requests HoldType History. If the request fails, this keyboard stays open."
         configureTopAction(
             latestButton,
             title: "Latest",

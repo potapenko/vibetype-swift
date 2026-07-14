@@ -206,8 +206,226 @@ struct IOSForegroundVoiceLatestResultOwnerTests {
         await owner.waitUntilClearIsIdle()
 
         #expect(owner.presentation.status == .absent)
-        #expect(owner.presentation.notice == .keyboardProjectionUpdateFailed)
+        #expect(owner.presentation.notice == nil)
+        #expect(owner.presentation.keyboardProjectionUpdateFailed)
         #expect(await projection.callCount == 1)
+    }
+
+    @Test func failedProjectionRefreshIsReportedAfterLatestLoads()
+        async throws {
+        let record = try latestResultRecord(text: "accepted before refresh")
+        let probe = LatestResultClientProbe(
+            loads: [.value(.resultReady(record))]
+        )
+        let projection = LatestKeyboardProjectionProbe(results: [false])
+        let owner = latestResultOwner(
+            probe: probe,
+            publishKeyboardSnapshot: { await projection.publish() }
+        )
+
+        await owner.refreshKeyboardProjection()
+        #expect(owner.presentation == .initial)
+
+        _ = try await owner.loadForVoiceWorkflow()
+
+        #expect(owner.presentation.status == .ready)
+        #expect(owner.presentation.text == "accepted before refresh")
+        #expect(owner.presentation.notice == nil)
+        #expect(owner.presentation.keyboardProjectionUpdateFailed)
+        #expect(await projection.callCount == 1)
+    }
+
+    @Test func successfulProjectionRefreshClearsTheFailureNotice()
+        async throws {
+        let record = try latestResultRecord(text: "refresh retry")
+        let probe = LatestResultClientProbe(
+            loads: [.value(.resultReady(record))]
+        )
+        let projection = LatestKeyboardProjectionProbe(
+            results: [false, true]
+        )
+        let owner = latestResultOwner(
+            probe: probe,
+            publishKeyboardSnapshot: { await projection.publish() }
+        )
+
+        _ = try await owner.loadForVoiceWorkflow()
+        await owner.refreshKeyboardProjection()
+        #expect(owner.presentation.keyboardProjectionUpdateFailed)
+
+        await owner.refreshKeyboardProjection()
+
+        #expect(owner.presentation.status == .ready)
+        #expect(owner.presentation.text == "refresh retry")
+        #expect(owner.presentation.notice == nil)
+        #expect(!owner.presentation.keyboardProjectionUpdateFailed)
+        #expect(await projection.callCount == 2)
+    }
+
+    @Test func projectionWarningRefreshPreservesVisibleCommands()
+        async throws {
+        let record = try latestResultRecord(text: "stable command target")
+        let probe = LatestResultClientProbe(
+            loads: [.value(.resultReady(record))]
+        )
+        let projection = LatestKeyboardProjectionProbe(
+            results: [false, true]
+        )
+        let owner = latestResultOwner(
+            probe: probe,
+            publishKeyboardSnapshot: { await projection.publish() }
+        )
+
+        _ = try await owner.loadForVoiceWorkflow()
+        let clearCommand = try #require(owner.clearCommand)
+        let contentCommand = try #require(owner.contentCommand)
+
+        await owner.refreshKeyboardProjection()
+        #expect(owner.presentation.keyboardProjectionUpdateFailed)
+        #expect(owner.clearCommand == clearCommand)
+        #expect(owner.content(for: contentCommand) == "stable command target")
+
+        await owner.refreshKeyboardProjection()
+        #expect(!owner.presentation.keyboardProjectionUpdateFailed)
+        #expect(owner.clearCommand == clearCommand)
+        #expect(owner.content(for: contentCommand) == "stable command target")
+    }
+
+    @Test func projectionFailureNeverReplacesOrClearsAClearFailure()
+        async throws {
+        let record = try latestResultRecord(text: "clear remains primary")
+        let probe = LatestResultClientProbe(
+            loads: [
+                .value(.resultReady(record)),
+                .value(.resultReady(record)),
+            ],
+            clears: [.failure]
+        )
+        let projection = LatestKeyboardProjectionProbe(
+            results: [false, true]
+        )
+        let owner = latestResultOwner(
+            probe: probe,
+            publishKeyboardSnapshot: { await projection.publish() }
+        )
+
+        _ = try await owner.loadForVoiceWorkflow()
+        #expect(owner.clear(try #require(owner.clearCommand)) == .accepted)
+        await owner.waitUntilClearIsIdle()
+        #expect(owner.presentation.notice == .clearFailed)
+
+        await owner.refreshKeyboardProjection()
+        #expect(owner.presentation.notice == .clearFailed)
+        #expect(owner.presentation.keyboardProjectionUpdateFailed)
+
+        await owner.refreshKeyboardProjection()
+        #expect(owner.presentation.notice == .clearFailed)
+        #expect(!owner.presentation.keyboardProjectionUpdateFailed)
+        #expect(await projection.callCount == 2)
+    }
+
+    @Test func failedClearWithoutPublicationPreservesPendingProjectionFailure()
+        async throws {
+        let record = try latestResultRecord(text: "pending cache failure")
+        let probe = LatestResultClientProbe(
+            loads: [
+                .value(.resultReady(record)),
+                .value(.resultReady(record)),
+            ],
+            clears: [.failure]
+        )
+        let projection = LatestKeyboardProjectionProbe(results: [false])
+        let owner = latestResultOwner(
+            probe: probe,
+            publishKeyboardSnapshot: { await projection.publish() }
+        )
+
+        _ = try await owner.loadForVoiceWorkflow()
+        await owner.refreshKeyboardProjection()
+        #expect(owner.presentation.keyboardProjectionUpdateFailed)
+
+        #expect(owner.clear(try #require(owner.clearCommand)) == .accepted)
+        await owner.waitUntilClearIsIdle()
+
+        #expect(owner.presentation.notice == .clearFailed)
+        #expect(owner.presentation.keyboardProjectionUpdateFailed)
+        #expect(await projection.callCount == 1)
+    }
+
+    @Test func canonicalLoadFailureRetainsThePendingProjectionFailure()
+        async throws {
+        let record = try latestResultRecord(text: "latent cache failure")
+        let probe = LatestResultClientProbe(
+            loads: [
+                .value(.resultReady(record)),
+                .failure,
+                .value(.resultReady(record)),
+            ]
+        )
+        let projection = LatestKeyboardProjectionProbe(results: [false])
+        let owner = latestResultOwner(
+            probe: probe,
+            publishKeyboardSnapshot: { await projection.publish() }
+        )
+
+        _ = try await owner.loadForVoiceWorkflow()
+        await owner.refreshKeyboardProjection()
+        await #expect(
+            throws: IOSForegroundVoiceLatestResultOwnerError.self
+        ) {
+            _ = try await owner.loadForVoiceWorkflow()
+        }
+
+        #expect(owner.presentation.status == .unavailable)
+        #expect(owner.presentation.notice == .loadFailed)
+        #expect(owner.presentation.keyboardProjectionUpdateFailed)
+
+        _ = try await owner.loadForVoiceWorkflow()
+        #expect(owner.presentation.status == .ready)
+        #expect(owner.presentation.notice == nil)
+        #expect(owner.presentation.keyboardProjectionUpdateFailed)
+    }
+
+    @Test func clearAndRefreshShareOneOrderedProjectionPublicationLane()
+        async throws {
+        let record = try latestResultRecord(text: "serialized projection")
+        let firstStarted = LatestResultTestGate()
+        let firstRelease = LatestResultTestGate()
+        let probe = LatestResultClientProbe(
+            loads: [.value(.resultReady(record))],
+            clears: [.value(.cleared)]
+        )
+        let projection = LatestKeyboardProjectionProbe(
+            results: [false, true],
+            firstPublishStarted: firstStarted,
+            firstPublishRelease: firstRelease
+        )
+        let owner = latestResultOwner(
+            probe: probe,
+            publishKeyboardSnapshot: { await projection.publish() }
+        )
+
+        _ = try await owner.loadForVoiceWorkflow()
+        #expect(owner.clear(try #require(owner.clearCommand)) == .accepted)
+        await firstStarted.wait()
+
+        var refreshReachedOwner = false
+        let refresh = Task { @MainActor in
+            refreshReachedOwner = true
+            await owner.refreshKeyboardProjection()
+        }
+        while !refreshReachedOwner { await Task.yield() }
+        #expect(await projection.callCount == 1)
+
+        await firstRelease.open()
+        await owner.waitUntilClearIsIdle()
+        await refresh.value
+
+        let snapshot = await projection.snapshot()
+        #expect(snapshot.callCount == 2)
+        #expect(snapshot.maximumConcurrentCalls == 1)
+        #expect(owner.presentation.status == .absent)
+        #expect(!owner.presentation.keyboardProjectionUpdateFailed)
     }
 
     @Test func reconciledAbsenceRepublishesKeyboardButRetainedResultDoesNot()
@@ -687,16 +905,47 @@ private actor LatestResultTestGate {
 }
 
 private actor LatestKeyboardProjectionProbe {
-    private var results: [Bool]
-    private(set) var callCount = 0
-
-    init(results: [Bool]) {
-        self.results = results
+    nonisolated struct Snapshot: Equatable, Sendable {
+        let callCount: Int
+        let maximumConcurrentCalls: Int
     }
 
-    func publish() -> Bool {
+    private var results: [Bool]
+    private let firstPublishStarted: LatestResultTestGate?
+    private let firstPublishRelease: LatestResultTestGate?
+    private(set) var callCount = 0
+    private var activeCalls = 0
+    private var maximumConcurrentCalls = 0
+
+    init(
+        results: [Bool],
+        firstPublishStarted: LatestResultTestGate? = nil,
+        firstPublishRelease: LatestResultTestGate? = nil
+    ) {
+        self.results = results
+        self.firstPublishStarted = firstPublishStarted
+        self.firstPublishRelease = firstPublishRelease
+    }
+
+    func publish() async -> Bool {
+        activeCalls += 1
+        maximumConcurrentCalls = max(maximumConcurrentCalls, activeCalls)
+        defer { activeCalls -= 1 }
+
+        let isFirstCall = callCount == 0
         callCount += 1
+        if isFirstCall {
+            await firstPublishStarted?.open()
+            await firstPublishRelease?.wait()
+        }
         return results.isEmpty ? true : results.removeFirst()
+    }
+
+    func snapshot() -> Snapshot {
+        Snapshot(
+            callCount: callCount,
+            maximumConcurrentCalls: maximumConcurrentCalls
+        )
     }
 }
 

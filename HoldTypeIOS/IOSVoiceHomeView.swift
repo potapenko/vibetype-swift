@@ -263,8 +263,8 @@ struct IOSVoiceHomeView: View {
             IOSVoiceSetupRow(
                 number: 1,
                 systemImage: "keyboard",
-                title: "Keyboard practice",
-                detail: "Learn the basics in a few minutes."
+                title: "Add and switch keyboards",
+                detail: "In Settings › General › Keyboard › Keyboards, choose Add New Keyboard, then HoldType. Leave Full Access off and use Globe in the practice field below."
             ) {
                 practiceFieldIsFocused = true
             }
@@ -335,12 +335,9 @@ struct IOSVoiceHomeView: View {
     }
 
     private var latestSectionIsVisible: Bool {
-        switch latestResultOwner.presentation.status {
-        case .notLoaded, .absent:
-            false
-        case .ready, .clearing, .unavailable:
-            true
-        }
+        IOSVoiceLatestStatusPresentation.sectionIsVisible(
+            for: latestResultOwner.presentation
+        )
     }
 
     private var latestResultSection: some View {
@@ -457,14 +454,14 @@ struct IOSVoiceHomeView: View {
     private var keyboardPracticeSection: some View {
         Section("Keyboard Practice") {
             Text(
-                "Try typing or dictating here before returning to another app."
+                "Normal typing and Apple Dictation stay on your system keyboard. The app shares one Latest Result with HoldType Keyboard for explicit insertion; insertion eligibility expires after 10 minutes."
             )
             .font(.footnote)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
 
             TextField(
-                "Tap here and start dictating…",
+                "Tap here to try HoldType Keyboard",
                 text: $practiceText,
                 axis: .vertical
             )
@@ -796,6 +793,20 @@ struct IOSVoiceLatestStatusPresentation {
         tone.color
     }
 
+    static func sectionIsVisible(
+        for presentation: IOSForegroundVoiceLatestResultPresentation
+    ) -> Bool {
+        switch presentation.status {
+        case .notLoaded:
+            false
+        case .absent:
+            presentation.notice != nil
+                || presentation.keyboardProjectionUpdateFailed
+        case .ready, .clearing, .unavailable:
+            true
+        }
+    }
+
     static func resolve(
         _ presentation: IOSForegroundVoiceLatestResultPresentation
     ) -> Self {
@@ -842,24 +853,36 @@ struct IOSVoiceLatestStatusPresentation {
             )
         }
 
-        guard let notice = presentation.notice else { return base }
-        let noticeDetail: String = switch notice {
-        case .loadFailed:
-            "The protected Latest Result could not be verified."
-        case .clearFailed:
-            "Clear did not finish; the exact result remains available."
-        case .clearStateUnknown:
-            "Clear could not be reconciled, so text remains hidden."
-        case .resultChanged:
-            "A newer result replaced the one selected for Clear."
-        case .keyboardProjectionUpdateFailed:
-            "Latest Result changed, but the keyboard copy couldn't be updated."
+        if let notice = presentation.notice {
+            let noticeDetail: String = switch notice {
+            case .loadFailed:
+                "The protected Latest Result could not be verified."
+            case .clearFailed:
+                "Clear did not finish; the exact result remains available."
+            case .clearStateUnknown:
+                "Clear could not be reconciled, so text remains hidden."
+            case .resultChanged:
+                "A newer result replaced the one selected for Clear."
+            }
+            return Self(
+                title: base.title,
+                detail: noticeDetail,
+                systemImage: base.systemImage,
+                tone: notice == .resultChanged ? .warning : .failure,
+                showsProgress: base.showsProgress
+            )
+        }
+
+        guard presentation.keyboardProjectionUpdateFailed,
+              presentation.status == .ready
+                || presentation.status == .absent else {
+            return base
         }
         return Self(
             title: base.title,
-            detail: noticeDetail,
+            detail: "The keyboard copy couldn't be refreshed; an older item may remain until it expires.",
             systemImage: base.systemImage,
-            tone: notice == .resultChanged ? .warning : .failure,
+            tone: .failure,
             showsProgress: base.showsProgress
         )
     }

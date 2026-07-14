@@ -28,6 +28,7 @@ Approved source:
 | Device | Light | Dark |
 | --- | --- | --- |
 | iPhone 16, iOS 18.6 | [Screenshot](assets/ios-brand-stage-keyboard-2026-07-13/iphone-light.png) | [Screenshot](assets/ios-brand-stage-keyboard-2026-07-13/iphone-dark.png) |
+| iPhone 16 compact landscape, iOS 18.6 | [Screenshot](assets/ios-brand-stage-keyboard-2026-07-13/iphone-landscape-light.png) | [Screenshot](assets/ios-brand-stage-keyboard-2026-07-13/iphone-landscape-dark.png) |
 | iPad Pro 11-inch, iOS 26.0 | [Screenshot](assets/ios-brand-stage-keyboard-2026-07-13/ipad-light.png) | [Screenshot](assets/ios-brand-stage-keyboard-2026-07-13/ipad-dark.png) |
 
 The iPhone and iPad captures were refreshed from the real extension on
@@ -39,7 +40,8 @@ captures verify:
 - one-line compact status text;
 - distinct keyboard and host-app surfaces;
 - unchanged hierarchy and geometry between appearances;
-- bounded iPad content width instead of stretched controls.
+- bounded iPad content width instead of stretched controls;
+- the intended two-column compact-landscape layout in both appearances.
 
 The current real extension was also captured with Accessibility Large text and
 Increase Contrast enabled:
@@ -87,9 +89,31 @@ also says keyboard extensions must not launch apps other than Settings.
 - History, recent-result arrays, settings, prompts, audio, provider payloads,
   and credentials never enter this snapshot.
 
+## Canonical Latest Insertion Evidence
+
+An explicit qualification run started from an empty Simulator app container
+and used the production persistence owner, not a UI-only sample. It accepted one
+known result through the normal local acceptance boundary, which produced:
+
+- one canonical app-private Latest with no remaining Pending record;
+- one matching compact History entry;
+- one schema 3 App Group snapshot with the same result identifier and exact
+  text, plus an expiry exactly 600 seconds after canonical creation.
+
+The installed real keyboard then inserted that App Group item with one `Latest`
+tap. The host practice field contained the exact 39-character value
+`HoldType canonical Latest qualification`:
+
+![Canonical Latest inserted by the real keyboard](assets/ios-brand-stage-keyboard-2026-07-13/iphone-latest-canonical-insert.png)
+
+The ad hoc UI qualification result passed 1 test with 0 failures on iPhone 16,
+iOS 18.6 Simulator. The production-container fixture fails closed unless both
+canonical Voice state and compact History are empty, so it cannot replace or
+evict an existing user History entry.
+
 ## Automated Evidence
 
-- Full `HoldType-iOS` iPhone Simulator test run: 1,023 passed, 0 failed,
+- Full `HoldType-iOS` iPhone Simulator test run: 1,033 passed, 0 failed,
   0 skipped.
 - The full run includes eight direct UIKit tests of the actual Brand Stage
   view: control composition and callbacks, 44-point portrait geometry,
@@ -106,8 +130,9 @@ also says keyboard extensions must not launch apps other than Settings.
   document proxy, Return and Globe follow host traits, and synchronous or
   asynchronous History failure shows only `Open failed` before returning to
   `Ready`.
-- Focused publisher and command-surface run: 12 passed, 0 failed. Focused real
-  keyboard-view and controller run: 16 passed, 0 failed.
+- Focused Latest owner, publisher, and platform-contract run: 39 passed,
+  0 failed. Focused real keyboard-view and presentation run: 50 passed,
+  0 failed.
 - `HoldType-iOS` generic Simulator Release build: passed.
 - `HoldType` macOS build: passed.
 - `git diff --check`: passed.
@@ -127,18 +152,17 @@ practice field:
 - one Delete changed that value to `.,?!`;
 - Return appended one line break.
 
-This interaction pass does not qualify long-press cursor movement, Delete
-repeat, Globe switching, Latest App Group signing, or physical-device host
-fallbacks. Those remain covered only by deterministic tests or the device gate
-listed below.
+This interaction pass additionally qualified canonical Latest insertion through
+the real extension on Simulator. It does not qualify long-press cursor movement,
+Delete repeat, matching physical-device App Group signing, or host fallbacks.
+Those remain covered only by deterministic tests or the device gate below.
 
 ## Remaining Gate
 
 A signed physical iPhone still must verify matching App Group signing,
 restricted-mode Latest reading and insertion, host-app fallbacks, and process
-eviction. A real-extension compact-landscape capture and the iPad accessibility
-settings capture remain; compact landscape is currently qualified only by the
-direct UIKit geometry matrix.
+eviction. It must also verify cursor Space, Delete repeat, Globe behavior, and
+the remaining real-host matrix.
 
 The public History-launch result remains a separate technical observation and
 review gate. Apple documents `NSExtensionContext.open` support on iOS for Today

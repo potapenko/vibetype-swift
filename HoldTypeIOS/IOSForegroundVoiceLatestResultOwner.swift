@@ -15,7 +15,6 @@ nonisolated enum IOSForegroundVoiceLatestResultNotice: Equatable, Sendable {
     case clearFailed
     case clearStateUnknown
     case resultChanged
-    case keyboardProjectionUpdateFailed
 }
 
 /// Text-bearing presentation for the process-owned Latest Result surface.
@@ -27,6 +26,20 @@ nonisolated struct IOSForegroundVoiceLatestResultPresentation:
     let status: IOSForegroundVoiceLatestResultStatus
     let text: String?
     let notice: IOSForegroundVoiceLatestResultNotice?
+    let keyboardProjectionUpdateFailed: Bool
+
+    init(
+        status: IOSForegroundVoiceLatestResultStatus,
+        text: String?,
+        notice: IOSForegroundVoiceLatestResultNotice?,
+        keyboardProjectionUpdateFailed: Bool = false
+    ) {
+        self.status = status
+        self.text = text
+        self.notice = notice
+        self.keyboardProjectionUpdateFailed =
+            keyboardProjectionUpdateFailed
+    }
 
     static let initial = IOSForegroundVoiceLatestResultPresentation(
         status: .notLoaded,
@@ -38,15 +51,16 @@ nonisolated struct IOSForegroundVoiceLatestResultPresentation:
 nonisolated struct IOSForegroundVoiceLatestResultClearCommand:
     Equatable,
     Sendable {
-    fileprivate let presentationRevision: UInt64
+    fileprivate let selectionRevision: UInt64
 }
 
 /// Opaque admission for one exact visible Latest Result snapshot. It carries
-/// no text or durable identity and becomes stale on every owner publication.
+/// no text or durable identity and becomes stale whenever the canonical
+/// selection changes. A cache-warning-only refresh does not invalidate it.
 nonisolated struct IOSForegroundVoiceLatestResultContentCommand:
     Equatable,
     Sendable {
-    fileprivate let presentationRevision: UInt64
+    fileprivate let selectionRevision: UInt64
 }
 
 nonisolated enum IOSForegroundVoiceLatestResultClearAdmission:
@@ -224,11 +238,19 @@ final class IOSForegroundVoiceLatestResultOwner {
     @ObservationIgnored
     private var clearTask: Task<Void, Never>?
     @ObservationIgnored
-    private var presentationRevision: UInt64 = 0
+    private var selectionRevision: UInt64 = 0
     @ObservationIgnored
     private var publicationEpoch: UInt64 = 0
     @ObservationIgnored
     private var latestPublishedCoreSequence: UInt64 = 0
+    @ObservationIgnored
+    private var keyboardProjectionPublicationSequence: UInt64 = 0
+    @ObservationIgnored
+    private var latestAppliedKeyboardProjectionSequence: UInt64 = 0
+    @ObservationIgnored
+    private var keyboardProjectionPublicationTail: Task<Bool, Never>?
+    @ObservationIgnored
+    private var keyboardProjectionFailureIsPending = false
 
     convenience init(
         persistenceOwner: IOSV1ForegroundVoicePersistenceOwner,
@@ -279,7 +301,7 @@ final class IOSForegroundVoiceLatestResultOwner {
             return nil
         }
         return IOSForegroundVoiceLatestResultClearCommand(
-            presentationRevision: presentationRevision
+            selectionRevision: selectionRevision
         )
     }
 
@@ -291,7 +313,7 @@ final class IOSForegroundVoiceLatestResultOwner {
             return nil
         }
         return IOSForegroundVoiceLatestResultContentCommand(
-            presentationRevision: presentationRevision
+            selectionRevision: selectionRevision
         )
     }
 
@@ -301,7 +323,7 @@ final class IOSForegroundVoiceLatestResultOwner {
     func content(
         for command: IOSForegroundVoiceLatestResultContentCommand
     ) -> String? {
-        guard command.presentationRevision == presentationRevision,
+        guard command.selectionRevision == selectionRevision,
               Self.contentIsAdmitted(
                   presentation: presentation,
                   selection: selection
@@ -326,7 +348,7 @@ final class IOSForegroundVoiceLatestResultOwner {
                 if publicationEpoch == startingEpoch,
                    completion.sequence > latestPublishedCoreSequence {
                     latestPublishedCoreSequence = completion.sequence
-                    publish(projection)
+                    publish(applyingKeyboardProjectionState(to: projection))
                 }
                 return observation
             } catch {
@@ -349,6 +371,13 @@ final class IOSForegroundVoiceLatestResultOwner {
         }
     }
 
+    /// Republishes the bounded keyboard cache without coupling its failure to
+    /// canonical Latest. A failed refresh is retained until the Latest surface
+    /// can present it or a newer refresh succeeds.
+    func refreshKeyboardProjection() async {
+        _ = await publishKeyboardProjection()
+    }
+
     /// Admits an exact revision-bound Clear and transfers its lifetime to this
     /// process owner before returning. The caller receives no task handle that
     /// could cancel an already-admitted destructive operation.
@@ -356,7 +385,7 @@ final class IOSForegroundVoiceLatestResultOwner {
     func clear(
         _ command: IOSForegroundVoiceLatestResultClearCommand
     ) -> IOSForegroundVoiceLatestResultClearAdmission {
-        guard command.presentationRevision == presentationRevision else {
+        guard command.selectionRevision == selectionRevision else {
             return .stale
         }
         guard clearTask == nil, let expected = clearExpectation else {
@@ -370,7 +399,9 @@ final class IOSForegroundVoiceLatestResultOwner {
                 presentation: IOSForegroundVoiceLatestResultPresentation(
                     status: .clearing,
                     text: retainedText,
-                    notice: nil
+                    notice: nil,
+                    keyboardProjectionUpdateFailed:
+                        keyboardProjectionFailureIsPending
                 ),
                 selection: selection,
                 clearExpectation: nil
@@ -448,40 +479,101 @@ final class IOSForegroundVoiceLatestResultOwner {
             }
         }
 
-        let projectionUpdated = updatesKeyboardSnapshot
-            ? await publishKeyboardSnapshot()
-            : true
+        if updatesKeyboardSnapshot {
+            _ = await publishKeyboardProjection()
+        }
         guard completion.sequence > latestPublishedCoreSequence else {
             return
         }
         latestPublishedCoreSequence = completion.sequence
-        publish(
-            projection.withNotice(
-                projectionUpdated
-                    ? projection.presentation.notice
-                    : .keyboardProjectionUpdateFailed
-            )
-        )
+        publish(applyingKeyboardProjectionState(to: projection))
     }
 
     private func publishUnavailable(
         notice: IOSForegroundVoiceLatestResultNotice
     ) {
-        publish(
-            Projection(
-                presentation: IOSForegroundVoiceLatestResultPresentation(
-                    status: .unavailable,
-                    text: nil,
-                    notice: notice
-                ),
-                selection: nil,
-                clearExpectation: nil
-            )
+        let projection = Projection(
+            presentation: IOSForegroundVoiceLatestResultPresentation(
+                status: .unavailable,
+                text: nil,
+                notice: notice
+            ),
+            selection: nil,
+            clearExpectation: nil
+        )
+        publish(applyingKeyboardProjectionState(to: projection))
+    }
+
+    private func applyingKeyboardProjectionState(
+        to projection: Projection
+    ) -> Projection {
+        projection.withKeyboardProjectionUpdateFailed(
+            keyboardProjectionFailureIsPending
         )
     }
 
-    private func publish(_ projection: Projection) {
-        presentationRevision &+= 1
+    /// Enqueues every cache write from acceptance, lifecycle recovery, and
+    /// Clear behind one process-owned tail. Request sequence is assigned on the
+    /// MainActor before suspension, so both the file writes and their visible
+    /// outcomes follow one deterministic order.
+    private func publishKeyboardProjection() async -> Bool {
+        keyboardProjectionPublicationSequence &+= 1
+        let sequence = keyboardProjectionPublicationSequence
+        let previous = keyboardProjectionPublicationTail
+        let publisher = publishKeyboardSnapshot
+        let publication = Task {
+            _ = await previous?.value
+            return await publisher()
+        }
+        keyboardProjectionPublicationTail = publication
+
+        let updated = await publication.value
+        if sequence == keyboardProjectionPublicationSequence {
+            keyboardProjectionPublicationTail = nil
+        }
+        guard sequence > latestAppliedKeyboardProjectionSequence else {
+            return updated
+        }
+
+        latestAppliedKeyboardProjectionSequence = sequence
+        keyboardProjectionFailureIsPending = !updated
+        publishKeyboardProjectionStateIfVisible()
+        return updated
+    }
+
+    private func publishKeyboardProjectionStateIfVisible() {
+        switch presentation.status {
+        case .ready, .absent:
+            guard presentation.keyboardProjectionUpdateFailed
+                    != keyboardProjectionFailureIsPending else {
+                return
+            }
+            publish(
+                Projection(
+                    presentation: IOSForegroundVoiceLatestResultPresentation(
+                        status: presentation.status,
+                        text: presentation.text,
+                        notice: presentation.notice,
+                        keyboardProjectionUpdateFailed:
+                            keyboardProjectionFailureIsPending
+                    ),
+                    selection: selection,
+                    clearExpectation: clearExpectation
+                ),
+                invalidatesSelectionCommands: false
+            )
+        case .notLoaded, .clearing, .unavailable:
+            break
+        }
+    }
+
+    private func publish(
+        _ projection: Projection,
+        invalidatesSelectionCommands: Bool = true
+    ) {
+        if invalidatesSelectionCommands {
+            selectionRevision &+= 1
+        }
         presentation = projection.presentation
         selection = projection.selection
         clearExpectation = projection.clearExpectation
@@ -503,7 +595,24 @@ final class IOSForegroundVoiceLatestResultOwner {
                 presentation: IOSForegroundVoiceLatestResultPresentation(
                     status: presentation.status,
                     text: presentation.text,
-                    notice: notice
+                    notice: notice,
+                    keyboardProjectionUpdateFailed:
+                        presentation.keyboardProjectionUpdateFailed
+                ),
+                selection: selection,
+                clearExpectation: clearExpectation
+            )
+        }
+
+        func withKeyboardProjectionUpdateFailed(
+            _ failed: Bool
+        ) -> Projection {
+            Projection(
+                presentation: IOSForegroundVoiceLatestResultPresentation(
+                    status: presentation.status,
+                    text: presentation.text,
+                    notice: presentation.notice,
+                    keyboardProjectionUpdateFailed: failed
                 ),
                 selection: selection,
                 clearExpectation: clearExpectation

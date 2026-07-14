@@ -88,6 +88,18 @@ struct IOSVoiceHomePresentationTests {
         }
     }
 
+    @Test func dormantFullAccessRecoveryCopyMatchesTheNoAccessContract() {
+        let resolved = IOSVoiceHomePresentation.resolve(
+            voicePresentation(setup: .needsSetup(.fullAccess))
+        )
+
+        #expect(resolved.title == "Full Access is not required")
+        #expect(
+            resolved.detail
+                == "Leave Full Access off. HoldType Keyboard still supports local editing and Latest insertion."
+        )
+    }
+
     @Test func everyRecoveryRemainsVisibleAndNeverLooksReady() {
         let recoveries: [IOSForegroundVoiceRecovery] = [
             .captureRecoverOrDiscard,

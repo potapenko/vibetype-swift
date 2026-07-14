@@ -4,14 +4,14 @@ import HoldTypeDomain
 @_spi(HoldTypeIOSCore) import HoldTypePersistence
 
 nonisolated enum IOSKeyboardSnapshotAcceptancePublication {
-    typealias Publish = @Sendable () async -> Bool
+    typealias Publish = @Sendable () async -> Void
 
     static func apply(
         to resolution: IOSForegroundVoiceProcessingResolution,
         publish: @escaping Publish
     ) async -> IOSForegroundVoiceProcessingResolution {
         if case .acceptance = resolution {
-            _ = await publish()
+            await publish()
         }
         return resolution
     }
@@ -260,7 +260,9 @@ final class IOSForegroundVoiceRuntime {
                 )
                 return await IOSKeyboardSnapshotAcceptancePublication.apply(
                     to: resolution,
-                    publish: publishKeyboardSnapshot
+                    publish: {
+                        await latestResultOwner.refreshKeyboardProjection()
+                    }
                 )
             },
             recoverCapture: { attemptID, configuration in

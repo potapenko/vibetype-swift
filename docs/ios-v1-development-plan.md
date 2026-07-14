@@ -51,11 +51,12 @@ Remaining release work:
    extensions from launching apps other than Settings. That blocks a production
    HoldType microphone handoff and also leaves the requested History launch
    unqualified.
-2. The production Latest path is implemented without Full Access, but matching
-   App Group signing, restricted-mode reading, insertion, and process eviction
-   still require a signed physical-iPhone pass.
-3. Compact landscape, real-host editing behavior, accessibility settings, and
-   the remaining signed physical-iPhone matrix require runtime evidence.
+2. The production Latest path is implemented without Full Access, and the
+   canonical Latest -> App Group -> real-keyboard insertion E2E is complete on
+   iOS 18.6 Simulator. Matching App Group signing, restricted-mode reading,
+   insertion, and process eviction still require a signed physical-iPhone pass.
+3. Real-host editing behavior, signed-device accessibility settings, and the
+   remaining physical-iPhone matrix require runtime evidence.
 
 ## Execution Rules
 
@@ -329,9 +330,9 @@ K3 state while local editing and Globe keep working.
 | H4 Bounded legacy cleanup | Completed 2026-07-13 |
 | P1-P6 Persistence simplification and legacy retirement | Completed 2026-07-13 |
 | K1 Voice activation platform gate | Not qualified for production, 2026-07-13 |
-| K2 Production Brand Stage Adaptive | Engineering complete; portrait/iPad runtime and compact-landscape automated matrix complete, landscape/device gates pending 2026-07-14 |
-| K3 Latest snapshot and History route qualification | Latest engineering complete; History/device gate pending 2026-07-14 |
+| K2 Production Brand Stage Adaptive | Engineering complete; portrait/iPad and compact-landscape runtime evidence complete, signed-device host/accessibility gates pending 2026-07-14 |
+| K3 Latest snapshot and History route qualification | Canonical Latest E2E complete on Simulator; History review risk and signed-device host/device gates pending 2026-07-14 |
 
-Compact History and the non-launching Brand Stage surface are complete in code.
-V1.1 is not release-complete until K1 is explicitly rescoped or Apple changes
-the platform contract, and the remaining signed-device gates are resolved.
+Compact History, the non-interactive Brand Stage voice core, and explicit Latest
+insertion are complete in code. The requested best-effort History request remains
+an explicit review risk, and the signed-device gates are unresolved.

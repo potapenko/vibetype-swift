@@ -10,20 +10,23 @@ specs remain research and implementation evidence, but they do not expand this
 release unless this file explicitly links to that behavior.
 
 K1 update, 2026-07-14: current Apple documentation and App Review Guideline
-4.4.1 do not qualify a review-safe keyboard-to-containing-app launch, including
-the requested History launch. Apple may
-show its own Dictation key while `hasDictationKey` is false; that is a public
-system speech path, not the HoldType/OpenAI pipeline. The non-blocked keyboard
-UI, editing, and Latest work may proceed, but the HoldType keyboard-plus-voice
-claim remains unresolved until an explicit product rescope, new Apple guidance,
-or explicit acceptance of the review risk.
+4.4.1 do not qualify a review-safe keyboard-to-containing-app launch. The
+review-safe keyboard core therefore uses a non-interactive branded voice stage,
+starts HoldType recording only from Voice in the containing app, and supports
+explicit `Latest` insertion after the user returns to the host. The selected UI
+still retains the user-required `History` request through the public extension
+API, but it is a separate unqualified release risk: failure stays inside the
+keyboard as `Open failed`, and technical success would not by itself settle App
+Review. Apple may show its own Dictation key while `hasDictationKey` is false;
+that public system speech path is separate from the HoldType/OpenAI pipeline.
 
 ## Goal
 
 Ship one coherent iPhone product: a useful containing app for foreground voice
-input and personal writing rules, plus a polished custom voice-command keyboard
-for starting the verified voice flow, correcting text, and explicitly inserting
-accepted results.
+input and personal writing rules, plus a polished custom command keyboard for
+local editing and explicit insertion of accepted results. The keyboard's
+branded voice stage communicates product identity and the app-owned Voice
+workflow; it is not an extension voice action.
 
 V1.1 optimizes for a trustworthy daily path, not maximum platform coverage. It
 must finish the visible product before adding another recovery, storage, or
@@ -40,8 +43,11 @@ V1.1 includes:
 - one recoverable pending recording;
 - one Latest Result;
 - up to 20 successful text-only History entries;
-- one production-quality iPhone voice-command keyboard surface;
-- a dedicated keyboard voice action and explicit Insert Result path;
+- one production-quality iPhone command-keyboard surface with a non-interactive
+  branded voice stage;
+- one visible best-effort `History` request whose launch is not yet
+  release-qualified;
+- an explicit `Latest` insertion path after the user returns to the host;
 - a bounded keyboard projection of one Latest item with time-limited insertion
   eligibility only;
 - the existing Usage Estimate kept unchanged as an informational Settings
@@ -67,6 +73,8 @@ alphabetic layouts.
   autocorrection, or locale-specific typing dictionaries;
 - pixel-identical Apple keyboard trade dress or Apple emoji assets;
 - background Quick Session or a keyboard-started background recording flow;
+- keyboard-originated HoldType voice activation;
+- a guaranteed or review-qualified keyboard-originated History app launch;
 - cloud sync, accounts, analytics, profiles, modes, Live Activity, or billing;
 - production iPad floating keyboard, Stage Manager, or hardware-keyboard
   shortcuts;
@@ -92,8 +100,9 @@ release-complete until the finished History destination is restored.
 - Microphone permission is requested by the containing app only when the user
   starts the first recording or explicitly reviews permission setup.
 - The app exposes one practice field for keyboard switching and insertion.
-- Setup never claims that voice can start from the keyboard until a signed
-  physical-device test proves the exact action.
+- Setup states that HoldType voice recording starts in the containing app and
+  never presents the keyboard voice stage as an app-launch action. Any History
+  explanation describes only a best-effort request and never promises success.
 - Setup explains that normal typing remains on the user's system keyboard and
   that Globe switches between it and HoldType.
 - Punctuation, Space, Delete, Return, Globe, and read-only Latest insertion do
@@ -147,6 +156,14 @@ release-complete until the finished History destination is restored.
 - Latest Result is always on for V1.1. The old iOS `keepLatestResult` preference
   is removed from the UI and ignored by a scoped migration; macOS behavior is
   unchanged.
+- Failure to refresh the bounded keyboard copy never invalidates canonical
+  Latest. The containing app retains a nonblocking cache warning until a later
+  publication actually succeeds; operations that do not publish cannot clear
+  that warning.
+- Canonical load and Clear notices have display priority but do not erase a
+  pending cache warning. A failed empty-snapshot publication after Clear keeps
+  the otherwise-absent Latest section visible until the cache is successfully
+  refreshed.
 
 ## Compact History
 
@@ -192,10 +209,12 @@ purple are reserved for the microphone and small active-state accents.
 
 The first-release surface provides:
 
-- a compact top row with `History` navigation on the left, the HoldType mark
-  plus honest status centered, and `Latest` insertion on the right;
-- one medium microphone control and a restrained waveform/status stage; the
-  microphone is the only primary action and never becomes a full-width button;
+- a compact top row with the best-effort `History` request on the left, the
+  HoldType mark plus honest status centered, and `Latest` insertion on the
+  right;
+- one medium, non-interactive microphone treatment and a restrained
+  waveform/status stage; it communicates the app-owned Voice workflow without
+  presenting an extension action;
 - one correction row containing `.`, `,`, `?`, and `!`;
 - one editing row containing Globe, a wide Space key, Delete, and adaptive
   Return;
@@ -214,19 +233,22 @@ contains no alphabet, number deck, `A` probe key, `Refresh`, Shift, Caps Lock,
 `123`, predictions, or autocorrection. Accepted results may contain arbitrary
 Unicode; ordinary free typing and system emoji remain available through Globe.
 
-## Keyboard Voice And Insertion
+## Keyboard Voice Boundary And Latest Insertion
 
-- The microphone button performs only a physically verified action.
+- The branded microphone treatment is non-interactive. HoldType recording
+  starts only from Voice in the containing app.
 - The extension never records audio or contacts OpenAI itself.
-- Current K1 evidence does not prove a review-safe containing-app handoff. The
-  extension uses no private launch path and exposes no actionable microphone or
-  optimistic `Listening` state. The user-required public `History` handoff is a
-  separate release gate: registering the app route does not by itself qualify a
-  keyboard-originated launch.
+- Keyboard-originated HoldType voice activation is unsupported in the
+  review-safe V1.1 core. The microphone uses no URL, responder-chain, private,
+  or other app-launch path and exposes no actionable or optimistic `Listening`
+  state.
+- `History` is a separate user-required, best-effort public request to the real
+  containing-app destination. It is not claimed as review-safe or guaranteed,
+  and the app's ordinary History navigation remains the reliable path.
 - `hasDictationKey` remains false so iOS may show its own system Dictation key.
   System Dictation may insert speech directly into the active host field, but it
   does not use HoldType/OpenAI and provides no result callback to the extension.
-- The user explicitly returns to the host app and invokes `Insert Result`.
+- The user explicitly returns to the host app and selects `Latest`.
   V1.1 does not promise private automatic return or automatic insertion.
 - The app publishes one bounded keyboard snapshot to App Group storage. The
   extension is read-only and never requires Full Access merely to read or insert
@@ -248,9 +270,11 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
 - `Latest` inserts only a valid unexpired item and the keyboard never renders or
   previews its text. Full 20-entry History, detail, Share, Delete, Clear All,
   and retention settings remain in the containing app.
-- `History` requests the containing app's real History destination. It never
-  inserts text, renders transcript content, or changes the Latest-only App Group
-  snapshot. A private responder-chain or host-return workaround is forbidden.
+- `History` requests `holdtype://history` only through the public extension
+  context. It inserts no text, renders no transcript content, and changes no
+  Latest-only App Group state. A failed request keeps the keyboard open and
+  briefly shows `Open failed`; a responder-chain or private host-return
+  workaround is forbidden.
 - Every Latest selection is an explicit insertion. One tap calls
   `textDocumentProxy` once; re-entrant handling of that tap is suppressed.
 - The same still-valid result may be inserted again only after another explicit
@@ -327,26 +351,26 @@ V1.1 is not release-complete until a recorded device pass proves:
 - restricted-mode keyboard operation with no Full Access request, including
   read-only App Group Latest insertion;
 - secure-field, phone-pad, and host-opt-out fallback;
-- the honest unavailable microphone state, public History handoff result, and
-  absence of a private launch workaround;
+- the honest non-interactive microphone state, the actual public History
+  request result, and absence of a private launch workaround;
 - app foreground recording, Done, Cancel, interruption, and provider timeout;
 - explicit return and Latest insertion exactly once per tap, with no automatic
-  or wrong-field replay; the actual keyboard-originated History launch result is
-  recorded without treating technical success as App Review qualification;
+  or wrong-field replay; the History result is recorded without treating
+  technical success as App Review qualification;
 - process termination preserves Latest or the one pending attempt;
 - effective Keychain and Data Protection behavior.
 - after explicit user authorization with a configured provider key, one manual
   Standard-mode smoke proves physical microphone -> OpenAI -> configured text
-  rules -> Latest -> History -> manual return -> Insert Result. Automated agents
-  do not enter the key or run live-provider tooling without that request.
+  rules -> Latest -> History -> manual return -> Latest insertion. Automated
+  agents do not enter the key or run live-provider tooling without that request.
 
 Simulator evidence cannot pass this gate.
 
-The current public documentation does not qualify the supported containing-app
-handoff requirement. The keyboard-plus-voice V1.1 defined here remains no-go
-until an explicitly approved product rescope, new Apple guidance, or explicit
-acceptance of the review risk; an instruction-only microphone button is not
-successful completion of V1.1.
+The review-safe keyboard core is the non-interactive branded voice stage, local
+editing, and explicit `Latest` insertion. HoldType voice handoff is out of
+scope. The selected `History` request remains an explicit product exception and
+release no-go until Apple clarifies the rule or the review risk is accepted;
+observed device behavior alone does not make it review-safe.
 
 ## Complexity Guardrails
 
@@ -371,9 +395,10 @@ successful completion of V1.1.
 
 ## Voice Activation Decision
 
-Physical evidence may qualify App Group, editing, insertion, fallback, and
-metadata behavior. It may also show whether a one-way custom URL happens to work
-on a specific iOS version, but it cannot alone make undocumented keyboard
-behavior App-Review-safe. No production spike adds a private host-return path or
-fabricates recording state. Continuing as an app-only product or changing the
-keyboard's role requires an explicit scope and product-name decision.
+The review-safe core is settled as app-owned Voice plus a non-interactive
+branded keyboard stage and explicit `Latest` insertion. Physical evidence may
+qualify App Group, editing, insertion, fallback, and metadata behavior, but it
+cannot make the retained public History request App-Review-safe. No production
+spike adds a private host-return path or fabricated recording state. Shipping
+the History exception requires explicit risk acceptance or new public Apple
+support.
