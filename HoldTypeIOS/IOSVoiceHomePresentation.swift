@@ -17,6 +17,16 @@ struct IOSVoiceStatusPresentation: Equatable, Sendable {
     let setupDestination: RecoveryDestination?
 }
 
+enum IOSVoicePrimaryGate: Equatable, Sendable {
+    case available
+    case draftLoading
+    case draftUpdating
+    case draftEditing
+    case draftUnavailable
+    case draftFull
+    case voiceChecking
+}
+
 enum IOSVoiceActionProminence: Equatable, Sendable {
     case primary
     case secondary
@@ -211,7 +221,10 @@ enum IOSVoiceHomePresentation {
                 tone: .failure
             )
         case .needsSetup(let destination):
-            return setupStatus(destination)
+            return setupStatus(
+                destination,
+                failure: presentation.failure
+            )
         case .ready:
             break
         }
@@ -281,8 +294,20 @@ enum IOSVoiceHomePresentation {
     }
 
     private static func setupStatus(
-        _ destination: RecoveryDestination
+        _ destination: RecoveryDestination,
+        failure: IOSForegroundVoiceFailure?
     ) -> IOSVoiceStatusPresentation {
+        if destination == .microphoneAndPrivacy,
+           failure == .microphonePermissionDenied {
+            return status(
+                "Microphone access is off",
+                detail: "Open Privacy & Permissions to allow recording, then return to Voice.",
+                image: "mic.slash",
+                tone: .warning,
+                setupDestination: destination
+            )
+        }
+
         let copy: (String, String, String)
         switch destination {
         case .openAI:
@@ -329,6 +354,60 @@ enum IOSVoiceHomePresentation {
             tone: .warning,
             setupDestination: destination
         )
+    }
+
+    static func primaryGateStatus(
+        _ gate: IOSVoicePrimaryGate
+    ) -> IOSVoiceStatusPresentation? {
+        switch gate {
+        case .available:
+            nil
+        case .draftLoading:
+            status(
+                "Preparing your Draft…",
+                detail: "HoldType is loading the text area before enabling dictation.",
+                image: "doc.text",
+                tone: .neutral,
+                showsProgress: true
+            )
+        case .draftUpdating:
+            status(
+                "Saving your Draft…",
+                detail: "Dictation will be available as soon as the current text is safe.",
+                image: "doc.badge.clock",
+                tone: .neutral,
+                showsProgress: true
+            )
+        case .draftEditing:
+            status(
+                "Finish editing to dictate",
+                detail: "Tap Done on the keyboard, then start a new dictation.",
+                image: "keyboard",
+                tone: .neutral
+            )
+        case .draftUnavailable:
+            status(
+                "Draft needs attention",
+                detail: "Reload the protected Draft before adding another dictation.",
+                image: "doc.badge.exclamationmark",
+                tone: .failure
+            )
+        case .draftFull:
+            status(
+                "Draft is full",
+                detail: "Copy or clear the Draft above before adding another dictation.",
+                image: "doc.badge.ellipsis",
+                tone: .warning
+            )
+        case .voiceChecking:
+            status(
+                "Checking Voice…",
+                detail: "HoldType is confirming setup before enabling dictation.",
+                image: "mic",
+                tone: .neutral,
+                showsProgress: true
+            )
+        }
     }
 
     private static func warningStatus(

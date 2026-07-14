@@ -116,6 +116,55 @@ struct IOSSettingsHomeView: View {
             } else {
                 IOSDestinationLoadingView(title: "Loading Settings")
             }
+        case .voiceRecovery(let recovery):
+            voiceRecoveryDestination(recovery)
+        }
+    }
+
+    @ViewBuilder
+    private func voiceRecoveryDestination(
+        _ recovery: IOSVoiceSettingsRecovery
+    ) -> some View {
+        Group {
+            switch recovery {
+            case .openAI:
+                IOSOpenAISettingsView(editorDraft: $openAIEditorDraft)
+            case .transcription:
+                if let settings = currentSettings {
+                    generalSettingsDestination(
+                        .transcription,
+                        settings: settings
+                    )
+                } else {
+                    IOSDestinationLoadingView(title: "Loading Settings")
+                }
+            case .translation:
+                if let settings = currentSettings {
+                    generalSettingsDestination(
+                        .translation,
+                        settings: settings
+                    )
+                } else {
+                    IOSDestinationLoadingView(title: "Loading Settings")
+                }
+            case .keyboard, .fullAccess:
+                IOSKeyboardSetupView(practiceText: $practiceText)
+            case .privacyReview, .microphonePermission:
+                if foregroundVoiceRuntimeAvailable {
+                    IOSPrivacyPermissionsView()
+                } else {
+                    ContentUnavailableView(
+                        "Privacy Status Unavailable",
+                        systemImage: "hand.raised.slash",
+                        description: Text(
+                            "Foreground Voice is unavailable in this build."
+                        )
+                    )
+                }
+            }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            IOSVoiceSettingsRecoveryBanner(recovery: recovery)
         }
     }
 
@@ -160,6 +209,36 @@ struct IOSSettingsHomeView: View {
         case .notLoaded, .loadFailed:
             nil
         }
+    }
+}
+
+private struct IOSVoiceSettingsRecoveryBanner: View {
+    let recovery: IOSVoiceSettingsRecovery
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(recovery.title)
+                    .font(.headline)
+                Text(recovery.detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } icon: {
+            Image(systemName: recovery.systemImage)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.orange)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.regularMaterial)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("ios.settings.voice-recovery")
     }
 }
 

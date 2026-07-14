@@ -2,14 +2,14 @@ import HoldTypeDomain
 import SwiftUI
 
 enum IOSVoiceActivityPhase: Equatable {
-    case idle
+    case ready
     case listening
     case recognizing
 
     static func resolve(_ workPhase: VoiceWorkPhase) -> Self {
         switch workPhase {
         case .inactive, .arming, .ready:
-            .idle
+            .ready
         case .listening:
             .listening
         case .finalizing, .processing:
@@ -30,8 +30,6 @@ struct IOSVoiceRecordButton: View {
         Button(action: action) {
             IOSVoiceActivityIndicator(phase: activityPhase)
                 .id(activityPhase)
-                .saturation(isEnabled || activityPhase != .idle ? 1 : 0)
-                .opacity(isEnabled || activityPhase != .idle ? 1 : 0.44)
                 .frame(width: 208, height: 208)
                 .contentShape(Circle())
         }
@@ -54,15 +52,19 @@ struct IOSVoiceRecordButton: View {
         if activityPhase == .recognizing {
             return "HoldType is recognizing the current dictation."
         }
-        return "Review the status above to make dictation available."
+        return "HoldType is finishing the current dictation."
     }
 }
 
-private struct IOSVoiceActivityIndicator: View {
+struct IOSVoiceActivityIndicator: View {
     let phase: IOSVoiceActivityPhase
 
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency)
+    private var reduceTransparency
+    @Environment(\.colorScheme)
+    private var colorScheme
 
     @State private var isPulsing = false
     @State private var isRotating = false
@@ -70,8 +72,14 @@ private struct IOSVoiceActivityIndicator: View {
     var body: some View {
         indicator
             .frame(width: Self.visualSize, height: Self.visualSize)
+            .shadow(
+                color: reduceTransparency
+                    ? .clear
+                    : phase.accent.opacity(colorScheme == .dark ? 0.28 : 0.16),
+                radius: Self.scaled(5)
+            )
             .onAppear {
-                guard !reduceMotion, phase != .idle else { return }
+                guard !reduceMotion, phase != .ready else { return }
 
                 withAnimation(
                     .easeInOut(duration: phase.pulseDuration)
@@ -91,33 +99,45 @@ private struct IOSVoiceActivityIndicator: View {
 
     @ViewBuilder
     private var indicator: some View {
-        if reduceMotion || phase == .idle {
-            fullArtwork
+        if reduceMotion || phase == .ready {
+            ZStack {
+                staticOrbit
+                coreArtwork
+            }
         } else {
             ZStack {
                 animatedOrbit
-
-                Image(phase.coreAssetName)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .scaleEffect(isPulsing ? phase.corePulseScale : 1)
+                coreArtwork
+                    .scaleEffect(
+                        isPulsing ? phase.corePulseScale : 1
+                    )
             }
             .scaleEffect(isPulsing ? phase.containerPulseScale : 1)
         }
     }
 
-    private var fullArtwork: some View {
-        Image(phase.fullAssetName)
+    private var coreArtwork: some View {
+        Image(phase.coreAssetName)
+            .renderingMode(.original)
             .resizable()
             .interpolation(.high)
             .scaledToFit()
     }
 
     @ViewBuilder
+    private var staticOrbit: some View {
+        switch phase {
+        case .ready, .listening:
+            listeningOrbit
+        case .recognizing:
+            recognizingOrbit
+        }
+    }
+
+    @ViewBuilder
     private var animatedOrbit: some View {
         switch phase {
-        case .idle:
+        case .ready:
             EmptyView()
         case .listening:
             listeningOrbit
@@ -206,21 +226,10 @@ private struct IOSVoiceActivityIndicator: View {
 }
 
 private extension IOSVoiceActivityPhase {
-    var fullAssetName: String {
-        switch self {
-        case .idle:
-            "ActivityIdleIndicatorLight"
-        case .listening:
-            "ActivityRecordingIndicatorLight"
-        case .recognizing:
-            "ActivityTranscribingIndicatorLight"
-        }
-    }
-
     var coreAssetName: String {
         switch self {
-        case .idle:
-            "ActivityIdleIndicatorLight"
+        case .ready:
+            "ActivityRecordingCoreLight"
         case .listening:
             "ActivityRecordingCoreLight"
         case .recognizing:
@@ -230,7 +239,7 @@ private extension IOSVoiceActivityPhase {
 
     var accessibilityValue: String {
         switch self {
-        case .idle:
+        case .ready:
             "Ready"
         case .listening:
             "Listening"
@@ -241,9 +250,7 @@ private extension IOSVoiceActivityPhase {
 
     var accent: Color {
         switch self {
-        case .idle:
-            .secondary
-        case .listening:
+        case .ready, .listening:
             Color(red: 0.031, green: 0.545, blue: 0.941)
         case .recognizing:
             Color(red: 0.388, green: 0.078, blue: 0.894)
@@ -252,7 +259,7 @@ private extension IOSVoiceActivityPhase {
 
     var pulseDuration: Double {
         switch self {
-        case .idle:
+        case .ready:
             0
         case .listening:
             0.78
@@ -263,7 +270,7 @@ private extension IOSVoiceActivityPhase {
 
     var rotationDuration: Double {
         switch self {
-        case .idle:
+        case .ready:
             0
         case .listening:
             1.8
@@ -274,7 +281,7 @@ private extension IOSVoiceActivityPhase {
 
     var corePulseScale: CGFloat {
         switch self {
-        case .idle:
+        case .ready:
             1
         case .listening:
             1.035
@@ -285,7 +292,7 @@ private extension IOSVoiceActivityPhase {
 
     var containerPulseScale: CGFloat {
         switch self {
-        case .idle:
+        case .ready:
             1
         case .listening:
             1.025

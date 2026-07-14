@@ -70,12 +70,46 @@ struct IOSVoiceHomePresentationTests {
     }
 
     @Test func primaryActivityUsesListeningThenRecognitionVisuals() {
-        #expect(IOSVoiceActivityPhase.resolve(.inactive) == .idle)
-        #expect(IOSVoiceActivityPhase.resolve(.arming) == .idle)
-        #expect(IOSVoiceActivityPhase.resolve(.ready) == .idle)
+        #expect(IOSVoiceActivityPhase.resolve(.inactive) == .ready)
+        #expect(IOSVoiceActivityPhase.resolve(.arming) == .ready)
+        #expect(IOSVoiceActivityPhase.resolve(.ready) == .ready)
         #expect(IOSVoiceActivityPhase.resolve(.listening) == .listening)
         #expect(IOSVoiceActivityPhase.resolve(.finalizing) == .recognizing)
         #expect(IOSVoiceActivityPhase.resolve(.processing) == .recognizing)
+    }
+
+    @Test func blockedPrimaryGatesAlwaysExplainTheNextStep() {
+        let gates: [IOSVoicePrimaryGate] = [
+            .draftLoading,
+            .draftUpdating,
+            .draftEditing,
+            .draftUnavailable,
+            .draftFull,
+            .voiceChecking,
+        ]
+
+        for gate in gates {
+            let status = IOSVoiceHomePresentation.primaryGateStatus(gate)
+            #expect(status != nil)
+            #expect(status?.title.isEmpty == false)
+            #expect(status?.detail.isEmpty == false)
+        }
+        #expect(
+            IOSVoiceHomePresentation.primaryGateStatus(.available) == nil
+        )
+    }
+
+    @Test func deniedMicrophoneRoutesToTheOwningSettingsScreen() {
+        let resolved = IOSVoiceHomePresentation.resolve(
+            voicePresentation(
+                setup: .needsSetup(.microphoneAndPrivacy),
+                failure: .microphonePermissionDenied
+            )
+        )
+
+        #expect(resolved.title == "Microphone access is off")
+        #expect(resolved.setupDestination == .microphoneAndPrivacy)
+        #expect(resolved.detail.contains("Privacy & Permissions"))
     }
 
     @Test func everySetupDestinationOwnsItsVisibleRecoveryCopy() {

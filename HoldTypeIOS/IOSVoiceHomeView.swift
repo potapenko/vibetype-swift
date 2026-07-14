@@ -31,6 +31,7 @@ struct IOSVoiceHomeView: View {
     @State private var accessibilityAnnouncementCandidate:
         IOSAccessibilityAnnouncementCandidate?
     @State private var draftEditSaveTask: Task<Void, Never>?
+    @State private var automaticallyOpenedSetup: RecoveryDestination?
     @FocusState private var practiceFieldIsFocused: Bool
     @FocusState private var draftEditorIsFocused: Bool
 
@@ -43,7 +44,9 @@ struct IOSVoiceHomeView: View {
                 VStack(spacing: 14) {
                     draftSurface
                         .frame(minHeight: 250, maxHeight: 340)
-                    voiceStatusSurface
+                    if showsInlineVoiceStatus {
+                        voiceStatusSurface
+                    }
                     Spacer(minLength: 0)
                     primaryVoiceSurface
                     Spacer(minLength: 0)
@@ -171,6 +174,12 @@ struct IOSVoiceHomeView: View {
                 message,
                 priority: .status
             )
+        }
+        .onChange(
+            of: sceneOwner.presentation.setup,
+            initial: true
+        ) { _, setup in
+            routeToSetupIfNeeded(setup)
         }
         .onChange(of: sceneOwner.actionCommands) { _, commands in
             guard let pendingVoiceCommand,
@@ -494,10 +503,7 @@ struct IOSVoiceHomeView: View {
             .accessibilityLabel("Redo Draft Change")
 
             Button {
-                guard !draftOwner.visibleText.isEmpty else { return }
-                IOSVoiceClipboard.copy(draftOwner.visibleText)
-                draftActionNotice = "Copied"
-                IOSAccessibilityAnnouncement.post("Current Draft copied")
+                copyDraft()
             } label: {
                 Image(systemName: "doc.on.doc")
                     .frame(width: 36, height: 36)
@@ -506,13 +512,7 @@ struct IOSVoiceHomeView: View {
             .accessibilityLabel("Copy Draft")
 
             Button(role: .destructive) {
-                draftActionNotice = nil
-                if draftOwner.isEditing {
-                    draftOwner.updateEditingText("")
-                    scheduleDraftEditPersistence()
-                } else {
-                    Task { await draftOwner.clear() }
-                }
+                clearDraft()
             } label: {
                 Image(systemName: "trash")
                     .frame(width: 36, height: 36)
@@ -564,44 +564,217 @@ struct IOSVoiceHomeView: View {
         .padding(.horizontal, 4)
     }
 
+    @ViewBuilder
     private var primaryVoiceSurface: some View {
         let status = IOSVoiceHomePresentation.resolve(
             sceneOwner.presentation
         )
-        let command = sceneOwner.actionCommands.first {
+        let command = primaryVoiceCommand
+
+        switch sceneOwner.presentation.phase {
+        case .inactive:
+            if let command, primaryVoiceGate == .available {
+                voiceActivityButton(command)
+            } else {
+                primaryVoiceRecoverySurface(
+                    status: primaryBlockedStatus(fallback: status)
+                )
+            }
+        case .arming:
+            ProgressView()
+                .controlSize(.large)
+                .tint(.accentColor)
+                .frame(width: 96, height: 96)
+                .background(
+                    Color.accentColor.opacity(0.08),
+                    in: Circle()
+                )
+                .accessibilityLabel(status.title)
+                .accessibilityValue(status.detail)
+                .accessibilityIdentifier("ios.voice.primary-progress")
+        case .listening:
+            if let command {
+                voiceActivityButton(command)
+            } else {
+                voiceActivityIndicator(.listening, status: status)
+            }
+        case .finalizing, .processing:
+            voiceActivityIndicator(.recognizing, status: status)
+        case .ready:
+            primaryVoiceRecoverySurface(status: status)
+        }
+    }
+
+    private func voiceActivityButton(
+        _ command: IOSForegroundVoiceActionCommand
+    ) -> some View {
+        let presentation = IOSVoiceActionPresentation.resolve(command.action)
+
+        return IOSVoiceRecordButton(
+            accessibilityLabel: presentation.title,
+            isEnabled: true,
+            workPhase: sceneOwner.presentation.phase,
+            action: { performVoiceCommand(command) }
+        )
+        .accessibilityIdentifier("ios.voice.primary-action")
+    }
+
+    private func voiceActivityIndicator(
+        _ phase: IOSVoiceActivityPhase,
+        status: IOSVoiceStatusPresentation
+    ) -> some View {
+        IOSVoiceActivityIndicator(phase: phase)
+            .id(phase)
+            .frame(width: 208, height: 208)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(status.title)
+            .accessibilityValue(status.detail)
+            .accessibilityIdentifier("ios.voice.primary-activity")
+    }
+
+    private var showsInlineVoiceStatus: Bool {
+        switch sceneOwner.presentation.phase {
+        case .inactive:
+            primaryVoiceCommand != nil && primaryVoiceGate == .available
+        case .ready:
+            false
+        case .arming, .listening, .finalizing, .processing:
+            true
+        }
+    }
+
+    private var primaryVoiceCommand: IOSForegroundVoiceActionCommand? {
+        sceneOwner.actionCommands.first {
             isPrimaryVoiceAction($0.action)
         }
-        let presentation = command.map {
-            IOSVoiceActionPresentation.resolve($0.action)
+    }
+
+    private var primaryVoiceGate: IOSVoicePrimaryGate {
+        if draftOwner.isEditing { return .draftEditing }
+
+        if draftOwner.operation == .refreshing {
+            return draftOwner.isLoaded ? .draftUpdating : .draftLoading
         }
-        let startIsBlockedByDraft = command?.action == .startStandard
-            && draftBlocksNewDictation
-        let isEnabled = command != nil && !startIsBlockedByDraft
-        let accessibilityLabel = presentation?.title ?? status.title
+        if draftOwner.operation != .idle { return .draftUpdating }
 
-        return VStack(spacing: 4) {
-            IOSVoiceRecordButton(
-                accessibilityLabel: accessibilityLabel,
-                isEnabled: isEnabled,
-                workPhase: sceneOwner.presentation.phase,
-                action: {
-                    guard let command, isEnabled else { return }
-                    performVoiceCommand(command)
-                }
-            )
-            .accessibilityIdentifier("ios.voice.primary-action")
+        switch draftOwner.state {
+        case .notLoaded:
+            return .draftLoading
+        case .loadFailed:
+            return .draftUnavailable
+        case .ready:
+            break
+        }
 
-            if startIsBlockedByDraft {
-                Text(
-                    draftOwner.isFull
-                        ? "Copy or clear this Draft before adding more."
-                        : "Restore Draft access before starting dictation."
+        if draftOwner.isFull { return .draftFull }
+        if primaryVoiceCommand == nil { return .voiceChecking }
+        return .available
+    }
+
+    private func primaryBlockedStatus(
+        fallback: IOSVoiceStatusPresentation
+    ) -> IOSVoiceStatusPresentation {
+        if sceneOwner.presentation.setup != .ready
+            || sceneOwner.presentation.recovery != .none
+            || sceneOwner.presentation.failure != nil {
+            return fallback
+        }
+        return IOSVoiceHomePresentation.primaryGateStatus(primaryVoiceGate)
+            ?? fallback
+    }
+
+    private func primaryVoiceRecoverySurface(
+        status: IOSVoiceStatusPresentation
+    ) -> some View {
+        let recoveryCommands = sceneOwner.actionCommands.filter {
+            !isPrimaryVoiceAction($0.action)
+                && $0.action != .startTranslation
+                && $0.action != .startCorrection
+        }
+
+        return VStack(spacing: 14) {
+            if status.showsProgress {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(status.color)
+                    .frame(width: 58, height: 58)
+            } else {
+                Image(systemName: status.systemImage)
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(status.color)
+                    .frame(width: 58, height: 58)
+                    .background(status.color.opacity(0.10), in: Circle())
+            }
+
+            VStack(spacing: 5) {
+                Text(status.title)
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                Text(status.detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !recoveryCommands.isEmpty {
+                IOSVoiceActionLayout(
+                    commands: recoveryCommands,
+                    perform: performVoiceCommand
                 )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            } else if let destination = status.setupDestination,
+                      let setupAction = setupAction(for: destination) {
+                Button(setupAction.title) {
+                    setupAction.perform()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .accessibilityIdentifier("ios.voice.setup-action")
+            } else if primaryVoiceGate == .draftUnavailable {
+                Button("Try Loading Draft Again") {
+                    Task { await draftOwner.refresh() }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .accessibilityIdentifier("ios.voice.draft-retry")
+            } else if primaryVoiceGate == .draftFull {
+                ViewThatFits(in: .horizontal) {
+                    HStack { draftRecoveryButtons }
+                    VStack { draftRecoveryButtons }
+                }
             }
         }
+        .frame(maxWidth: 360)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 20)
+        .background(
+            status.color.opacity(0.055),
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(status.color.opacity(0.16), lineWidth: 1)
+        }
+        .accessibilityIdentifier("ios.voice.primary-recovery")
+    }
+
+    @ViewBuilder
+    private var draftRecoveryButtons: some View {
+        Button {
+            copyDraft()
+        } label: {
+            Label("Copy Draft", systemImage: "doc.on.doc")
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+
+        Button(role: .destructive) {
+            clearDraft()
+        } label: {
+            Label("Clear Draft", systemImage: "trash")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
     }
 
     private func isPrimaryVoiceAction(
@@ -612,6 +785,23 @@ struct IOSVoiceHomeView: View {
 
     private var draftBlocksNewDictation: Bool {
         !draftOwner.isAvailableForMutation || draftOwner.isFull
+    }
+
+    private func copyDraft() {
+        guard !draftOwner.visibleText.isEmpty else { return }
+        IOSVoiceClipboard.copy(draftOwner.visibleText)
+        draftActionNotice = "Copied"
+        IOSAccessibilityAnnouncement.post("Current Draft copied")
+    }
+
+    private func clearDraft() {
+        draftActionNotice = nil
+        if draftOwner.isEditing {
+            draftOwner.updateEditingText("")
+            scheduleDraftEditPersistence()
+        } else {
+            Task { await draftOwner.clear() }
+        }
     }
 
     private var voiceHeader: some View {
@@ -980,32 +1170,78 @@ struct IOSVoiceHomeView: View {
     ) -> (title: String, perform: () -> Void)? {
         switch destination {
         case .openAI:
-            ("Open OpenAI Settings", { openSettings(.openAI) })
+            (
+                "Open OpenAI Settings",
+                { openVoiceRecoverySettings(destination) }
+            )
         case .transcription:
             (
                 "Review Transcription Settings",
-                { openSettings(.general(.transcription)) }
+                { openVoiceRecoverySettings(destination) }
             )
         case .translation:
             (
                 "Review Translation Settings",
-                { openSettings(.general(.translation)) }
+                { openVoiceRecoverySettings(destination) }
             )
         case .microphoneAndPrivacy:
             (
                 "Review Privacy & Permissions",
-                { openSettings(.privacyAndPermissions) }
+                { openVoiceRecoverySettings(destination) }
             )
         case .keyboard:
             (
                 "Open Keyboard Setup",
-                { openSettings(.keyboardSetup) }
+                { openVoiceRecoverySettings(destination) }
             )
         case .fullAccess:
             (
                 "Enable Full Access",
-                { openSettings(.keyboardSetup) }
+                { openVoiceRecoverySettings(destination) }
             )
+        }
+    }
+
+    private func routeToSetupIfNeeded(
+        _ setup: IOSForegroundVoiceSetup
+    ) {
+        guard case .needsSetup(let destination) = setup else {
+            automaticallyOpenedSetup = nil
+            return
+        }
+        guard automaticallyOpenedSetup != destination else { return }
+        automaticallyOpenedSetup = destination
+        openVoiceRecoverySettings(destination)
+    }
+
+    private func openVoiceRecoverySettings(
+        _ destination: RecoveryDestination
+    ) {
+        openSettings(
+            .voiceRecovery(
+                voiceSettingsRecovery(for: destination)
+            )
+        )
+    }
+
+    private func voiceSettingsRecovery(
+        for destination: RecoveryDestination
+    ) -> IOSVoiceSettingsRecovery {
+        switch destination {
+        case .openAI:
+            .openAI
+        case .transcription:
+            .transcription
+        case .translation:
+            .translation
+        case .keyboard:
+            .keyboard
+        case .fullAccess:
+            .fullAccess
+        case .microphoneAndPrivacy:
+            sceneOwner.presentation.failure == .microphonePermissionDenied
+                ? .microphonePermission
+                : .privacyReview
         }
     }
 

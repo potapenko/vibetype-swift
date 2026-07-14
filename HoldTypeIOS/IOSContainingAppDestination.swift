@@ -94,6 +94,87 @@ enum IOSSettingsRoute: Hashable {
     case keyboardSetup
     case privacyAndPermissions
     case usageEstimate
+    case voiceRecovery(IOSVoiceSettingsRecovery)
+}
+
+enum IOSVoiceSettingsRecovery: String, Hashable, Sendable {
+    case openAI
+    case transcription
+    case translation
+    case keyboard
+    case fullAccess
+    case privacyReview
+    case microphonePermission
+
+    var title: String {
+        switch self {
+        case .openAI:
+            "OpenAI key required for Voice"
+        case .transcription:
+            "Transcription setup required"
+        case .translation:
+            "Translation setup required"
+        case .keyboard:
+            "Keyboard setup required"
+        case .fullAccess:
+            "Full Access required for keyboard voice"
+        case .privacyReview:
+            "Privacy review required"
+        case .microphonePermission:
+            "Microphone access is off"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .openAI:
+            "Add or repair the API key below. HoldType cannot transcribe Voice recordings without it."
+        case .transcription:
+            "Choose a valid transcription language and model below."
+        case .translation:
+            "Choose a valid translation target before using Translate."
+        case .keyboard:
+            "Complete keyboard setup below, then verify it in the practice field."
+        case .fullAccess:
+            "Enable Allow Full Access for keyboard-controlled dictation, then return to HoldType."
+        case .privacyReview:
+            "Review microphone access and OpenAI processing consent below."
+        case .microphonePermission:
+            "Allow microphone access below, then return to Voice and start dictation again."
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .openAI:
+            "key.fill"
+        case .transcription:
+            "waveform.and.mic"
+        case .translation:
+            "character.book.closed"
+        case .keyboard, .fullAccess:
+            "keyboard.badge.ellipsis"
+        case .privacyReview:
+            "hand.raised.fill"
+        case .microphonePermission:
+            "mic.slash.fill"
+        }
+    }
+
+    var destination: IOSSettingsRoute {
+        switch self {
+        case .openAI:
+            .openAI
+        case .transcription:
+            .general(.transcription)
+        case .translation:
+            .general(.translation)
+        case .keyboard, .fullAccess:
+            .keyboardSetup
+        case .privacyReview, .microphonePermission:
+            .privacyAndPermissions
+        }
+    }
 }
 
 enum IOSLibraryRoute: Hashable {

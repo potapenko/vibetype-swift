@@ -60,6 +60,48 @@ struct IOSContainingAppShellTests {
         )
     }
 
+    @Test func voiceRecoveryRoutesOwnVisibleInstructionsAndDestinations() {
+        let recoveries: [IOSVoiceSettingsRecovery] = [
+            .openAI,
+            .transcription,
+            .translation,
+            .keyboard,
+            .fullAccess,
+            .privacyReview,
+            .microphonePermission,
+        ]
+
+        for recovery in recoveries {
+            #expect(!recovery.title.isEmpty)
+            #expect(!recovery.detail.isEmpty)
+            #expect(UIImage(systemName: recovery.systemImage) != nil)
+        }
+
+        #expect(IOSVoiceSettingsRecovery.openAI.destination == .openAI)
+        #expect(
+            IOSVoiceSettingsRecovery.transcription.destination
+                == .general(.transcription)
+        )
+        #expect(
+            IOSVoiceSettingsRecovery.translation.destination
+                == .general(.translation)
+        )
+        #expect(
+            IOSVoiceSettingsRecovery.keyboard.destination == .keyboardSetup
+        )
+        #expect(
+            IOSVoiceSettingsRecovery.fullAccess.destination == .keyboardSetup
+        )
+        #expect(
+            IOSVoiceSettingsRecovery.privacyReview.destination
+                == .privacyAndPermissions
+        )
+        #expect(
+            IOSVoiceSettingsRecovery.microphonePermission.destination
+                == .privacyAndPermissions
+        )
+    }
+
     @Test func practiceDraftSurvivesRoundTripAndIsSceneLocal() {
         var firstScene = IOSContainingAppSceneDraft()
         let secondScene = IOSContainingAppSceneDraft()

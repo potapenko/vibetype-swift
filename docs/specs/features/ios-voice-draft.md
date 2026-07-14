@@ -69,8 +69,9 @@ without opening the custom keyboard.
   activity artwork and motion as the macOS floating indicator instead of
   placing a microphone, progress spinner, or action label over the artwork.
   Its action name and state remain available to VoiceOver.
-- Ready shows the static idle activity mark as an active Start Dictation
-  control.
+- Ready shows the complete cyan recording artwork as a static, full-color Start
+  Dictation control. iOS does not invent a grey idle phase because the macOS
+  floating indicator has only recording and transcribing phases.
 - Listening uses the same primary location for Done, shows elapsed time plus a
   separate Cancel action, and switches the control to the cyan recording
   phase: two rotating orbit lines, an orbiting point, and a subtle pulse.
@@ -78,11 +79,21 @@ without opening the custom keyboard.
   the purple recognition phase: a rotating particle ring and slower subtle
   pulse. The status row continues to distinguish local finalization,
   transcription, refinement, and result saving in text.
-- Arming keeps the static primary control visible but unavailable while the
+- Arming replaces the primary control with a native progress state while the
   status row shows exact progress. Cancel appears only when the controller
   admits it.
-- Setup, Pending recovery, blocked local recovery, and unavailable runtime
-  keep a grey static control plus the exact corrective actions.
+- Setup, Pending recovery, blocked local recovery, unavailable runtime, and an
+  unavailable Draft never show a disabled activity image. They replace the
+  activity control with an explicit native recovery state containing the
+  problem, the next action, and every exact corrective command currently
+  admitted by the controller.
+- A setup problem that belongs to Settings exposes one direct action to its
+  owning OpenAI, Transcription, Translation, Keyboard, or Privacy & Permissions
+  destination. Draft capacity and Draft storage problems stay on Voice and
+  offer only their local Copy, Clear, or Retry resolution.
+- A transient reconciliation interval says that Voice or Draft is being
+  checked and shows progress; it never presents Ready while Start Dictation is
+  not admitted.
 - No unavailable state fabricates readiness or starts provider work.
 - Reduce Motion replaces rotating and pulsing phases with their corresponding
   complete static recording or recognition artwork, preserving truthful state.
@@ -115,8 +126,13 @@ without opening the custom keyboard.
 
 - Safely loaded Draft text remains visible and copyable while new dictation is
   unavailable.
+- A stable setup blocker discovered at launch or during Voice preflight opens
+  its exact owning Settings destination once. Returning to Voice without
+  resolving it does not create an automatic navigation loop; the centered
+  recovery state keeps the same direct action available.
 - OpenAI, transcription, translation, and microphone/privacy setup route to
-  their existing owning Settings screens.
+  their existing owning Settings screens. The destination shows a contextual
+  Voice Setup message explaining why it opened and what the user must complete.
 - Keyboard and Full Access recovery route to a dedicated Keyboard & Full Access
   setup screen with the complete public Settings path, an Open System Settings
   action, and a practice field. The containing app reports Full Access as not
@@ -138,8 +154,12 @@ without opening the custom keyboard.
   recovery explanation.
 - Light and Dark use the same geometry. Increase Contrast strengthens native
   boundaries; Reduce Transparency removes nonessential glow.
-- The image asset contains no label or microphone glyph. Native text and SF
-  Symbols remain crisp, localizable, and state-aware at every scale.
+- Every activity PNG preserves transparent outer pixels and is rendered without
+  a theme-colored bitmap background, grayscale filter, or disabled opacity
+  transform. The cyan and purple artwork must remain legible in both Light and
+  Dark appearance.
+- The image asset contains no action label. Native text and SF Symbols remain
+  crisp, localizable, and state-aware at every scale.
 
 ## Verification
 
@@ -151,6 +171,7 @@ without opening the custom keyboard.
 - presentation tests cover empty, populated, loading, listening, processing,
   setup, Pending recovery, full Draft, and unavailable states.
 - Simulator QA covers cold launch without focus, tap-to-edit, keyboard Done and
-  dismissal, Copy, Clear/Undo, recovery routing, both appearances, Dynamic
-  Type, Reduce Motion, and Reduce Transparency. A signed physical iPhone proves
-  real microphone metering and Full Access behavior.
+  dismissal, Copy, Clear/Undo, ready, listening, recognition, setup, Draft
+  failure and recovery routing, both appearances, Dynamic Type, Reduce Motion,
+  and Reduce Transparency. A signed physical iPhone proves real microphone
+  metering and Full Access behavior.
