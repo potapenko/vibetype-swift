@@ -198,6 +198,40 @@ The MVP is functionally complete only when all of the following are true:
 - DEBUG-only probes must be removed before the iteration's commit unless the QA
   contract explicitly keeps a bounded qualification route.
 
+## Runtime QA And Computer Use Contract
+
+Computer Use is mandatory for user-visible and interactive testing. Passing
+unit tests, reading source, rendering an isolated screenshot, or using only
+`simctl` does not qualify a flow that a user performs by tapping the app or
+keyboard.
+
+- Use CLI/Xcode tooling for builds, test execution, installation, log capture,
+  and deterministic state preparation.
+- Use Computer Use for the actual Mac-visible UI: Xcode, iOS Simulator, System
+  Settings when authorized, and iPhone mirroring or device UI when available.
+- Inspect fresh application state before acting and again after each meaningful
+  action. Prefer accessibility-element actions; use screenshot coordinates only
+  when the control is not exposed through accessibility.
+- For Simulator QA, launch HoldType through the repository's sanitized
+  verification path so automated checks do not interact with live Keychain.
+  Never type a login-keychain password or click `Always Allow`.
+- Exercise the real production shell and embedded keyboard. Qualification routes
+  may prepare deterministic state, but they cannot replace a normal cold-launch
+  and real-navigation pass.
+- Capture screenshots only after performing the corresponding interaction.
+  Evidence must name the build/commit, device or Simulator, OS, appearance,
+  starting state, actions, and observed result.
+- For physical-device work, first use Computer Use through any available
+  Xcode/device-mirroring UI. If a required device action cannot be controlled
+  from the Mac, request only the minimal user handoff and keep that row pending
+  until its actual result is observed.
+- If Computer Use is unavailable, fails to expose the required UI, or was not
+  used, report the exact reason and leave the interactive gate pending. Do not
+  replace it with a source-inspection claim.
+- Follow Computer Use confirmation requirements for system-setting changes,
+  credentials, uploads, or other consequential UI actions. Previously granted
+  task authority does not permit entering secrets or bypassing security prompts.
+
 ## Iteration Dashboard
 
 | ID | Scope | Status | Depends On |
@@ -234,9 +268,13 @@ ordinary app launch before changing the voice architecture.
 ### Verification
 
 - focused keyboard action/presentation tests;
+- mandatory Computer Use pass: terminate any qualification instance, cold-launch
+  the normal app, tap all four tabs, open History, return between destinations,
+  present the real embedded keyboard, and tap its Settings gear;
 - normal iPhone Simulator cold launch with four visible tabs;
 - History selection retains the tab bar;
-- Light and Dark keyboard render with the gear in the left position;
+- Computer Use screenshots of the real keyboard in Light and Dark with the gear
+  in the left position;
 - public Settings request success/failure handling, with physical-device
   confirmation deferred only if no device is connected;
 - generic iOS Debug build and `git diff --check`.
@@ -255,7 +293,9 @@ the change.
 > History contents, or unrelated UI. Read only the task-routed docs and files,
 > add focused verification, run the required build/checks, update only this
 > task's status/evidence, and create one scoped checkpoint commit. Do not create
-> agents, branches, or backlog tasks.
+> agents, branches, or backlog tasks. Use Computer Use for the real normal-launch,
+> tab, keyboard, Settings, and Light/Dark interaction pass; tests or static
+> screenshots alone are not acceptance evidence.
 
 ## KBD-MVP-2 — Physical Background-Session Feasibility
 
@@ -303,6 +343,11 @@ precondition and stop. Simulator evidence must not be presented as a pass.
 7. Stop or expire the session and prove the keyboard shows `Open HoldType`.
 8. Disable Full Access and prove local editing and Globe still work.
 
+Perform the Mac-visible parts of this matrix with Computer Use through Xcode,
+iPhone mirroring, or another available device UI. Record which steps were
+agent-controlled and which required a minimal user touch. A written claim or
+Simulator reproduction does not replace the physical interaction evidence.
+
 ### Stop conditions
 
 Stop without KBD-MVP-3 if the proof requires:
@@ -334,7 +379,10 @@ commits only the spec/QA/status evidence needed to preserve the decision.
 > agents or backlog. Finish with a pass/fail QA record, focused verification,
 > dashboard update, and one scoped checkpoint commit if repository files
 > changed. On failure, remove the incomplete production spike before committing
-> and preserve only the bounded evidence.
+> and preserve only the bounded evidence. Use Computer Use for every available
+> Xcode, device-mirroring, keyboard, and Notes interaction; if the physical UI
+> cannot be controlled or observed, leave the gate pending rather than claiming
+> a pass.
 
 ## KBD-MVP-3 — Production Voice Pipeline And Safe Insertion
 
@@ -370,6 +418,8 @@ without duplicating recorder, provider, Latest, or History ownership.
 - provider failure leaves no fabricated Listening or Processing state;
 - accepted result reaches Latest and History exactly once;
 - ownership loss suppresses auto-insert without losing Latest;
+- mandatory Computer Use pass through the real containing app and embedded
+  keyboard for Start, Finish, Cancel, accepted insertion, and Latest fallback;
 - focused full iOS Simulator regression, persistence tests affected by the
   boundary, generic Release build, macOS build, and `git diff --check`;
 - one live device smoke only after explicit user authorization and using the
@@ -389,7 +439,9 @@ existing production pipeline and insert one accepted result safely.
 > once only for the same live request/host context; otherwise preserve Latest.
 > Add no new persistence family or unrelated refactor. Run focused and baseline
 > verification, update task evidence, and create one scoped commit on master.
-> Do not create agents, branches, or backlog tasks.
+> Do not create agents, branches, or backlog tasks. Use Computer Use for the
+> actual app/keyboard interaction flow; automated tests alone do not complete
+> this iteration.
 
 ## KBD-MVP-4 — Setup, States, And Release UX
 
@@ -421,7 +473,10 @@ new product areas.
 - setup state tests with Full Access and microphone allowed/denied;
 - normal app tabs and History remain intact;
 - keyboard remains usable in restricted mode;
-- Light/Dark screenshots on compact and standard iPhone;
+- mandatory Computer Use traversal of setup, session controls, each recoverable
+  user state that can be induced safely, and the normal four-tab shell;
+- Light/Dark screenshots on compact and standard iPhone captured after the real
+  Computer Use interaction flow;
 - no new placeholder, long keyboard copy, or app-launch action;
 - full iOS regression, Release build, macOS build, and `git diff --check`.
 
@@ -438,7 +493,9 @@ short truthful recovery states and no unfinished control.
 > appearance. Do not add product areas, QWERTY, partial transcription, or new
 > persistence. Preserve the four-tab app and History behavior. Run the specified
 > tests/screenshots/builds, update task evidence, and create one scoped master
-> commit without agents or backlog work.
+> commit without agents or backlog work. Use Computer Use for setup, keyboard
+> state transitions, navigation, accessibility-visible labels, and Light/Dark
+> evidence; do not accept source inspection as UI QA.
 
 ## KBD-MVP-5 — Device Qualification And TestFlight Candidate
 
@@ -476,6 +533,11 @@ fixes discovered release blockers only; it does not add features.
 - Keychain, Data Protection, microphone indicator, and no idle-content capture;
 - VoiceOver and Dynamic Type smoke in both appearances.
 
+Drive every Mac-visible row with Computer Use, including Xcode Organizer,
+Simulator, iPhone mirroring, and the real keyboard. Preserve screenshots and a
+row-by-row evidence ledger. Any row that could not be operated or observed stays
+pending and prevents a release-ready claim.
+
 ### Exit
 
 One exact build is installed through TestFlight and has no unresolved P1/P2
@@ -490,8 +552,10 @@ does not mean App Store ready.
 > candidate, run the bounded signed-device matrix, inspect privacy/signing, and
 > prepare the required App Store artifacts. Fix only P1/P2 blockers inside the
 > approved MVP scope. Do not add features, redesign persistence, create branches,
-> or use agents. Record exact pass/fail evidence and make scoped checkpoint
-> commits for any fixes.
+> or use agents. Use Computer Use for all available Xcode, Organizer, Simulator,
+> device-mirroring, keyboard, and TestFlight UI checks. Record exact pass/fail
+> evidence and make scoped checkpoint commits for any fixes; an unobserved UI
+> row remains pending.
 
 ## Handoff Protocol
 
