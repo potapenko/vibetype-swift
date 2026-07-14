@@ -5,8 +5,9 @@ matching feature spec, then verify exact source ownership with `rg --files`.
 
 | Area | Spec | Read When |
 | --- | --- | --- |
-| iOS V1.1 release | `features/ios-v1-release.md` | Any current iOS product, keyboard, Voice, History, Settings, Library, privacy, or release-scope work; this contract wins conflicts with legacy iOS specs |
+| iOS V1.1 release | `features/ios-v1-release.md` | Current iOS product, Voice, History, Settings, Library, privacy, or release-scope work; read the keyboard handoff spec with it for keyboard-originated dictation |
 | iOS V1.1 voice state | `features/ios-v1-voice-state-persistence.md` | Current Pending, Latest Result, Retry/Discard, relaunch recovery, or replacement of legacy iOS persistence |
+| iOS keyboard handoff and delivery | `features/ios-keyboard-handoff-and-delivery.md` | Canonical microphone tap, app opening, app-owned capture, return to host, request reconnection, exactly-once insertion, and app-only release fallback; this narrow contract wins conflicts with no-launch or manual-session clauses elsewhere |
 | Menu bar shell | `features/menu-bar-app-shell.md` | Menu bar lifecycle, primary controls, app shell state, status text |
 | Microphone input | `features/microphone-text-input.md` | Recording flow, microphone permission, audio capture, empty capture behavior |
 | OpenAI transcription | `features/openai-transcription.md` | Transcription request/response behavior, model settings, timeout/error policy |
@@ -31,17 +32,17 @@ matching feature spec, then verify exact source ownership with `rg --files`.
 | Blocked tasks | `features/blocked-task-resolution-automation.md` | Blocked-task resolver behavior and resolution contracts |
 | Automation recovery | `features/automation-prompt-recovery.md` | Installed automation/runbook recovery behavior |
 | iOS feasibility evidence (historical) | `features/ios-keyboard-feasibility.md` | Earlier launch/microphone findings; current signed-device background-session gate is in the V1.1 release contract and `docs/ios-keyboard-dictation-mvp-plan.md` |
-| iOS keyboard UX | `features/ios-keyboard-experience.md` | Active Brand Stage Adaptive composition, Settings, keyboard-controlled dictation session, editing controls, Latest fallback, accessibility, and appearance |
+| iOS keyboard UX | `features/ios-keyboard-experience.md` | Active Brand Stage Adaptive composition, editing controls, voice/error-area presentation, Latest fallback, accessibility, and appearance; use the handoff spec for microphone behavior and recovery routing |
 | iOS shared state (legacy) | `features/ios-keyboard-shared-state.md` | Historical Phase-0 App Group and automatic-delivery evidence; current snapshot is in the V1.1 release contract |
 | iOS containing app (legacy) | `features/ios-containing-app-experience.md` | Historical expanded iPhone/iPad, Quick Session, and navigation contract; current scope is in V1.1 |
 | iOS settings/secrets | `features/ios-settings-and-secret-storage.md` | iOS defaults, persistence, migrations, Keychain, truthful setup status |
-| iOS voice/audio reference | `features/ios-voice-session-and-audio.md` | Foreground recording and audio invariants only; Quick Session is excluded from V1.1 |
+| iOS voice/audio reference | `features/ios-voice-session-and-audio.md` | Foreground recorder and audio invariants; keyboard-originated launch and request lifecycle are governed by the handoff spec |
 | iOS history/storage (legacy) | `features/ios-history-and-storage.md` | Historical P5H durable History, failed retry, pending journal, and recording-cache decisions; not current V1.1 scope |
-| iOS privacy (legacy) | `features/ios-privacy-and-permissions.md` | Historical Quick Session and disclosure contract; use V1.1 for current History, Full Access, and App Group behavior |
+| iOS privacy (legacy) | `features/ios-privacy-and-permissions.md` | Historical Quick Session and disclosure contract; use V1.1 plus the keyboard handoff spec for current permission and App Group behavior |
 | iOS provider consent (legacy schema) | `features/ios-provider-consent-record.md` | Historical strict schema; V1.1 keeps provider-stage authorization in one standalone record |
 | iOS diagnostics | `features/ios-diagnostics.md` | Redacted runtime events, app-owned diagnostics, explicit local export |
 | iOS keyboard settings (deferred) | `features/ios-keyboard-settings-snapshot.md` | Historical typing-preference snapshot; V1.1 Brand Stage uses bundled presentation defaults |
-| iOS output actions (legacy) | `features/ios-output-actions.md` | Historical automatic insertion and acknowledgement contract; use V1.1 for Latest and explicit Insert |
+| iOS output actions (legacy) | `features/ios-output-actions.md` | Historical insertion and acknowledgement evidence; current keyboard delivery is governed by the handoff spec |
 | iOS accepted output delivery (legacy) | `features/ios-accepted-output-delivery-record.md` | Historical capability train; use V1.1 compact Pending, Latest, and History instead |
 | iOS accepted History foundation (deferred) | `features/ios-accepted-history-foundation.md` | Historical app-private policy, accepted-row, outbox, and generation-cutover contract; do not continue for V1.1 |
 | iOS failed History and retry audio (deferred) | `features/ios-failed-history-and-retry-audio.md` | Historical failed-row and retry-audio contract; explicitly excluded from V1.1 |

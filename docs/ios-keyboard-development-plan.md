@@ -1,11 +1,12 @@
 # HoldType iOS Keyboard Development Plan (Historical Feasibility Roadmap)
 
 Status: feasibility and physical-device appendix as of 2026-07-13. This file no
-longer defines implementation order. Its former full-QWERTY, Quick Session, and
-M1-M5 product direction is superseded by Brand Stage Adaptive. Preserve platform
-findings and gate evidence, but use `docs/specs/features/ios-v1-release.md` for
-product behavior and `docs/ios-keyboard-dictation-mvp-plan.md` for current
-keyboard work.
+longer defines implementation order. Its former full-QWERTY, Quick Session,
+manual prepared-session, no-app-launch, and M1-M5 product direction is
+superseded. Preserve platform findings and gate evidence, but use
+`docs/specs/features/ios-keyboard-handoff-and-delivery.md` for the current
+keyboard product contract and `docs/ios-keyboard-dictation-mvp-plan.md` for
+execution order.
 
 The historical complete portability roadmap lives in
 `docs/ios-product-portability-plan.md`. This file keeps platform evidence and
@@ -21,9 +22,10 @@ alphabetic or locale-specific typing engine, and system keyboards available via
 Globe.
 
 The still-valid rule is that voice readiness, effective App Group behavior, and
-accepted-text insertion require a signed physical-device gate. HoldType does
-not request Full Access. Do not modify Apple's keyboard, record audio inside the
-extension, or depend on a private automatic-return trick.
+accepted-text insertion require a signed physical-device gate. Do not modify
+Apple's keyboard, record audio inside the extension, or depend on a private
+automatic-return trick. Earlier statements that HoldType never opens from its
+keyboard or requires a user-prepared Quick Session are historical only.
 
 ## Product And Architecture
 

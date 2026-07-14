@@ -20,11 +20,16 @@ transcription API, and inserts returned text into the active app.
 The macOS product remains shipped behavior that must not regress. The current
 iOS scope is the compact V1.1 product contract in
 [`features/ios-v1-release.md`](features/ios-v1-release.md), implemented in the
-order defined by `docs/ios-v1-development-plan.md`. Current keyboard-controlled
-dictation work uses `docs/ios-keyboard-dictation-mvp-plan.md`. The former P0-P8
-portability roadmap and detailed accepted/failed History transaction specs are
-historical evidence, not active implementation queues. Physical-device gates
-still control claims that cannot be proven in the simulator.
+order defined by `docs/ios-v1-development-plan.md`. Keyboard-originated
+dictation is governed by
+[`features/ios-keyboard-handoff-and-delivery.md`](features/ios-keyboard-handoff-and-delivery.md)
+and executed through `docs/ios-keyboard-dictation-mvp-plan.md`. That narrow
+handoff contract supersedes older clauses that forbid opening HoldType, require
+a manually prepared keyboard session, or treat every extension recreation as
+automatic-delivery failure. The former P0-P8 portability roadmap and detailed
+accepted/failed History transaction specs are historical evidence, not active
+implementation queues. Physical-device gates still control claims that cannot
+be proven in the simulator.
 
 Early specs were seeded from the repository description and
 `docs/openwhispr_swiftui_codex_tz.md`. The current checkout now contains real
