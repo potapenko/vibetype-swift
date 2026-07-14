@@ -51,19 +51,46 @@ enum KeyboardVoiceRecovery: Equatable, Sendable {
         }
     }
 
-    var instruction: String {
+    var emphasizedInstruction: String {
         switch self {
         case .startSession:
             "Open HoldType → Voice → Keyboard Dictation Session → Start "
                 + "Keyboard Session. Then return here."
         case .enableFullAccess:
             "iPhone Settings → General → Keyboard → Keyboards → HoldType → "
-                + "Allow Full Access. Then open HoldType and start a keyboard "
-                + "session."
+                + "Allow Full Access."
         case .requestFailed:
             "Open HoldType → Voice to review the problem and start a new "
                 + "keyboard session."
         }
+    }
+
+    var followUpInstruction: String? {
+        switch self {
+        case .enableFullAccess:
+            "Then open HoldType and start a session."
+        case .startSession, .requestFailed:
+            nil
+        }
+    }
+
+    var shortcutInstruction: String? {
+        switch self {
+        case .enableFullAccess:
+            "Shortcut: hold 🌐 → Keyboard Settings."
+        case .startSession, .requestFailed:
+            nil
+        }
+    }
+
+    var instruction: String {
+        [
+            emphasizedInstruction,
+            followUpInstruction,
+            shortcutInstruction,
+        ]
+        .compactMap { $0 }
+        .joined(separator: " ")
     }
 }
 

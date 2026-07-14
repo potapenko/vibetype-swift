@@ -11,7 +11,7 @@ physical-device keyboard matrix or a longer background-session lifetime.
 - Simulator: iPhone 16, iOS 18.6
   (`71E5A24E-74E4-49EE-BDFB-026C4C15CCCC`)
 - `HoldType-iOS` Debug Simulator build: passed
-- Full `HoldType-iOS` test run: 1,061 tests in 140 suites passed
+- Full `HoldType-iOS` test run: 1,062 tests in 140 suites passed
 - Generic Simulator build without code signing: passed
 - Generic iOS Release build without code signing: passed
 - macOS baseline build: passed
@@ -20,6 +20,11 @@ The automated contract covers all recovery presentations, status vocabulary,
 absence of a keyboard Settings action, local editing while Full Access is off,
 one-request insertion ownership, stale-request rejection, dynamic colors,
 compact landscape, safe areas, and accessibility copy.
+
+The follow-up Full Access copy refinement is also covered at the real UIKit
+view level: the complete Settings route uses a bold font, the
+return-to-HoldType sentence remains separate, and `Shortcut: hold 🌐 → Keyboard
+Settings.` remains visible at the 393-point phone width.
 
 ## Simulator Interactive Extension Result
 

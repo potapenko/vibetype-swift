@@ -122,6 +122,9 @@ release-complete until the finished History destination is restored.
 - Setup explains that History and Settings are opened from the containing app.
 - Setup explains that normal typing remains on the user's system keyboard and
   that Globe switches between it and HoldType.
+- Full Access recovery keeps the complete iPhone Settings route visibly
+  emphasized. `Shortcut: hold 🌐 → Keyboard Settings` appears only as a
+  secondary hint and never replaces the full route.
 - Punctuation, Space, Delete, Return, Globe, and an already-available
   restricted-mode Latest do not require provider setup, microphone permission,
   network, or Full Access. Keyboard-controlled dictation does require Full

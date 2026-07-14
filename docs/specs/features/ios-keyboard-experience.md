@@ -91,12 +91,15 @@ number deck, Shift, Caps Lock, `123`, prediction row, or manual Refresh.
   - stopped or expired session: `Open HoldType → Voice → Keyboard Dictation
     Session → Start Keyboard Session. Then return here.`;
   - Full Access: `iPhone Settings → General → Keyboard → Keyboards →
-    HoldType → Allow Full Access. Then open HoldType and start a keyboard
-    session.`;
+    HoldType → Allow Full Access.` This full route is visually emphasized,
+    followed by `Then open HoldType and start a session.` and the secondary
+    shortcut `Shortcut: hold 🌐 → Keyboard Settings.`;
   - request failure: `Open HoldType → Voice to review the problem and start a
     new keyboard session.`
 - Recovery instructions are visible text, not accessibility-only hints or
   transient status.
+- A shortcut never replaces the complete route. It is a smaller secondary hint
+  for users who already recognize the system Globe menu.
 
 ## Editing Controls
 

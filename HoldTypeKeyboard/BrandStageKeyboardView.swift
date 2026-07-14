@@ -38,6 +38,8 @@ final class BrandStageKeyboardView: UIView {
     private let recoveryStage = UIStackView()
     private let recoveryTitleLabel = UILabel()
     private let recoveryDetailLabel = UILabel()
+    private let recoveryFollowUpLabel = UILabel()
+    private let recoveryShortcutLabel = UILabel()
     private let progressStage = UIStackView()
     private let progressIndicator = UIActivityIndicatorView(style: .medium)
     private let progressTitleLabel = UILabel()
@@ -146,7 +148,11 @@ final class BrandStageKeyboardView: UIView {
         switch presentation {
         case let .recovery(recovery):
             recoveryTitleLabel.text = recovery.title
-            recoveryDetailLabel.text = recovery.instruction
+            recoveryDetailLabel.text = recovery.emphasizedInstruction
+            recoveryFollowUpLabel.text = recovery.followUpInstruction
+            recoveryFollowUpLabel.isHidden = recovery.followUpInstruction == nil
+            recoveryShortcutLabel.text = recovery.shortcutInstruction
+            recoveryShortcutLabel.isHidden = recovery.shortcutInstruction == nil
             recoveryStage.accessibilityLabel = recovery.title
             recoveryStage.accessibilityValue = recovery.instruction
             recoveryStage.isHidden = false
@@ -500,7 +506,7 @@ final class BrandStageKeyboardView: UIView {
         recoveryStage.axis = .vertical
         recoveryStage.alignment = .center
         recoveryStage.distribution = .fill
-        recoveryStage.spacing = 4
+        recoveryStage.spacing = 3
         recoveryStage.isAccessibilityElement = true
         recoveryStage.accessibilityIdentifier =
             "keyboard.brand-stage.recovery"
@@ -520,20 +526,51 @@ final class BrandStageKeyboardView: UIView {
 
         recoveryDetailLabel.font = UIFontMetrics(forTextStyle: .caption1)
             .scaledFont(
-                for: UIFont.systemFont(ofSize: 12, weight: .regular),
+                for: UIFont.systemFont(ofSize: 12, weight: .semibold),
                 maximumPointSize: 15
             )
         recoveryDetailLabel.adjustsFontForContentSizeCategory = true
         recoveryDetailLabel.textAlignment = .center
-        recoveryDetailLabel.numberOfLines = 4
+        recoveryDetailLabel.numberOfLines = 3
         recoveryDetailLabel.adjustsFontSizeToFitWidth = true
         recoveryDetailLabel.minimumScaleFactor = 0.78
         recoveryDetailLabel.accessibilityIdentifier =
             "keyboard.brand-stage.recovery-detail"
 
+        configureRecoverySupportingLabel(
+            recoveryFollowUpLabel,
+            weight: .regular,
+            identifier: "keyboard.brand-stage.recovery-follow-up"
+        )
+        configureRecoverySupportingLabel(
+            recoveryShortcutLabel,
+            weight: .medium,
+            identifier: "keyboard.brand-stage.recovery-shortcut"
+        )
+
         recoveryStage.addArrangedSubview(recoveryTitleLabel)
         recoveryStage.addArrangedSubview(recoveryDetailLabel)
+        recoveryStage.addArrangedSubview(recoveryFollowUpLabel)
+        recoveryStage.addArrangedSubview(recoveryShortcutLabel)
         recoveryStage.isHidden = true
+    }
+
+    private func configureRecoverySupportingLabel(
+        _ label: UILabel,
+        weight: UIFont.Weight,
+        identifier: String
+    ) {
+        label.font = UIFontMetrics(forTextStyle: .caption2).scaledFont(
+            for: UIFont.systemFont(ofSize: 11, weight: weight),
+            maximumPointSize: 14
+        )
+        label.adjustsFontForContentSizeCategory = true
+        label.textAlignment = .center
+        label.numberOfLines = 1
+        label.adjustsFontSizeToFitWidth = true
+        label.minimumScaleFactor = 0.76
+        label.accessibilityIdentifier = identifier
+        label.isHidden = true
     }
 
     private func configureProgressStage() {
@@ -901,6 +938,8 @@ final class BrandStageKeyboardView: UIView {
         layer.borderWidth = 1 / max(traitCollection.displayScale, 1)
         recoveryTitleLabel.textColor = Self.keyForeground
         recoveryDetailLabel.textColor = Self.statusForeground
+        recoveryFollowUpLabel.textColor = Self.statusForeground
+        recoveryShortcutLabel.textColor = Self.statusForeground
         progressTitleLabel.textColor = Self.keyForeground
         progressIndicator.color = Self.voiceForeground
         microphoneView.backgroundColor = Self.microphoneBackground

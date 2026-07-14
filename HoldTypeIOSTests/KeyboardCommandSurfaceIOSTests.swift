@@ -39,6 +39,18 @@ struct KeyboardCommandSurfaceIOSTests {
                 .contains("iPhone Settings → General → Keyboard → Keyboards → HoldType")
         )
         #expect(
+            KeyboardVoiceRecovery.enableFullAccess.emphasizedInstruction
+                .hasSuffix("HoldType → Allow Full Access.")
+        )
+        #expect(
+            KeyboardVoiceRecovery.enableFullAccess.followUpInstruction
+                == "Then open HoldType and start a session."
+        )
+        #expect(
+            KeyboardVoiceRecovery.enableFullAccess.shortcutInstruction
+                == "Shortcut: hold 🌐 → Keyboard Settings."
+        )
+        #expect(
             KeyboardVoiceRecovery.requestFailed.instruction
                 .contains("Open HoldType → Voice")
         )

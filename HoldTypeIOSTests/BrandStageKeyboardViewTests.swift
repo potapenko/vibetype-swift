@@ -289,6 +289,48 @@ struct BrandStageKeyboardViewTests {
         }
     }
 
+    @Test func fullAccessRecoveryEmphasizesTheCompleteRouteAndKeepsShortcutSecondary()
+        throws {
+        let view = makeView(width: 393)
+        view.render(
+            presentation(
+                status: .fullAccessRequired,
+                voiceStage: .recovery(.enableFullAccess)
+            )
+        )
+        layout(view)
+
+        let route = try #require(
+            view.descendant(
+                UILabel.self,
+                identifier: "keyboard.brand-stage.recovery-detail"
+            )
+        )
+        let followUp = try #require(
+            view.descendant(
+                UILabel.self,
+                identifier: "keyboard.brand-stage.recovery-follow-up"
+            )
+        )
+        let shortcut = try #require(
+            view.descendant(
+                UILabel.self,
+                identifier: "keyboard.brand-stage.recovery-shortcut"
+            )
+        )
+
+        #expect(
+            route.text
+                == "iPhone Settings → General → Keyboard → Keyboards → HoldType → Allow Full Access."
+        )
+        #expect(route.font.fontDescriptor.symbolicTraits.contains(.traitBold))
+        #expect(followUp.text == "Then open HoldType and start a session.")
+        #expect(shortcut.text == "Shortcut: hold 🌐 → Keyboard Settings.")
+        #expect(!isEffectivelyHidden(route))
+        #expect(!isEffectivelyHidden(followUp))
+        #expect(!isEffectivelyHidden(shortcut))
+    }
+
     @Test func compactPhoneLandscapeKeepsVoiceIdentityAndControlsInBounds()
         throws {
         for showsGlobe in [true, false] {

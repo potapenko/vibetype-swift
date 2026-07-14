@@ -55,9 +55,14 @@ Keyboard Session. Then return here.`
 
 Title: `Enable Full Access`
 
-Instruction: `iPhone Settings → General → Keyboard → Keyboards →
-HoldType → Allow Full Access. Then open HoldType and start a keyboard
-session.`
+Emphasized route: `iPhone Settings → General → Keyboard → Keyboards →
+HoldType → Allow Full Access.`
+
+Follow-up: `Then open HoldType and start a session.`
+
+Secondary shortcut: `Shortcut: hold 🌐 → Keyboard Settings.`
+
+The shortcut never replaces the complete route.
 
 ### Request failure
 

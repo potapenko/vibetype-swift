@@ -447,6 +447,13 @@ struct KeyboardViewControllerTests {
                 in: restrictedController.view
             )?.text?.contains("iPhone Settings → General → Keyboard") == true
         )
+        #expect(
+            descendant(
+                UILabel.self,
+                identifier: "keyboard.brand-stage.recovery-shortcut",
+                in: restrictedController.view
+            )?.text == "Shortcut: hold 🌐 → Keyboard Settings."
+        )
         #expect(restricted.proxy.insertedTexts == [".", " ", "\n"])
         #expect(restricted.proxy.deleteBackwardCount == 1)
     }
