@@ -22,16 +22,19 @@ struct IOSContainingAppShell: View {
 
     let secureProviderAvailability: IOSSecureProviderAvailability
     let foregroundVoiceRuntimeAvailable: Bool
+    let historyPlaybackActions: IOSHistoryPlaybackActions?
     let layout: IOSContainingAppShellLayout
 
     init(
         secureProviderAvailability: IOSSecureProviderAvailability,
         foregroundVoiceRuntimeAvailable: Bool = false,
+        historyPlaybackActions: IOSHistoryPlaybackActions? = nil,
         layout: IOSContainingAppShellLayout = .current
     ) {
         self.secureProviderAvailability = secureProviderAvailability
         self.foregroundVoiceRuntimeAvailable =
             foregroundVoiceRuntimeAvailable
+        self.historyPlaybackActions = historyPlaybackActions
         self.layout = layout
     }
 
@@ -192,14 +195,22 @@ struct IOSContainingAppShell: View {
                 hasBlockingLibraryOperation: $hasBlockingEditorOperation
             )
         case .history:
-            IOSHistoryHomeView()
+            IOSHistoryHomeView(
+                playbackActions: historyPlaybackActions
+            )
         case .settings:
             IOSSettingsHomeView(
                 openAIEditorDraft: $openAIEditorDraft,
                 hasUnsavedGeneralSettings:
                     $hasUnsavedEditor,
                 foregroundVoiceRuntimeAvailable:
-                    foregroundVoiceRuntimeAvailable
+                    foregroundVoiceRuntimeAvailable,
+                reconcileRecordingCache: { policy in
+                    guard let historyPlaybackActions else { return true }
+                    return await historyPlaybackActions.reconcile(
+                        policy: policy
+                    )
+                }
             )
         }
     }

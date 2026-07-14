@@ -71,7 +71,9 @@ private extension HoldTypeIOSRootView {
                 compositionAvailability: composition.availability
             ),
             foregroundVoiceRuntimeAvailable:
-                composition.foregroundVoiceRuntime != nil
+                composition.foregroundVoiceRuntime != nil,
+            historyPlaybackActions:
+                composition.historyPlaybackActions
         )
     }
 }

@@ -9,12 +9,19 @@ struct IOSVoiceRecordingSettingsView: View {
         IOSVoiceRecordingSettingsDraft
     >
     @State private var showsDiscardConfirmation = false
+    @State private var showsCacheReconciliationFailure = false
     @Binding private var hasUnsavedSceneEditor: Bool
+    private let reconcileRecordingCache: (
+        RecordingCachePolicy
+    ) async -> Bool
 
     init(
         preferences: VoiceSessionPreferences,
         recordingCachePolicy: RecordingCachePolicy,
-        hasUnsavedSceneEditor: Binding<Bool> = .constant(false)
+        hasUnsavedSceneEditor: Binding<Bool> = .constant(false),
+        reconcileRecordingCache: @escaping (
+            RecordingCachePolicy
+        ) async -> Bool = { _ in true }
     ) {
         _session = State(
             initialValue: IOSSettingsEditorSession(
@@ -25,6 +32,7 @@ struct IOSVoiceRecordingSettingsView: View {
             )
         )
         _hasUnsavedSceneEditor = hasUnsavedSceneEditor
+        self.reconcileRecordingCache = reconcileRecordingCache
     }
 
     var body: some View {
@@ -124,6 +132,16 @@ struct IOSVoiceRecordingSettingsView: View {
             save: beginSave,
             discard: { session.discard() }
         )
+        .alert(
+            "Recording Cache Update Failed",
+            isPresented: $showsCacheReconciliationFailure
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(
+                "Your setting was saved. HoldType will retry the cache update after the next recording."
+            )
+        }
     }
 
     private var durableDraft: IOSVoiceRecordingSettingsDraft {
@@ -240,6 +258,11 @@ struct IOSVoiceRecordingSettingsView: View {
                 returnedDurableValue: returned,
                 latestDurableValue: durableDraft
             )
+            if !(await reconcileRecordingCache(
+                settings.recordingCachePolicy
+            )) {
+                showsCacheReconciliationFailure = true
+            }
             iosAnnounceSettingsStatus(
                 session.phase == .saved
                     ? "Voice and recording settings saved"

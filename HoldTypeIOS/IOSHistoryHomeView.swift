@@ -5,30 +5,15 @@ import UIKit
 @MainActor
 struct IOSHistoryRowActions {
     private let copyText: (String) -> Void
-    private let isPlaybackAvailable: (UUID) -> Bool
-    private let playRecording: (UUID) -> Void
 
-    init(
-        copyText: @escaping (String) -> Void,
-        isPlaybackAvailable: @escaping (UUID) -> Bool = { _ in false },
-        playRecording: @escaping (UUID) -> Void = { _ in }
-    ) {
+    init(copyText: @escaping (String) -> Void) {
         self.copyText = copyText
-        self.isPlaybackAvailable = isPlaybackAvailable
-        self.playRecording = playRecording
     }
 
     func copy(_ text: String) {
         copyText(text)
     }
 
-    func canPlay(resultID: UUID) -> Bool {
-        isPlaybackAvailable(resultID)
-    }
-
-    func play(resultID: UUID) {
-        playRecording(resultID)
-    }
 }
 
 struct IOSHistoryHomeView: View {
@@ -38,17 +23,25 @@ struct IOSHistoryHomeView: View {
         IOSAcceptedTextHistorySnapshotToken?
     @State private var pendingDisableToken:
         IOSAcceptedTextHistorySnapshotToken?
+    @State private var playableResultIDs = Set<UUID>()
+    @State private var showsPlaybackFailure = false
 
     private let rowActions: IOSHistoryRowActions
+    private let playbackActions: IOSHistoryPlaybackActions?
 
-    init() {
+    init(playbackActions: IOSHistoryPlaybackActions? = nil) {
         rowActions = IOSHistoryRowActions(
             copyText: { UIPasteboard.general.string = $0 }
         )
+        self.playbackActions = playbackActions
     }
 
-    init(rowActions: IOSHistoryRowActions) {
+    init(
+        rowActions: IOSHistoryRowActions,
+        playbackActions: IOSHistoryPlaybackActions? = nil
+    ) {
         self.rowActions = rowActions
+        self.playbackActions = playbackActions
     }
 
     var body: some View {
@@ -76,6 +69,21 @@ struct IOSHistoryHomeView: View {
         }
         .task {
             await stateOwner.refresh()
+        }
+        .task(id: playbackRefreshToken) {
+            await refreshPlaybackAvailability()
+        }
+        .onDisappear {
+            guard let playbackActions else { return }
+            Task { await playbackActions.stop() }
+        }
+        .alert(
+            "Recording Unavailable",
+            isPresented: $showsPlaybackFailure
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("HoldType couldn’t play this cached recording.")
         }
         .confirmationDialog(
             "Clear All History?",
@@ -267,12 +275,12 @@ struct IOSHistoryHomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 0) {
-                if rowActions.canPlay(resultID: entry.resultID) {
+                if playableResultIDs.contains(entry.resultID) {
                     historyActionButton(
                         title: "Play Recording",
                         systemImage: "play.fill"
                     ) {
-                        rowActions.play(resultID: entry.resultID)
+                        beginPlayback(resultID: entry.resultID)
                     }
                     .accessibilityIdentifier(
                         "ios.history.play.\(entry.resultID.uuidString)"
@@ -298,9 +306,6 @@ struct IOSHistoryHomeView: View {
             }
             .disabled(stateOwner.isBusy)
         }
-        .accessibilityIdentifier(
-            "ios.history.entry.\(entry.resultID.uuidString)"
-        )
     }
 
     private func historyActionButton(
@@ -315,5 +320,40 @@ struct IOSHistoryHomeView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
+    }
+
+    private var playbackRefreshToken: String {
+        stateOwner.confirmedRecord?.entries
+            .map(\.resultID.uuidString)
+            .joined(separator: "|") ?? ""
+    }
+
+    private func refreshPlaybackAvailability() async {
+        guard let playbackActions,
+              let record = stateOwner.confirmedRecord else {
+            playableResultIDs = []
+            return
+        }
+        let resolved = await playbackActions.playableResultIDs(
+            record.entries.map(\.resultID)
+        )
+        guard !Task.isCancelled else { return }
+        playableResultIDs = resolved
+    }
+
+    private func beginPlayback(resultID: UUID) {
+        guard let playbackActions else { return }
+
+        Task {
+            switch await playbackActions.play(resultID: resultID) {
+            case .played:
+                break
+            case .unavailable:
+                playableResultIDs.remove(resultID)
+            case .failed:
+                playableResultIDs.remove(resultID)
+                showsPlaybackFailure = true
+            }
+        }
     }
 }

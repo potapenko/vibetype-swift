@@ -27,6 +27,9 @@ struct IOSContainingAppCompositionTests {
             IOSV1ProviderConsentCoordinator?
         var capturedAcceptedTextHistoryRepository:
             IOSAcceptedTextHistoryRepository?
+        var capturedAcceptedAudioCache: IOSAcceptedAudioCache?
+        var capturedRecordingCachePolicy:
+            (@Sendable () async -> RecordingCachePolicy)?
         var capturedUsageRepository: IOSTranscriptionUsageRepository?
         var capturedForegroundUsageClient:
             IOSTranscriptionUsageRecordingClient?
@@ -88,11 +91,15 @@ struct IOSContainingAppCompositionTests {
                 },
                 makeForegroundVoicePersistenceOwner: {
                     resolvedRoot,
-                    acceptedTextHistoryRepository in
+                    acceptedTextHistoryRepository,
+                    acceptedAudioCache,
+                    recordingCachePolicy in
                     events.append("foreground-persistence")
                     foregroundPersistenceFactoryCount += 1
                     capturedAcceptedTextHistoryRepository =
                         acceptedTextHistoryRepository
+                    capturedAcceptedAudioCache = acceptedAudioCache
+                    capturedRecordingCachePolicy = recordingCachePolicy
                     return IOSV1ForegroundVoicePersistenceOwner(
                         applicationSupportDirectoryURL: resolvedRoot,
                         acceptedTextHistoryRepository:
@@ -202,6 +209,14 @@ struct IOSContainingAppCompositionTests {
             composition.acceptedTextHistoryRepository ===
                 capturedAcceptedTextHistoryRepository
         )
+        #expect(
+            composition.acceptedAudioCache ===
+                capturedAcceptedAudioCache
+        )
+        let recordingCachePolicy = try #require(
+            capturedRecordingCachePolicy
+        )
+        #expect(await recordingCachePolicy() == .deleteImmediately)
         #expect(composition.acceptedTextHistoryStateOwner != nil)
         #expect(
             composition.acceptedTextHistoryStateOwner?.state == .notLoaded
@@ -223,6 +238,7 @@ struct IOSContainingAppCompositionTests {
         let voiceRuntime = try #require(
             composition.foregroundVoiceRuntime
         )
+        #expect(composition.historyPlaybackActions != nil)
         #expect(composition.voiceSceneLifecycleBinding != nil)
         #expect(voiceRuntime.sceneRegistry.activeEventSubscriptionCount == 1)
         #expect(voiceRuntime.sceneRegistry.snapshot.registeredSceneCount == 0)
@@ -369,7 +385,9 @@ struct IOSContainingAppCompositionTests {
                 },
                 makeForegroundVoicePersistenceOwner: {
                     resolvedRoot,
-                    acceptedTextHistoryRepository in
+                    acceptedTextHistoryRepository,
+                    _,
+                    _ in
                     foregroundPersistenceFactoryCalls += 1
                     return IOSV1ForegroundVoicePersistenceOwner(
                         applicationSupportDirectoryURL: resolvedRoot,
@@ -479,7 +497,9 @@ struct IOSContainingAppCompositionTests {
                 },
                 makeForegroundVoicePersistenceOwner: {
                     resolvedRoot,
-                    acceptedTextHistoryRepository in
+                    acceptedTextHistoryRepository,
+                    _,
+                    _ in
                     foregroundPersistenceFactoryCalls += 1
                     return IOSV1ForegroundVoicePersistenceOwner(
                         applicationSupportDirectoryURL: resolvedRoot,
@@ -571,7 +591,7 @@ struct IOSContainingAppCompositionTests {
                         "Consent must not be constructed."
                     )
                 },
-                makeForegroundVoicePersistenceOwner: { _, _ in
+                makeForegroundVoicePersistenceOwner: { _, _, _, _ in
                     foregroundPersistenceFactoryCalls += 1
                     preconditionFailure(
                         "Foreground persistence must not be constructed."

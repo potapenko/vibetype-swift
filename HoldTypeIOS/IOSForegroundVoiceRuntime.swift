@@ -88,7 +88,7 @@ final class IOSForegroundVoiceRuntime {
                 )
             },
             makeHistoryPlaybackArbitrator: {
-                IOSNoActiveHistoryPlaybackArbitrator()
+                IOSHistoryAudioPlaybackOwner()
             },
             makeWorkflow: { dependencies in
                 IOSForegroundVoiceWorkflow(dependencies: dependencies)
@@ -115,6 +115,10 @@ final class IOSForegroundVoiceRuntime {
     let providerBridge: IOSForegroundVoiceProviderBridge
     let historyPlaybackArbitrator:
         any IOSForegroundVoiceHistoryPlaybackArbitrating
+
+    var historyAudioPlaybackOwner: IOSHistoryAudioPlaybackOwner? {
+        historyPlaybackArbitrator as? IOSHistoryAudioPlaybackOwner
+    }
     let latestResultOwner: IOSForegroundVoiceLatestResultOwner
     let workflow: IOSForegroundVoiceWorkflow
     let controller: IOSForegroundVoiceController

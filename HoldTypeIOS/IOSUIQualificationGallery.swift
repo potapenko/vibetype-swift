@@ -3,6 +3,7 @@ import Foundation
 import HoldTypeDomain
 @_spi(HoldTypeIOSCore) import HoldTypePersistence
 import SwiftUI
+import UIKit
 
 /// Debug-only, side-effect-free rendered-state qualification entry points.
 /// Release builds do not compile this file or its launch-environment contract.
@@ -26,6 +27,7 @@ nonisolated enum IOSUIQualificationRoute:
     case latestEmpty = "latest-empty"
     case latestSuccess = "latest-success"
     case latestFailure = "latest-failure"
+    case historyEntries = "history-entries"
     case privacyChecking = "privacy-checking"
     case privacyReady = "privacy-ready"
     case privacyAccepted = "privacy-accepted"
@@ -82,6 +84,8 @@ nonisolated enum IOSUIQualificationRoute:
             "Latest Result — Success and Actions"
         case .latestFailure:
             "Latest Result — Failure"
+        case .historyEntries:
+            "History — Text List"
         case .privacyChecking:
             "Privacy — Checking"
         case .privacyReady:
@@ -119,6 +123,8 @@ nonisolated enum IOSUIQualificationRoute:
             .voice
         case .latestEmpty, .latestSuccess, .latestFailure:
             .latestResult
+        case .historyEntries:
+            .history
         case .privacyChecking, .privacyReady, .privacyAccepted,
              .privacyUnreadable, .privacyFailure:
             .privacy
@@ -156,7 +162,8 @@ nonisolated enum IOSUIQualificationRoute:
             .latestSuccess
         case .latestFailure:
             .latestFailure
-        case .gallery, .privacyChecking, .privacyReady, .privacyAccepted,
+        case .gallery, .historyEntries, .privacyChecking, .privacyReady,
+             .privacyAccepted,
              .privacyUnreadable, .privacyFailure, .usageEmpty,
              .usageKnown, .usageMixed, .usageUnknown, .usageLoadFailure,
              .usageWriteWarning, .usageResetFailure:
@@ -176,7 +183,8 @@ nonisolated enum IOSUIQualificationRoute:
             .unreadable
         case .privacyFailure:
             .failure
-        case .gallery, .voiceStart, .voiceSetupBlocked, .voiceArming,
+        case .gallery, .historyEntries, .voiceStart, .voiceSetupBlocked,
+             .voiceArming,
              .voiceListening, .voiceFinalizing, .voiceProcessing,
              .voicePostProcessing, .voiceOutputDelivery,
              .voiceCaptureRecovery, .voicePendingRetry, .latestEmpty,
@@ -203,7 +211,8 @@ nonisolated enum IOSUIQualificationRoute:
             .writeWarning
         case .usageResetFailure:
             .resetFailure
-        case .gallery, .voiceStart, .voiceSetupBlocked, .voiceArming,
+        case .gallery, .historyEntries, .voiceStart, .voiceSetupBlocked,
+             .voiceArming,
              .voiceListening, .voiceFinalizing, .voiceProcessing,
              .voicePostProcessing, .voiceOutputDelivery,
              .voiceCaptureRecovery, .voicePendingRetry, .latestEmpty,
@@ -221,6 +230,7 @@ fileprivate nonisolated enum IOSUIQualificationSection:
     Hashable {
     case voice = "Voice"
     case latestResult = "Latest Result"
+    case history = "History"
     case privacy = "Privacy & Permissions"
     case usage = "Usage Estimate"
 }
@@ -262,6 +272,8 @@ struct IOSUIQualificationRootView: View {
     private func destination(_ route: IOSUIQualificationRoute) -> some View {
         if let scenario = route.voiceScenario {
             IOSUIQualificationVoiceHost(scenario: scenario)
+        } else if route == .historyEntries {
+            IOSUIQualificationHistoryHost()
         } else if let scenario = route.privacyScenario {
             IOSUIQualificationPrivacyHost(scenario: scenario)
         } else if let scenario = route.usageScenario {
@@ -778,6 +790,98 @@ private struct IOSUIQualificationUsageHost: View {
             _ = await stateOwner.reset()
         }
         .accessibilityIdentifier("ios.qualification.usage")
+    }
+}
+
+@MainActor
+private final class IOSUIQualificationHistoryFixture {
+    static let playableResultID = UUID(
+        uuidString: "11111111-1111-4111-8111-111111111111"
+    )!
+
+    let stateOwner: IOSAcceptedTextHistoryStateOwner
+
+    private let repository: IOSAcceptedTextHistoryRepository
+    private var hasSeeded = false
+
+    init() {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "holdtype-history-qualification-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        let repository = IOSAcceptedTextHistoryRepository(
+            applicationSupportDirectoryURL: root
+        )
+        self.repository = repository
+        stateOwner = IOSAcceptedTextHistoryStateOwner(
+            repository: repository
+        )
+    }
+
+    func seed() async {
+        guard !hasSeeded else { return }
+        hasSeeded = true
+
+        let rows: [(UUID, String, TimeInterval)] = [
+            (
+                Self.playableResultID,
+                "Copy this text and return to the app where you need it.",
+                1_750_000_003
+            ),
+            (
+                UUID(
+                    uuidString: "22222222-2222-4222-8222-222222222222"
+                )!,
+                "The complete transcript is visible directly in History.",
+                1_750_000_002
+            ),
+            (
+                UUID(
+                    uuidString: "33333333-3333-4333-8333-333333333333"
+                )!,
+                "Swipe a row to delete it. There is no second result screen.",
+                1_750_000_001
+            ),
+        ]
+
+        for row in rows {
+            guard let entry = try? IOSAcceptedTextHistoryEntry(
+                resultID: row.0,
+                text: row.1,
+                createdAt: Date(timeIntervalSince1970: row.2)
+            ) else { continue }
+            _ = try? await repository.append(entry)
+        }
+        await stateOwner.refresh()
+    }
+}
+
+private struct IOSUIQualificationHistoryHost: View {
+    @State private var fixture = IOSUIQualificationHistoryFixture()
+
+    var body: some View {
+        NavigationStack {
+            IOSHistoryHomeView(
+                rowActions: IOSHistoryRowActions(
+                    copyText: { UIPasteboard.general.string = $0 }
+                ),
+                playbackActions: IOSHistoryPlaybackActions(
+                    resolvePlayableResultIDs: { resultIDs in
+                        Set(resultIDs.filter {
+                            $0 == IOSUIQualificationHistoryFixture
+                                .playableResultID
+                        })
+                    },
+                    playRecording: { _ in .played }
+                )
+            )
+            .environment(fixture.stateOwner)
+        }
+        .task {
+            await fixture.seed()
+        }
+        .accessibilityIdentifier("ios.qualification.history")
     }
 }
 

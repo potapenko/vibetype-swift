@@ -1,4 +1,5 @@
 import Foundation
+import HoldTypeDomain
 @_spi(HoldTypeIOSCore) import HoldTypeIOSCore
 import HoldTypeOpenAI
 @_spi(HoldTypeIOSCore) import HoldTypePersistence
@@ -33,7 +34,9 @@ final class IOSContainingAppComposition {
         ) -> IOSV1ProviderConsentCoordinator
         let makeForegroundVoicePersistenceOwner: @MainActor (
             URL,
-            IOSAcceptedTextHistoryRepository
+            IOSAcceptedTextHistoryRepository,
+            IOSAcceptedAudioCache,
+            @escaping @Sendable () async -> RecordingCachePolicy
         ) -> IOSV1ForegroundVoicePersistenceOwner
         let makeTranscriptionUsageRepository: @MainActor (
             URL
@@ -96,12 +99,16 @@ final class IOSContainingAppComposition {
             },
             makeForegroundVoicePersistenceOwner: {
                 applicationSupportDirectoryURL,
-                acceptedTextHistoryRepository in
+                acceptedTextHistoryRepository,
+                acceptedAudioCache,
+                recordingCachePolicy in
                 IOSV1ForegroundVoicePersistenceOwner(
                     applicationSupportDirectoryURL:
                         applicationSupportDirectoryURL,
                     acceptedTextHistoryRepository:
-                        acceptedTextHistoryRepository
+                        acceptedTextHistoryRepository,
+                    acceptedAudioCache: acceptedAudioCache,
+                    recordingCachePolicy: recordingCachePolicy
                 )
             },
             makeTranscriptionUsageRepository: {
@@ -145,6 +152,7 @@ final class IOSContainingAppComposition {
     let providerConsentCoordinator: IOSV1ProviderConsentCoordinator?
     let acceptedTextHistoryRepository:
         IOSAcceptedTextHistoryRepository?
+    let acceptedAudioCache: IOSAcceptedAudioCache?
     let acceptedTextHistoryStateOwner:
         IOSAcceptedTextHistoryStateOwner?
     let foregroundVoicePersistenceOwner:
@@ -154,6 +162,7 @@ final class IOSContainingAppComposition {
     let usageEstimateStateOwner: IOSUsageEstimateStateOwner?
     let foregroundVoiceProcessor: IOSForegroundVoiceProcessor?
     let foregroundVoiceRuntime: IOSForegroundVoiceRuntime?
+    let historyPlaybackActions: IOSHistoryPlaybackActions?
     let lifecycleScheduler: IOSContainingAppLifecycleScheduler
     let voiceSceneLifecycleBinding: IOSVoiceSceneLifecycleBinding?
     let availability: IOSContainingAppCompositionAvailability
@@ -177,6 +186,7 @@ final class IOSContainingAppComposition {
             openAISettingsStateOwner = nil
             providerConsentCoordinator = nil
             acceptedTextHistoryRepository = nil
+            acceptedAudioCache = nil
             acceptedTextHistoryStateOwner = nil
             foregroundVoicePersistenceOwner = nil
             keyboardSnapshotPublisher = nil
@@ -184,6 +194,7 @@ final class IOSContainingAppComposition {
             usageEstimateStateOwner = nil
             foregroundVoiceProcessor = nil
             foregroundVoiceRuntime = nil
+            historyPlaybackActions = nil
             availability = .storageUnavailable
             lifecycleScheduler = IOSContainingAppLifecycleScheduler { _ in
                 .pendingLocalRecovery
@@ -218,10 +229,28 @@ final class IOSContainingAppComposition {
             )
         self.acceptedTextHistoryRepository =
             acceptedTextHistoryRepository
+        let acceptedAudioCache = IOSAcceptedAudioCache(
+            applicationSupportDirectoryURL:
+                applicationSupportDirectoryURL
+        )
+        self.acceptedAudioCache = acceptedAudioCache
+        let loadRecordingCachePolicy: @Sendable () async
+            -> RecordingCachePolicy = {
+            do {
+                return try await settingsStateOwner
+                    .confirmedValueForProviderAction()
+                    .recordingCachePolicy
+                    .normalized
+            } catch {
+                return .deleteImmediately
+            }
+        }
         let foregroundVoicePersistenceOwner = factories
             .makeForegroundVoicePersistenceOwner(
                 applicationSupportDirectoryURL,
-                acceptedTextHistoryRepository
+                acceptedTextHistoryRepository,
+                acceptedAudioCache,
+                loadRecordingCachePolicy
             )
         self.foregroundVoicePersistenceOwner =
             foregroundVoicePersistenceOwner
@@ -293,6 +322,15 @@ final class IOSContainingAppComposition {
             factories: factories.voiceFactories
         )
         self.foregroundVoiceRuntime = foregroundVoiceRuntime
+        historyPlaybackActions = foregroundVoiceRuntime
+            .historyAudioPlaybackOwner
+            .map {
+                IOSHistoryPlaybackActions(
+                    cache: acceptedAudioCache,
+                    loadPolicy: loadRecordingCachePolicy,
+                    player: $0
+                )
+            }
         let lifecycleScheduler = IOSContainingAppLifecycleScheduler {
             opportunity in
             let disposition = await foregroundVoiceRuntime
@@ -327,6 +365,7 @@ final class IOSContainingAppComposition {
         openAISettingsStateOwner = nil
         providerConsentCoordinator = nil
         acceptedTextHistoryRepository = nil
+        acceptedAudioCache = nil
         acceptedTextHistoryStateOwner = nil
         foregroundVoicePersistenceOwner = nil
         keyboardSnapshotPublisher = nil
@@ -334,6 +373,7 @@ final class IOSContainingAppComposition {
         usageEstimateStateOwner = nil
         foregroundVoiceProcessor = nil
         foregroundVoiceRuntime = nil
+        historyPlaybackActions = nil
         availability = .injected
         lifecycleScheduler = IOSContainingAppLifecycleScheduler(
             recover: recoverContainingAppLifecycle

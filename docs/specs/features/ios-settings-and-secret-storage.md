@@ -716,8 +716,10 @@ result after the operation returns.
   remote stage or action preference is off. Reset restores the exact shared
   standard prompt in the draft, announces that the draft is not saved, and
   does not save until the user taps `Save`.
-- Voice & Recording exposes only recording cues, stop tail, and the fixed
-  five-minute utterance limit explanation. `Keep Latest Result` is not
+- Voice & Recording exposes recording cues, stop tail, the fixed five-minute
+  utterance limit explanation, and Recording Cache controls. Cache is off by
+  default; enabling it starts at the last 10 recordings, and unlimited
+  retention is an explicit choice. `Keep Latest Result` is not
   editable in P3: turning it off requires coordinated accepted-output,
   bridge-revocation, and History-outbox cleanup under `ios-output-actions.md`.
   Its control appears only with that owning storage/recovery coordinator.

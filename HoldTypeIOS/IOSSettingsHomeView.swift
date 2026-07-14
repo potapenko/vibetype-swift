@@ -9,6 +9,22 @@ struct IOSSettingsHomeView: View {
     @Binding var openAIEditorDraft: IOSOpenAICredentialEditorDraft
     @Binding var hasUnsavedGeneralSettings: Bool
     let foregroundVoiceRuntimeAvailable: Bool
+    let reconcileRecordingCache: (RecordingCachePolicy) async -> Bool
+
+    init(
+        openAIEditorDraft: Binding<IOSOpenAICredentialEditorDraft>,
+        hasUnsavedGeneralSettings: Binding<Bool>,
+        foregroundVoiceRuntimeAvailable: Bool,
+        reconcileRecordingCache: @escaping (
+            RecordingCachePolicy
+        ) async -> Bool = { _ in true }
+    ) {
+        _openAIEditorDraft = openAIEditorDraft
+        _hasUnsavedGeneralSettings = hasUnsavedGeneralSettings
+        self.foregroundVoiceRuntimeAvailable =
+            foregroundVoiceRuntimeAvailable
+        self.reconcileRecordingCache = reconcileRecordingCache
+    }
 
     var body: some View {
         Group {
@@ -124,7 +140,8 @@ struct IOSSettingsHomeView: View {
             IOSVoiceRecordingSettingsView(
                 preferences: settings.voiceSessionPreferences,
                 recordingCachePolicy: settings.recordingCachePolicy,
-                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings
+                hasUnsavedSceneEditor: $hasUnsavedGeneralSettings,
+                reconcileRecordingCache: reconcileRecordingCache
             )
         }
     }

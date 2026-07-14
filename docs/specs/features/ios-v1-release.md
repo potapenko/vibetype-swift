@@ -43,6 +43,7 @@ V1.1 includes:
 - one recoverable pending recording;
 - one Latest Result;
 - up to 20 successful text-only History entries;
+- an optional app-private Recording Cache for local History playback;
 - one production-quality iPhone command-keyboard surface with a non-interactive
   branded voice stage;
 - one visible best-effort `History` request whose launch is not yet
@@ -63,7 +64,7 @@ alphabetic layouts.
 ## Non-goals
 
 - failed-attempt History or more than one recoverable failed recording;
-- retry-audio queues, accepted audio playback, or Recording Cache;
+- retry-audio queues or failed-attempt audio playback;
 - History policy generations, outboxes, tombstones, receipts, or multi-record
   transaction protocols;
 - automatic provider retry after relaunch;
@@ -170,10 +171,16 @@ release-complete until the finished History destination is restored.
 - History is local, app-private, text-only, and limited to the 20 newest
   accepted results.
 - Each entry uses the accepted `resultID` as its opaque idempotency key and
-  contains accepted text and creation date.
-- Entries are presented newest first with text preview and full-text detail.
-- Each entry supports Copy, Share, and Delete. The screen supports confirmed
-  Clear All.
+  contains accepted text and an internal creation date used only for ordering.
+- Entries are presented newest first as one flat list. Each row shows the full
+  text directly; History has no result-detail destination and displays no
+  creation date or time.
+- Each row exposes one-tap Copy and, when eligible, Play immediately before
+  Copy. Trailing swipe Delete removes that row. History does not add Share or
+  another tap before Copy.
+- Management actions such as confirmed Clear All and the Save History policy
+  stay in toolbar or Settings surfaces so the primary screen remains a text
+  list.
 - History append, Delete, and Clear All are serialized by one repository owner.
 - History storage failure is a nonblocking local warning after Voice success;
   it never turns a successful provider result into a failed dictation.
@@ -184,7 +191,8 @@ release-complete until the finished History destination is restored.
   cleanup completed, reconciliation may append that same result idempotently
   when `Save History` is still on. It never repeats provider work and never
   keeps Pending solely because History is unavailable.
-- History never owns audio and never contains failed provider attempts.
+- History never owns audio and never contains failed provider attempts. A Play
+  button resolves a separately retained Recording Cache file by `resultID`.
 - A new install enables `Save History` by default. Setup and Privacy state that
   up to 20 successful texts are stored locally on this device.
 - Turning `Save History` off requires confirmation, stops future appends, and
@@ -199,6 +207,33 @@ release-complete until the finished History destination is restored.
 - A failed Delete, Clear All, enable, or disable operation keeps the last
   confirmed presentation and shows a nonblocking local warning. Destructive
   actions report success only after the atomic record replacement succeeds.
+
+## Recording Cache And History Playback
+
+- Recording Cache is app-private, off by default, and independent from the
+  text-only History repository. It reuses `RecordingCachePolicy`: enabling it
+  defaults to the 10 newest recordings; unlimited retention requires an
+  explicit choice.
+- When the current saved policy keeps recordings, HoldType retains the
+  validated Pending audio in the cache under that accepted `resultID` before
+  Pending cleanup. Relaunch reconciliation is idempotent and never repeats
+  provider work.
+- Recording Cache is optional: cache read, retention, or write failure never
+  changes an accepted dictation into a failed result or blocks accepted Pending
+  cleanup. The next reconciliation opportunity may retry cache maintenance.
+- A History row shows Play only while Recording Cache is enabled and the exact
+  cache file for that row still exists. Saving cache-off reconciles managed
+  cache files immediately; clearing or retention pruning a file also removes
+  Play availability.
+- Play is local only. It does not contact OpenAI, retry transcription, mutate
+  Latest or History, write either clipboard, or insert text.
+- Deleting a History row does not delete its independent Recording Cache file;
+  cache retention and cache clearing own those files, matching macOS behavior.
+- One process-owned player owns History playback. Starting Voice first stops
+  playback and deactivates its playback audio session before recording audio is
+  activated.
+- A missing or unplayable file removes Play availability or reports one compact
+  playback failure. File paths never appear in product logs or UI.
 
 ## Keyboard Command Surface
 
@@ -333,7 +368,10 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
 - Foreground Voice to Latest succeeds with fakes.
 - Relaunch exposes the one Pending Retry/Discard path.
 - Library and core Settings persist.
-- Compact History append, Delete, Clear All, cap, and failure isolation pass.
+- Compact History append, one-tap Copy, swipe Delete, Clear All, cap, and
+  failure isolation pass; no detail route, Share, date, or time is rendered.
+- Recording Cache off/on, bounded retention, missing-file Play eligibility,
+  local playback failure, and playback-to-Voice handoff pass.
 - Release navigation contains no placeholder destination.
 - Keyboard tests cover both appearances, punctuation, Delete repeat, Space
   cursor movement, Return traits, voice-state honesty, snapshot validation,
