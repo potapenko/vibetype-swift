@@ -212,20 +212,37 @@ struct KeyboardViewControllerTests {
         )
     }
 
-    @Test func historyFailureShowsBriefStatusThenReturnsToReady() async throws {
+    @Test func settingsSuccessUsesOnlyThePublicSystemURL() async throws {
+        let harness = KeyboardControllerHarness(
+            synchronousSettingsResult: true
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+
+        controller.keyboardView.onSettingsRequested?()
+        await Task.yield()
+
+        #expect(harness.openedSettingsURLs.map(\.absoluteString) == [
+            UIApplication.openSettingsURLString,
+        ])
+        #expect(statusText(in: controller.view) == "Ready")
+        #expect(harness.scheduledStatusReset == nil)
+    }
+
+    @Test func settingsFailureShowsBriefStatusThenReturnsToReady() async throws {
         let harness = KeyboardControllerHarness()
         let controller = harness.makeController()
         controller.loadViewIfNeeded()
 
-        controller.keyboardView.onHistoryRequested?()
+        controller.keyboardView.onSettingsRequested?()
 
-        #expect(harness.openedHistoryURLs.map(\.absoluteString) == [
-            "holdtype://history",
+        #expect(harness.openedSettingsURLs.map(\.absoluteString) == [
+            UIApplication.openSettingsURLString,
         ])
-        let completion = try #require(harness.historyCompletion)
+        let completion = try #require(harness.settingsCompletion)
         completion(false)
         try await eventually {
-            statusText(in: controller.view) == "Open failed"
+            statusText(in: controller.view) == "Open Settings"
         }
 
         #expect(harness.scheduledStatusDuration == 1.6)
@@ -235,20 +252,20 @@ struct KeyboardViewControllerTests {
         #expect(statusText(in: controller.view) == "Ready")
     }
 
-    @Test func synchronousHistoryFailureUsesTheSameBriefStatus() async throws {
+    @Test func synchronousSettingsFailureUsesTheSameBriefStatus() async throws {
         let harness = KeyboardControllerHarness(
-            synchronousHistoryResult: false
+            synchronousSettingsResult: false
         )
         let controller = harness.makeController()
         controller.loadViewIfNeeded()
 
-        controller.keyboardView.onHistoryRequested?()
+        controller.keyboardView.onSettingsRequested?()
         try await eventually {
-            statusText(in: controller.view) == "Open failed"
+            statusText(in: controller.view) == "Open Settings"
         }
 
-        #expect(harness.openedHistoryURLs.map(\.absoluteString) == [
-            "holdtype://history",
+        #expect(harness.openedSettingsURLs.map(\.absoluteString) == [
+            UIApplication.openSettingsURLString,
         ])
         #expect(harness.scheduledStatusDuration == 1.6)
     }
@@ -260,9 +277,9 @@ private final class KeyboardControllerHarness {
     var snapshot: KeyboardBridgeSnapshot?
     let proxy = KeyboardDocumentProxySpy()
     let inputModeSwitchKeyOverride: Bool?
-    let synchronousHistoryResult: Bool?
-    var openedHistoryURLs: [URL] = []
-    var historyCompletion: ((Bool) -> Void)?
+    let synchronousSettingsResult: Bool?
+    var openedSettingsURLs: [URL] = []
+    var settingsCompletion: ((Bool) -> Void)?
     var scheduledStatusDuration: TimeInterval?
     var scheduledStatusReset: DispatchWorkItem?
     var scheduledExpiryDates: [Date] = []
@@ -272,12 +289,12 @@ private final class KeyboardControllerHarness {
         now: Date = Date(timeIntervalSince1970: 1_750_000_000),
         snapshot: KeyboardBridgeSnapshot? = nil,
         inputModeSwitchKeyOverride: Bool? = true,
-        synchronousHistoryResult: Bool? = nil
+        synchronousSettingsResult: Bool? = nil
     ) {
         self.now = now
         self.snapshot = snapshot
         self.inputModeSwitchKeyOverride = inputModeSwitchKeyOverride
-        self.synchronousHistoryResult = synchronousHistoryResult
+        self.synchronousSettingsResult = synchronousSettingsResult
     }
 
     func makeController() -> KeyboardViewController {
@@ -286,12 +303,12 @@ private final class KeyboardControllerHarness {
                 loadSnapshot: { [self] in snapshot },
                 now: { [self] in now },
                 documentProxyOverride: proxy,
-                historyOpener: { [self] url, completion in
-                    openedHistoryURLs.append(url)
-                    if let synchronousHistoryResult {
-                        completion(synchronousHistoryResult)
+                settingsOpener: { [self] url, completion in
+                    openedSettingsURLs.append(url)
+                    if let synchronousSettingsResult {
+                        completion(synchronousSettingsResult)
                     } else {
-                        historyCompletion = completion
+                        settingsCompletion = completion
                     }
                 },
                 inputModeSwitchKeyOverride: inputModeSwitchKeyOverride,

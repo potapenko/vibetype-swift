@@ -11,7 +11,7 @@ struct BrandStageKeyboardPresentation: Equatable {
 /// The selected Brand Stage Adaptive composition. The controller owns document
 /// proxy behavior; this view owns only layout, appearance, and touch routing.
 final class BrandStageKeyboardView: UIView {
-    var onHistoryRequested: (() -> Void)?
+    var onSettingsRequested: (() -> Void)?
     var onLatestRequested: (() -> Void)?
     var onPunctuationRequested: ((String) -> Void)?
     var onSpaceRequested: (() -> Void)?
@@ -27,7 +27,7 @@ final class BrandStageKeyboardView: UIView {
     private let bodyStack = UIStackView()
     private let commandStack = UIStackView()
     private let punctuationRow = UIStackView()
-    private let historyButton = UIButton(type: .system)
+    private let settingsButton = UIButton(type: .system)
     private let latestButton = UIButton(type: .system)
     private let statusLabel = UILabel()
     private let logoImageView = UIImageView()
@@ -122,7 +122,7 @@ final class BrandStageKeyboardView: UIView {
         let isCompactPhone = traitCollection.userInterfaceIdiom == .phone
             && traitCollection.verticalSizeClass == .compact
         topActionWidthConstraint?.constant = traitCollection
-            .preferredContentSizeCategory.isAccessibilityCategory ? 104 : 88
+            .preferredContentSizeCategory.isAccessibilityCategory ? 112 : 100
         updateAdaptiveLayout(isCompactPhone: isCompactPhone)
         let baseHeight: CGFloat
         if isCompactPhone {
@@ -325,14 +325,13 @@ final class BrandStageKeyboardView: UIView {
 
     private func makeTopRail() -> UIStackView {
         configureTopAction(
-            historyButton,
-            title: "History",
-            systemImage: "clock",
-            accessibilityLabel: "Open History in HoldType"
+            settingsButton,
+            title: "Settings",
+            systemImage: "gearshape",
+            accessibilityLabel: "Open Settings"
         )
-        historyButton.accessibilityIdentifier = "keyboard.brand-stage.history"
-        historyButton.accessibilityHint =
-            "Requests HoldType History. If the request fails, this keyboard stays open."
+        settingsButton.accessibilityIdentifier = "keyboard.brand-stage.settings"
+        settingsButton.accessibilityHint = "Opens system settings for HoldType."
         configureTopAction(
             latestButton,
             title: "Latest",
@@ -383,20 +382,20 @@ final class BrandStageKeyboardView: UIView {
         ])
 
         let rail = UIStackView(
-            arrangedSubviews: [historyButton, identity, latestButton]
+            arrangedSubviews: [settingsButton, identity, latestButton]
         )
         rail.axis = .horizontal
         rail.alignment = .center
         rail.distribution = .equalCentering
         rail.spacing = 8
-        let topActionWidth = historyButton.widthAnchor.constraint(
-            equalToConstant: 88
+        let topActionWidth = settingsButton.widthAnchor.constraint(
+            equalToConstant: 100
         )
         topActionWidthConstraint = topActionWidth
         NSLayoutConstraint.activate([
             topActionWidth,
-            latestButton.widthAnchor.constraint(equalTo: historyButton.widthAnchor),
-            historyButton.heightAnchor.constraint(equalToConstant: 44),
+            latestButton.widthAnchor.constraint(equalTo: settingsButton.widthAnchor),
+            settingsButton.heightAnchor.constraint(equalToConstant: 44),
             latestButton.heightAnchor.constraint(equalToConstant: 44),
         ])
         return rail
@@ -591,9 +590,9 @@ final class BrandStageKeyboardView: UIView {
     }
 
     private func configureInteractions() {
-        historyButton.addTarget(
+        settingsButton.addTarget(
             self,
-            action: #selector(historyTapped),
+            action: #selector(settingsTapped),
             for: .touchUpInside
         )
         latestButton.addTarget(
@@ -797,7 +796,7 @@ final class BrandStageKeyboardView: UIView {
     }
 
     private func keyBackground(for button: UIButton) -> UIColor {
-        if button === historyButton || button === latestButton {
+        if button === settingsButton || button === latestButton {
             return Self.topActionBackground
         }
         if punctuationButtons.contains(where: { $0 === button }) {
@@ -806,8 +805,8 @@ final class BrandStageKeyboardView: UIView {
         return Self.editingKeyBackground
     }
 
-    @objc private func historyTapped() {
-        onHistoryRequested?()
+    @objc private func settingsTapped() {
+        onSettingsRequested?()
     }
 
     @objc private func latestTapped() {

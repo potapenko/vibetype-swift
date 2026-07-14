@@ -12,12 +12,12 @@ struct KeyboardCommandSurfaceIOSTests {
     @Test func topRailStatusUsesOnlyShortProductLabels() {
         #expect(KeyboardTopRailStatus.allCases.map(\.rawValue) == [
             "Ready",
-            "Open failed",
+            "Open Settings",
         ])
         #expect(KeyboardTopRailStatus.ready.accessibilityAnnouncement == nil)
         #expect(
-            KeyboardTopRailStatus.openFailed.accessibilityAnnouncement
-                == "Open failed"
+            KeyboardTopRailStatus.openSettings.accessibilityAnnouncement
+                == "Open Settings"
         )
     }
 

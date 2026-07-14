@@ -1,6 +1,6 @@
 import UIKit
 
-typealias KeyboardHistoryOpener = (
+typealias KeyboardSettingsOpener = (
     URL,
     @escaping (Bool) -> Void
 ) -> Void
@@ -15,7 +15,7 @@ struct KeyboardViewControllerDependencies {
     let loadSnapshot: () throws -> KeyboardBridgeSnapshot?
     let now: () -> Date
     let documentProxyOverride: (any UITextDocumentProxy)?
-    let historyOpener: KeyboardHistoryOpener?
+    let settingsOpener: KeyboardSettingsOpener?
     let inputModeSwitchKeyOverride: Bool?
     let scheduleStatusReset: (TimeInterval, DispatchWorkItem) -> Void
     let scheduleLatestExpiry: KeyboardLatestExpiryScheduler
@@ -27,7 +27,7 @@ struct KeyboardViewControllerDependencies {
         },
         now: { Date() },
         documentProxyOverride: nil,
-        historyOpener: nil,
+        settingsOpener: nil,
         inputModeSwitchKeyOverride: nil,
         scheduleStatusReset: { duration, workItem in
             DispatchQueue.main.asyncAfter(
@@ -62,7 +62,7 @@ final class KeyboardViewController: UIInputViewController {
     private var latestExpiryTimer: Timer?
     private var statusResetWorkItem: DispatchWorkItem?
     private var activeStatusOverride: KeyboardTopRailStatus?
-    private var historyRequestID: UUID?
+    private var settingsRequestID: UUID?
     private var showsInputModeSwitchKey = true
 
     convenience init(dependencies: KeyboardViewControllerDependencies) {
@@ -99,7 +99,7 @@ final class KeyboardViewController: UIInputViewController {
         latestExpiryTimer = nil
         statusResetWorkItem?.cancel()
         activeStatusOverride = nil
-        historyRequestID = nil
+        settingsRequestID = nil
         super.viewWillDisappear(animated)
     }
 
@@ -135,8 +135,8 @@ final class KeyboardViewController: UIInputViewController {
             action: #selector(handleInputModeList(from:with:)),
             for: .allTouchEvents
         )
-        keyboardView.onHistoryRequested = { [weak self] in
-            self?.openHistory()
+        keyboardView.onSettingsRequested = { [weak self] in
+            self?.openSettings()
         }
         keyboardView.onLatestRequested = { [weak self] in
             guard let self, let latestItem else { return }
@@ -210,44 +210,43 @@ final class KeyboardViewController: UIInputViewController {
             && !activeDocumentProxy.hasText)
     }
 
-    private func openHistory() {
-        guard let url = HoldTypeContainingAppRoute.history.url else {
-            showTemporaryStatus(.openFailed, duration: 1.6)
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else {
+            showTemporaryStatus(.openSettings, duration: 1.6)
             return
         }
-
         let requestID = UUID()
-        historyRequestID = requestID
+        settingsRequestID = requestID
         statusResetWorkItem?.cancel()
         activeStatusOverride = nil
         render()
-        let requested = requestHistoryOpen(url) { [weak self] opened in
+        let requested = requestSettingsOpen(url) { [weak self] opened in
             Task { @MainActor [weak self] in
                 guard let self,
-                      self.historyRequestID == requestID else {
+                      self.settingsRequestID == requestID else {
                     return
                 }
-                self.historyRequestID = nil
+                self.settingsRequestID = nil
                 guard !opened else { return }
                 self.showTemporaryStatus(
-                    .openFailed,
+                    .openSettings,
                     duration: 1.6
                 )
             }
         }
         guard requested else {
-            historyRequestID = nil
-            showTemporaryStatus(.openFailed, duration: 1.6)
+            settingsRequestID = nil
+            showTemporaryStatus(.openSettings, duration: 1.6)
             return
         }
     }
 
-    private func requestHistoryOpen(
+    private func requestSettingsOpen(
         _ url: URL,
         completion: @escaping (Bool) -> Void
     ) -> Bool {
-        if let historyOpener = dependencies.historyOpener {
-            historyOpener(url, completion)
+        if let settingsOpener = dependencies.settingsOpener {
+            settingsOpener(url, completion)
             return true
         }
 

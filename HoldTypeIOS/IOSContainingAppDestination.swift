@@ -44,14 +44,6 @@ enum IOSContainingAppDestination: String, CaseIterable, Identifiable,
         Self(rawValue: storedRawValue) ?? .voice
     }
 
-    static func resolve(deepLinkURL: URL) -> Self? {
-        switch HoldTypeContainingAppRoute(url: deepLinkURL) {
-        case .history:
-            .history
-        case nil:
-            nil
-        }
-    }
 }
 
 enum IOSContainingAppShellLayout: Equatable, Sendable {

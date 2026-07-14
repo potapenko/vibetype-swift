@@ -14,7 +14,7 @@ struct BrandStageKeyboardViewTests {
 
     @Test func renderExposesTheApprovedControlsAndRoutesEachActionOnce() throws {
         let view = makeView(width: 393)
-        var historyCount = 0
+        var settingsCount = 0
         var latestCount = 0
         var punctuation: [String] = []
         var spaceCount = 0
@@ -22,7 +22,7 @@ struct BrandStageKeyboardViewTests {
         var deleteStopCount = 0
         var returnCount = 0
 
-        view.onHistoryRequested = { historyCount += 1 }
+        view.onSettingsRequested = { settingsCount += 1 }
         view.onLatestRequested = { latestCount += 1 }
         view.onPunctuationRequested = { punctuation.append($0) }
         view.onSpaceRequested = { spaceCount += 1 }
@@ -48,12 +48,15 @@ struct BrandStageKeyboardViewTests {
         #expect(status.accessibilityLabel == "Keyboard status")
         #expect(status.accessibilityValue == "Ready")
 
-        let history = try button("keyboard.brand-stage.history", in: view)
-        #expect(history.accessibilityLabel == "Open History in HoldType")
+        let settings = try button("keyboard.brand-stage.settings", in: view)
+        #expect(settings.accessibilityLabel == "Open Settings")
         #expect(
-            history.accessibilityHint
-                == "Requests HoldType History. If the request fails, this keyboard stays open."
+            settings.accessibilityHint
+                == "Opens system settings for HoldType."
         )
+        #expect(settings.configuration?.title == "Settings")
+        #expect(settings.configuration?.image == UIImage(systemName: "gearshape"))
+        #expect(settings.bounds.width >= 99.9)
         let latest = try button("keyboard.brand-stage.latest", in: view)
         let period = try button(
             "keyboard.brand-stage.punctuation.period",
@@ -79,7 +82,7 @@ struct BrandStageKeyboardViewTests {
         #expect(returnButton.configuration?.title == "Send")
         #expect(returnButton.accessibilityLabel == "Send")
 
-        history.sendActions(for: .touchUpInside)
+        settings.sendActions(for: .touchUpInside)
         latest.sendActions(for: .touchUpInside)
         period.sendActions(for: .touchUpInside)
         comma.sendActions(for: .touchUpInside)
@@ -90,7 +93,7 @@ struct BrandStageKeyboardViewTests {
         delete.sendActions(for: .touchUpInside)
         returnButton.sendActions(for: .touchUpInside)
 
-        #expect(historyCount == 1)
+        #expect(settingsCount == 1)
         #expect(latestCount == 1)
         #expect(punctuation == [".", ",", "?", "!"])
         #expect(spaceCount == 1)
@@ -129,14 +132,15 @@ struct BrandStageKeyboardViewTests {
         )
         layout(view)
 
-        let history = try button("keyboard.brand-stage.history", in: view)
+        let settings = try button("keyboard.brand-stage.settings", in: view)
         let latest = try button("keyboard.brand-stage.latest", in: view)
         let delete = try button("keyboard.brand-stage.delete", in: view)
         let returnButton = try button("keyboard.brand-stage.return", in: view)
 
-        #expect(history.bounds.width >= 103.9)
-        #expect(latest.bounds.width == history.bounds.width)
-        #expect(history.configuration?.title == "History")
+        #expect(settings.bounds.width >= 111.9)
+        #expect(latest.bounds.width == settings.bounds.width)
+        #expect(settings.configuration?.title == "Settings")
+        #expect(settings.configuration?.image == UIImage(systemName: "gearshape"))
         #expect(latest.configuration?.title == "Latest")
         let boundedSymbol = UIImage.SymbolConfiguration(
             pointSize: 20,
@@ -165,9 +169,9 @@ struct BrandStageKeyboardViewTests {
             .resolvedColor(with: dark)
         #expect(lightBackground != darkBackground)
 
-        let history = try button("keyboard.brand-stage.history", in: view)
+        let settings = try button("keyboard.brand-stage.settings", in: view)
         let keyColor = try #require(
-            history.configuration?.baseBackgroundColor
+            settings.configuration?.baseBackgroundColor
         )
         #expect(
             keyColor.resolvedColor(with: light)
@@ -529,7 +533,7 @@ struct BrandStageKeyboardViewTests {
 
     private func compactControlIdentifiers(showsGlobe: Bool) -> [String] {
         var identifiers = [
-            "keyboard.brand-stage.history",
+            "keyboard.brand-stage.settings",
             "keyboard.brand-stage.latest",
             "keyboard.brand-stage.punctuation.period",
             "keyboard.brand-stage.punctuation.comma",

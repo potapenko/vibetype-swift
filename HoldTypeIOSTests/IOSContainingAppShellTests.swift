@@ -60,39 +60,6 @@ struct IOSContainingAppShellTests {
         )
     }
 
-    @Test func historyDeepLinkIsStrictAndResolvesToHistory() throws {
-        let historyURL = try #require(
-            HoldTypeContainingAppRoute.history.url
-        )
-
-        #expect(historyURL.absoluteString == "holdtype://history")
-        #expect(
-            HoldTypeContainingAppRoute(url: historyURL) == .history
-        )
-        #expect(
-            IOSContainingAppDestination.resolve(
-                deepLinkURL: historyURL
-            ) == .history
-        )
-
-        for rejectedValue in [
-            "https://history",
-            "holdtype://voice",
-            "holdtype://history/",
-            "holdtype://history/detail",
-            "holdtype://history?result=private",
-            "holdtype://history#latest",
-        ] {
-            let rejectedURL = try #require(URL(string: rejectedValue))
-            #expect(HoldTypeContainingAppRoute(url: rejectedURL) == nil)
-            #expect(
-                IOSContainingAppDestination.resolve(
-                    deepLinkURL: rejectedURL
-                ) == nil
-            )
-        }
-    }
-
     @Test func practiceDraftSurvivesRoundTripAndIsSceneLocal() {
         var firstScene = IOSContainingAppSceneDraft()
         let secondScene = IOSContainingAppSceneDraft()

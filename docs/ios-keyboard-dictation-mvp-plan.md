@@ -237,13 +237,15 @@ keyboard.
 | ID | Scope | Status | Depends On |
 | --- | --- | --- | --- |
 | KBD-MVP-0 | Product contract and execution plan | Completed 2026-07-14 | — |
-| KBD-MVP-1 | Settings action and normal app shell | Ready | KBD-MVP-0 |
+| KBD-MVP-1 | Settings action and normal app shell | Completed 2026-07-14 | KBD-MVP-0 |
 | KBD-MVP-2 | Signed-device background-session feasibility | Pending | KBD-MVP-1 |
 | KBD-MVP-3 | Real recorder, OpenAI, and safe insertion | Pending | KBD-MVP-2 pass |
 | KBD-MVP-4 | Setup, failure states, and release UX | Pending | KBD-MVP-3 |
 | KBD-MVP-5 | Device qualification and TestFlight candidate | Pending | KBD-MVP-4 |
 
 ## KBD-MVP-1 — Settings And Normal App Shell
+
+Status: completed 2026-07-14.
 
 ### Purpose
 
@@ -284,6 +286,28 @@ ordinary app launch before changing the voice architecture.
 The keyboard contains no History action or containing-app URL. The containing
 app opens normally with four permanent destinations. One scoped commit records
 the change.
+
+### Evidence
+
+- Focused iPhone Simulator tests passed: 35 tests in `KeyboardViewControllerTests`,
+  `BrandStageKeyboardViewTests`, `KeyboardCommandSurfaceIOSTests`,
+  `IOSContainingAppShellTests`, and `IOSVoicePlatformPlistTests`.
+- A normal cold launch on iPhone 16, iOS 18.6, with no qualification launch
+  environment showed Voice, Library, History, and Settings. Selecting History
+  through Computer Use kept the tab bar visible; no production navigation fix
+  was needed.
+- The Settings action uses `UIApplication.openSettingsURLString` through the
+  extension context. Focused tests cover successful and failed completion, and
+  failure presents `Open Settings` before returning to `Ready`.
+- The installed keyboard was checked in Light and Dark Mode with a fully visible
+  Settings label and gear: [Light](qa/runs/assets/kbd-mvp-1-2026-07-14/keyboard-light.png)
+  and [Dark](qa/runs/assets/kbd-mvp-1-2026-07-14/keyboard-dark.png).
+- Generic iOS Simulator Debug and generic iOS device Debug builds succeeded,
+  including the embedded keyboard extension. `git diff --check` passed.
+- No signed physical iPhone was connected, so the plan's physical-device
+  confirmation of public Settings navigation remains deferred to KBD-MVP-2.
+  Full task evidence is recorded in
+  [the KBD-MVP-1 QA note](qa/runs/kbd-mvp-1-settings-and-app-shell-2026-07-14.md).
 
 ### Ready-to-use prompt
 
