@@ -121,6 +121,7 @@ final class IOSForegroundVoiceRuntime {
     }
     let latestResultOwner: IOSForegroundVoiceLatestResultOwner
     let workflow: IOSForegroundVoiceWorkflow
+    let keyboardDictationSession: IOSKeyboardDictationSessionCoordinator
     let controller: IOSForegroundVoiceController
     let lifecycleCoordinator:
         IOSForegroundVoiceProcessLifecycleCoordinator
@@ -290,6 +291,10 @@ final class IOSForegroundVoiceRuntime {
         )
         let workflow = factories.makeWorkflow(dependencies)
         self.workflow = workflow
+        keyboardDictationSession = IOSKeyboardDictationSessionCoordinator(
+            workflow: workflow.keyboardDictationClient,
+            permission: permissionOwner.client
+        )
         let controller = factories.makeController(
             workflow.client,
             sceneRegistry

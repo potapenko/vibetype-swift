@@ -126,6 +126,30 @@ nonisolated struct IOSForegroundVoiceWorkflowDurableObservation: Sendable {
     let latest: IOSV1ForegroundVoiceLatestResultObservation
 }
 
+nonisolated enum IOSKeyboardDictationWorkflowProgress: Equatable, Sendable {
+    case listening
+    case processing
+}
+
+nonisolated enum IOSKeyboardDictationWorkflowResolution: Equatable, Sendable {
+    case accepted(String)
+    case cancelled
+    case failed
+}
+
+nonisolated struct IOSKeyboardDictationWorkflowClient: Sendable {
+    typealias Progress = @MainActor @Sendable (
+        IOSKeyboardDictationWorkflowProgress
+    ) -> Void
+
+    let run: @Sendable (
+        UUID,
+        @escaping Progress
+    ) async -> IOSKeyboardDictationWorkflowResolution
+    let finish: @MainActor @Sendable (UUID) -> Bool
+    let cancel: @MainActor @Sendable (UUID) -> Bool
+}
+
 nonisolated enum IOSForegroundVoiceWorkflowCaptureStopReason:
     Equatable,
     Sendable {
@@ -509,8 +533,14 @@ final class IOSForegroundVoiceWorkflow {
     }
 
     private final class Attempt {
+        enum Origin {
+            case foreground(SceneLeaseOwner)
+            case keyboard(UUID)
+        }
+
         let token: IOSForegroundVoiceWorkflowAttemptToken
-        let sceneLeaseOwner: SceneLeaseOwner
+        let origin: Origin
+        var recordingAttemptID: UUID?
         var stopContinuation: CheckedContinuation<StopTrigger, Never>?
         var tailContinuation:
             CheckedContinuation<StopTrigger?, Never>?
@@ -529,17 +559,42 @@ final class IOSForegroundVoiceWorkflow {
         var finalizationExpired = false
         var isListening = false
         var hasStartedRecording = false
-        var requiresInitiatingScene = true
+        var requiresInitiatingScene: Bool
 
         init(
             token: IOSForegroundVoiceWorkflowAttemptToken,
-            sceneLeaseOwner: SceneLeaseOwner
+            origin: Origin
         ) {
             self.token = token
-            self.sceneLeaseOwner = sceneLeaseOwner
+            self.origin = origin
+            switch origin {
+            case .foreground:
+                requiresInitiatingScene = true
+            case .keyboard:
+                requiresInitiatingScene = false
+            }
         }
 
-        var sceneLease: IOSVoiceSceneStartLease { sceneLeaseOwner.lease }
+        var sceneLeaseOwner: SceneLeaseOwner? {
+            guard case .foreground(let owner) = origin else { return nil }
+            return owner
+        }
+
+        var sceneLease: IOSVoiceSceneStartLease? {
+            sceneLeaseOwner?.lease
+        }
+
+        var allowsBackgroundContinuation: Bool {
+            if case .keyboard = origin { return true }
+            return false
+        }
+
+        func matchesKeyboardRequest(_ requestID: UUID) -> Bool {
+            guard case .keyboard(let activeRequestID) = origin else {
+                return false
+            }
+            return activeRequestID == requestID
+        }
     }
 
     private let dependencies: IOSForegroundVoiceWorkflowDependencies
@@ -552,6 +607,7 @@ final class IOSForegroundVoiceWorkflow {
     private var activeControllerAuthority: IOSForegroundVoiceAuthority?
     private var activeControllerToken: IOSForegroundVoiceWorkflowAttemptToken?
     private var isRunningRecoveryOperation = false
+    private var acceptedKeyboardResult: (requestID: UUID, text: String)?
 
     init(dependencies: IOSForegroundVoiceWorkflowDependencies) {
         self.dependencies = dependencies
@@ -600,6 +656,24 @@ final class IOSForegroundVoiceWorkflow {
             providerConsentInvalidated: { [weak self] authority in
                 self?.providerConsentDidInvalidate(authority)
                     ?? .unavailable
+            }
+        )
+    }
+
+    var keyboardDictationClient: IOSKeyboardDictationWorkflowClient {
+        IOSKeyboardDictationWorkflowClient(
+            run: { [weak self] requestID, progress in
+                guard let self else { return .failed }
+                return await self.runKeyboardDictation(
+                    requestID: requestID,
+                    progress: progress
+                )
+            },
+            finish: { [weak self] requestID in
+                self?.finishKeyboardDictation(requestID: requestID) ?? false
+            },
+            cancel: { [weak self] requestID in
+                self?.cancelKeyboardDictation(requestID: requestID) ?? false
             }
         )
     }
@@ -672,7 +746,7 @@ final class IOSForegroundVoiceWorkflow {
         }
         return await runStart(
             request.outputIntent,
-            sceneLeaseOwner: leaseOwner,
+            origin: .foreground(leaseOwner),
             token: token,
             progress: progress
         )
@@ -689,6 +763,59 @@ final class IOSForegroundVoiceWorkflow {
         }
         requestStop(.done, for: attempt)
         return .accepted
+    }
+
+    private func runKeyboardDictation(
+        requestID: UUID,
+        progress: @escaping IOSKeyboardDictationWorkflowClient.Progress
+    ) async -> IOSKeyboardDictationWorkflowResolution {
+        guard activeAttempt == nil,
+              !isRunningRecoveryOperation else {
+            return .failed
+        }
+        let token = IOSForegroundVoiceWorkflowAttemptToken()
+        let resolution = await runStart(
+            .standard,
+            origin: .keyboard(requestID),
+            token: token,
+            progress: { value in
+                switch value {
+                case .listening:
+                    progress(.listening)
+                case .finalizing, .processing:
+                    progress(.processing)
+                }
+            }
+        )
+        if let acceptedKeyboardResult,
+           acceptedKeyboardResult.requestID == requestID {
+            self.acceptedKeyboardResult = nil
+            return .accepted(acceptedKeyboardResult.text)
+        }
+        return resolution.failure == nil && resolution.outcome == nil
+            ? .cancelled
+            : .failed
+    }
+
+    private func finishKeyboardDictation(requestID: UUID) -> Bool {
+        guard let attempt = activeAttempt,
+              attempt.matchesKeyboardRequest(requestID),
+              attempt.isListening,
+              attempt.pendingTrigger == nil else {
+            return false
+        }
+        requestStop(.done, for: attempt)
+        return true
+    }
+
+    private func cancelKeyboardDictation(requestID: UUID) -> Bool {
+        guard let attempt = activeAttempt,
+              attempt.matchesKeyboardRequest(requestID),
+              attempt.pendingTrigger == nil else {
+            return false
+        }
+        requestStop(.cancelled, for: attempt)
+        return true
     }
 
     private func observe(
@@ -858,43 +985,48 @@ final class IOSForegroundVoiceWorkflow {
 
     private func runStart(
         _ intent: DictationOutputIntent,
-        sceneLeaseOwner: SceneLeaseOwner,
+        origin: Attempt.Origin,
         token: IOSForegroundVoiceWorkflowAttemptToken,
         progress: @escaping IOSForegroundVoiceClient.Progress
     ) async -> IOSForegroundVoiceResolution {
-        let sceneLease = sceneLeaseOwner.lease
-        guard dependencies.sceneRegistry.validateContinuation(sceneLease)
-                == .ready else {
+        if case .foreground(let sceneLeaseOwner) = origin,
+           dependencies.sceneRegistry.validateContinuation(
+               sceneLeaseOwner.lease
+           ) != .ready {
             return await blockedPreflight(failure: .unavailable)
         }
 
         let attempt = Attempt(
             token: token,
-            sceneLeaseOwner: sceneLeaseOwner
+            origin: origin
         )
         activeAttempt = attempt
-        attempt.sceneObservation = dependencies.sceneRegistry.observeEvents {
-            [weak self, weak attempt] event in
-            guard let self, let attempt, self.activeAttempt === attempt else {
-                return
-            }
-            guard self.dependencies.sceneRegistry.validate(event) else {
-                return
-            }
-            switch event.kind {
-            case .lastActiveSceneLost(.expectedMicrophonePermissionPrompt),
-                 .aggregateBecameActive,
-                 .initiatingSceneReactivatedAfterPermission:
-                break
-            case .lastActiveSceneLost(.voiceWorkMustStop):
-                self.dependencies.cancelStartBoundary()
-                self.requestStop(.interrupted, for: attempt)
-            case .initiatingSceneBecameUnavailable
-                where attempt.requiresInitiatingScene:
-                self.dependencies.cancelStartBoundary()
-                self.requestStop(.interrupted, for: attempt)
-            case .initiatingSceneBecameUnavailable:
-                break
+        if case .foreground = origin {
+            attempt.sceneObservation = dependencies.sceneRegistry.observeEvents {
+                [weak self, weak attempt] event in
+                guard let self, let attempt,
+                      self.activeAttempt === attempt else {
+                    return
+                }
+                guard self.dependencies.sceneRegistry.validate(event) else {
+                    return
+                }
+                switch event.kind {
+                case .lastActiveSceneLost(
+                    .expectedMicrophonePermissionPrompt
+                ), .aggregateBecameActive,
+                     .initiatingSceneReactivatedAfterPermission:
+                    break
+                case .lastActiveSceneLost(.voiceWorkMustStop):
+                    self.dependencies.cancelStartBoundary()
+                    self.requestStop(.interrupted, for: attempt)
+                case .initiatingSceneBecameUnavailable
+                    where attempt.requiresInitiatingScene:
+                    self.dependencies.cancelStartBoundary()
+                    self.requestStop(.interrupted, for: attempt)
+                case .initiatingSceneBecameUnavailable:
+                    break
+                }
             }
         }
 
@@ -922,7 +1054,7 @@ final class IOSForegroundVoiceWorkflow {
         guard await hasNoDurableRecoveryOwner(),
               canContinueArming(
                 attempt,
-                requireInitiatingScene: true
+                requireInitiatingScene: attempt.requiresInitiatingScene
               ) else {
             return await blockedPreflight(failure: .localRecovery)
         }
@@ -933,7 +1065,7 @@ final class IOSForegroundVoiceWorkflow {
                 guard let self, let attempt else { return false }
                 return self.canContinueArming(
                     attempt,
-                    requireInitiatingScene: true
+                    requireInitiatingScene: attempt.requiresInitiatingScene
                 )
             }
         ) {
@@ -949,7 +1081,7 @@ final class IOSForegroundVoiceWorkflow {
         }
         guard canContinueArming(
             attempt,
-            requireInitiatingScene: true
+            requireInitiatingScene: attempt.requiresInitiatingScene
         ) else { return await blockedPreflight(failure: .unavailable) }
         lastConfiguration = configuration
         passiveConfigurationSetupOverride = nil
@@ -968,7 +1100,7 @@ final class IOSForegroundVoiceWorkflow {
         }
         guard canContinueArming(
             attempt,
-            requireInitiatingScene: true
+            requireInitiatingScene: attempt.requiresInitiatingScene
         ) else { return await blockedPreflight(failure: .unavailable) }
 
         let credential: IOSForegroundVoiceWorkflowCredentialProof
@@ -988,7 +1120,7 @@ final class IOSForegroundVoiceWorkflow {
         }
         guard canContinueArming(
             attempt,
-            requireInitiatingScene: true
+            requireInitiatingScene: attempt.requiresInitiatingScene
         ) else { return await blockedPreflight(failure: .unavailable) }
 
         switch await resolvePermission(for: attempt) {
@@ -1016,14 +1148,14 @@ final class IOSForegroundVoiceWorkflow {
         }
         guard canContinueArming(
             attempt,
-            requireInitiatingScene: true
+            requireInitiatingScene: attempt.requiresInitiatingScene
         ) else { return await blockedPreflight(failure: .unavailable) }
 
         // Consent and the system permission interaction are complete. The
         // process attempt remains admitted, but no scene owns presentation
         // from this point forward.
         attempt.requiresInitiatingScene = false
-        attempt.sceneLeaseOwner.finish()
+        attempt.sceneLeaseOwner?.finish()
         guard canContinueArming(
             attempt,
             requireInitiatingScene: false
@@ -1126,8 +1258,10 @@ final class IOSForegroundVoiceWorkflow {
             requireInitiatingScene: false
         ) else { return await blockedPreflight(failure: .unavailable) }
         do {
+            let recordingAttemptID = dependencies.makeUUID()
+            attempt.recordingAttemptID = recordingAttemptID
             attempt.recording = try await dependencies.makeRecording(
-                dependencies.makeUUID(),
+                recordingAttemptID,
                 intent
             )
         } catch {
@@ -1431,16 +1565,16 @@ final class IOSForegroundVoiceWorkflow {
                 )
             }
             guard !Task.isCancelled,
-                  dependencies.sceneRegistry.snapshot.isForegroundActive,
+                  canContinueProvider(for: attempt),
                   attempt.forcedTrigger == nil,
                   await dependencies.revalidateConsent(consent),
                   !Task.isCancelled,
-                  dependencies.sceneRegistry.snapshot.isForegroundActive,
+                  canContinueProvider(for: attempt),
                   attempt.forcedTrigger == nil,
                   await dependencies.revalidateCredential(credential),
                   !Task.isCancelled,
                   activeAttempt === attempt,
-                  dependencies.sceneRegistry.snapshot.isForegroundActive,
+                  canContinueProvider(for: attempt),
                   attempt.forcedTrigger == nil else {
                 return IOSForegroundVoiceResolution(
                     observation: await observeDurableTerminalState(),
@@ -1808,6 +1942,16 @@ final class IOSForegroundVoiceWorkflow {
     ) async -> IOSForegroundVoiceResolution {
         switch resolution {
         case .acceptance(let acceptance):
+            if case .resultReady(let record, _) = acceptance,
+               let attempt = activeAttempt,
+               let recordingAttemptID = attempt.recordingAttemptID,
+               record.sourceAttemptID == recordingAttemptID,
+               case .keyboard(let requestID) = attempt.origin {
+                acceptedKeyboardResult = (
+                    requestID: requestID,
+                    text: record.acceptedText
+                )
+            }
             return await mapAcceptance(acceptance)
         case .retryAvailable(_, let failure, let stage):
             return IOSForegroundVoiceResolution(
@@ -1832,7 +1976,7 @@ final class IOSForegroundVoiceWorkflow {
         progress: @escaping IOSForegroundVoiceClient.Progress
     ) async -> IOSForegroundVoiceResolution {
         guard !Task.isCancelled,
-              dependencies.sceneRegistry.snapshot.isForegroundActive,
+              canContinueProvider(for: attempt),
               attempt.forcedTrigger == nil else {
             return IOSForegroundVoiceResolution(
                 observation: await observeDurableTerminalState(),
@@ -1847,8 +1991,7 @@ final class IOSForegroundVoiceWorkflow {
                 guard !Task.isCancelled,
                       self.activeAttempt === attempt,
                       attempt.forcedTrigger == nil,
-                      self.dependencies.sceneRegistry.snapshot
-                        .isForegroundActive else {
+                      self.canContinueProvider(for: attempt) else {
                     return
                 }
                 progress(.processing(stage))
@@ -1860,7 +2003,7 @@ final class IOSForegroundVoiceWorkflow {
         guard activeAttempt === attempt,
               !Task.isCancelled,
               attempt.forcedTrigger == nil,
-              dependencies.sceneRegistry.snapshot.isForegroundActive else {
+              canContinueProvider(for: attempt) else {
             return IOSForegroundVoiceResolution(
                 observation: await observeDurableTerminalState(),
                 stage: .recordingFinalization,
@@ -2042,7 +2185,13 @@ final class IOSForegroundVoiceWorkflow {
     private func resolveConsent(
         for attempt: Attempt
     ) async -> ConsentResolution {
-        await resolveConsent(sceneLease: attempt.sceneLease)
+        if attempt.allowsBackgroundContinuation {
+            return await resolveConsentWithoutPresentation()
+        }
+        guard let sceneLease = attempt.sceneLease else {
+            return .unavailable
+        }
+        return await resolveConsent(sceneLease: sceneLease)
     }
 
     private func resolveConsent(
@@ -2115,9 +2264,13 @@ final class IOSForegroundVoiceWorkflow {
         case .unavailable:
             return .unavailable
         case .undetermined:
+            guard !attempt.allowsBackgroundContinuation,
+                  let sceneLease = attempt.sceneLease else {
+                return .stale
+            }
             guard dependencies.sceneRegistry
                 .beginExpectedMicrophonePermissionPrompt(
-                    attempt.sceneLease
+                    sceneLease
                 ) else {
                 return .stale
             }
@@ -2127,25 +2280,25 @@ final class IOSForegroundVoiceWorkflow {
             switch outcome {
             case .timedOut:
                 _ = dependencies.sceneRegistry
-                    .microphonePermissionPromptDidReturn(attempt.sceneLease)
+                    .microphonePermissionPromptDidReturn(sceneLease)
                 return .timedOut
             case .cancelled:
                 _ = dependencies.sceneRegistry
-                    .microphonePermissionPromptDidReturn(attempt.sceneLease)
+                    .microphonePermissionPromptDidReturn(sceneLease)
                 return .cancelled
             case .unavailable:
                 _ = dependencies.sceneRegistry
-                    .microphonePermissionPromptDidReturn(attempt.sceneLease)
+                    .microphonePermissionPromptDidReturn(sceneLease)
                 return .unavailable
             case .granted, .denied:
                 break
             }
 
             var validation = dependencies.sceneRegistry
-                .microphonePermissionPromptDidReturn(attempt.sceneLease)
+                .microphonePermissionPromptDidReturn(sceneLease)
             if validation == .awaitingInitiatingSceneReactivation {
                 validation = await dependencies.sceneRegistry
-                    .waitUntilInitiatingSceneActive(attempt.sceneLease)
+                    .waitUntilInitiatingSceneActive(sceneLease)
             }
             guard validation == .ready,
                   !Task.isCancelled,
@@ -2354,20 +2507,33 @@ final class IOSForegroundVoiceWorkflow {
         activeAttempt = nil
     }
 
+    private func canContinueProvider(for attempt: Attempt) -> Bool {
+        activeAttempt === attempt
+            && !Task.isCancelled
+            && attempt.forcedTrigger == nil
+            && (attempt.allowsBackgroundContinuation
+                || dependencies.sceneRegistry.snapshot.isForegroundActive)
+    }
+
     private func canContinueArming(
         _ attempt: Attempt,
         requireInitiatingScene: Bool
     ) -> Bool {
         guard activeAttempt === attempt,
               !Task.isCancelled,
-              attempt.forcedTrigger == nil,
-              dependencies.sceneRegistry.snapshot.isForegroundActive else {
+              attempt.forcedTrigger == nil else {
             return false
         }
-        return !requireInitiatingScene
-            || dependencies.sceneRegistry.validateContinuation(
-                attempt.sceneLease
-            ) == .ready
+        if attempt.allowsBackgroundContinuation {
+            return !requireInitiatingScene
+        }
+        guard dependencies.sceneRegistry.snapshot.isForegroundActive else {
+            return false
+        }
+        guard requireInitiatingScene else { return true }
+        guard let sceneLease = attempt.sceneLease else { return false }
+        return dependencies.sceneRegistry.validateContinuation(sceneLease)
+            == .ready
     }
 
     private func apply(

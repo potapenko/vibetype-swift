@@ -74,7 +74,7 @@ struct KeyboardDictationBridgeTests {
             KeyboardDictationStateRecord(
                 requestID: requestID,
                 phase: .resultReady,
-                result: String(repeating: "x", count: 513),
+                result: String(repeating: "x", count: 3_073),
                 publishedAt: now,
                 expiresAt: now.addingTimeInterval(60)
             ) == nil
@@ -83,7 +83,7 @@ struct KeyboardDictationBridgeTests {
             KeyboardDictationStateRecord(
                 requestID: requestID,
                 phase: .resultReady,
-                result: "HoldType keyboard device probe",
+                result: "Processed keyboard text",
                 publishedAt: now,
                 expiresAt: now.addingTimeInterval(60)
             ) != nil

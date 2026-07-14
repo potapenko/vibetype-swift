@@ -239,7 +239,7 @@ keyboard.
 | KBD-MVP-0 | Product contract and execution plan | Completed 2026-07-14 | — |
 | KBD-MVP-1 | Settings action and normal app shell | Completed 2026-07-14 | KBD-MVP-0 |
 | KBD-MVP-2 | Signed-device background-session feasibility | Passed 2026-07-14 | KBD-MVP-1 |
-| KBD-MVP-3 | Real recorder, OpenAI, and safe insertion | Pending | KBD-MVP-2 pass |
+| KBD-MVP-3 | Real recorder, OpenAI, and safe insertion | Implemented 2026-07-14; live smoke pending authorization | KBD-MVP-2 pass |
 | KBD-MVP-4 | Setup, failure states, and release UX | Pending | KBD-MVP-3 |
 | KBD-MVP-5 | Device qualification and TestFlight candidate | Pending | KBD-MVP-4 |
 
@@ -484,6 +484,9 @@ commits only the spec/QA/status evidence needed to preserve the decision.
 
 ## KBD-MVP-3 — Production Voice Pipeline And Safe Insertion
 
+Status: implemented 2026-07-14; automated acceptance passed; live-provider UI
+smoke remains pending explicit user authorization.
+
 ### Purpose
 
 Replace the feasibility result with the existing app-owned dictation pipeline
@@ -527,6 +530,34 @@ without duplicating recorder, provider, Latest, or History ownership.
 
 The deterministic probe is gone. A real keyboard request can complete the
 existing production pipeline and insert one accepted result safely.
+
+### Evidence
+
+- The KBD-MVP-2 gate was confirmed Passed from its signed iPhone 14 Pro Max
+  (`iPhone15,3`) evidence before implementation began.
+- Keyboard Start, Finish, and Cancel now enter the existing process-owned
+  foreground Voice workflow, recorder, provider, text-rule, Latest, optional
+  History, and Recording Cache boundaries. No second recorder, persistence
+  package, History store, transaction coordinator, outbox, receipt, or retry
+  queue was added.
+- Matching transient publication is bound to the keyboard request and the
+  accepted source attempt. Automatic insertion additionally requires the same
+  extension lifetime and host-context generation and remains exactly once.
+- Focused workflow and package tests cover Start, Finish, Cancel, timeout,
+  provider failure, stale command/result, duplicate delivery, ownership loss,
+  foreground/keyboard arbitration, and one Latest/History acceptance. The full
+  iOS Simulator regression passed 1,060 tests on iPhone 16, iOS 18.6.
+- HoldTypeDomain passed 165 tests, HoldTypeOpenAI 118, HoldTypePersistence 200,
+  and HoldTypeIOSCore 53. Generic iOS Release and macOS builds succeeded, and
+  `git diff --check` passed.
+- Computer Use confirmed the production containing-app session reaches
+  `Ready for HoldType Keyboard` and the real embedded extension presents the
+  production surface without the deterministic probe. Full Access was off in
+  that Simulator state. It was not changed, and no live OpenAI request or key
+  access occurred. The accepted live-provider insertion/fallback smoke remains
+  pending the explicit authorization required by this plan.
+- Full implementation and verification detail is recorded in
+  [the KBD-MVP-3 QA note](qa/runs/kbd-mvp-3-production-pipeline-2026-07-14.md).
 
 ### Ready-to-use prompt
 

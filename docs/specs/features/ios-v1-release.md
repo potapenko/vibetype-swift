@@ -289,6 +289,11 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
 - The extension never records audio, requests microphone permission, reads
   Keychain, or contacts OpenAI. The containing app owns the recorder and the
   existing provider/text-rule pipeline.
+- Keyboard Start joins the same process-owned Voice workflow and recorder
+  arbitration used by foreground Voice. It does not create a second recorder,
+  provider pipeline, persistence owner, or recovery path. Foreground Voice,
+  Pending Retry/Discard, and a keyboard request are mutually exclusive while
+  any one of them owns Voice work.
 - The user explicitly starts one bounded Keyboard Dictation Session in the
   containing app. An unavailable or expired session produces `Open HoldType`;
   the keyboard does not launch the app.
@@ -305,6 +310,10 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
   request still owns the current host context. A dismissed/restarted extension,
   host-context change, stale request, or ownership loss disables automatic
   insertion.
+- The transient result is published only for the request whose accepted Latest
+  record came from that same keyboard capture. Provider failure, cancellation,
+  a duplicate command, or a result from another request never fabricates a
+  transient result.
 - When automatic insertion is unsafe, the accepted result still follows the
   canonical Latest and optional History path. The user may later select
   `Latest` explicitly.

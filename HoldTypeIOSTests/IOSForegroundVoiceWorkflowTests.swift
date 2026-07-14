@@ -2196,6 +2196,123 @@ struct IOSForegroundVoiceWorkflowTests {
         #expect(configuration.customMirror.children.isEmpty)
         #expect(start.customMirror.children.isEmpty)
     }
+
+    @Test
+    func keyboardRequestUsesSharedWorkflowAcrossBackgroundAndReturnsMatchingText()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            completedCapture: true,
+            processorAcceptedText: "Keyboard pipeline result",
+            preacceptConsent: true
+        )
+        var progress: [IOSKeyboardDictationWorkflowProgress] = []
+        let requestID = UUID()
+        let client = fixture.workflow.keyboardDictationClient
+        let task = Task {
+            await client.run(requestID) { progress.append($0) }
+        }
+
+        try await waitUntil {
+            fixture.events.contains("recording-start")
+        }
+        _ = fixture.facade.updateActivity(.background)
+        #expect(client.finish(requestID))
+
+        #expect(await task.value == .accepted("Keyboard pipeline result"))
+        #expect(progress.contains(.listening))
+        #expect(progress.contains(.processing))
+        #expect(fixture.events.count("recording-make") == 1)
+        #expect(fixture.events.count("provider-process") == 1)
+        #expect(fixture.permissionRequestCount == 0)
+    }
+
+    @Test
+    func foregroundStartCannotCreateSecondRecorderDuringKeyboardRequest()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            preacceptConsent: true
+        )
+        let keyboardRequestID = UUID()
+        let keyboardClient = fixture.workflow.keyboardDictationClient
+        let keyboardTask = Task {
+            await keyboardClient.run(keyboardRequestID) { _ in }
+        }
+        try await waitUntil {
+            fixture.events.contains("recording-start")
+        }
+
+        let foreground = await fixture.workflow.start(
+            IOSForegroundVoiceWorkflowStartRequest(
+                outputIntent: .standard,
+                sceneLease: fixture.lease
+            ),
+            token: IOSForegroundVoiceWorkflowAttemptToken(),
+            progress: { _ in }
+        )
+
+        #expect(foreground.observation.recovery == .blocked)
+        #expect(fixture.events.count("recording-make") == 1)
+        #expect(keyboardClient.cancel(keyboardRequestID))
+        #expect(await keyboardTask.value == .cancelled)
+    }
+
+    @Test
+    func keyboardStartCannotCreateSecondRecorderDuringForegroundRequest()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            preacceptConsent: true
+        )
+        let foregroundToken = IOSForegroundVoiceWorkflowAttemptToken()
+        let foregroundTask = Task {
+            await fixture.workflow.start(
+                IOSForegroundVoiceWorkflowStartRequest(
+                    outputIntent: .standard,
+                    sceneLease: fixture.lease
+                ),
+                token: foregroundToken,
+                progress: { _ in }
+            )
+        }
+        try await waitUntil {
+            fixture.events.contains("recording-start")
+        }
+
+        let keyboard = await fixture.workflow.keyboardDictationClient.run(
+            UUID()
+        ) { _ in }
+
+        #expect(keyboard == .failed)
+        #expect(fixture.events.count("recording-make") == 1)
+        #expect(fixture.workflow.finishUtterance(foregroundToken) == .accepted)
+        _ = await foregroundTask.value
+    }
+
+    @Test
+    func keyboardProviderTimeoutLeavesRecoverablePendingAndNoAcceptedText()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            completedCapture: true,
+            processorResolution: .notStarted(.timedOut),
+            preacceptConsent: true
+        )
+        let requestID = UUID()
+        let client = fixture.workflow.keyboardDictationClient
+        let task = Task {
+            await client.run(requestID) { _ in }
+        }
+        try await waitUntil {
+            fixture.events.contains("recording-start")
+        }
+        #expect(client.finish(requestID))
+
+        #expect(await task.value == .failed)
+        #expect(fixture.events.count("provider-process") == 1)
+        #expect(fixture.events.count("recording-make") == 1)
+    }
 }
 
 private enum WorkflowCredentialResolution: Sendable {
@@ -2283,6 +2400,7 @@ private final class WorkflowFixture {
         processorReturnsSuccessAfterCancellation: Bool = false,
         processorEmitsLateProgressAfterCancellation: Bool = false,
         processorResolution: IOSForegroundVoiceProcessingResolution? = nil,
+        processorAcceptedText: String? = nil,
         throwTailSleep: Bool = false,
         throwMaximumSleep: Bool = false,
         lossReactivationTrigger: WorkflowEventTrigger? = nil,
@@ -2578,7 +2696,7 @@ private final class WorkflowFixture {
                         self?.finalizationExpirationHandler?()
                     }
                 },
-                makeRecording: { [weak self] _, _ in
+                makeRecording: { [weak self] attemptID, _ in
                     events.record("recording-make")
                     if deactivateSceneDuringMakeRecording {
                         _ = self?.facade.updateActivity(.inactive)
@@ -2641,6 +2759,7 @@ private final class WorkflowFixture {
                                             }
                                         }
                                         let pending = try makePendingRecording(
+                                            attemptID: attemptID,
                                             outputIntent: .standard,
                                             phase: .readyForTranscription,
                                             configuration: configuration
@@ -2677,7 +2796,7 @@ private final class WorkflowFixture {
                         self?.finalizationFinishCount += 1
                     }
                 },
-                process: { _, progress in
+                process: { request, progress in
                     events.record("provider-process")
                     if let processorInitialProgress {
                         await progress(processorInitialProgress)
@@ -2697,6 +2816,18 @@ private final class WorkflowFixture {
                             }
                             return .notStarted(.cancelled)
                         }
+                    }
+                    if let processorAcceptedText {
+                        let record = try! IOSV1AcceptedOutputDeliveryRecord(
+                            resultID: UUID(),
+                            sourceAttemptID:
+                                request.pendingRecording.attemptID,
+                            acceptedText: processorAcceptedText,
+                            createdAt: Date(
+                                timeIntervalSince1970: 1_800_000_000
+                            )
+                        )
+                        return .acceptance(.resultReady(record))
                     }
                     return processorResolution
                         ?? .notStarted(.providerUnavailable)
@@ -2981,6 +3112,7 @@ private final class WorkflowPendingBox: @unchecked Sendable {
 }
 
 private func makePendingRecording(
+    attemptID: UUID = UUID(),
     outputIntent: DictationOutputIntent,
     phase: IOSV1PendingRecordingPhase,
     configuration: TranscriptionConfiguration
@@ -2992,6 +3124,7 @@ private func makePendingRecording(
         nil
     }
     return try IOSV1PendingRecording.qualificationFixture(
+        attemptID: attemptID,
         outputIntent: outputIntent,
         phase: phase,
         transcriptionID: transcriptionID,

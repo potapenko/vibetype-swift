@@ -60,6 +60,12 @@ struct IOSForegroundVoiceProcessorTests {
         #expect(latest.resultID == record.resultID)
         #expect(latest.sourceAttemptID == record.sourceAttemptID)
         #expect(latest.acceptedText == record.acceptedText)
+        let history = try await IOSAcceptedTextHistoryRepository(
+            applicationSupportDirectoryURL: fixture.root
+        ).load()
+        #expect(history.entries.count == 1)
+        #expect(history.entries.first?.resultID == record.resultID)
+        #expect(history.entries.first?.text == record.acceptedText)
         #expect(
             progress.stages
                 == [.transcription, .postProcessing, .outputDelivery]

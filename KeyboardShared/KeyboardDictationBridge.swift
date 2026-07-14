@@ -7,7 +7,7 @@ nonisolated enum KeyboardDictationBridgeConfiguration {
     static let maximumRecordBytes = 4 * 1_024
     static let commandLifetime: TimeInterval = 5
     static let sessionLifetime: TimeInterval = 60
-    static let resultMaximumUTF8Bytes = 512
+    static let resultMaximumUTF8Bytes = 3 * 1_024
     static let commandNotification =
         "app.holdtype.keyboard-dictation.command.v1"
     static let stateNotification =

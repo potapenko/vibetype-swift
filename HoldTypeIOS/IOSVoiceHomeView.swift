@@ -10,6 +10,8 @@ struct IOSVoiceHomeView: View {
     private var latestResultOwner
     @Environment(IOSProviderConsentPresentationOwner.self)
     private var consentOwner
+    @Environment(IOSKeyboardDictationSessionCoordinator.self)
+    private var keyboardSession
 
     @Binding var practiceText: String
     @State private var listeningStartedAt: Date?
@@ -22,8 +24,6 @@ struct IOSVoiceHomeView: View {
     @State private var accessibilityAnnouncementTask: Task<Void, Never>?
     @State private var accessibilityAnnouncementCandidate:
         IOSAccessibilityAnnouncementCandidate?
-    @StateObject private var keyboardSession =
-        IOSKeyboardDictationSessionCoordinator()
     @FocusState private var practiceFieldIsFocused: Bool
 
     let secureProviderAvailability: IOSSecureProviderAvailability
@@ -496,15 +496,11 @@ struct IOSVoiceHomeView: View {
                 )
 
             Text(
-                "This signed-device probe keeps one app-owned session available for up to 60 seconds. The containing app alone owns microphone recording."
+                "This app-owned session lets HoldType Keyboard control one recording for up to 60 seconds. The existing Voice pipeline owns recording, processing, Latest, and History."
             )
             .font(.footnote)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
-
-            #if DEBUG
-            keyboardDictationRecordingProbeControls
-            #endif
 
             switch keyboardSession.presentation {
             case .stopped, .failed:
@@ -529,44 +525,6 @@ struct IOSVoiceHomeView: View {
             }
         }
     }
-
-    #if DEBUG
-    @ViewBuilder
-    private var keyboardDictationRecordingProbeControls: some View {
-        switch keyboardSession.presentation {
-        case .ready:
-            Button("Start Recording Probe") {
-                keyboardSession.startRecordingProbe()
-            }
-            .accessibilityIdentifier(
-                "ios.voice.keyboard-session.probe-start"
-            )
-        case .listening:
-            Button("Finish Recording Probe") {
-                keyboardSession.finishRecordingProbe()
-            }
-            .accessibilityIdentifier(
-                "ios.voice.keyboard-session.probe-finish"
-            )
-
-            Button("Cancel Recording Probe", role: .destructive) {
-                keyboardSession.cancelRecordingProbe()
-            }
-            .accessibilityIdentifier(
-                "ios.voice.keyboard-session.probe-cancel"
-            )
-        case .processing:
-            ProgressView()
-                .accessibilityLabel("Finishing recording probe")
-        case .resultReady:
-            Text("Deterministic non-provider result is ready.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        case .stopped, .preparing, .failed:
-            EmptyView()
-        }
-    }
-    #endif
 
     private func scheduleAccessibilityAnnouncement(
         _ message: String,

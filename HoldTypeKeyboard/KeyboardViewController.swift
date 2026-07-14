@@ -74,6 +74,12 @@ struct KeyboardViewControllerDependencies {
 }
 
 final class KeyboardViewController: UIInputViewController {
+    private struct DictationRequestOwnership: Equatable {
+        let requestID: UUID
+        let extensionLifetimeID: UUID
+        let hostContextGeneration: UInt64
+    }
+
     let keyboardView = BrandStageKeyboardView()
     private let deleteRepeater = KeyboardDeleteRepeater()
     private var dependencies = KeyboardViewControllerDependencies.live
@@ -86,6 +92,7 @@ final class KeyboardViewController: UIInputViewController {
     private var dictationObserver: KeyboardDictationBridgeObserver?
     private var dictationState: KeyboardDictationStateRecord?
     private var activeDictationRequestID: UUID?
+    private var activeDictationOwnership: DictationRequestOwnership?
     private var insertedDictationRequestID: UUID?
     private var lastSeenDictationSessionID: UUID?
     private var pendingDictationCommand: KeyboardDictationCommandKind?
@@ -94,6 +101,8 @@ final class KeyboardViewController: UIInputViewController {
     private var activeStatusOverride: KeyboardTopRailStatus?
     private var settingsRequestID: UUID?
     private var showsInputModeSwitchKey = true
+    private var extensionLifetimeID = UUID()
+    private var hostContextGeneration: UInt64 = 0
 
     convenience init(dependencies: KeyboardViewControllerDependencies) {
         self.init(nibName: nil, bundle: nil)
@@ -128,6 +137,7 @@ final class KeyboardViewController: UIInputViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        beginExtensionLifetime()
         showsInputModeSwitchKey = shouldShowInputModeSwitchKey
         reloadSharedSnapshot()
         reloadDictationState()
@@ -142,6 +152,7 @@ final class KeyboardViewController: UIInputViewController {
         statusResetWorkItem?.cancel()
         activeStatusOverride = nil
         settingsRequestID = nil
+        endExtensionLifetime()
         super.viewWillDisappear(animated)
     }
 
@@ -152,6 +163,7 @@ final class KeyboardViewController: UIInputViewController {
 
     override func textWillChange(_ textInput: UITextInput?) {
         super.textWillChange(textInput)
+        invalidateHostContextOwnership()
         statusResetWorkItem?.cancel()
         activeStatusOverride = nil
     }
@@ -278,8 +290,14 @@ final class KeyboardViewController: UIInputViewController {
         switch dictationState.phase {
         case .ready:
             return (.ready, true, false)
+        case .listening
+            where activeDictationRequestID != dictationState.requestID:
+            return (.openHoldType, false, false)
         case .listening:
             return (.listening, true, true)
+        case .processing
+            where activeDictationRequestID != dictationState.requestID:
+            return (.openHoldType, false, false)
         case .processing:
             return (.processing, false, true)
         case .resultReady, .unavailable:
@@ -313,6 +331,7 @@ final class KeyboardViewController: UIInputViewController {
                 lastSeenDictationSessionID = state.requestID
                 insertedDictationRequestID = nil
                 activeDictationRequestID = nil
+                activeDictationOwnership = nil
             }
             if state.phase == .listening || state.phase == .processing {
                 pendingDictationCommand = nil
@@ -320,16 +339,19 @@ final class KeyboardViewController: UIInputViewController {
             dictationState = state
             if state.phase == .resultReady,
                activeDictationRequestID == state.requestID,
+               ownsCurrentHostContext(for: state.requestID),
                insertedDictationRequestID != state.requestID,
                let result = state.result {
                 insertText(result)
                 insertedDictationRequestID = state.requestID
                 activeDictationRequestID = nil
+                activeDictationOwnership = nil
                 pendingDictationCommand = nil
                 forcesOpenHoldType = true
             } else if (state.phase == .unavailable || state.phase == .failed),
                       activeDictationRequestID == state.requestID {
                 activeDictationRequestID = nil
+                activeDictationOwnership = nil
                 pendingDictationCommand = nil
                 forcesOpenHoldType = true
             }
@@ -342,6 +364,7 @@ final class KeyboardViewController: UIInputViewController {
                 }
                 self.dictationState = nil
                 self.activeDictationRequestID = nil
+                self.activeDictationOwnership = nil
                 self.pendingDictationCommand = nil
                 self.forcesOpenHoldType = true
                 self.render()
@@ -358,6 +381,11 @@ final class KeyboardViewController: UIInputViewController {
         switch state.phase {
         case .ready:
             activeDictationRequestID = state.requestID
+            activeDictationOwnership = DictationRequestOwnership(
+                requestID: state.requestID,
+                extensionLifetimeID: extensionLifetimeID,
+                hostContextGeneration: hostContextGeneration
+            )
             sendDictationCommand(.start)
         case .listening:
             sendDictationCommand(.finish)
@@ -390,12 +418,14 @@ final class KeyboardViewController: UIInputViewController {
             pendingDictationCommand = kind
             if kind == .cancel {
                 activeDictationRequestID = nil
+                activeDictationOwnership = nil
                 pendingDictationCommand = nil
                 forcesOpenHoldType = true
             }
         } catch {
             pendingDictationCommand = nil
             activeDictationRequestID = nil
+            activeDictationOwnership = nil
             forcesOpenHoldType = true
         }
         render()
@@ -462,6 +492,34 @@ final class KeyboardViewController: UIInputViewController {
             return
         }
         insertText(item.text)
+    }
+
+    private func beginExtensionLifetime() {
+        extensionLifetimeID = UUID()
+        hostContextGeneration &+= 1
+        activeDictationRequestID = nil
+        activeDictationOwnership = nil
+        pendingDictationCommand = nil
+    }
+
+    private func endExtensionLifetime() {
+        hostContextGeneration &+= 1
+        activeDictationRequestID = nil
+        activeDictationOwnership = nil
+        pendingDictationCommand = nil
+    }
+
+    private func invalidateHostContextOwnership() {
+        hostContextGeneration &+= 1
+        activeDictationOwnership = nil
+    }
+
+    private func ownsCurrentHostContext(for requestID: UUID) -> Bool {
+        activeDictationOwnership == DictationRequestOwnership(
+            requestID: requestID,
+            extensionLifetimeID: extensionLifetimeID,
+            hostContextGeneration: hostContextGeneration
+        )
     }
 
     private func insertText(_ text: String) {

@@ -308,7 +308,7 @@ struct KeyboardViewControllerTests {
             KeyboardDictationStateRecord(
                 requestID: requestID,
                 phase: .resultReady,
-                result: "HoldType keyboard device probe",
+                result: "Processed keyboard text",
                 publishedAt: now,
                 expiresAt: deadline
             )
@@ -317,8 +317,124 @@ struct KeyboardViewControllerTests {
         controller.textDidChange(nil)
 
         #expect(harness.proxy.insertedTexts == [
-            "HoldType keyboard device probe",
+            "Processed keyboard text",
         ])
+        #expect(statusText(in: controller.view) == "Open HoldType")
+    }
+
+    @Test func hostContextLossSuppressesAutomaticInsertion() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let requestID = UUID()
+        let deadline = now.addingTimeInterval(60)
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    requestID: requestID,
+                    phase: .ready,
+                    publishedAt: now,
+                    expiresAt: deadline
+                )
+            )
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+        controller.keyboardView.onMicrophoneRequested?()
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                requestID: requestID,
+                phase: .listening,
+                publishedAt: now,
+                expiresAt: deadline
+            )
+        )
+        controller.textDidChange(nil)
+        controller.textWillChange(nil)
+
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                requestID: requestID,
+                phase: .resultReady,
+                result: "Latest fallback text",
+                publishedAt: now,
+                expiresAt: deadline
+            )
+        )
+        controller.textDidChange(nil)
+
+        #expect(harness.proxy.insertedTexts.isEmpty)
+        #expect(statusText(in: controller.view) == "Open HoldType")
+    }
+
+    @Test func resultFromAnotherRequestNeverInserts() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let requestID = UUID()
+        let deadline = now.addingTimeInterval(60)
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    requestID: requestID,
+                    phase: .ready,
+                    publishedAt: now,
+                    expiresAt: deadline
+                )
+            )
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+        controller.keyboardView.onMicrophoneRequested?()
+
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                requestID: UUID(),
+                phase: .resultReady,
+                result: "Stale result",
+                publishedAt: now,
+                expiresAt: deadline
+            )
+        )
+        controller.textDidChange(nil)
+
+        #expect(harness.proxy.insertedTexts.isEmpty)
+        #expect(statusText(in: controller.view) == "Ready")
+    }
+
+    @Test func extensionLifetimeLossSuppressesAutomaticInsertion() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let requestID = UUID()
+        let deadline = now.addingTimeInterval(60)
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    requestID: requestID,
+                    phase: .ready,
+                    publishedAt: now,
+                    expiresAt: deadline
+                )
+            )
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+        controller.keyboardView.onMicrophoneRequested?()
+        controller.beginAppearanceTransition(false, animated: false)
+        controller.endAppearanceTransition()
+        controller.beginAppearanceTransition(true, animated: false)
+        controller.endAppearanceTransition()
+
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                requestID: requestID,
+                phase: .resultReady,
+                result: "Latest fallback text",
+                publishedAt: now,
+                expiresAt: deadline
+            )
+        )
+        controller.textDidChange(nil)
+
+        #expect(harness.proxy.insertedTexts.isEmpty)
         #expect(statusText(in: controller.view) == "Open HoldType")
     }
 

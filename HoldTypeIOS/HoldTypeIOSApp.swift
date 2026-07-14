@@ -53,10 +53,7 @@ struct HoldTypeIOSApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let physicalProbe =
-                IOSKeyboardDictationPhysicalProbeAction.current {
-                IOSKeyboardDictationPhysicalProbeView(action: physicalProbe)
-            } else if let qualificationRoute = IOSUIQualificationRoute.current {
+            if let qualificationRoute = IOSUIQualificationRoute.current {
                 IOSUIQualificationRootView(route: qualificationRoute)
             } else {
                 IOSContainingAppSceneHost(composition: composition)

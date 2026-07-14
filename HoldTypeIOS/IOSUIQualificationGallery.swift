@@ -424,6 +424,9 @@ private final class IOSUIQualificationVoiceFixture {
     let sceneOwner: IOSForegroundVoiceSceneHostOwner
     let latestResultOwner: IOSForegroundVoiceLatestResultOwner
     let consentOwner: IOSProviderConsentPresentationOwner
+    let keyboardSession = IOSKeyboardDictationSessionCoordinator(
+        qualificationOnly: true
+    )
 
     private let controller: IOSForegroundVoiceController
     private let scenario: IOSUIQualificationVoiceScenario
@@ -537,6 +540,7 @@ private struct IOSUIQualificationVoiceHost: View {
             .environment(fixture.sceneOwner)
             .environment(fixture.latestResultOwner)
             .environment(fixture.consentOwner)
+            .environment(fixture.keyboardSession)
         }
         .task {
             await fixture.prepare()

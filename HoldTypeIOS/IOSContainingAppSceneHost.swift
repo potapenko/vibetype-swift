@@ -45,6 +45,7 @@ private struct IOSRegisteredContainingAppSceneHost: View {
             .environment(voiceSceneOwner)
             .environment(runtime.latestResultOwner)
             .environment(runtime.providerConsentPresentationOwner)
+            .environment(runtime.keyboardDictationSession)
             .onChange(of: scenePhase, initial: true) { _, newPhase in
                 voiceSceneOwner.registerOrUpdateActivity(
                     IOSVoiceSceneActivity(newPhase)

@@ -1,13 +1,33 @@
-import AVFAudio
-import Combine
 import Foundation
-import SwiftUI
+import Observation
 import UIKit
 
-/// DEBUG feasibility owner for KBD-MVP-2. The containing app alone owns the
-/// microphone, temporary audio file, bounded background assertion, and state.
 @MainActor
-final class IOSKeyboardDictationSessionCoordinator: ObservableObject {
+struct IOSKeyboardDictationSessionDependencies {
+    let workflow: IOSKeyboardDictationWorkflowClient
+    let permission: IOSForegroundVoiceWorkflowPermissionClient
+    let loadCommand: (Date) throws -> KeyboardDictationCommandRecord?
+    let saveState: (KeyboardDictationStateRecord) throws -> Void
+    let postStateChanged: () -> Void
+    let applicationIsActive: () -> Bool
+    let beginBackgroundTask: (
+        @escaping @Sendable () -> Void
+    ) -> UIBackgroundTaskIdentifier
+    let endBackgroundTask: (UIBackgroundTaskIdentifier) -> Void
+    let scheduleExpiry: (
+        Date,
+        @escaping @MainActor () -> Void
+    ) -> Timer?
+    let now: () -> Date
+    let makeUUID: () -> UUID
+}
+
+/// The bounded keyboard command adapter for the one process-owned Voice
+/// workflow. It owns no recorder, provider, accepted-text persistence, or
+/// recovery state.
+@MainActor
+@Observable
+final class IOSKeyboardDictationSessionCoordinator {
     enum Presentation: Equatable {
         case stopped
         case preparing
@@ -28,91 +48,154 @@ final class IOSKeyboardDictationSessionCoordinator: ObservableObject {
             case .listening:
                 return "Listening…"
             case .processing:
-                return "Finishing…"
+                return "Processing…"
             case .resultReady:
-                return "Probe result ready"
+                return "Result sent to keyboard"
             case let .failed(message):
                 return message
             }
         }
     }
 
-    @Published private(set) var presentation: Presentation = .stopped
+    private(set) var presentation: Presentation = .stopped
 
-    private let store: KeyboardDictationBridgeStore?
+    private let dependencies: IOSKeyboardDictationSessionDependencies
     private var commandObserver: KeyboardDictationBridgeObserver?
-    private var interruptionObserver: NSObjectProtocol?
     private var requestID: UUID?
     private var deadline: Date?
     private var expiryTimer: Timer?
     private var backgroundTask = UIBackgroundTaskIdentifier.invalid
-    private var recorder: AVAudioRecorder?
-    private var recordingURL: URL?
     private var lastHandledCommand: KeyboardDictationCommandRecord?
+    private var workflowTask: Task<Void, Never>?
+    private var workflowGeneration: UInt64 = 0
 
-    init(store: KeyboardDictationBridgeStore? = try? .appGroup()) {
-        self.store = store
-        commandObserver = KeyboardDictationBridgeObserver(
-            name: KeyboardDictationBridgeConfiguration.commandNotification
-        ) { [weak self] in
-            self?.receiveCurrentCommand()
-        }
-        interruptionObserver = NotificationCenter.default.addObserver(
-            forName: AVAudioSession.interruptionNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            Task { @MainActor [weak self] in
-                guard let raw = notification.userInfo?[
-                    AVAudioSessionInterruptionTypeKey
-                ] as? UInt,
-                AVAudioSession.InterruptionType(rawValue: raw) == .began else {
-                    return
-                }
-                self?.failAndStop("Audio interrupted")
-            }
-        }
+    convenience init(
+        workflow: IOSKeyboardDictationWorkflowClient,
+        permission: IOSForegroundVoiceWorkflowPermissionClient
+    ) {
+        let store = try? KeyboardDictationBridgeStore.appGroup()
+        self.init(
+            dependencies: IOSKeyboardDictationSessionDependencies(
+                workflow: workflow,
+                permission: permission,
+                loadCommand: { date in
+                    try store?.loadCommand(at: date)
+                },
+                saveState: { record in
+                    guard let store else {
+                        throw KeyboardDictationBridgeStoreError
+                            .appGroupContainerUnavailable
+                    }
+                    try store.saveState(record)
+                },
+                postStateChanged: {
+                    KeyboardDictationBridgeSignal.postStateChanged()
+                },
+                applicationIsActive: {
+                    UIApplication.shared.applicationState == .active
+                },
+                beginBackgroundTask: { expiration in
+                    UIApplication.shared.beginBackgroundTask(
+                        withName: "Keyboard Dictation Session",
+                        expirationHandler: expiration
+                    )
+                },
+                endBackgroundTask: { identifier in
+                    UIApplication.shared.endBackgroundTask(identifier)
+                },
+                scheduleExpiry: { fireDate, action in
+                    let timer = Timer(
+                        fire: fireDate,
+                        interval: 0,
+                        repeats: false
+                    ) { _ in
+                        Task { @MainActor in action() }
+                    }
+                    RunLoop.main.add(timer, forMode: .common)
+                    return timer
+                },
+                now: { Date() },
+                makeUUID: { UUID() }
+            ),
+            observesCommands: true
+        )
     }
 
-    deinit {
-        if let interruptionObserver {
-            NotificationCenter.default.removeObserver(interruptionObserver)
+    convenience init(qualificationOnly: Bool) {
+        precondition(qualificationOnly)
+        self.init(
+            dependencies: IOSKeyboardDictationSessionDependencies(
+                workflow: IOSKeyboardDictationWorkflowClient(
+                    run: { _, _ in .failed },
+                    finish: { _ in false },
+                    cancel: { _ in false }
+                ),
+                permission: IOSForegroundVoiceWorkflowPermissionClient(
+                    read: { .unavailable },
+                    requestIfUndetermined: { .unavailable }
+                ),
+                loadCommand: { _ in nil },
+                saveState: { _ in
+                    throw KeyboardDictationBridgeStoreError.writeFailed
+                },
+                postStateChanged: {},
+                applicationIsActive: { true },
+                beginBackgroundTask: { _ in .invalid },
+                endBackgroundTask: { _ in },
+                scheduleExpiry: { _, _ in nil },
+                now: { Date() },
+                makeUUID: { UUID() }
+            )
+        )
+    }
+
+    init(
+        dependencies: IOSKeyboardDictationSessionDependencies,
+        observesCommands: Bool = false
+    ) {
+        self.dependencies = dependencies
+        if observesCommands {
+            commandObserver = KeyboardDictationBridgeObserver(
+                name: KeyboardDictationBridgeConfiguration.commandNotification
+            ) { [weak self] in
+                self?.receiveCurrentCommand()
+            }
         }
     }
 
     func startSession() async {
-        guard UIApplication.shared.applicationState == .active else {
+        guard dependencies.applicationIsActive() else {
             presentation = .failed("Open HoldType")
             return
         }
-        stopSession(publishUnavailable: false)
+
+        let previousTask = workflowTask
+        cancelCurrentWorkflow()
+        await previousTask?.value
+        workflowTask = nil
+        finishSessionLifetime()
         presentation = .preparing
 
-        switch AVAudioApplication.shared.recordPermission {
-        case .undetermined:
-            await withCheckedContinuation { continuation in
-                AVAudioApplication.requestRecordPermission { _ in
-                    continuation.resume()
-                }
-            }
-        case .denied, .granted:
+        switch dependencies.permission.read() {
+        case .granted:
             break
-        @unknown default:
+        case .undetermined:
+            guard await dependencies.permission.requestIfUndetermined()
+                    == .granted,
+                  dependencies.permission.read() == .granted else {
+                presentation = .failed("Allow Microphone")
+                return
+            }
+        case .denied:
+            presentation = .failed("Allow Microphone")
+            return
+        case .unavailable:
             presentation = .failed("Microphone unavailable")
             return
         }
 
-        guard AVAudioApplication.shared.recordPermission == .granted else {
-            presentation = .failed("Allow Microphone")
-            return
-        }
-        guard store != nil else {
-            presentation = .failed("App Group unavailable")
-            return
-        }
-
-        let now = Date()
-        let requestID = UUID()
+        let now = dependencies.now()
+        let requestID = dependencies.makeUUID()
         let deadline = now.addingTimeInterval(
             KeyboardDictationBridgeConfiguration.sessionLifetime
         )
@@ -134,37 +217,26 @@ final class IOSKeyboardDictationSessionCoordinator: ObservableObject {
     }
 
     func stopSession() {
-        stopSession(publishUnavailable: true)
+        cancelCurrentWorkflow()
+        publishUnavailableIfCurrent()
+        finishSessionLifetime()
+        presentation = .stopped
     }
 
-    #if DEBUG
-    func startRecordingProbe() {
-        guard let requestID, let deadline, deadline > Date() else { return }
-        startRecording(requestID: requestID, deadline: deadline)
-    }
-
-    func finishRecordingProbe() {
-        guard let requestID, let deadline, deadline > Date() else { return }
-        finishRecording(requestID: requestID, deadline: deadline)
-    }
-
-    func cancelRecordingProbe() {
-        guard let requestID, let deadline, deadline > Date() else { return }
-        cancelRecording(requestID: requestID, deadline: deadline)
-    }
-    #endif
-
-    private func receiveCurrentCommand() {
-        guard let store,
-              let requestID,
+    /// Internal test seam and Darwin-notification reducer. Loading at the
+    /// injected current time rejects stale commands before any workflow call.
+    func receiveCurrentCommand() {
+        let now = dependencies.now()
+        guard let requestID,
               let deadline,
-              deadline > Date(),
-              let command = try? store.loadCommand(),
+              deadline > now,
+              let command = try? dependencies.loadCommand(now),
               command.requestID == requestID,
               command != lastHandledCommand else {
             return
         }
         lastHandledCommand = command
+
         switch command.kind {
         case .start:
             startRecording(requestID: requestID, deadline: deadline)
@@ -176,60 +248,39 @@ final class IOSKeyboardDictationSessionCoordinator: ObservableObject {
     }
 
     private func startRecording(requestID: UUID, deadline: Date) {
-        guard recorder == nil,
-              case .ready = presentation,
-              UIApplication.shared.applicationState != .inactive else {
+        guard workflowTask == nil,
+              case .ready = presentation else {
             return
         }
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("holdtype-kbd-probe-\(UUID().uuidString)")
-            .appendingPathExtension("m4a")
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement)
-            try session.setActive(true)
-            let recorder = try AVAudioRecorder(
-                url: url,
-                settings: [
-                    AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-                    AVSampleRateKey: 16_000,
-                    AVNumberOfChannelsKey: 1,
-                    AVEncoderAudioQualityKey:
-                        AVAudioQuality.medium.rawValue,
-                ]
-            )
-            recorder.prepareToRecord()
-            let remaining = max(0, deadline.timeIntervalSinceNow)
-            guard remaining > 0,
-                  recorder.record(forDuration: remaining),
-                  recorder.isRecording else {
-                try? FileManager.default.removeItem(at: url)
-                try? session.setActive(false, options: .notifyOthersOnDeactivation)
-                failAndStop("Recording unavailable")
-                return
+        workflowGeneration &+= 1
+        let generation = workflowGeneration
+        let workflow = dependencies.workflow
+        workflowTask = Task { @MainActor [weak self] in
+            let resolution = await workflow.run(requestID) {
+                [weak self] progress in
+                self?.receive(
+                    progress,
+                    requestID: requestID,
+                    deadline: deadline,
+                    generation: generation
+                )
             }
-            self.recorder = recorder
-            recordingURL = url
-            guard publish(
-                phase: .listening,
+            guard let self else { return }
+            self.receive(
+                resolution,
                 requestID: requestID,
-                expiresAt: deadline
-            ) else {
-                failAndStop("Session unavailable")
-                return
+                deadline: deadline,
+                generation: generation
+            )
+            if self.workflowGeneration == generation {
+                self.workflowTask = nil
             }
-            presentation = .listening(deadline)
-        } catch {
-            try? FileManager.default.removeItem(at: url)
-            failAndStop("Recording unavailable")
         }
     }
 
     private func finishRecording(requestID: UUID, deadline: Date) {
-        guard recorder?.isRecording == true else { return }
-        stopAndDeleteRecording()
-        guard recorder == nil else {
-            failAndStop("Recording did not stop")
+        guard case .listening = presentation,
+              dependencies.workflow.finish(requestID) else {
             return
         }
         guard publish(
@@ -241,68 +292,140 @@ final class IOSKeyboardDictationSessionCoordinator: ObservableObject {
             return
         }
         presentation = .processing
-
-        #if DEBUG
-        let result = "HoldType keyboard device probe"
-        guard publish(
-            phase: .resultReady,
-            requestID: requestID,
-            result: result,
-            expiresAt: deadline
-        ) else {
-            failAndStop("Session unavailable")
-            return
-        }
-        presentation = .resultReady
-        #else
-        failAndStop("Probe unavailable")
-        #endif
     }
 
     private func cancelRecording(requestID: UUID, deadline: Date) {
-        stopAndDeleteRecording()
+        guard dependencies.workflow.cancel(requestID) else { return }
         _ = publish(
             phase: .unavailable,
             requestID: requestID,
             expiresAt: deadline
         )
-        finishSessionLifetime()
+        finishSessionLifetime(cancelWorkflowTask: false)
         presentation = .stopped
     }
 
+    private func receive(
+        _ progress: IOSKeyboardDictationWorkflowProgress,
+        requestID: UUID,
+        deadline: Date,
+        generation: UInt64
+    ) {
+        guard ownsCurrentWorkflow(
+            requestID: requestID,
+            deadline: deadline,
+            generation: generation
+        ) else {
+            return
+        }
+        let phase: KeyboardDictationStatePhase
+        switch progress {
+        case .listening:
+            phase = .listening
+            presentation = .listening(deadline)
+        case .processing:
+            phase = .processing
+            presentation = .processing
+        }
+        guard publish(
+            phase: phase,
+            requestID: requestID,
+            expiresAt: deadline
+        ) else {
+            failAndStop("Session unavailable")
+            return
+        }
+    }
+
+    private func receive(
+        _ resolution: IOSKeyboardDictationWorkflowResolution,
+        requestID: UUID,
+        deadline: Date,
+        generation: UInt64
+    ) {
+        guard ownsCurrentWorkflow(
+            requestID: requestID,
+            deadline: deadline,
+            generation: generation
+        ) else {
+            return
+        }
+        switch resolution {
+        case .accepted(let text):
+            guard publish(
+                phase: .resultReady,
+                requestID: requestID,
+                result: text,
+                expiresAt: deadline
+            ) else {
+                failAndStop("Result available in Latest")
+                return
+            }
+            endBackgroundTask()
+            presentation = .resultReady
+        case .cancelled:
+            _ = publish(
+                phase: .unavailable,
+                requestID: requestID,
+                expiresAt: deadline
+            )
+            finishSessionLifetime(cancelWorkflowTask: false)
+            presentation = .stopped
+        case .failed:
+            failAndStop("Try Again")
+        }
+    }
+
+    private func ownsCurrentWorkflow(
+        requestID: UUID,
+        deadline: Date,
+        generation: UInt64
+    ) -> Bool {
+        self.requestID == requestID
+            && self.deadline == deadline
+            && workflowGeneration == generation
+            && deadline > dependencies.now()
+    }
+
+    private func cancelCurrentWorkflow() {
+        if let requestID {
+            _ = dependencies.workflow.cancel(requestID)
+        }
+        workflowTask?.cancel()
+    }
+
     private func failAndStop(_ message: String) {
-        if let requestID, let deadline, deadline > Date() {
+        if let requestID,
+           let deadline,
+           deadline > dependencies.now() {
             _ = publish(
                 phase: .failed,
                 requestID: requestID,
                 expiresAt: deadline
             )
         }
-        stopAndDeleteRecording()
+        cancelCurrentWorkflow()
         finishSessionLifetime()
         presentation = .failed(message)
     }
 
-    private func stopSession(publishUnavailable: Bool) {
-        stopAndDeleteRecording()
-        if publishUnavailable,
-           let requestID,
-           let deadline,
-           deadline > Date() {
-            _ = publish(
-                phase: .unavailable,
-                requestID: requestID,
-                expiresAt: deadline
-            )
+    private func publishUnavailableIfCurrent() {
+        guard let requestID,
+              let deadline,
+              deadline > dependencies.now() else {
+            return
         }
-        finishSessionLifetime()
-        presentation = .stopped
+        _ = publish(
+            phase: .unavailable,
+            requestID: requestID,
+            expiresAt: deadline
+        )
     }
 
     private func expireSession() {
         guard let requestID else { return }
-        stopAndDeleteRecording()
-        let now = Date()
+        cancelCurrentWorkflow()
+        let now = dependencies.now()
         _ = publish(
             phase: .unavailable,
             requestID: requestID,
@@ -313,165 +436,61 @@ final class IOSKeyboardDictationSessionCoordinator: ObservableObject {
         presentation = .stopped
     }
 
-    private func stopAndDeleteRecording() {
-        recorder?.stop()
-        recorder = nil
-        try? AVAudioSession.sharedInstance().setActive(
-            false,
-            options: .notifyOthersOnDeactivation
-        )
-        if let recordingURL {
-            try? FileManager.default.removeItem(at: recordingURL)
-        }
-        recordingURL = nil
-    }
-
     private func publish(
         phase: KeyboardDictationStatePhase,
         requestID: UUID,
         result: String? = nil,
-        publishedAt: Date = Date(),
+        publishedAt: Date? = nil,
         expiresAt: Date
     ) -> Bool {
-        guard let store,
-              let record = KeyboardDictationStateRecord(
-                requestID: requestID,
-                phase: phase,
-                result: result,
-                publishedAt: publishedAt,
-                expiresAt: expiresAt
-              ),
-              (try? store.saveState(record)) != nil else {
+        let publicationDate = publishedAt ?? dependencies.now()
+        guard let record = KeyboardDictationStateRecord(
+            requestID: requestID,
+            phase: phase,
+            result: result,
+            publishedAt: publicationDate,
+            expiresAt: expiresAt
+        ) else {
             return false
         }
-        KeyboardDictationBridgeSignal.postStateChanged()
-        return true
+        do {
+            try dependencies.saveState(record)
+            dependencies.postStateChanged()
+            return true
+        } catch {
+            return false
+        }
     }
 
     private func beginBackgroundTask() {
-        backgroundTask = UIApplication.shared.beginBackgroundTask(
-            withName: "Keyboard Dictation Session"
-        ) { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.expireSession()
-            }
+        backgroundTask = dependencies.beginBackgroundTask { [weak self] in
+            Task { @MainActor [weak self] in self?.expireSession() }
         }
     }
 
     private func scheduleExpiry(at date: Date) {
         expiryTimer?.invalidate()
-        let timer = Timer(fire: date, interval: 0, repeats: false) {
-            [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.expireSession()
-            }
+        expiryTimer = dependencies.scheduleExpiry(date) { [weak self] in
+            self?.expireSession()
         }
-        RunLoop.main.add(timer, forMode: .common)
-        expiryTimer = timer
     }
 
-    private func finishSessionLifetime() {
+    private func endBackgroundTask() {
+        guard backgroundTask != .invalid else { return }
+        dependencies.endBackgroundTask(backgroundTask)
+        backgroundTask = .invalid
+    }
+
+    private func finishSessionLifetime(cancelWorkflowTask: Bool = true) {
+        workflowGeneration &+= 1
         expiryTimer?.invalidate()
         expiryTimer = nil
         requestID = nil
         deadline = nil
         lastHandledCommand = nil
-        if backgroundTask != .invalid {
-            UIApplication.shared.endBackgroundTask(backgroundTask)
-            backgroundTask = .invalid
+        if cancelWorkflowTask {
+            workflowTask?.cancel()
         }
+        endBackgroundTask()
     }
 }
-
-#if DEBUG
-enum IOSKeyboardDictationPhysicalProbeAction: String {
-    case finish
-    case cancel
-
-    static var current: Self? {
-        if let environmentValue = ProcessInfo.processInfo.environment[
-            "HOLDTYPE_KBD_MVP2_PHYSICAL_PROBE"
-        ], let action = Self(rawValue: environmentValue) {
-            return action
-        }
-        let prefix = "holdtype-kbd-mvp2-physical-probe="
-        return ProcessInfo.processInfo.arguments.lazy.compactMap { argument in
-            let normalized = argument.hasPrefix("--")
-                ? String(argument.dropFirst(2))
-                : argument
-            guard normalized.hasPrefix(prefix) else { return nil }
-            return Self(
-                rawValue: String(normalized.dropFirst(prefix.count))
-            )
-        }.first
-    }
-}
-
-struct IOSKeyboardDictationPhysicalProbeView: View {
-    @StateObject private var coordinator =
-        IOSKeyboardDictationSessionCoordinator()
-
-    let action: IOSKeyboardDictationPhysicalProbeAction
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("Keyboard Dictation Physical Probe")
-                .font(.headline)
-            Text(coordinator.presentation.title)
-                .accessibilityIdentifier(
-                    "ios.voice.keyboard-session.physical-probe-status"
-                )
-            Text("Action: \(action.rawValue)")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        .padding()
-        .task {
-            await run()
-        }
-    }
-
-    private func run() async {
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-        print("KBD-MVP-2 physical probe: session start")
-        await coordinator.startSession()
-        guard case .ready = coordinator.presentation else {
-            logFailure()
-            return
-        }
-
-        coordinator.startRecordingProbe()
-        guard case .listening = coordinator.presentation else {
-            logFailure()
-            return
-        }
-        print("KBD-MVP-2 physical probe: confirmed listening")
-
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
-        switch action {
-        case .finish:
-            coordinator.finishRecordingProbe()
-            guard coordinator.presentation == .resultReady else {
-                logFailure()
-                return
-            }
-            print("KBD-MVP-2 physical probe: finish stopped recording")
-            print("KBD-MVP-2 physical probe: deterministic result ready")
-        case .cancel:
-            coordinator.cancelRecordingProbe()
-            guard coordinator.presentation == .stopped else {
-                logFailure()
-                return
-            }
-            print("KBD-MVP-2 physical probe: cancel stopped without result")
-        }
-    }
-
-    private func logFailure() {
-        print(
-            "KBD-MVP-2 physical probe: FAILED "
-                + coordinator.presentation.title
-        )
-    }
-}
-#endif
