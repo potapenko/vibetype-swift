@@ -21,6 +21,11 @@ The native Button keeps its current action label and phase as VoiceOver-only
 content. Reduce Motion uses the complete static recording or transcription
 artwork instead of rotating or pulsing it.
 
+The activity control is vertically centered between equal flexible spaces in
+the remaining area below the status surface. It no longer sticks to the bottom
+when the screen or available content area grows; constrained layouts collapse
+the flexible spaces before the surrounding ScrollView takes over.
+
 ## Visual Evidence
 
 Both captures use iPhone 16, iOS 18.6, the DEBUG-only side-effect-free

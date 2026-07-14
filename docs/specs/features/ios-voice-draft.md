@@ -63,11 +63,12 @@ without opening the custom keyboard.
 
 ## Primary Voice Control
 
-- A large Start Dictation action stays below the Draft in the lower thumb
-  region. It uses the same text-free HoldType activity artwork and motion as
-  the macOS floating indicator instead of placing a microphone, progress
-  spinner, or action label over the artwork. Its action name and state remain
-  available to VoiceOver.
+- A large Start Dictation action stays below the status and remains vertically
+  centered inside the flexible free area above the tab bar. It must not stick
+  to the bottom when that free area grows. It uses the same text-free HoldType
+  activity artwork and motion as the macOS floating indicator instead of
+  placing a microphone, progress spinner, or action label over the artwork.
+  Its action name and state remain available to VoiceOver.
 - Ready shows the static idle activity mark as an active Start Dictation
   control.
 - Listening uses the same primary location for Done, shows elapsed time plus a

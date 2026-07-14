@@ -46,6 +46,7 @@ struct IOSVoiceHomeView: View {
                     voiceStatusSurface
                     Spacer(minLength: 0)
                     primaryVoiceSurface
+                    Spacer(minLength: 0)
                 }
                 .frame(
                     minHeight: max(0, geometry.size.height - 22),
