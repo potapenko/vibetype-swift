@@ -1067,6 +1067,14 @@ final class IOSForegroundVoiceWorkflow {
                 ),
                 failure: .unavailable
             )
+        case .checkAgain:
+            let observation = await observe(includeConfiguration: true)
+            return IOSForegroundVoiceResolution(
+                observation: observation,
+                failure: observation.setup == .unavailable
+                    ? .localRecovery
+                    : nil
+            )
         case .retryPending:
             return await runRetryPending(progress: progress)
         case .recoverRecording:
@@ -1209,8 +1217,8 @@ final class IOSForegroundVoiceWorkflow {
             )
         case .unavailable:
             return await blockedPreflight(
-                setup: .unavailable,
-                failure: .unavailable
+                setup: .needsSetup(.openAI),
+                failure: .credentialUnavailable
             )
         }
         guard canContinueArming(
@@ -1228,7 +1236,7 @@ final class IOSForegroundVoiceWorkflow {
             )
         case .unavailable:
             return await blockedPreflight(
-                setup: .unavailable,
+                setup: .needsSetup(.microphoneAndPrivacy),
                 failure: .microphoneUnavailable
             )
         case .timedOut:
@@ -1859,7 +1867,8 @@ final class IOSForegroundVoiceWorkflow {
             )
         case .unavailable:
             return await pendingRetryPreflightResolution(
-                failure: .unavailable,
+                setup: .needsSetup(.openAI),
+                failure: .credentialUnavailable,
                 authority: authority,
                 registry: registry
             )
@@ -1878,7 +1887,8 @@ final class IOSForegroundVoiceWorkflow {
         guard await dependencies.revalidateCredential(credential),
               retryCanContinue(authority, registry: registry) else {
             return await pendingRetryPreflightResolution(
-                failure: .unavailable,
+                setup: .needsSetup(.openAI),
+                failure: .credentialUnavailable,
                 authority: authority,
                 registry: registry
             )
@@ -2778,13 +2788,13 @@ final class IOSForegroundVoiceWorkflow {
     }
 
     private func blockedPreflight(
-        setup: IOSForegroundVoiceSetup = .unavailable,
+        setup: IOSForegroundVoiceSetup? = nil,
         failure: IOSForegroundVoiceFailure?
     ) async -> IOSForegroundVoiceResolution {
         let current = await observe(includeConfiguration: false)
         return IOSForegroundVoiceResolution(
             observation: IOSForegroundVoiceObservation(
-                setup: setup,
+                setup: setup ?? passiveSetup,
                 recovery: current.recovery,
                 stage: current.stage,
                 latestAvailability: current.latestAvailability,

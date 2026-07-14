@@ -1007,7 +1007,9 @@ struct IOSForegroundVoiceWorkflowTests {
             progress: { _ in }
         )
         #expect(unavailableResolution.failure == .microphoneUnavailable)
-        #expect(unavailableResolution.observation.setup == .unavailable)
+        #expect(unavailableResolution.observation.setup == .needsSetup(
+            .microphoneAndPrivacy
+        ))
 
         let timedOut = try await WorkflowFixture(
             permission: .undetermined,
@@ -1068,8 +1070,8 @@ struct IOSForegroundVoiceWorkflowTests {
             token: IOSForegroundVoiceWorkflowAttemptToken(),
             progress: { _ in }
         )
-        #expect(secureResolution.failure == .unavailable)
-        #expect(secureResolution.observation.setup == .unavailable)
+        #expect(secureResolution.failure == .credentialUnavailable)
+        #expect(secureResolution.observation.setup == .needsSetup(.openAI))
 
         let settingsIO = try await WorkflowFixture(
             settingsLoads: [.failure],
@@ -1557,7 +1559,14 @@ struct IOSForegroundVoiceWorkflowTests {
         try await waitUntil {
             credentialController.presentation.phase == .inactive
         }
-        #expect(credentialController.presentation.failure == .unavailable)
+        #expect(
+            credentialController.presentation.failure
+                == .credentialUnavailable
+        )
+        #expect(
+            credentialController.presentation.setup
+                == .needsSetup(.openAI)
+        )
         #expect(!credential.events.contains("provider-process"))
 
         let settings = try await WorkflowFixture(
@@ -2043,7 +2052,41 @@ struct IOSForegroundVoiceWorkflowTests {
         })
     }
 
+    @Test
+    func checkAgainRecoversReadinessWithoutStartingAudioOrProviderWork()
+        async throws {
+        let settings = IOSAppSettings.defaults
+        let fixture = try await WorkflowFixture(
+            settings: settings,
+            settingsLoads: [.failure, .value(settings)],
+            permission: .granted,
+            acquireLease: false
+        )
+        let controller = IOSForegroundVoiceController(
+            client: fixture.workflow.client,
+            sceneRegistry: fixture.registry
+        )
 
+        await controller.activate()
+        #expect(controller.presentation.setup == .unavailable)
+        let checkAgain = try #require(
+            controller.actionCommands.first {
+                $0.action == .checkAgain
+            }
+        )
+        #expect(controller.submit(checkAgain) == .accepted)
+        try await waitUntil {
+            controller.presentation.phase == .inactive
+                && controller.presentation.setup == .ready
+        }
+
+        #expect(controller.presentation.failure == nil)
+        #expect(controller.actionCommands.contains {
+            $0.action == .startStandard
+        })
+        #expect(!fixture.events.contains("recording-start"))
+        #expect(!fixture.events.contains("provider-process"))
+    }
 
     @Test
     func ordinaryWorkflowCancelPreservesActualCaptureRecoveryAction()

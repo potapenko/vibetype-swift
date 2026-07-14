@@ -87,6 +87,22 @@ without opening the custom keyboard.
   activity control with an explicit native recovery state containing the
   problem, the next action, and every exact corrective command currently
   admitted by the controller.
+- `Voice unavailable` is not a user-facing diagnosis. Setup availability,
+  microphone availability, credential access, protected local recovery, and a
+  transiently interrupted Start remain distinct states with distinct copy.
+- A transient Start failure keeps valid setup ready and restores Start
+  Dictation immediately so the user can retry. It never converts a usable
+  configuration into an unavailable setup state.
+- A credential-access failure routes to OpenAI Settings and explains that the
+  saved key must be reviewed or saved again. A microphone availability failure
+  routes to Privacy & Permissions and explains what access or input to check.
+- If a protected recording is already waiting to retry, the blocking Settings
+  action remains visible alongside Retry and Discard; the recovery controls do
+  not hide the action required to make Retry succeed.
+- If HoldType cannot safely classify local Voice readiness, the recovery state
+  includes Check Again. Check Again performs a bounded, non-destructive local
+  readiness refresh; it never starts provider work, deletes a Draft, or
+  discards a protected recording.
 - A setup problem that belongs to Settings exposes one direct action to its
   owning OpenAI, Transcription, Translation, Keyboard, or Privacy & Permissions
   destination. Draft capacity and Draft storage problems stay on Voice and

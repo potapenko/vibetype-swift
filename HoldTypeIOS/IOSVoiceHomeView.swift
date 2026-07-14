@@ -547,18 +547,19 @@ struct IOSVoiceHomeView: View {
             )
             .accessibilityIdentifier("ios.voice.status")
 
-            if !recoveryCommands.isEmpty {
-                IOSVoiceActionLayout(
-                    commands: recoveryCommands,
-                    perform: performVoiceCommand
-                )
-            } else if let destination = status.setupDestination,
-                      let setupAction = setupAction(for: destination) {
+            if let destination = status.setupDestination,
+               let setupAction = setupAction(for: destination) {
                 Button(setupAction.title) {
                     setupAction.perform()
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("ios.voice.setup-action")
+            }
+            if !recoveryCommands.isEmpty {
+                IOSVoiceActionLayout(
+                    commands: recoveryCommands,
+                    perform: performVoiceCommand
+                )
             }
         }
         .padding(.horizontal, 4)
@@ -601,7 +602,13 @@ struct IOSVoiceHomeView: View {
         case .finalizing, .processing:
             voiceActivityIndicator(.recognizing, status: status)
         case .ready:
-            primaryVoiceRecoverySurface(status: status)
+            if let command, primaryVoiceGate == .available {
+                voiceActivityButton(command)
+            } else {
+                primaryVoiceRecoverySurface(
+                    status: primaryBlockedStatus(fallback: status)
+                )
+            }
         }
     }
 
@@ -717,27 +724,30 @@ struct IOSVoiceHomeView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if !recoveryCommands.isEmpty {
-                IOSVoiceActionLayout(
-                    commands: recoveryCommands,
-                    perform: performVoiceCommand
-                )
-            } else if let destination = status.setupDestination,
-                      let setupAction = setupAction(for: destination) {
+            if let destination = status.setupDestination,
+               let setupAction = setupAction(for: destination) {
                 Button(setupAction.title) {
                     setupAction.perform()
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .accessibilityIdentifier("ios.voice.setup-action")
-            } else if primaryVoiceGate == .draftUnavailable {
+            }
+            if !recoveryCommands.isEmpty {
+                IOSVoiceActionLayout(
+                    commands: recoveryCommands,
+                    perform: performVoiceCommand
+                )
+            } else if status.setupDestination == nil,
+                      primaryVoiceGate == .draftUnavailable {
                 Button("Try Loading Draft Again") {
                     Task { await draftOwner.refresh() }
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .accessibilityIdentifier("ios.voice.draft-retry")
-            } else if primaryVoiceGate == .draftFull {
+            } else if status.setupDestination == nil,
+                      primaryVoiceGate == .draftFull {
                 ViewThatFits(in: .horizontal) {
                     HStack { draftRecoveryButtons }
                     VStack { draftRecoveryButtons }

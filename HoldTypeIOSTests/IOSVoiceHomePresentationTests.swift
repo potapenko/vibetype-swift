@@ -10,6 +10,7 @@ struct IOSVoiceHomePresentationTests {
             .startStandard,
             .startTranslation,
             .startCorrection,
+            .checkAgain,
             .cancelStart,
             .finishUtterance,
             .cancelUtterance,
@@ -24,6 +25,7 @@ struct IOSVoiceHomePresentationTests {
             "Start Dictation",
             "Translate",
             "Correction",
+            "Check Again",
             "Cancel Start",
             "Done",
             "Cancel Utterance",
@@ -35,18 +37,18 @@ struct IOSVoiceHomePresentationTests {
         #expect(
             presentations.enumerated().filter {
                 $0.element.requiresConfirmation
-            }.map(\.offset) == [9]
+            }.map(\.offset) == [10]
         )
         #expect(
-            Set(presentations.map(\.accessibilityIdentifier)).count == 10
+            Set(presentations.map(\.accessibilityIdentifier)).count == 11
         )
-        #expect(presentations[9].prominence == .destructive)
+        #expect(presentations[10].prominence == .destructive)
     }
 
     @Test func activePhasesRemainDistinctAndUnderstandable() {
         let cases: [(VoiceWorkPhase, VoiceAttemptStage?, String, Bool)] = [
             (.arming, nil, "Getting ready…", true),
-            (.ready, nil, "Voice unavailable", false),
+            (.ready, nil, "Ready to dictate", false),
             (.listening, nil, "Listening", false),
             (
                 .finalizing,
@@ -112,6 +114,55 @@ struct IOSVoiceHomePresentationTests {
         #expect(resolved.detail.contains("Privacy & Permissions"))
     }
 
+    @Test func unavailableMicrophoneRoutesToPrivacyWithAConcreteNextStep() {
+        let resolved = IOSVoiceHomePresentation.resolve(
+            voicePresentation(
+                setup: .needsSetup(.microphoneAndPrivacy),
+                failure: .microphoneUnavailable
+            )
+        )
+
+        #expect(resolved.title == "Microphone isn't available")
+        #expect(resolved.setupDestination == .microphoneAndPrivacy)
+        #expect(resolved.detail.contains("audio input"))
+    }
+
+    @Test func unreadableCredentialRoutesToOpenAISettings() {
+        let resolved = IOSVoiceHomePresentation.resolve(
+            voicePresentation(
+                setup: .needsSetup(.openAI),
+                failure: .credentialUnavailable
+            )
+        )
+
+        #expect(resolved.title == "OpenAI key needs attention")
+        #expect(resolved.setupDestination == .openAI)
+        #expect(resolved.detail.contains("OpenAI Settings"))
+    }
+
+    @Test func unclassifiedReadinessOffersANonDestructiveRecheck() {
+        let resolved = IOSVoiceHomePresentation.resolve(
+            voicePresentation(setup: .unavailable)
+        )
+
+        #expect(resolved.title == "Voice needs another check")
+        #expect(resolved.detail.contains("Check Again"))
+        #expect(resolved.tone == .warning)
+    }
+
+    @Test func pendingRetryShowsTheBlockingSetupRouteBeforeRetry() {
+        let resolved = IOSVoiceHomePresentation.resolve(
+            voicePresentation(
+                setup: .needsSetup(.openAI),
+                failure: .credentialUnavailable,
+                recovery: .pendingRetryOrDiscard
+            )
+        )
+
+        #expect(resolved.title == "OpenAI key needs attention")
+        #expect(resolved.setupDestination == .openAI)
+    }
+
     @Test func everySetupDestinationOwnsItsVisibleRecoveryCopy() {
         let destinations: [RecoveryDestination] = [
             .openAI,
@@ -167,6 +218,7 @@ struct IOSVoiceHomePresentationTests {
             .operationFailed,
             .localRecovery,
             .unavailable,
+            .credentialUnavailable,
             .microphonePermissionDenied,
             .microphoneUnavailable,
             .microphonePermissionTimedOut,
@@ -203,7 +255,7 @@ struct IOSVoiceHomePresentationTests {
         #expect(!unavailableSession.detail.contains("Latest Result"))
     }
 
-    @Test func activePhaseAndRecoveryDominateStaleSecondaryAxes() {
+    @Test func activePhaseThenBlockingSetupOwnTheVisibleNextStep() {
         let active = IOSVoiceHomePresentation.resolve(
             voicePresentation(
                 phase: .listening,
@@ -222,8 +274,8 @@ struct IOSVoiceHomePresentationTests {
                 recovery: .pendingRetryOrDiscard
             )
         )
-        #expect(recovery.title == "Recording ready to retry")
-        #expect(recovery.setupDestination == nil)
+        #expect(recovery.title == "OpenAI setup required")
+        #expect(recovery.setupDestination == .openAI)
     }
 
     @Test func historySaveWarningPreservesReadyResultCopy() {
@@ -269,6 +321,7 @@ struct IOSVoiceHomePresentationTests {
             .startStandard,
             .startTranslation,
             .startCorrection,
+            .checkAgain,
             .cancelStart,
             .finishUtterance,
             .cancelUtterance,
@@ -349,6 +402,7 @@ private func voiceStatusFixtures() -> [IOSForegroundVoicePresentation] {
         IOSForegroundVoiceFailure.operationFailed,
         .localRecovery,
         .unavailable,
+        .credentialUnavailable,
         .microphonePermissionDenied,
         .microphoneUnavailable,
         .microphonePermissionTimedOut,

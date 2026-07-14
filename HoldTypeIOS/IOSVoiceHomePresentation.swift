@@ -65,6 +65,13 @@ struct IOSVoiceActionPresentation: Equatable, Sendable {
                 image: "wand.and.stars",
                 prominence: .secondary
             )
+        case .checkAgain:
+            makeAction(
+                action,
+                title: "Check Again",
+                image: "arrow.clockwise",
+                prominence: .primary
+            )
         case .cancelStart:
             makeAction(
                 action,
@@ -142,6 +149,7 @@ struct IOSVoiceActionPresentation: Equatable, Sendable {
         case .startStandard: "start-standard"
         case .startTranslation: "start-translation"
         case .startCorrection: "start-correction"
+        case .checkAgain: "check-again"
         case .cancelStart: "cancel-start"
         case .finishUtterance: "finish-utterance"
         case .cancelUtterance: "cancel-utterance"
@@ -169,12 +177,7 @@ enum IOSVoiceHomePresentation {
                 showsProgress: true
             )
         case .ready:
-            status(
-                "Voice unavailable",
-                detail: "This Voice state is not available in one-shot mode.",
-                image: "exclamationmark.triangle",
-                tone: .warning
-            )
+            resolveInactive(presentation)
         case .listening:
             status(
                 "Listening",
@@ -198,6 +201,13 @@ enum IOSVoiceHomePresentation {
     private static func resolveInactive(
         _ presentation: IOSForegroundVoicePresentation
     ) -> IOSVoiceStatusPresentation {
+        if presentation.recovery == .pendingRetryOrDiscard,
+           case .needsSetup(let destination) = presentation.setup {
+            return setupStatus(
+                destination,
+                failure: presentation.failure
+            )
+        }
         if presentation.recovery != .none {
             return recoveryStatus(
                 presentation.recovery,
@@ -215,10 +225,10 @@ enum IOSVoiceHomePresentation {
             )
         case .unavailable:
             return status(
-                "Voice unavailable",
-                detail: "Voice setup could not be read safely.",
-                image: "exclamationmark.triangle",
-                tone: .failure
+                "Voice needs another check",
+                detail: "Check Again reloads local Voice readiness without changing your Draft or recordings.",
+                image: "arrow.clockwise.circle",
+                tone: .warning
             )
         case .needsSetup(let destination):
             return setupStatus(
@@ -297,11 +307,32 @@ enum IOSVoiceHomePresentation {
         _ destination: RecoveryDestination,
         failure: IOSForegroundVoiceFailure?
     ) -> IOSVoiceStatusPresentation {
+        if destination == .openAI,
+           failure == .credentialUnavailable {
+            return status(
+                "OpenAI key needs attention",
+                detail: "HoldType couldn't read the saved key. Open OpenAI Settings to review or save it again.",
+                image: "key.slash",
+                tone: .warning,
+                setupDestination: destination
+            )
+        }
+
         if destination == .microphoneAndPrivacy,
            failure == .microphonePermissionDenied {
             return status(
                 "Microphone access is off",
                 detail: "Open Privacy & Permissions to allow recording, then return to Voice.",
+                image: "mic.slash",
+                tone: .warning,
+                setupDestination: destination
+            )
+        }
+        if destination == .microphoneAndPrivacy,
+           failure == .microphoneUnavailable {
+            return status(
+                "Microphone isn't available",
+                detail: "Review microphone access and audio input, then return to Voice and try again.",
                 image: "mic.slash",
                 tone: .warning,
                 setupDestination: destination
@@ -477,24 +508,31 @@ enum IOSVoiceHomePresentation {
         switch failure {
         case .operationFailed:
             copy = (
-                "Voice action failed",
-                "The current action ended without changing a prior result.",
+                "Couldn't complete dictation",
+                "No new result was saved. Check the microphone or audio route, then try again.",
                 "exclamationmark.circle",
                 .failure
             )
         case .localRecovery:
             copy = (
-                "Local recovery needs attention",
-                "Protected local work was preserved for a later retry.",
+                "Local data needs another check",
+                "Your Draft and protected recording were preserved. Try again to recheck them.",
                 "externaldrive.badge.exclamationmark",
                 .warning
             )
         case .unavailable:
             copy = (
-                "Voice unavailable",
-                "A required local service is unavailable.",
+                "Dictation was interrupted",
+                "No recording was saved. Tap Start Dictation to try again.",
                 "exclamationmark.triangle",
-                .failure
+                .warning
+            )
+        case .credentialUnavailable:
+            copy = (
+                "OpenAI key needs attention",
+                "Review or save the API key again in OpenAI Settings.",
+                "key.slash",
+                .warning
             )
         case .microphonePermissionDenied:
             copy = (

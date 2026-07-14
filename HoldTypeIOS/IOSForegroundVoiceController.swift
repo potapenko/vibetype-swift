@@ -13,6 +13,7 @@ enum IOSForegroundVoiceFailure: Equatable, Sendable {
     case operationFailed
     case localRecovery
     case unavailable
+    case credentialUnavailable
     case microphonePermissionDenied
     case microphoneUnavailable
     case microphonePermissionTimedOut
@@ -44,6 +45,7 @@ enum IOSForegroundVoiceAction: Equatable, Sendable {
     case startStandard
     case startTranslation
     case startCorrection
+    case checkAgain
     case cancelStart
     case finishUtterance
     case cancelUtterance
@@ -159,6 +161,7 @@ enum IOSForegroundVoiceStartAction: Equatable, Sendable {
 
 enum IOSForegroundVoiceOperation: Equatable, Sendable {
     case start(IOSForegroundVoiceStartAction)
+    case checkAgain
     case retryPending
     case recoverRecording
     case discard
@@ -461,6 +464,8 @@ final class IOSForegroundVoiceController {
                   begin(.start(.correction), startLease: startLease) else {
                 return .unavailable
             }
+        case .checkAgain:
+            guard begin(.checkAgain) else { return .unavailable }
         case .retryPending:
             guard begin(.retryPending) else { return .unavailable }
         case .recoverRecording:
@@ -746,7 +751,9 @@ final class IOSForegroundVoiceController {
         if case .primary? = activeWork {
             switch phase {
             case .arming:
-                return [.cancelStart]
+                return activeOperation == .checkAgain
+                    ? []
+                    : [.cancelStart]
             case .listening:
                 return finishRequested
                     ? [.cancelUtterance]
@@ -771,8 +778,9 @@ final class IOSForegroundVoiceController {
         case .pendingRetryOrDiscard:
             return [.retryPending, .discard]
         case .blocked:
-            return []
+            return [.checkAgain]
         case .none:
+            if setup == .unavailable { return [.checkAgain] }
             guard setup == .ready else { return [] }
             var actions: [IOSForegroundVoiceAction] = [.startStandard]
             if translationAvailable {
@@ -788,6 +796,8 @@ final class IOSForegroundVoiceController {
     ) -> (phase: VoiceWorkPhase, stage: VoiceAttemptStage?) {
         switch operation {
         case .start:
+            (.arming, nil)
+        case .checkAgain:
             (.arming, nil)
         case .retryPending:
             (.processing, .transcription)
@@ -997,7 +1007,7 @@ final class IOSForegroundVoiceController {
         switch activeOperation {
         case .start, .retryPending:
             return true
-        case .recoverRecording, .discard:
+        case .checkAgain, .recoverRecording, .discard:
             return false
         }
     }

@@ -324,6 +324,14 @@ struct IOSForegroundVoiceControllerTests {
                 forcesTextCorrection: true
             ),
             VoiceOperationCase(
+                observation: voiceObservation(setup: .unavailable),
+                action: .checkAgain,
+                operation: .checkAgain,
+                phase: .arming,
+                stage: nil,
+                actions: []
+            ),
+            VoiceOperationCase(
                 observation: voiceObservation(
                     recovery: .captureRecoverOrDiscard
                 ),
@@ -742,7 +750,7 @@ struct IOSForegroundVoiceControllerTests {
             controller.presentation.latestAvailability
                 == .available
         )
-        #expect(controller.presentation.availableActions.isEmpty)
+        #expect(controller.presentation.availableActions == [.checkAgain])
     }
 
     @Test func terminalRecoveryRejectsHostileOutcomeCombinations()
@@ -770,7 +778,7 @@ struct IOSForegroundVoiceControllerTests {
                 inputOutcome: .resultReady,
                 expectedStage: nil,
                 expectedOutcome: nil,
-                expectedActions: []
+                expectedActions: [.checkAgain]
             ),
         ]
 
@@ -899,7 +907,7 @@ struct IOSForegroundVoiceControllerTests {
             ),
             VoiceActionCase(
                 observation: voiceObservation(recovery: .blocked),
-                actions: [],
+                actions: [.checkAgain],
                 stage: nil
             ),
             VoiceActionCase(
@@ -911,7 +919,7 @@ struct IOSForegroundVoiceControllerTests {
             ),
             VoiceActionCase(
                 observation: voiceObservation(setup: .unavailable),
-                actions: [],
+                actions: [.checkAgain],
                 stage: nil
             ),
         ]
@@ -1413,7 +1421,8 @@ private func submitVoiceCommand(
             initialActivity: .active
         )
         return controller.submit(command, from: scene)
-    case .cancelStart,
+    case .checkAgain,
+         .cancelStart,
          .finishUtterance,
          .cancelUtterance,
          .cancelProcessing,
