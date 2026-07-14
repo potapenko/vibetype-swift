@@ -483,7 +483,7 @@ final class BrandStageKeyboardView: UIView {
 
         configureKey(
             translateButton,
-            systemImage: "character.book.closed",
+            systemImage: "character.bubble",
             accessibilityLabel: "Translate dictation"
         )
         translateButton.accessibilityTraits.remove(.keyboardKey)

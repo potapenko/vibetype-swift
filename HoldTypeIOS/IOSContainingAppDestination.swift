@@ -151,7 +151,7 @@ enum IOSVoiceSettingsRecovery: String, Hashable, Sendable {
         case .transcription:
             "waveform.and.mic"
         case .translation:
-            "character.book.closed"
+            "character.bubble"
         case .keyboard, .fullAccess:
             "keyboard.badge.ellipsis"
         case .privacyReview:

@@ -83,6 +83,11 @@ struct BrandStageKeyboardViewTests {
         let microphone = try button("keyboard.brand-stage.voice", in: view)
         #expect(quickInsertToggle.accessibilityLabel == "Open Quick Insert")
         #expect(translate.isEnabled)
+        #expect(
+            translate.configuration?.image?.isEqual(
+                UIImage(systemName: "character.bubble")
+            ) == true
+        )
         #expect(improve.isEnabled)
         #expect(isEffectivelyHidden(quickInsertStage))
         #expect(!isEffectivelyHidden(microphone))

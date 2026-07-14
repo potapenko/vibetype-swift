@@ -565,7 +565,7 @@ struct IOSVoiceHomeView: View {
             }
             voiceSessionModeButton(
                 title: "Translate",
-                systemImage: "character.book.closed",
+                systemImage: "character.bubble",
                 isSelected: sessionModes.translates,
                 isEnabled: voiceSessionModesAreEnabled
                     && translationModeIsAvailable

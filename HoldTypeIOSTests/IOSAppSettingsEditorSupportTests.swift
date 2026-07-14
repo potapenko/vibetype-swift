@@ -23,6 +23,10 @@ struct IOSAppSettingsEditorSupportTests {
             ]
         )
         #expect(
+            IOSGeneralSettingsDestination.translation.systemImage
+                == "character.bubble"
+        )
+        #expect(
             Set(
                 IOSGeneralSettingsDestination.allCases.map(
                     \.rowAccessibilityIdentifier

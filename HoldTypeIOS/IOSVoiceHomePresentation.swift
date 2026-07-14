@@ -55,7 +55,7 @@ struct IOSVoiceActionPresentation: Equatable, Sendable {
             makeAction(
                 action,
                 title: "Translate",
-                image: "character.book.closed",
+                image: "character.bubble",
                 prominence: .secondary
             )
         case .startCorrection:
@@ -383,7 +383,7 @@ enum IOSVoiceHomePresentation {
             copy = (
                 "Translation setup required",
                 "Choose a valid translation target before using Translate.",
-                "character.book.closed"
+                "character.bubble"
             )
         case .keyboard:
             copy = (

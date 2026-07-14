@@ -87,6 +87,10 @@ struct IOSContainingAppShellTests {
                 == .general(.translation)
         )
         #expect(
+            IOSVoiceSettingsRecovery.translation.systemImage
+                == "character.bubble"
+        )
+        #expect(
             IOSVoiceSettingsRecovery.keyboard.destination == .keyboardSetup
         )
         #expect(

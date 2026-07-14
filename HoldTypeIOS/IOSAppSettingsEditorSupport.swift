@@ -22,7 +22,7 @@ enum IOSGeneralSettingsDestination: String, CaseIterable, Hashable {
         switch self {
         case .transcription: "waveform.and.mic"
         case .writingCorrection: "text.badge.checkmark"
-        case .translation: "character.book.closed"
+        case .translation: "character.bubble"
         case .voiceRecording: "mic.badge.plus"
         }
     }

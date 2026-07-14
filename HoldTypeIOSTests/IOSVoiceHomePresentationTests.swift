@@ -42,6 +42,7 @@ struct IOSVoiceHomePresentationTests {
         #expect(
             Set(presentations.map(\.accessibilityIdentifier)).count == 11
         )
+        #expect(presentations[1].systemImage == "character.bubble")
         #expect(presentations[10].prominence == .destructive)
     }
 
