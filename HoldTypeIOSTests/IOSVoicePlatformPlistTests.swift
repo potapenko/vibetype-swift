@@ -21,7 +21,7 @@ struct IOSVoicePlatformPlistTests {
 
         #expect(app["NSMicrophoneUsageDescription"] as? String == exact)
         #expect(app["NSSpeechRecognitionUsageDescription"] == nil)
-        #expect(app["UIBackgroundModes"] == nil)
+        #expect(app["UIBackgroundModes"] as? [String] == ["audio"])
         #expect(keyboard["NSMicrophoneUsageDescription"] == nil)
         #expect(keyboard["NSSpeechRecognitionUsageDescription"] == nil)
         #expect(keyboard["UIBackgroundModes"] == nil)
@@ -41,7 +41,7 @@ struct IOSVoicePlatformPlistTests {
             extensionRecord["NSExtensionPointIdentifier"] as? String
                 == "com.apple.keyboard-service"
         )
-        #expect(attributes["RequestsOpenAccess"] as? Bool == false)
+        #expect(attributes["RequestsOpenAccess"] as? Bool == true)
         #expect(attributes["IsASCIICapable"] as? Bool == false)
         #expect(attributes["PrefersRightToLeft"] as? Bool == false)
     }

@@ -504,6 +504,8 @@ struct BrandStageKeyboardViewTests {
         BrandStageKeyboardPresentation(
             status: .ready,
             latestIsEnabled: latestIsEnabled,
+            microphoneIsEnabled: false,
+            cancelIsVisible: false,
             returnKey: returnKey,
             returnIsEnabled: true,
             showsInputModeSwitchKey: showsInputModeSwitchKey

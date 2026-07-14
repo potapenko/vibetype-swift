@@ -22,6 +22,8 @@ struct IOSVoiceHomeView: View {
     @State private var accessibilityAnnouncementTask: Task<Void, Never>?
     @State private var accessibilityAnnouncementCandidate:
         IOSAccessibilityAnnouncementCandidate?
+    @StateObject private var keyboardSession =
+        IOSKeyboardDictationSessionCoordinator()
     @FocusState private var practiceFieldIsFocused: Bool
 
     let secureProviderAvailability: IOSSecureProviderAvailability
@@ -49,6 +51,7 @@ struct IOSVoiceHomeView: View {
                 }
             }
 
+            keyboardDictationSessionSection
             keyboardPracticeSection
         }
         .listStyle(.insetGrouped)
@@ -481,6 +484,45 @@ struct IOSVoiceHomeView: View {
                 .accessibilityIdentifier("ios.voice.practice-clear")
             }
 
+        }
+    }
+
+    private var keyboardDictationSessionSection: some View {
+        Section("Keyboard Dictation Session") {
+            Text(keyboardSession.presentation.title)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier(
+                    "ios.voice.keyboard-session.status"
+                )
+
+            Text(
+                "This signed-device probe keeps one app-owned session available for up to 60 seconds. Audio starts only after Start on HoldType Keyboard."
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            switch keyboardSession.presentation {
+            case .stopped, .failed:
+                Button("Start Keyboard Session") {
+                    Task {
+                        await keyboardSession.startSession()
+                    }
+                }
+                .accessibilityIdentifier(
+                    "ios.voice.keyboard-session.start"
+                )
+            case .preparing:
+                ProgressView()
+                    .accessibilityLabel("Preparing keyboard session")
+            case .ready, .listening, .processing:
+                Button("Stop Keyboard Session", role: .destructive) {
+                    keyboardSession.stopSession()
+                }
+                .accessibilityIdentifier(
+                    "ios.voice.keyboard-session.stop"
+                )
+            }
         }
     }
 

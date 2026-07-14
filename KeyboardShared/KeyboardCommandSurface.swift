@@ -9,13 +9,23 @@ import Foundation
 
 enum KeyboardTopRailStatus: String, CaseIterable, Equatable, Sendable {
     case ready = "Ready"
+    case enableFullAccess = "Enable Full Access"
+    case listening = "Listening…"
+    case processing = "Processing…"
+    case openHoldType = "Open HoldType"
+    case tryAgain = "Try Again"
     case openSettings = "Open Settings"
 
     var accessibilityAnnouncement: String? {
         switch self {
         case .ready:
             nil
-        case .openSettings:
+        case .enableFullAccess,
+             .listening,
+             .processing,
+             .openHoldType,
+             .tryAgain,
+             .openSettings:
             rawValue
         }
     }

@@ -3,6 +3,8 @@ import UIKit
 struct BrandStageKeyboardPresentation: Equatable {
     let status: KeyboardTopRailStatus
     let latestIsEnabled: Bool
+    let microphoneIsEnabled: Bool
+    let cancelIsVisible: Bool
     let returnKey: KeyboardReturnKeyPresentation
     let returnIsEnabled: Bool
     let showsInputModeSwitchKey: Bool
@@ -13,6 +15,8 @@ struct BrandStageKeyboardPresentation: Equatable {
 final class BrandStageKeyboardView: UIView {
     var onSettingsRequested: (() -> Void)?
     var onLatestRequested: (() -> Void)?
+    var onMicrophoneRequested: (() -> Void)?
+    var onCancelRequested: (() -> Void)?
     var onPunctuationRequested: ((String) -> Void)?
     var onSpaceRequested: (() -> Void)?
     var onSpaceCursorGesture: ((UIGestureRecognizer.State, CGFloat) -> Void)?
@@ -37,7 +41,8 @@ final class BrandStageKeyboardView: UIView {
     private let spaceButton = UIButton(type: .system)
     private let deleteButton = UIButton(type: .system)
     private let returnButton = UIButton(type: .system)
-    private let microphoneView = UIView()
+    private let microphoneView = UIButton(type: .system)
+    private let cancelButton = UIButton(type: .system)
     private let microphoneImageView = UIImageView()
     private let waveformStack = UIStackView()
     private var preferredHeightConstraint: NSLayoutConstraint?
@@ -102,6 +107,17 @@ final class BrandStageKeyboardView: UIView {
         statusLabel.text = presentation.status.rawValue
         statusLabel.accessibilityValue = presentation.status.rawValue
         latestButton.isEnabled = presentation.latestIsEnabled
+        microphoneView.isEnabled = presentation.microphoneIsEnabled
+        cancelButton.isHidden = !presentation.cancelIsVisible
+        cancelButton.isEnabled = presentation.cancelIsVisible
+        microphoneImageView.image = UIImage(
+            systemName: presentation.status == .listening
+                ? "stop.fill"
+                : "mic.fill"
+        )
+        microphoneView.accessibilityLabel = presentation.status == .listening
+            ? "Finish keyboard dictation"
+            : "Start keyboard dictation"
         updateInputModeSwitchKeyVisibility(
             presentation.showsInputModeSwitchKey
         )
@@ -414,6 +430,7 @@ final class BrandStageKeyboardView: UIView {
         voiceStage.addArrangedSubview(leftWaveform)
         voiceStage.addArrangedSubview(microphoneView)
         voiceStage.addArrangedSubview(rightWaveform)
+        voiceStage.addArrangedSubview(cancelButton)
         leftWaveform.widthAnchor.constraint(greaterThanOrEqualToConstant: 96)
             .isActive = true
         rightWaveform.widthAnchor.constraint(equalTo: leftWaveform.widthAnchor)
@@ -425,8 +442,8 @@ final class BrandStageKeyboardView: UIView {
         microphoneView.layer.cornerCurve = .continuous
         microphoneView.layer.borderWidth = 2
         microphoneView.layer.masksToBounds = false
-        microphoneView.isUserInteractionEnabled = false
-        microphoneView.isAccessibilityElement = false
+        microphoneView.isUserInteractionEnabled = true
+        microphoneView.isAccessibilityElement = true
         microphoneView.accessibilityIdentifier = "keyboard.brand-stage.voice"
         microphoneImageView.translatesAutoresizingMaskIntoConstraints = false
         microphoneImageView.image = UIImage(systemName: "mic.fill")
@@ -438,6 +455,16 @@ final class BrandStageKeyboardView: UIView {
             microphoneImageView.widthAnchor.constraint(equalToConstant: 34),
             microphoneImageView.heightAnchor.constraint(equalToConstant: 34),
         ])
+
+        var cancelConfiguration = UIButton.Configuration.bordered()
+        cancelConfiguration.title = "Cancel"
+        cancelConfiguration.cornerStyle = .medium
+        cancelButton.configuration = cancelConfiguration
+        cancelButton.isHidden = true
+        cancelButton.accessibilityIdentifier =
+            "keyboard.brand-stage.cancel"
+        cancelButton.widthAnchor.constraint(equalToConstant: 72).isActive = true
+        cancelButton.heightAnchor.constraint(equalToConstant: 44).isActive = true
     }
 
     private func makePunctuationRow() -> UIStackView {
@@ -598,6 +625,16 @@ final class BrandStageKeyboardView: UIView {
         latestButton.addTarget(
             self,
             action: #selector(latestTapped),
+            for: .touchUpInside
+        )
+        microphoneView.addTarget(
+            self,
+            action: #selector(microphoneTapped),
+            for: .touchUpInside
+        )
+        cancelButton.addTarget(
+            self,
+            action: #selector(cancelTapped),
             for: .touchUpInside
         )
         spaceButton.addTarget(
@@ -811,6 +848,14 @@ final class BrandStageKeyboardView: UIView {
 
     @objc private func latestTapped() {
         onLatestRequested?()
+    }
+
+    @objc private func microphoneTapped() {
+        onMicrophoneRequested?()
+    }
+
+    @objc private func cancelTapped() {
+        onCancelRequested?()
     }
 
     @objc private func spaceTapped() {

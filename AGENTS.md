@@ -256,6 +256,13 @@ If a task changes behavior, update or add appropriate verification artifacts.
 Verification may be unit tests, integration tests, UI tests, manual app-run
 evidence, or another project-appropriate artifact.
 
+Before every UI test, Computer Use session, or automated runtime QA pass on
+macOS, agents must start a scoped `caffeinate` process (for example,
+`caffeinate -dimsu`) before the first interface action. Keep it running for the
+entire UI session so system idle timers cannot sleep or lock the Mac, then stop
+that process when the UI session finishes. Do not begin UI automation without
+this guard.
+
 For UI tests, Computer Use, and automated runtime QA, HoldType must launch with
 live Keychain access disabled. Use the UI-test launch helper or
 `script/build_and_run.sh --verify`, which launches the app with a sanitized

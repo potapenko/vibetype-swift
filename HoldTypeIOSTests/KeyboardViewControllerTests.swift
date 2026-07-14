@@ -225,7 +225,7 @@ struct KeyboardViewControllerTests {
         #expect(harness.openedSettingsURLs.map(\.absoluteString) == [
             UIApplication.openSettingsURLString,
         ])
-        #expect(statusText(in: controller.view) == "Ready")
+        #expect(statusText(in: controller.view) == "Open HoldType")
         #expect(harness.scheduledStatusReset == nil)
     }
 
@@ -249,7 +249,7 @@ struct KeyboardViewControllerTests {
         let reset = try #require(harness.scheduledStatusReset)
         reset.perform()
 
-        #expect(statusText(in: controller.view) == "Ready")
+        #expect(statusText(in: controller.view) == "Open HoldType")
     }
 
     @Test func synchronousSettingsFailureUsesTheSameBriefStatus() async throws {
@@ -269,15 +269,106 @@ struct KeyboardViewControllerTests {
         ])
         #expect(harness.scheduledStatusDuration == 1.6)
     }
+
+    @Test func appStateDrivesCommandsAndMatchingResultInsertsOnce() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let requestID = UUID()
+        let deadline = now.addingTimeInterval(60)
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    requestID: requestID,
+                    phase: .ready,
+                    publishedAt: now,
+                    expiresAt: deadline
+                )
+            )
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+
+        controller.keyboardView.onMicrophoneRequested?()
+        #expect(harness.savedCommands.map(\.kind) == [.start])
+
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                requestID: requestID,
+                phase: .listening,
+                publishedAt: now,
+                expiresAt: deadline
+            )
+        )
+        controller.textDidChange(nil)
+        #expect(statusText(in: controller.view) == "Listening…")
+        controller.keyboardView.onMicrophoneRequested?()
+        #expect(harness.savedCommands.map(\.kind) == [.start, .finish])
+
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                requestID: requestID,
+                phase: .resultReady,
+                result: "HoldType keyboard device probe",
+                publishedAt: now,
+                expiresAt: deadline
+            )
+        )
+        controller.textDidChange(nil)
+        controller.textDidChange(nil)
+
+        #expect(harness.proxy.insertedTexts == [
+            "HoldType keyboard device probe",
+        ])
+        #expect(statusText(in: controller.view) == "Open HoldType")
+    }
+
+    @Test func cancelDoesNotInsertAndRestrictedModeKeepsEditing() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let requestID = UUID()
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    requestID: requestID,
+                    phase: .ready,
+                    publishedAt: now,
+                    expiresAt: now.addingTimeInterval(60)
+                )
+            )
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+        controller.keyboardView.onMicrophoneRequested?()
+        controller.keyboardView.onCancelRequested?()
+
+        #expect(harness.savedCommands.map(\.kind) == [.start, .cancel])
+        #expect(harness.proxy.insertedTexts.isEmpty)
+
+        let restricted = KeyboardControllerHarness(fullAccessOverride: false)
+        let restrictedController = restricted.makeController()
+        restrictedController.loadViewIfNeeded()
+        restrictedController.keyboardView.onPunctuationRequested?(".")
+        restrictedController.keyboardView.onSpaceRequested?()
+        restrictedController.keyboardView.onDeleteStarted?()
+        restrictedController.keyboardView.onDeleteStopped?()
+        restrictedController.keyboardView.onReturnRequested?()
+
+        #expect(statusText(in: restrictedController.view) == "Enable Full Access")
+        #expect(restricted.proxy.insertedTexts == [".", " ", "\n"])
+        #expect(restricted.proxy.deleteBackwardCount == 1)
+    }
 }
 
 @MainActor
 private final class KeyboardControllerHarness {
     var now: Date
     var snapshot: KeyboardBridgeSnapshot?
+    var dictationState: KeyboardDictationStateRecord?
     let proxy = KeyboardDocumentProxySpy()
     let inputModeSwitchKeyOverride: Bool?
     let synchronousSettingsResult: Bool?
+    let fullAccessOverride: Bool
+    var savedCommands: [KeyboardDictationCommandRecord] = []
     var openedSettingsURLs: [URL] = []
     var settingsCompletion: ((Bool) -> Void)?
     var scheduledStatusDuration: TimeInterval?
@@ -288,19 +379,28 @@ private final class KeyboardControllerHarness {
     init(
         now: Date = Date(timeIntervalSince1970: 1_750_000_000),
         snapshot: KeyboardBridgeSnapshot? = nil,
+        dictationState: KeyboardDictationStateRecord? = nil,
         inputModeSwitchKeyOverride: Bool? = true,
-        synchronousSettingsResult: Bool? = nil
+        synchronousSettingsResult: Bool? = nil,
+        fullAccessOverride: Bool = true
     ) {
         self.now = now
         self.snapshot = snapshot
+        self.dictationState = dictationState
         self.inputModeSwitchKeyOverride = inputModeSwitchKeyOverride
         self.synchronousSettingsResult = synchronousSettingsResult
+        self.fullAccessOverride = fullAccessOverride
     }
 
     func makeController() -> KeyboardViewController {
         KeyboardViewController(
             dependencies: KeyboardViewControllerDependencies(
                 loadSnapshot: { [self] in snapshot },
+                loadDictationState: { [self] in dictationState },
+                saveDictationCommand: { [self] command in
+                    savedCommands.append(command)
+                },
+                observeDictationState: { _ in nil },
                 now: { [self] in now },
                 documentProxyOverride: proxy,
                 settingsOpener: { [self] url, completion in
@@ -312,6 +412,7 @@ private final class KeyboardControllerHarness {
                     }
                 },
                 inputModeSwitchKeyOverride: inputModeSwitchKeyOverride,
+                fullAccessOverride: fullAccessOverride,
                 scheduleStatusReset: { [self] duration, workItem in
                     scheduledStatusDuration = duration
                     scheduledStatusReset = workItem
