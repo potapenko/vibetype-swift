@@ -80,6 +80,51 @@ struct IOSVoiceHomePresentationTests {
         #expect(IOSVoiceActivityPhase.resolve(.processing) == .recognizing)
     }
 
+    @Test func cancellationActionsStayOutOfTheVisibleStatusLayout() {
+        let cancellationActions: [IOSForegroundVoiceAction] = [
+            .cancelStart,
+            .cancelUtterance,
+            .cancelProcessing,
+        ]
+        let visibleRecoveryActions: [IOSForegroundVoiceAction] = [
+            .checkAgain,
+            .recoverRecording,
+            .retryPending,
+            .discard,
+        ]
+
+        for action in cancellationActions {
+            #expect(IOSVoiceHomeActionPlacement.isCancellation(action))
+            #expect(
+                !IOSVoiceHomeActionPlacement.isVisibleStatusAction(action)
+            )
+        }
+        for action in visibleRecoveryActions {
+            #expect(!IOSVoiceHomeActionPlacement.isCancellation(action))
+            #expect(
+                IOSVoiceHomeActionPlacement.isVisibleStatusAction(action)
+            )
+        }
+    }
+
+    @Test func activityCenterDependsOnlyOnTheVoiceStageBounds() {
+        let phoneStage = CGSize(width: 398, height: 426)
+        let compactStage = CGSize(width: 320, height: 300)
+
+        #expect(
+            IOSVoiceStagePlacement.activityCenter(in: phoneStage)
+                == CGPoint(x: 199, y: 213)
+        )
+        #expect(
+            IOSVoiceStagePlacement.activityCenter(in: compactStage)
+                == CGPoint(x: 160, y: 150)
+        )
+        #expect(
+            IOSVoiceStagePlacement.cancellationCenter(in: phoneStage)
+                == CGPoint(x: 277, y: 291)
+        )
+    }
+
     @Test func blockedPrimaryGatesAlwaysExplainTheNextStep() {
         let gates: [IOSVoicePrimaryGate] = [
             .draftLoading,

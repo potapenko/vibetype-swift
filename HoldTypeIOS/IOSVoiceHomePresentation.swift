@@ -161,6 +161,32 @@ struct IOSVoiceActionPresentation: Equatable, Sendable {
     }
 }
 
+enum IOSVoiceHomeActionPlacement {
+    static func isCancellation(
+        _ action: IOSForegroundVoiceAction
+    ) -> Bool {
+        switch action {
+        case .cancelStart, .cancelUtterance, .cancelProcessing:
+            true
+        default:
+            false
+        }
+    }
+
+    static func isVisibleStatusAction(
+        _ action: IOSForegroundVoiceAction
+    ) -> Bool {
+        switch action {
+        case .startStandard, .startTranslation, .startCorrection,
+             .finishUtterance, .cancelStart, .cancelUtterance,
+             .cancelProcessing:
+            false
+        case .checkAgain, .recoverRecording, .retryPending, .discard:
+            true
+        }
+    }
+}
+
 enum IOSVoiceHomePresentation {
     static func resolve(
         _ presentation: IOSForegroundVoicePresentation

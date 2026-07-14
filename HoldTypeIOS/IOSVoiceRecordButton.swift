@@ -22,25 +22,45 @@ struct IOSVoiceRecordButton: View {
     let accessibilityLabel: String
     let isEnabled: Bool
     let workPhase: VoiceWorkPhase
+    var longPressAction: (() -> Void)? = nil
     let action: () -> Void
 
     var body: some View {
         let activityPhase = IOSVoiceActivityPhase.resolve(workPhase)
 
-        Button(action: action) {
-            IOSVoiceActivityIndicator(phase: activityPhase)
-                .id(activityPhase)
-                .frame(width: 208, height: 208)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityValue(activityPhase.accessibilityValue)
-        .accessibilityHint(
-            accessibilityHint(for: activityPhase)
-        )
+        IOSVoiceActivityIndicator(phase: activityPhase)
+            .id(activityPhase)
+            .frame(width: 208, height: 208)
+            .contentShape(Circle())
+            .gesture(primaryGesture)
+            .allowsHitTesting(isEnabled)
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityValue(activityPhase.accessibilityValue)
+            .accessibilityHint(
+                accessibilityHint(for: activityPhase)
+            )
+            .accessibilityAction {
+                guard isEnabled else { return }
+                action()
+            }
+    }
+
+    private var primaryGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.6)
+            .exclusively(before: TapGesture())
+            .onEnded { result in
+                guard isEnabled else { return }
+                switch result {
+                case .first(true):
+                    longPressAction?()
+                case .first(false):
+                    break
+                case .second:
+                    action()
+                }
+            }
     }
 
     private func accessibilityHint(

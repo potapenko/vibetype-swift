@@ -144,7 +144,10 @@ destination. History remains a separate tab and is not previewed on Voice.
 ## Foreground Voice
 
 - `Start Dictation` records in the foreground containing app.
-- The active recording offers explicit Done and Cancel actions.
+- The active recording offers an explicit Done action. A deliberate long press
+  on the containing app's primary activity reveals a compact cancellation
+  control without reserving space or moving that activity; keyboard Cancel
+  remains an explicit keyboard command.
 - Done stops microphone capture before provider processing continues.
 - A valid completed recording becomes locally recoverable before the first
   provider request.

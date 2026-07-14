@@ -21,6 +21,8 @@ struct IOSVoiceHomeView: View {
     @State private var listeningStartedAt: Date?
     @State private var pendingVoiceCommand:
         IOSForegroundVoiceActionCommand?
+    @State private var revealedCancellationCommand:
+        IOSForegroundVoiceActionCommand?
     @State private var pendingLatestClearCommand:
         IOSForegroundVoiceLatestResultClearCommand?
     @State private var shareItem: IOSVoiceShareItem?
@@ -42,18 +44,23 @@ struct IOSVoiceHomeView: View {
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
-                VStack(spacing: 14) {
+                VStack(spacing: IOSVoiceStagePlacement.contentSpacing) {
                     draftSurface
-                        .frame(minHeight: 250, maxHeight: 340)
-                    if showsInlineVoiceStatus {
-                        voiceStatusSurface
-                    }
-                    Spacer(minLength: 0)
-                    primaryVoiceSurface
-                    Spacer(minLength: 0)
+                        .frame(
+                            minHeight: IOSVoiceStagePlacement.minimumDraftHeight,
+                            maxHeight: IOSVoiceStagePlacement.maximumDraftHeight
+                        )
+                    voiceStage
+                        .frame(
+                            minHeight: IOSVoiceStagePlacement.minimumHeight,
+                            maxHeight: .infinity
+                        )
                 }
                 .frame(
-                    minHeight: max(0, geometry.size.height - 22),
+                    height: max(
+                        IOSVoiceStagePlacement.minimumContentHeight,
+                        geometry.size.height - 22
+                    ),
                     alignment: .top
                 )
                 .padding(.horizontal, 16)
@@ -134,6 +141,7 @@ struct IOSVoiceHomeView: View {
             of: sceneOwner.presentation.phase,
             initial: true
         ) { _, phase in
+            revealedCancellationCommand = nil
             if phase == .listening {
                 listeningStartedAt = listeningStartedAt ?? Date()
             } else {
@@ -155,6 +163,7 @@ struct IOSVoiceHomeView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase != .active else { return }
+            revealedCancellationCommand = nil
             draftEditorIsFocused = false
             if draftOwner.isEditing {
                 finishDraftEditing()
@@ -191,6 +200,10 @@ struct IOSVoiceHomeView: View {
             if let pendingVoiceCommand,
                !commands.contains(pendingVoiceCommand) {
                 self.pendingVoiceCommand = nil
+            }
+            if let revealedCancellationCommand,
+               !commands.contains(revealedCancellationCommand) {
+                self.revealedCancellationCommand = nil
             }
         }
         .onChange(of: latestResultOwner.presentation) { old, new in
@@ -231,6 +244,7 @@ struct IOSVoiceHomeView: View {
             accessibilityAnnouncementTask?.cancel()
             accessibilityAnnouncementTask = nil
             accessibilityAnnouncementCandidate = nil
+            revealedCancellationCommand = nil
         }
         .confirmationDialog(
             "Discard Recording?",
@@ -618,14 +632,49 @@ struct IOSVoiceHomeView: View {
         }
     }
 
+    private var voiceStage: some View {
+        GeometryReader { geometry in
+            let activityCenter = IOSVoiceStagePlacement.activityCenter(
+                in: geometry.size
+            )
+
+            ZStack(alignment: .topLeading) {
+                primaryVoiceSurface
+                    .position(activityCenter)
+
+                if showsInlineVoiceStatus {
+                    voiceStatusSurface
+                        .frame(
+                            width: geometry.size.width,
+                            alignment: .leading
+                        )
+                }
+
+                if let command = currentRevealedCancellationCommand {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            revealedCancellationCommand = nil
+                        }
+
+                    cancellationButton(command)
+                        .position(
+                            IOSVoiceStagePlacement.cancellationCenter(
+                                in: geometry.size
+                            )
+                        )
+                }
+            }
+        }
+        .accessibilityIdentifier("ios.voice.stage")
+    }
+
     private var voiceStatusSurface: some View {
         let status = IOSVoiceHomePresentation.resolve(
             sceneOwner.presentation
         )
         let recoveryCommands = sceneOwner.actionCommands.filter {
-            !isPrimaryVoiceAction($0.action)
-                && $0.action != .startTranslation
-                && $0.action != .startCorrection
+            IOSVoiceHomeActionPlacement.isVisibleStatusAction($0.action)
         }
 
         return VStack(alignment: .leading, spacing: 10) {
@@ -670,17 +719,7 @@ struct IOSVoiceHomeView: View {
                 )
             }
         case .arming:
-            ProgressView()
-                .controlSize(.large)
-                .tint(.accentColor)
-                .frame(width: 96, height: 96)
-                .background(
-                    Color.accentColor.opacity(0.08),
-                    in: Circle()
-                )
-                .accessibilityLabel(status.title)
-                .accessibilityValue(status.detail)
-                .accessibilityIdentifier("ios.voice.primary-progress")
+            voiceArmingIndicator(status: status)
         case .listening:
             if let command {
                 voiceActivityButton(command)
@@ -705,26 +744,68 @@ struct IOSVoiceHomeView: View {
     ) -> some View {
         let presentation = IOSVoiceActionPresentation.resolve(command.action)
 
-        return IOSVoiceRecordButton(
-            accessibilityLabel: presentation.title,
-            isEnabled: true,
-            workPhase: sceneOwner.presentation.phase,
-            action: { performPrimaryVoiceCommand(command) }
-        )
+        return Group {
+            if let cancellationCommand = hiddenCancellationCommand {
+                IOSVoiceRecordButton(
+                    accessibilityLabel: presentation.title,
+                    isEnabled: true,
+                    workPhase: sceneOwner.presentation.phase,
+                    longPressAction: {
+                        revealCancellation(cancellationCommand)
+                    },
+                    action: { performPrimaryVoiceCommand(command) }
+                )
+                .accessibilityHint(
+                    "Tap to finish. Touch and hold to show cancellation."
+                )
+                .accessibilityAction(named: "Cancel Dictation") {
+                    performCancellation(cancellationCommand)
+                }
+            } else {
+                IOSVoiceRecordButton(
+                    accessibilityLabel: presentation.title,
+                    isEnabled: true,
+                    workPhase: sceneOwner.presentation.phase,
+                    action: { performPrimaryVoiceCommand(command) }
+                )
+            }
+        }
         .accessibilityIdentifier("ios.voice.primary-action")
+    }
+
+    private func voiceArmingIndicator(
+        status: IOSVoiceStatusPresentation
+    ) -> some View {
+        let progress = ProgressView()
+            .controlSize(.large)
+            .tint(.accentColor)
+            .frame(width: 96, height: 96)
+            .background(
+                Color.accentColor.opacity(0.08),
+                in: Circle()
+            )
+            .frame(width: 208, height: 208)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(status.title)
+            .accessibilityValue(status.detail)
+            .accessibilityIdentifier("ios.voice.primary-progress")
+
+        return cancelableActivity(progress)
     }
 
     private func voiceActivityIndicator(
         _ phase: IOSVoiceActivityPhase,
         status: IOSVoiceStatusPresentation
     ) -> some View {
-        IOSVoiceActivityIndicator(phase: phase)
+        let indicator = IOSVoiceActivityIndicator(phase: phase)
             .id(phase)
             .frame(width: 208, height: 208)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(status.title)
             .accessibilityValue(status.detail)
             .accessibilityIdentifier("ios.voice.primary-activity")
+
+        return cancelableActivity(indicator)
     }
 
     private var showsInlineVoiceStatus: Bool {
@@ -742,6 +823,92 @@ struct IOSVoiceHomeView: View {
         sceneOwner.actionCommands.first {
             isPrimaryVoiceAction($0.action)
         }
+    }
+
+    private var hiddenCancellationCommand:
+        IOSForegroundVoiceActionCommand? {
+        sceneOwner.actionCommands.first {
+            IOSVoiceHomeActionPlacement.isCancellation($0.action)
+        }
+    }
+
+    private var currentRevealedCancellationCommand:
+        IOSForegroundVoiceActionCommand? {
+        guard let revealedCancellationCommand,
+              sceneOwner.actionCommands.contains(revealedCancellationCommand),
+              IOSVoiceHomeActionPlacement.isCancellation(
+                revealedCancellationCommand.action
+              ) else {
+            return nil
+        }
+        return revealedCancellationCommand
+    }
+
+    @ViewBuilder
+    private func cancelableActivity<Content: View>(
+        _ content: Content
+    ) -> some View {
+        if let command = hiddenCancellationCommand {
+            content
+                .onLongPressGesture(minimumDuration: 0.6) {
+                    revealCancellation(command)
+                }
+                .accessibilityHint(
+                    "Touch and hold to show cancellation."
+                )
+                .accessibilityAction(named: "Cancel Dictation") {
+                    performCancellation(command)
+                }
+        } else {
+            content
+        }
+    }
+
+    private func cancellationButton(
+        _ command: IOSForegroundVoiceActionCommand
+    ) -> some View {
+        Button(role: .destructive) {
+            performCancellation(command)
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background(Color.red, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(.white.opacity(0.72), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Cancel Dictation")
+        .accessibilityHint("Stops and discards the current attempt.")
+        .accessibilityIdentifier("ios.voice.cancel-action")
+    }
+
+    private func revealCancellation(
+        _ command: IOSForegroundVoiceActionCommand
+    ) {
+        guard sceneOwner.actionCommands.contains(command),
+              IOSVoiceHomeActionPlacement.isCancellation(command.action) else {
+            revealedCancellationCommand = nil
+            return
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        revealedCancellationCommand = command
+    }
+
+    private func performCancellation(
+        _ command: IOSForegroundVoiceActionCommand
+    ) {
+        guard sceneOwner.actionCommands.contains(command),
+              IOSVoiceHomeActionPlacement.isCancellation(command.action) else {
+            revealedCancellationCommand = nil
+            return
+        }
+        revealedCancellationCommand = nil
+        _ = sceneOwner.submit(command)
     }
 
     private var primaryVoiceGate: IOSVoicePrimaryGate {
@@ -784,9 +951,7 @@ struct IOSVoiceHomeView: View {
         status: IOSVoiceStatusPresentation
     ) -> some View {
         let recoveryCommands = sceneOwner.actionCommands.filter {
-            !isPrimaryVoiceAction($0.action)
-                && $0.action != .startTranslation
-                && $0.action != .startCorrection
+            IOSVoiceHomeActionPlacement.isVisibleStatusAction($0.action)
         }
 
         return VStack(spacing: 14) {
@@ -1398,6 +1563,24 @@ struct IOSVoiceHomeView: View {
     private func dismissVisibleVoiceConsent() {
         guard let prompt = visibleVoiceConsentPrompt else { return }
         consentOwner.dismissVoicePrompt(prompt.id, from: sceneOwner)
+    }
+}
+
+struct IOSVoiceStagePlacement {
+    static let minimumHeight: CGFloat = 300
+    static let minimumDraftHeight: CGFloat = 250
+    static let maximumDraftHeight: CGFloat = 340
+    static let contentSpacing: CGFloat = 14
+    static let minimumContentHeight =
+        minimumDraftHeight + contentSpacing + minimumHeight
+
+    static func activityCenter(in size: CGSize) -> CGPoint {
+        CGPoint(x: size.width / 2, y: size.height / 2)
+    }
+
+    static func cancellationCenter(in size: CGSize) -> CGPoint {
+        let center = activityCenter(in: size)
+        return CGPoint(x: center.x + 78, y: center.y + 78)
     }
 }
 

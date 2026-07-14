@@ -82,16 +82,24 @@ without opening the custom keyboard.
 - Ready shows the complete cyan recording artwork as a static, full-color Start
   Dictation control. iOS does not invent a grey idle phase because the macOS
   floating indicator has only recording and transcribing phases.
-- Listening uses the same primary location for Done, shows elapsed time plus a
-  separate Cancel action, and switches the control to the cyan recording
-  phase: two rotating orbit lines, an orbiting point, and a subtle pulse.
+- Listening uses the same primary location for Done and switches the control
+  to the cyan recording phase: two rotating orbit lines, an orbiting point,
+  and a subtle pulse. Voice never reserves layout space for a separate Cancel
+  action. A deliberate long press on the primary activity reveals one compact
+  cancellation icon over the activity without moving it; activating that icon
+  cancels the currently admitted Start, recording, or processing command.
 - Finalizing and provider processing switch the unavailable primary control to
   the purple recognition phase: a rotating particle ring and slower subtle
   pulse. The status row continues to distinguish local finalization,
   transcription, refinement, and result saving in text.
 - Arming replaces the primary control with a native progress state while the
-  status row shows exact progress. Cancel appears only when the controller
-  admits it.
+  status row shows exact progress. Its admitted cancellation uses the same
+  long-press affordance and never appears in the ordinary action layout.
+- In Ready, Arming, Listening, Finalizing, and Processing, the primary activity
+  occupies one stable envelope whose center is exactly half the width and half
+  the height of the flexible Voice area below the Draft. Status copy and the
+  temporary cancellation overlay do not participate in that position's layout,
+  so changing phase or status length never moves the activity.
 - After activating the audio session, Voice freezes and validates the exact
   microphone input before it observes route changes or plays the start cue.
   An output-only route notification during Arming revalidates that frozen
