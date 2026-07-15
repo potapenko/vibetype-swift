@@ -44,6 +44,8 @@ final class BrandStageKeyboardView: UIView {
     private let commandStack = UIStackView()
     private let quickInsertButton = UIButton(type: .system)
     private let autoButton = UIButton(type: .system)
+    private let automaticModesDismissControl = UIControl()
+    private let automaticModesPanel = KeyboardAutomaticModesPanelView()
     private let topLeadingContainer = UIView()
     private let latestButton = UIButton(type: .system)
     private let logoImageView = UIImageView()
@@ -80,6 +82,7 @@ final class BrandStageKeyboardView: UIView {
     private var renderedVoiceStage: KeyboardVoiceStagePresentation = .ready
     private var renderedAutomaticVoiceAction: KeyboardVoiceAction = .standard
     private var quickInsertIsPresented = false
+    private var automaticModesArePresented = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -129,6 +132,7 @@ final class BrandStageKeyboardView: UIView {
         renderedAutomaticVoiceAction = presentation.automaticVoiceAction
         if presentation.voiceStage.keepsVoiceWorkspaceVisible {
             quickInsertIsPresented = false
+            automaticModesArePresented = false
         }
         quickInsertButton.isEnabled = !presentation.voiceStage
             .keepsVoiceWorkspaceVisible
@@ -156,6 +160,7 @@ final class BrandStageKeyboardView: UIView {
         updateWorkspaceVisibility()
         updateQuickInsertButtonPresentation()
         updateAutoButtonPresentation()
+        updateAutomaticModesVisibility()
     }
 
     private func renderVoiceStage(
@@ -361,6 +366,7 @@ final class BrandStageKeyboardView: UIView {
 
         rootStack.addArrangedSubview(topRail)
         rootStack.addArrangedSubview(bodyStack)
+        configureAutomaticModesOverlay()
 
         let height = heightAnchor.constraint(equalToConstant: 302)
         height.priority = UILayoutPriority(999)
@@ -445,7 +451,11 @@ final class BrandStageKeyboardView: UIView {
         var autoConfiguration = autoButton.configuration
         autoConfiguration?.imagePlacement = .trailing
         autoButton.configuration = autoConfiguration
-        autoButton.showsMenuAsPrimaryAction = true
+        autoButton.setContentCompressionResistancePriority(
+            .required,
+            for: .horizontal
+        )
+        autoButton.setContentHuggingPriority(.required, for: .horizontal)
         autoButton.accessibilityIdentifier = "keyboard.brand-stage.auto"
 
         configureTopAction(
@@ -504,7 +514,8 @@ final class BrandStageKeyboardView: UIView {
             ),
             utilityStack.heightAnchor.constraint(equalToConstant: 44),
             quickInsertButton.widthAnchor.constraint(equalToConstant: 44),
-            autoButton.widthAnchor.constraint(equalToConstant: 92),
+            autoButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 92),
+            autoButton.heightAnchor.constraint(equalToConstant: 44),
         ])
 
         let rail = UIView()
@@ -525,9 +536,6 @@ final class BrandStageKeyboardView: UIView {
         NSLayoutConstraint.activate([
             topLeadingContainer.leadingAnchor.constraint(
                 equalTo: rail.leadingAnchor
-            ),
-            topLeadingContainer.widthAnchor.constraint(
-                equalToConstant: 140
             ),
             topLeadingContainer.centerYAnchor.constraint(
                 equalTo: rail.centerYAnchor
@@ -550,6 +558,70 @@ final class BrandStageKeyboardView: UIView {
             rail.heightAnchor.constraint(greaterThanOrEqualToConstant: 48),
         ])
         return rail
+    }
+
+    private func configureAutomaticModesOverlay() {
+        automaticModesDismissControl.translatesAutoresizingMaskIntoConstraints =
+            false
+        automaticModesDismissControl.isAccessibilityElement = false
+        automaticModesDismissControl.accessibilityIdentifier =
+            "keyboard.brand-stage.auto-modes-dismiss"
+        automaticModesDismissControl.isHidden = true
+        automaticModesPanel.isHidden = true
+
+        addSubview(automaticModesDismissControl)
+        addSubview(automaticModesPanel)
+
+        let preferredPanelWidth = automaticModesPanel.widthAnchor.constraint(
+            equalToConstant: 280
+        )
+        preferredPanelWidth.priority = UILayoutPriority(999)
+        let followsAutoLeading = automaticModesPanel.leadingAnchor.constraint(
+            equalTo: autoButton.leadingAnchor
+        )
+        followsAutoLeading.priority = UILayoutPriority(999)
+        let preferredPanelHeight = automaticModesPanel.heightAnchor.constraint(
+            equalToConstant: 117
+        )
+        preferredPanelHeight.priority = UILayoutPriority(999)
+        let followsAutoBottom = automaticModesPanel.topAnchor.constraint(
+            equalTo: autoButton.bottomAnchor,
+            constant: 6
+        )
+        followsAutoBottom.priority = UILayoutPriority(999)
+        NSLayoutConstraint.activate([
+            automaticModesDismissControl.leadingAnchor.constraint(
+                equalTo: leadingAnchor
+            ),
+            automaticModesDismissControl.trailingAnchor.constraint(
+                equalTo: trailingAnchor
+            ),
+            automaticModesDismissControl.topAnchor.constraint(equalTo: topAnchor),
+            automaticModesDismissControl.bottomAnchor.constraint(
+                equalTo: bottomAnchor
+            ),
+            automaticModesPanel.leadingAnchor.constraint(
+                greaterThanOrEqualTo: safeAreaLayoutGuide.leadingAnchor,
+                constant: 16
+            ),
+            automaticModesPanel.trailingAnchor.constraint(
+                lessThanOrEqualTo: safeAreaLayoutGuide.trailingAnchor,
+                constant: -16
+            ),
+            automaticModesPanel.bottomAnchor.constraint(
+                lessThanOrEqualTo: bottomAnchor
+            ),
+            automaticModesPanel.widthAnchor.constraint(
+                lessThanOrEqualToConstant: 280
+            ),
+            automaticModesPanel.heightAnchor.constraint(
+                greaterThanOrEqualToConstant: 117
+            ),
+            preferredPanelWidth,
+            preferredPanelHeight,
+            followsAutoLeading,
+            followsAutoBottom,
+        ])
     }
 
     private func configureVoiceStage() {
@@ -818,6 +890,25 @@ final class BrandStageKeyboardView: UIView {
             action: #selector(quickInsertToggled),
             for: .touchUpInside
         )
+        autoButton.addTarget(
+            self,
+            action: #selector(autoToggled),
+            for: .touchUpInside
+        )
+        automaticModesDismissControl.addTarget(
+            self,
+            action: #selector(automaticModesDismissed),
+            for: .touchUpInside
+        )
+        automaticModesPanel.onTranslationToggleRequested = { [weak self] in
+            self?.toggleAutomaticTranslation()
+        }
+        automaticModesPanel.onCorrectionToggleRequested = { [weak self] in
+            self?.toggleAutomaticCorrection()
+        }
+        automaticModesPanel.onDismissRequested = { [weak self] in
+            self?.dismissAutomaticModesPanel()
+        }
         latestButton.addTarget(
             self,
             action: #selector(latestTapped),
@@ -1052,6 +1143,7 @@ final class BrandStageKeyboardView: UIView {
 
     @objc private func quickInsertToggled() {
         guard quickInsertButton.isEnabled else { return }
+        dismissAutomaticModesPanel(restoreAccessibilityFocus: false)
         quickInsertIsPresented.toggle()
         updateWorkspaceVisibility()
         updateQuickInsertButtonPresentation()
@@ -1069,6 +1161,7 @@ final class BrandStageKeyboardView: UIView {
         onAutomaticVoiceActionChanged?(
             renderedAutomaticVoiceAction.togglingTranslation()
         )
+        automaticModesPanel.render(renderedAutomaticVoiceAction)
     }
 
     func toggleAutomaticCorrection() {
@@ -1077,6 +1170,47 @@ final class BrandStageKeyboardView: UIView {
         onAutomaticVoiceActionChanged?(
             renderedAutomaticVoiceAction.togglingCorrection()
         )
+        automaticModesPanel.render(renderedAutomaticVoiceAction)
+    }
+
+    @objc private func autoToggled() {
+        guard autoButton.isEnabled else { return }
+        if automaticModesArePresented {
+            dismissAutomaticModesPanel()
+        } else {
+            closeQuickInsert()
+            automaticModesArePresented = true
+            updateAutomaticModesVisibility()
+            UIAccessibility.post(
+                notification: .screenChanged,
+                argument: automaticModesPanel.firstAccessibilityTarget
+            )
+        }
+    }
+
+    @objc private func automaticModesDismissed() {
+        dismissAutomaticModesPanel()
+    }
+
+    private func dismissAutomaticModesPanel(
+        restoreAccessibilityFocus: Bool = true
+    ) {
+        guard automaticModesArePresented else { return }
+        automaticModesArePresented = false
+        updateAutomaticModesVisibility()
+        if restoreAccessibilityFocus {
+            UIAccessibility.post(
+                notification: .layoutChanged,
+                argument: autoButton
+            )
+        }
+    }
+
+    private func updateAutomaticModesVisibility() {
+        automaticModesDismissControl.isHidden = !automaticModesArePresented
+        automaticModesPanel.isHidden = !automaticModesArePresented
+        automaticModesPanel.accessibilityElementsHidden =
+            !automaticModesArePresented
     }
 
     private func handleQuickInsertSelection(_ text: String) {
@@ -1126,22 +1260,7 @@ final class BrandStageKeyboardView: UIView {
             : "Auto \(selectedCount)"
         autoButton.configuration = configuration
         autoButton.accessibilityValue = automaticVoiceActionAccessibilityValue
-        autoButton.menu = UIMenu(children: [
-            UIAction(
-                title: "Auto-Translate",
-                image: UIImage(systemName: "character.bubble"),
-                state: renderedAutomaticVoiceAction.translates ? .on : .off
-            ) { [weak self] _ in
-                self?.toggleAutomaticTranslation()
-            },
-            UIAction(
-                title: "Auto-Correct",
-                image: UIImage(systemName: "wand.and.stars"),
-                state: renderedAutomaticVoiceAction.corrects ? .on : .off
-            ) { [weak self] _ in
-                self?.toggleAutomaticCorrection()
-            },
-        ])
+        automaticModesPanel.render(renderedAutomaticVoiceAction)
     }
 
     private var automaticVoiceActionAccessibilityValue: String {

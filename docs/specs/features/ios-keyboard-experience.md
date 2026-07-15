@@ -143,17 +143,22 @@ number deck, Shift, Caps Lock, `123`, prediction row, or manual Refresh.
 ## Automatic Voice Modes
 
 - One compact labeled `Auto` button replaces the separate Translate and Improve
-  icons beside Quick Insert. It opens a native text menu containing independent
-  `Auto-Translate` and `Auto-Correct` checkmarked actions. The closed button
-  uses a downward chevron matching the menu direction and shows how many of the
-  two modes are selected.
-- The menu contains no Append action. Keyboard results always preserve existing
-  host text and insert once at the current insertion point through
-  `UITextDocumentProxy`.
+  icons beside Quick Insert. It opens a compact popover matching the containing
+  app's Voice control, with independent native switches labeled `Translate
+  Result` and `Correct Result`. The closed button keeps the keyboard's existing
+  key treatment, uses a downward chevron matching the popover direction, and
+  shows how many of the two modes are selected.
+- The closed button has a minimum width and expands to fit its current title,
+  chevron, content insets, and supported Dynamic Type size without clipping or
+  shrinking its contents. The popover contains no Clear Draft or Append action.
+  Keyboard results always preserve existing host text and insert once at the
+  current insertion point through `UITextDocumentProxy`.
 - Selecting a mode never starts dictation. The centered microphone remains the
   only Start action and uses the currently selected modes for the next request.
-  Changing a mode closes Quick Insert if necessary and returns to the Voice
-  workspace.
+  Changing a valid mode keeps the popover open so the user can change both modes
+  in one visit. Opening the popover closes Quick Insert if necessary and returns
+  to the Voice workspace. The popover closes on a second `Auto` tap, an outside
+  tap, opening Quick Insert, or entry into Starting, Listening, or Processing.
 - Auto Translate uses the saved Translation route. If that route is incomplete,
   selecting Auto Translate leaves it off and opens the containing app at the
   exact owning Translation input with inline guidance.

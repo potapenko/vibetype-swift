@@ -100,11 +100,15 @@ struct BrandStageKeyboardViewTests {
             ) == true
         )
         #expect(auto.accessibilityValue == "Off")
-        #expect(auto.showsMenuAsPrimaryAction)
-        #expect(auto.menu?.children.map(\.title) == [
-            "Auto-Translate",
-            "Auto-Correct",
-        ])
+        #expect(!auto.showsMenuAsPrimaryAction)
+        #expect(auto.menu == nil)
+        let automaticModesPanel = try #require(
+            view.descendant(
+                UIView.self,
+                identifier: "keyboard.brand-stage.auto-modes"
+            )
+        )
+        #expect(isEffectivelyHidden(automaticModesPanel))
         #expect(
             view.descendant(
                 UIButton.self,
@@ -295,6 +299,162 @@ struct BrandStageKeyboardViewTests {
                 !(try button("keyboard.brand-stage.auto", in: view)).isEnabled
             )
         }
+    }
+
+    @Test func autoPanelUsesPersistentVoiceStyleSwitchRows() throws {
+        let view = makeView(width: 393)
+        var automaticVoiceActions: [KeyboardVoiceAction] = []
+        view.onAutomaticVoiceActionChanged = {
+            automaticVoiceActions.append($0)
+        }
+        view.render(presentation())
+        layout(view)
+
+        let auto = try button("keyboard.brand-stage.auto", in: view)
+        let panel = try #require(
+            view.descendant(
+                UIView.self,
+                identifier: "keyboard.brand-stage.auto-modes"
+            )
+        )
+        let translateSwitch = try switchControl(
+            "keyboard.brand-stage.auto-mode.translate",
+            in: view
+        )
+        let correctSwitch = try switchControl(
+            "keyboard.brand-stage.auto-mode.correct",
+            in: view
+        )
+        let translateTitle = try #require(
+            view.descendant(
+                UILabel.self,
+                identifier: "keyboard.brand-stage.auto-mode-title.translate"
+            )
+        )
+        let correctTitle = try #require(
+            view.descendant(
+                UILabel.self,
+                identifier: "keyboard.brand-stage.auto-mode-title.correct"
+            )
+        )
+
+        #expect(isEffectivelyHidden(panel))
+        auto.sendActions(for: .touchUpInside)
+        layout(view)
+
+        #expect(!isEffectivelyHidden(panel))
+        #expect(panel.bounds.width >= 279.9)
+        #expect(panel.bounds.height >= 116.9)
+        #expect(translateTitle.text == "Translate Result")
+        #expect(correctTitle.text == "Correct Result")
+        #expect(translateSwitch.accessibilityLabel == "Auto Translate")
+        #expect(correctSwitch.accessibilityLabel == "Auto Correct")
+        #expect(!translateSwitch.isOn)
+        #expect(!correctSwitch.isOn)
+
+        translateSwitch.setOn(true, animated: false)
+        translateSwitch.sendActions(for: .valueChanged)
+        #expect(automaticVoiceActions == [.translate])
+        #expect(!isEffectivelyHidden(panel))
+
+        view.render(presentation(automaticVoiceAction: .translate))
+        layout(view)
+        #expect(translateSwitch.isOn)
+        #expect(!correctSwitch.isOn)
+        #expect(!isEffectivelyHidden(panel))
+
+        correctSwitch.setOn(true, animated: false)
+        correctSwitch.sendActions(for: .valueChanged)
+        #expect(automaticVoiceActions == [.translate, .translateAndImprove])
+        #expect(!isEffectivelyHidden(panel))
+
+        view.render(
+            presentation(automaticVoiceAction: .translateAndImprove)
+        )
+        layout(view)
+        #expect(translateSwitch.isOn)
+        #expect(correctSwitch.isOn)
+        #expect(!isEffectivelyHidden(panel))
+
+        auto.sendActions(for: .touchUpInside)
+        layout(view)
+        #expect(isEffectivelyHidden(panel))
+    }
+
+    @Test func autoTriggerKeepsAMinimumWidthAndExpandsBeforeClipping()
+        throws {
+        let view = makeView(width: 393)
+        view.render(presentation())
+        layout(view)
+
+        let auto = try button("keyboard.brand-stage.auto", in: view)
+        #expect(auto.bounds.width >= 91.9)
+        assertFullTopActionTitle(auto)
+
+        view.traitOverrides.preferredContentSizeCategory =
+            .accessibilityExtraExtraExtraLarge
+        view.render(
+            presentation(automaticVoiceAction: .translateAndImprove)
+        )
+        layout(view)
+
+        #expect(auto.bounds.width >= 91.9)
+        #expect(auto.bounds.width + 0.5 >= auto.intrinsicContentSize.width)
+        assertFullTopActionTitle(auto)
+        #expect(auto.configuration?.title == "Auto 2")
+    }
+
+    @Test func autoPanelClosesForQuickInsertAndActiveVoice() throws {
+        let view = makeView(width: 393)
+        view.render(presentation())
+        layout(view)
+
+        let auto = try button("keyboard.brand-stage.auto", in: view)
+        let quickInsert = try button(
+            "keyboard.brand-stage.quick-insert-toggle",
+            in: view
+        )
+        let panel = try #require(
+            view.descendant(
+                UIView.self,
+                identifier: "keyboard.brand-stage.auto-modes"
+            )
+        )
+        let outsideDismissControl = try #require(
+            view.descendant(
+                UIControl.self,
+                identifier: "keyboard.brand-stage.auto-modes-dismiss"
+            )
+        )
+
+        auto.sendActions(for: .touchUpInside)
+        layout(view)
+        #expect(!isEffectivelyHidden(panel))
+
+        outsideDismissControl.sendActions(for: .touchUpInside)
+        layout(view)
+        #expect(isEffectivelyHidden(panel))
+
+        auto.sendActions(for: .touchUpInside)
+        quickInsert.sendActions(for: .touchUpInside)
+        layout(view)
+        #expect(isEffectivelyHidden(panel))
+
+        quickInsert.sendActions(for: .touchUpInside)
+        auto.sendActions(for: .touchUpInside)
+        layout(view)
+        #expect(!isEffectivelyHidden(panel))
+
+        view.render(
+            presentation(
+                status: .listening,
+                voiceStage: .listening,
+                cancelIsVisible: true
+            )
+        )
+        layout(view)
+        #expect(isEffectivelyHidden(panel))
+        #expect(!auto.isEnabled)
     }
 
     @Test func narrowPhoneKeepsEveryEditingControlAtLeast44PointsWide()
@@ -840,6 +1000,15 @@ struct BrandStageKeyboardViewTests {
     ) throws -> UIButton {
         try #require(
             view.descendant(UIButton.self, identifier: identifier)
+        )
+    }
+
+    private func switchControl(
+        _ identifier: String,
+        in view: UIView
+    ) throws -> UISwitch {
+        try #require(
+            view.descendant(UISwitch.self, identifier: identifier)
         )
     }
 
