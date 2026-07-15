@@ -224,8 +224,9 @@ sheet itself contains no setup logic, recorder ownership, or provider code.
 - Execute slices in order.
 - KBD-FLOW-1 is the first implementation slice and builds the isolated sheet
   before any keyboard launch behavior.
-- Stop after KBD-FLOW-1 and present visual evidence for user confirmation before
-  wiring the production handoff.
+- Continue from one completed slice to the next without an inter-stage approval
+  gate. Every slice remains independently reviewable and reversible through its
+  scoped checkpoint commit.
 - Do not run overlapping implementation work against the same keyboard, Voice,
   bridge, project, or spec files.
 - Read `AGENTS.md`, `docs/agent-onboarding.md`, `SWIFT.md`, this plan, and only
@@ -246,7 +247,7 @@ sheet itself contains no setup logic, recorder ownership, or provider code.
 | ID | Scope | Exit condition | Status |
 | --- | --- | --- | --- |
 | KBD-FLOW-0 | Durable strategy and execution plan | This checkout contains the approved plan and launch contract | Completed when this plan is checkpointed |
-| KBD-FLOW-1 | Isolated Keyboard Handoff Sheet | Sheet states, cancel behavior, accessibility, and visual evidence pass without production routing changes | Completed 2026-07-15; awaiting user confirmation before KBD-FLOW-2 |
+| KBD-FLOW-1 | Isolated Keyboard Handoff Sheet | Sheet states, cancel behavior, accessibility, and visual evidence pass without production routing changes | Completed 2026-07-15 |
 | KBD-FLOW-2 | Keyboard launch intent and app URL route | Missing session writes a bounded intent and opens only a matching HoldType route; warm path stays direct | Pending |
 | KBD-FLOW-3 | Shared Voice preflight and targeted setup recovery | Every setup blocker routes to its exact owner; no blocker presents Listening or the sheet | Pending |
 | KBD-FLOW-4 | Automatic app-owned capture and live sheet | A valid cold request starts real capture once and presents the sheet as Starting then Listening | Pending |
@@ -267,7 +268,7 @@ sheet itself contains no setup logic, recorder ownership, or provider code.
    production launch path.
 6. Cover Light/Dark, compact/regular width, Dynamic Type, VoiceOver, and Reduce
    Motion.
-7. Capture visual evidence and stop for user review.
+7. Capture visual evidence and complete the scoped checkpoint.
 
 ### Non-Goals
 
@@ -469,6 +470,7 @@ The feature is complete only when:
 ## Goal Launch Contract
 
 When the user authorizes goal execution, the goal must treat this file as the
-source of truth, execute KBD-FLOW slices in order, and begin with KBD-FLOW-1
-only. After the KBD-FLOW-1 checkpoint it must present visual evidence and wait
-for user confirmation before wiring KBD-FLOW-2.
+source of truth and execute KBD-FLOW slices in order. Each completed slice must
+end in focused verification and its own scoped checkpoint commit. The goal then
+continues automatically to the next slice unless the user explicitly pauses,
+changes, or stops the work.
