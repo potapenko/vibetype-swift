@@ -196,11 +196,14 @@ destination. History remains a separate tab and is not previewed on Voice.
 - Only one recording or provider chain may be active or pending.
 - Provider stages have explicit timeouts and real cancellation.
 - Standard dictation is always the primary action. Append, Auto Translate, and
-  Auto Correction are session-only icon toggles in the settings row below the
-  Voice Draft editor. The existing one-shot Translate and Correction actions,
-  plus Undo, Redo, Copy, and Clear, stay in the action row above it. All three
-  settings start off on cold launch, remain selected for subsequent
-  containing-app attempts until turned off, and never rewrite durable Settings.
+  Auto Correction are session-only labeled toggles below the Voice Draft
+  editor. The controls are labeled `Auto-Append`, `Auto-Translate`, and
+  `Auto-Correct` without a group heading or explanatory copy. Their selected
+  state uses an accent treatment plus a checkmark rather than color alone. The
+  existing one-shot Translate and Correction actions, plus Undo, Redo, Copy,
+  and Clear, stay in the action row above it. All three settings start off on
+  cold launch, remain selected for subsequent containing-app attempts until
+  turned off, and never rewrite durable Settings.
   If Auto Translate's saved route is incomplete, its control remains tappable
   and opens the exact owning Translation input with inline guidance. Auto
   Correction forces the saved correction configuration for the selected

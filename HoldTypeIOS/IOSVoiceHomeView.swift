@@ -666,9 +666,10 @@ struct IOSVoiceHomeView: View {
     }
 
     private var voiceSessionModeBar: some View {
-        HStack(spacing: 4) {
+        HStack(alignment: .top, spacing: 8) {
             voiceSessionModeButton(
-                title: "Append",
+                title: "Auto-Append",
+                identifier: "append",
                 systemImage: "text.badge.plus",
                 isSelected: sessionModes.appendsToDraft,
                 isEnabled: voiceSessionModesAreEnabled
@@ -676,7 +677,8 @@ struct IOSVoiceHomeView: View {
                 sessionModes.appendsToDraft.toggle()
             }
             voiceSessionModeButton(
-                title: "Translate",
+                title: "Auto-Translate",
+                identifier: "translate",
                 systemImage: "character.bubble",
                 isSelected: sessionModes.translates,
                 isEnabled: voiceSessionModesAreEnabled
@@ -688,41 +690,73 @@ struct IOSVoiceHomeView: View {
                 }
             }
             voiceSessionModeButton(
-                title: "Correct",
+                title: "Auto-Correct",
+                identifier: "correct",
                 systemImage: "wand.and.stars",
                 isSelected: sessionModes.corrects,
                 isEnabled: voiceSessionModesAreEnabled
             ) {
                 sessionModes.corrects.toggle()
             }
-            Spacer(minLength: 0)
         }
         .accessibilityIdentifier("ios.voice.session-modes")
     }
 
     private func voiceSessionModeButton(
         title: String,
+        identifier: String,
         systemImage: String,
         isSelected: Bool,
         isEnabled: Bool,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .medium))
-                .frame(width: 44, height: 44)
-                .foregroundStyle(
-                    isSelected ? Color.accentColor : Color.secondary
+            VStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 18, weight: .medium))
+                    .frame(height: 20)
+                    .overlay(alignment: .topTrailing) {
+                        if isSelected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                                .symbolRenderingMode(.hierarchical)
+                                .offset(x: 12, y: -6)
+                        }
+                    }
+
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 6)
+            .foregroundStyle(
+                isSelected ? Color.accentColor : Color.secondary
+            )
+            .background(
+                isSelected
+                    ? Color.accentColor.opacity(0.14)
+                    : Color(uiColor: .tertiarySystemFill),
+                in: RoundedRectangle(
+                    cornerRadius: 12,
+                    style: .continuous
                 )
-                .background(
-                    isSelected
-                        ? Color.accentColor.opacity(0.14)
-                        : Color.clear,
-                    in: RoundedRectangle(
-                        cornerRadius: 10,
-                        style: .continuous
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(
+                        isSelected
+                            ? Color.accentColor.opacity(0.4)
+                            : Color.secondary.opacity(0.18),
+                        lineWidth: 1
                     )
-                )
+            }
+            .contentShape(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
@@ -731,7 +765,7 @@ struct IOSVoiceHomeView: View {
         .accessibilityValue(isSelected ? "On" : "Off")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier(
-            "ios.voice.mode.\(title.lowercased())"
+            "ios.voice.mode.\(identifier)"
         )
     }
 

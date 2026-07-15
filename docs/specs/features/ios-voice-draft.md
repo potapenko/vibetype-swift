@@ -183,10 +183,14 @@ without opening the custom keyboard.
 
 ## Voice Session Modes
 
-- Append, Auto Translate, and Auto Correction are compact icon-only toggles
-  below the text editor. A divider separates this settings row from the editable
-  text. Each control has a minimum 44-point target, a visible selected state,
-  and an accessibility label.
+- Append, Auto Translate, and Auto Correction are compact labeled toggles below
+  the text editor. Their visible labels are `Auto-Append`, `Auto-Translate`, and
+  `Auto-Correct`; the row adds no heading or explanatory copy. A divider
+  separates these controls from the editable text. Each control has a minimum
+  44-point target and keeps its label readable as the layout adapts. Off uses a
+  neutral treatment. On uses an accent treatment plus a checkmark so state does
+  not depend on color alone. Accessibility exposes the same label and an
+  explicit On or Off value.
 - All three modes start off on cold launch. They remain selected for subsequent
   containing-app Voice attempts in the current process until the user turns
   them off. They do not rewrite durable Settings.
