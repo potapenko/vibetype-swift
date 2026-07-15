@@ -49,10 +49,6 @@ private struct IOSRegisteredContainingAppSceneHost: View {
     var body: some View {
         HoldTypeIOSRootView(
             composition: composition,
-            keyboardHandoffPreflight: { intent in
-                voiceSceneOwner.registerOrUpdateActivity(.active)
-                return await voiceSceneOwner.preflightKeyboardHandoff(intent)
-            },
             keyboardHandoffPresentationOwner:
                 keyboardHandoffPresentationOwner
         )
@@ -77,10 +73,6 @@ private struct IOSRegisteredContainingAppSceneHost: View {
 private extension HoldTypeIOSRootView {
     init(
         composition: IOSContainingAppComposition,
-        keyboardHandoffPreflight:
-            (@MainActor @Sendable (
-                KeyboardHandoffIntentRecord
-            ) async -> IOSKeyboardHandoffPreflightResult)? = nil,
         keyboardHandoffPresentationOwner:
             IOSKeyboardHandoffPresentationOwner? = nil
     ) {
@@ -102,7 +94,6 @@ private extension HoldTypeIOSRootView {
                 composition.historyPlaybackActions,
             recordingCacheLifecycleActions:
                 composition.recordingCacheLifecycleActions,
-            keyboardHandoffPreflight: keyboardHandoffPreflight,
             keyboardHandoffPresentationOwner:
                 keyboardHandoffPresentationOwner
         )

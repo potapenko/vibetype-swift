@@ -1,36 +1,12 @@
 import SwiftUI
 import UIKit
 
-enum IOSKeyboardHandoffPreflightSceneDecision: Equatable, Sendable {
+enum IOSKeyboardHandoffSceneDecision: Equatable, Sendable {
     case waitForActiveScene
     case start
 
     static func resolve(_ activity: IOSVoiceSceneActivity) -> Self {
         activity == .active ? .start : .waitForActiveScene
-    }
-}
-
-enum IOSKeyboardHandoffPreflightNavigationDecision: Equatable, Sendable {
-    case stayOnVoice
-    case settings(IOSSettingsAttention)
-    case unavailable
-
-    static func resolve(
-        _ result: IOSKeyboardHandoffPreflightResult
-    ) -> Self {
-        switch result {
-        case .ready:
-            .stayOnVoice
-        case .needsSetup(let destination, let failure):
-            .settings(
-                IOSSettingsAttention.voiceRecovery(
-                    for: destination,
-                    failure: failure
-                )
-            )
-        case .unavailable:
-            .unavailable
-        }
     }
 }
 
@@ -55,7 +31,7 @@ struct IOSContainingAppShell: View {
     @State private var acceptedKeyboardHandoffIntent:
         KeyboardHandoffIntentRecord?
     @State private var activeKeyboardHandoffRequestID: UUID?
-    @State private var preflightingKeyboardHandoffRequestID: UUID?
+    @State private var startingKeyboardHandoffRequestID: UUID?
     @State private var showsEditorDiscardConfirmation = false
     @State private var showsEditorOperationAlert = false
 
@@ -66,10 +42,6 @@ struct IOSContainingAppShell: View {
         IOSRecordingCacheLifecycleActions?
     let layout: IOSContainingAppShellLayout
     let launchRouter: IOSKeyboardHandoffLaunchRouter
-    let keyboardHandoffPreflight:
-        (@MainActor @Sendable (
-            KeyboardHandoffIntentRecord
-        ) async -> IOSKeyboardHandoffPreflightResult)?
     let keyboardHandoffPresentationOwner:
         IOSKeyboardHandoffPresentationOwner?
     let keyboardHandoffNow: @Sendable () -> Date
@@ -82,10 +54,6 @@ struct IOSContainingAppShell: View {
             IOSRecordingCacheLifecycleActions? = nil,
         layout: IOSContainingAppShellLayout = .current,
         launchRouter: IOSKeyboardHandoffLaunchRouter = .live,
-        keyboardHandoffPreflight:
-            (@MainActor @Sendable (
-                KeyboardHandoffIntentRecord
-            ) async -> IOSKeyboardHandoffPreflightResult)? = nil,
         keyboardHandoffPresentationOwner:
             IOSKeyboardHandoffPresentationOwner? = nil,
         keyboardHandoffNow: @escaping @Sendable () -> Date = { Date() }
@@ -98,7 +66,6 @@ struct IOSContainingAppShell: View {
             recordingCacheLifecycleActions
         self.layout = layout
         self.launchRouter = launchRouter
-        self.keyboardHandoffPreflight = keyboardHandoffPreflight
         self.keyboardHandoffPresentationOwner =
             keyboardHandoffPresentationOwner
         self.keyboardHandoffNow = keyboardHandoffNow
@@ -183,15 +150,15 @@ struct IOSContainingAppShell: View {
               activeKeyboardHandoffRequestID == intent.requestID else {
             return
         }
-        guard IOSKeyboardHandoffPreflightSceneDecision.resolve(
+        guard IOSKeyboardHandoffSceneDecision.resolve(
             IOSVoiceSceneActivity(scenePhase)
         ) == .start else {
             return
         }
-        guard preflightingKeyboardHandoffRequestID != intent.requestID else {
+        guard startingKeyboardHandoffRequestID != intent.requestID else {
             return
         }
-        guard let keyboardHandoffPreflight else {
+        guard let keyboardHandoffPresentationOwner else {
             clearAcceptedKeyboardHandoff(intent.requestID)
             return
         }
@@ -199,25 +166,14 @@ struct IOSContainingAppShell: View {
             clearAcceptedKeyboardHandoff(intent.requestID)
             return
         }
-        preflightingKeyboardHandoffRequestID = intent.requestID
+        startingKeyboardHandoffRequestID = intent.requestID
         Task { @MainActor in
-            let result = await keyboardHandoffPreflight(intent)
             guard activeKeyboardHandoffRequestID == intent.requestID else {
                 return
             }
             clearAcceptedKeyboardHandoff(intent.requestID)
             guard intent.expiresAt > keyboardHandoffNow() else { return }
-
-            switch IOSKeyboardHandoffPreflightNavigationDecision.resolve(
-                result
-            ) {
-            case .stayOnVoice:
-                await keyboardHandoffPresentationOwner?.start(intent)
-            case .unavailable:
-                break
-            case .settings(let attention):
-                openSettings(.attention(attention))
-            }
+            await keyboardHandoffPresentationOwner.start(intent)
         }
     }
 
@@ -225,8 +181,8 @@ struct IOSContainingAppShell: View {
         guard activeKeyboardHandoffRequestID == requestID else { return }
         acceptedKeyboardHandoffIntent = nil
         activeKeyboardHandoffRequestID = nil
-        if preflightingKeyboardHandoffRequestID == requestID {
-            preflightingKeyboardHandoffRequestID = nil
+        if startingKeyboardHandoffRequestID == requestID {
+            startingKeyboardHandoffRequestID = nil
         }
     }
 

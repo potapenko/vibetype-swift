@@ -1,6 +1,4 @@
 import Foundation
-import HoldTypeDomain
-import HoldTypePersistence
 import Testing
 import UIKit
 @testable import HoldTypeIOS
@@ -129,108 +127,6 @@ struct IOSContainingAppShellTests {
         )
     }
 
-    @Test
-    func voiceRecoveryMapsEveryDomainOwnerAndExactSettingsField() {
-        let expected: [(
-            RecoveryDestination,
-            IOSSettingsAttention,
-            IOSSettingsField
-        )] = [
-            (.openAI, .openAI, .openAIKey),
-            (.transcription, .transcription, .transcriptionLanguage),
-            (.translation, .translation, .translationTargetLanguage),
-            (.keyboard, .keyboard, .keyboardPractice),
-            (.fullAccess, .fullAccess, .keyboardSystemSettings),
-        ]
-        for (destination, attention, field) in expected {
-            let target = IOSSettingsAttentionTarget.voiceRecovery(
-                for: destination,
-                settings: .defaults
-            )
-            #expect(target.attention == attention)
-            #expect(target.field == field)
-        }
-
-        #expect(
-            IOSSettingsAttention.voiceRecovery(
-                for: .microphoneAndPrivacy
-            ) == .privacyReview
-        )
-        #expect(
-            IOSSettingsAttentionTarget.voiceRecovery(
-                for: .microphoneAndPrivacy,
-                failure: .microphonePermissionDenied,
-                settings: .defaults
-            ).field == .privacyMicrophone
-        )
-
-        var custom = IOSAppSettings.defaults
-        custom.transcriptionConfiguration = TranscriptionConfiguration(
-            language: .custom,
-            customLanguageCode: "invalid!"
-        )
-        #expect(
-            IOSSettingsAttentionTarget.voiceRecovery(
-                for: .transcription,
-                settings: custom
-            ).field == .transcriptionCustomLanguage
-        )
-
-        custom.translationConfiguration = TranslationConfiguration(
-            sourceMode: .override,
-            sourceLanguage: .custom,
-            customSourceLanguageCode: "invalid!",
-            targetLanguage: .english
-        )
-        #expect(
-            IOSSettingsAttentionTarget.voiceRecovery(
-                for: .translation,
-                settings: custom
-            ).field == .translationCustomSource
-        )
-        custom.translationConfiguration = TranslationConfiguration(
-            targetLanguage: .custom,
-            customTargetLanguageCode: "invalid!"
-        )
-        #expect(
-            IOSSettingsAttentionTarget.voiceRecovery(
-                for: .translation,
-                settings: custom
-            ).field == .translationCustomTarget
-        )
-    }
-
-    @Test
-    func keyboardHandoffPreflightNavigationNeverCreatesAListeningState() {
-        #expect(
-            IOSKeyboardHandoffPreflightNavigationDecision.resolve(.ready)
-                == .stayOnVoice
-        )
-        #expect(
-            IOSKeyboardHandoffPreflightNavigationDecision.resolve(
-                .needsSetup(.openAI, failure: nil)
-            ) == .settings(.openAI)
-        )
-        #expect(
-            IOSKeyboardHandoffPreflightNavigationDecision.resolve(
-                .needsSetup(
-                    .microphoneAndPrivacy,
-                    failure: .microphonePermissionDenied
-                )
-            ) == .settings(.microphonePermission)
-        )
-        #expect(
-            IOSKeyboardHandoffPreflightNavigationDecision.resolve(
-                .needsSetup(.microphoneAndPrivacy, failure: nil)
-            ) == .settings(.privacyReview)
-        )
-        #expect(
-            IOSKeyboardHandoffPreflightNavigationDecision.resolve(
-                .unavailable(.localRecovery)
-            ) == .unavailable
-        )
-    }
-
     @Test func practiceDraftSurvivesRoundTripAndIsSceneLocal() {
         var firstScene = IOSContainingAppSceneDraft()
         let secondScene = IOSContainingAppSceneDraft()
@@ -333,17 +229,17 @@ struct IOSContainingAppShellTests {
     }
 
     @Test
-    func keyboardHandoffPreflightWaitsForTheExactActiveScene() {
+    func keyboardHandoffWaitsForTheExactActiveScene() {
         #expect(
-            IOSKeyboardHandoffPreflightSceneDecision.resolve(.background)
+            IOSKeyboardHandoffSceneDecision.resolve(.background)
                 == .waitForActiveScene
         )
         #expect(
-            IOSKeyboardHandoffPreflightSceneDecision.resolve(.inactive)
+            IOSKeyboardHandoffSceneDecision.resolve(.inactive)
                 == .waitForActiveScene
         )
         #expect(
-            IOSKeyboardHandoffPreflightSceneDecision.resolve(.active)
+            IOSKeyboardHandoffSceneDecision.resolve(.active)
                 == .start
         )
     }

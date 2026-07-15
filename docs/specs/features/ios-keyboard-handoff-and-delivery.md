@@ -11,7 +11,10 @@ automatic delivery ineligible.
 The containing app's ordinary Voice experience remains governed by the iOS
 release and voice specs. A keyboard handoff lands on that same first Voice
 screen and may present a temporary handoff sheet over it. The sheet is not a
-new tab, navigation destination, or second Voice implementation.
+new tab or navigation destination, and keyboard handoff must not add states,
+copy, recovery cards, draft mutations, or routing rules to ordinary Voice.
+Keyboard status and recovery presentation belong to the temporary sheet and
+the keyboard's existing voice/error area.
 
 ## Product Decision
 
@@ -61,6 +64,10 @@ resolved by silently degrading the keyboard into that manual-session design.
   capture, dismisses the sheet, and leaves ordinary Voice Ready. Interactive
   sheet dismissal is unavailable while capture is active so it cannot be
   confused with the system return gesture.
+- Closing, failing, expiring, interrupting, or superseding a keyboard handoff
+  must not leave keyboard-originated text or local-recovery presentation on the
+  ordinary Voice screen. Any keyboard-owned cleanup stays inside the handoff
+  subsystem; genuine ordinary Voice recovery remains unchanged.
 - If setup is incomplete, HoldType does not start capture or present the
   handoff sheet. It opens the exact owning Settings or permission surface. A
   completed repair does not replay the request; the user returns to the host
@@ -152,6 +159,9 @@ microphone appear active.
   provider execution.
 - The containing app owns microphone permission, audio capture, OpenAI access,
   and accepted-output persistence.
+- Keyboard handoff may reuse lower-level recorder, permission, provider, and
+  accepted-output services, but it must not extend or repurpose the ordinary
+  Voice controller, scene owner, presentation model, or recovery UI.
 - Full Access may be required for shared coordination. Editing controls that do
   not need shared state remain useful when Full Access is off.
 - Shared storage stays bounded and expiring. It contains request/state/result

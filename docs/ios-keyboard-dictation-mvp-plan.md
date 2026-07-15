@@ -328,14 +328,18 @@ presents the handoff sheet.
 
 1. Add an app-owned entry point that starts the bounded keyboard session and its
    first attempt from the validated handoff ID and selected action.
-2. Reuse the existing keyboard Voice workflow, recorder, permission owner,
-   provider pipeline, and accepted-output persistence.
+2. Reuse the lower-level recorder, permission owner, provider pipeline, and
+   accepted-output persistence behind an isolated handoff owner. Do not add
+   keyboard preflight, status, draft, or recovery behavior to ordinary Voice's
+   controller, scene owner, workflow presentation, or screen.
 3. Present the sheet in `starting` while arming.
 4. Transition to `listening` only after real recorder acknowledgement.
 5. Keep recording while the user swipes back and the app becomes background.
 6. Make the close button cancel capture and dismiss to ordinary Voice Ready.
 7. Dismiss on failure, expiry, cancellation, or terminal completion.
 8. Keep normal app launches and ordinary Voice actions unchanged.
+9. Prove that keyboard cancellation, failure, interruption, and stale relaunch
+   cannot surface text or `Local recovery blocked` on ordinary Voice.
 
 Exit when app integration tests and signed-device evidence prove one valid cold
 handoff starts one real capture and one sheet.

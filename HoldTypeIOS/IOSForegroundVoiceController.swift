@@ -9,7 +9,7 @@ enum IOSForegroundVoiceSetup: Equatable, Sendable {
     case unavailable
 }
 
-nonisolated enum IOSForegroundVoiceFailure: Equatable, Sendable {
+enum IOSForegroundVoiceFailure: Equatable, Sendable {
     case operationFailed
     case localRecovery
     case draftClearFailed

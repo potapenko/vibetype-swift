@@ -673,42 +673,6 @@ struct IOSSettingsAttentionTarget: Hashable, Sendable {
         self.field = field ?? attention.defaultField
     }
 
-    static func voiceRecovery(
-        for destination: RecoveryDestination,
-        failure: IOSForegroundVoiceFailure? = nil,
-        settings: IOSAppSettings
-    ) -> Self {
-        let attention = IOSSettingsAttention.voiceRecovery(
-            for: destination,
-            failure: failure
-        )
-        let field: IOSSettingsField
-        switch attention {
-        case .transcription:
-            let configuration = settings.transcriptionConfiguration
-            field = configuration.language == .custom
-                && configuration.customLanguageCodeValidation.isInvalid
-                ? .transcriptionCustomLanguage
-                : .transcriptionLanguage
-        case .translation:
-            let configuration = settings.translationConfiguration
-            switch configuration.routeConfigurationIssue {
-            case .invalidSourceLanguage:
-                field = configuration.sourceLanguage == .custom
-                    ? .translationCustomSource
-                    : .translationSourceLanguage
-            case .missingTargetLanguage:
-                field = configuration.targetLanguage == .custom
-                    ? .translationCustomTarget
-                    : .translationTargetLanguage
-            case nil:
-                field = .translationTargetLanguage
-            }
-        default:
-            field = attention.defaultField
-        }
-        return Self(attention, field: field)
-    }
 }
 
 struct IOSSettingsForm<Content: View>: View {

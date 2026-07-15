@@ -82,10 +82,6 @@ struct HoldTypeIOSRootView: View {
     let recordingCacheLifecycleActions:
         IOSRecordingCacheLifecycleActions?
     let layout: IOSContainingAppShellLayout
-    let keyboardHandoffPreflight:
-        (@MainActor @Sendable (
-            KeyboardHandoffIntentRecord
-        ) async -> IOSKeyboardHandoffPreflightResult)?
     let keyboardHandoffPresentationOwner:
         IOSKeyboardHandoffPresentationOwner?
 
@@ -103,10 +99,6 @@ struct HoldTypeIOSRootView: View {
         recordingCacheLifecycleActions:
             IOSRecordingCacheLifecycleActions? = nil,
         layout: IOSContainingAppShellLayout = .current,
-        keyboardHandoffPreflight:
-            (@MainActor @Sendable (
-                KeyboardHandoffIntentRecord
-            ) async -> IOSKeyboardHandoffPreflightResult)? = nil,
         keyboardHandoffPresentationOwner:
             IOSKeyboardHandoffPresentationOwner? = nil
     ) {
@@ -123,7 +115,6 @@ struct HoldTypeIOSRootView: View {
         self.recordingCacheLifecycleActions =
             recordingCacheLifecycleActions
         self.layout = layout
-        self.keyboardHandoffPreflight = keyboardHandoffPreflight
         self.keyboardHandoffPresentationOwner =
             keyboardHandoffPresentationOwner
     }
@@ -158,7 +149,6 @@ struct HoldTypeIOSRootView: View {
                     recordingCacheLifecycleActions:
                         recordingCacheLifecycleActions,
                     layout: layout,
-                    keyboardHandoffPreflight: keyboardHandoffPreflight,
                     keyboardHandoffPresentationOwner:
                         keyboardHandoffPresentationOwner
                 )

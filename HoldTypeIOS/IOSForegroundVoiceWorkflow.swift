@@ -78,19 +78,6 @@ nonisolated struct IOSForegroundVoiceWorkflowStartRequest: Sendable {
     }
 }
 
-/// Structured result for the app-owned checks that precede a
-/// keyboard-originated capture. It intentionally carries product recovery
-/// ownership rather than a Settings route so the Voice workflow remains UI
-/// independent.
-nonisolated enum IOSKeyboardHandoffPreflightResult: Equatable, Sendable {
-    case ready
-    case needsSetup(
-        RecoveryDestination,
-        failure: IOSForegroundVoiceFailure?
-    )
-    case unavailable(IOSForegroundVoiceFailure?)
-}
-
 nonisolated struct IOSForegroundVoiceWorkflowAttemptToken:
     Equatable,
     Hashable,
@@ -627,7 +614,6 @@ final class IOSForegroundVoiceWorkflow {
         let forcesTextCorrection: Bool
         let clearsDraftOnStart: Bool
         let draftInsertionMode: IOSVoiceDraftInsertionMode
-        let presentsProviderConsent: Bool
         var recordingAttemptID: UUID?
         var stopContinuation: CheckedContinuation<StopTrigger, Never>?
         var tailContinuation:
@@ -654,15 +640,13 @@ final class IOSForegroundVoiceWorkflow {
             origin: Origin,
             forcesTextCorrection: Bool = false,
             clearsDraftOnStart: Bool = false,
-            draftInsertionMode: IOSVoiceDraftInsertionMode = .replace,
-            presentsProviderConsent: Bool = true
+            draftInsertionMode: IOSVoiceDraftInsertionMode = .replace
         ) {
             self.token = token
             self.origin = origin
             self.forcesTextCorrection = forcesTextCorrection
             self.clearsDraftOnStart = clearsDraftOnStart
             self.draftInsertionMode = draftInsertionMode
-            self.presentsProviderConsent = presentsProviderConsent
             switch origin {
             case .foreground:
                 requiresInitiatingScene = true
@@ -881,59 +865,6 @@ final class IOSForegroundVoiceWorkflow {
             draftInsertionMode: request.draftInsertionMode,
             progress: progress
         )
-    }
-
-    /// Runs the same configuration, consent, credential, permission, and
-    /// revalidation gates as Voice Start, but stops before History, draft,
-    /// audio-session, recorder, or provider work. Provider consent is routed
-    /// to guided Settings while an undetermined microphone permission remains
-    /// eligible for the initiating scene's system prompt.
-    func preflightKeyboardHandoff(
-        action: KeyboardVoiceAction,
-        sceneLease: IOSVoiceSceneStartLease
-    ) async -> IOSKeyboardHandoffPreflightResult {
-        let leaseOwner = SceneLeaseOwner(sceneLease)
-        defer { leaseOwner.finish() }
-        guard activeAttempt == nil,
-              !isRunningRecoveryOperation else {
-            return .unavailable(.unavailable)
-        }
-
-        let token = IOSForegroundVoiceWorkflowAttemptToken()
-        let attempt = Attempt(
-            token: token,
-            origin: .foreground(leaseOwner),
-            forcesTextCorrection: action.corrects,
-            presentsProviderConsent: false
-        )
-        activeAttempt = attempt
-        installSceneObservation(on: attempt)
-
-        let resolution = await withTaskCancellationHandler {
-            await performStart(
-                action.translates ? .translate : .standard,
-                attempt: attempt,
-                progress: { _ in },
-                stopsAfterPreflight: true
-            )
-        } onCancel: {
-            Task { @MainActor [weak self, weak attempt] in
-                guard let self, let attempt else { return }
-                self.requestStop(.cancelled, for: attempt)
-            }
-        }
-
-        switch resolution.observation.setup {
-        case .ready where resolution.failure == nil:
-            return .ready
-        case .needsSetup(let destination):
-            return .needsSetup(
-                destination,
-                failure: resolution.failure
-            )
-        case .unknown, .ready, .unavailable:
-            return .unavailable(resolution.failure)
-        }
     }
 
     func finishUtterance(
@@ -1213,7 +1144,34 @@ final class IOSForegroundVoiceWorkflow {
                 )
             )
         )
-        installSceneObservation(on: attempt)
+        if case .foreground = origin {
+            attempt.sceneObservation = dependencies.sceneRegistry.observeEvents {
+                [weak self, weak attempt] event in
+                guard let self, let attempt,
+                      self.activeAttempt === attempt else {
+                    return
+                }
+                guard self.dependencies.sceneRegistry.validate(event) else {
+                    return
+                }
+                switch event.kind {
+                case .lastActiveSceneLost(
+                    .expectedMicrophonePermissionPrompt
+                ), .aggregateBecameActive,
+                     .initiatingSceneReactivatedAfterPermission:
+                    break
+                case .lastActiveSceneLost(.voiceWorkMustStop):
+                    self.dependencies.cancelStartBoundary()
+                    self.requestStop(.interrupted, for: attempt)
+                case .initiatingSceneBecameUnavailable
+                    where attempt.requiresInitiatingScene:
+                    self.dependencies.cancelStartBoundary()
+                    self.requestStop(.interrupted, for: attempt)
+                case .initiatingSceneBecameUnavailable:
+                    break
+                }
+            }
+        }
 
         let resolution = await withTaskCancellationHandler {
             await performStart(
@@ -1236,8 +1194,7 @@ final class IOSForegroundVoiceWorkflow {
     private func performStart(
         _ intent: DictationOutputIntent,
         attempt: Attempt,
-        progress: @escaping IOSForegroundVoiceClient.Progress,
-        stopsAfterPreflight: Bool = false
+        progress: @escaping IOSForegroundVoiceClient.Progress
     ) async -> IOSForegroundVoiceResolution {
         defer { retire(attempt) }
 
@@ -1365,10 +1322,6 @@ final class IOSForegroundVoiceWorkflow {
             attempt,
             requireInitiatingScene: false
         ) else { return await blockedPreflight(failure: .unavailable) }
-
-        if stopsAfterPreflight {
-            return await blockedPreflight(setup: .ready, failure: nil)
-        }
 
         guard await dependencies.stopHistoryPlayback(),
               canContinueArming(
@@ -2436,8 +2389,7 @@ final class IOSForegroundVoiceWorkflow {
     private func resolveConsent(
         for attempt: Attempt
     ) async -> ConsentResolution {
-        if attempt.allowsBackgroundContinuation
-            || !attempt.presentsProviderConsent {
+        if attempt.allowsBackgroundContinuation {
             return await resolveConsentWithoutPresentation()
         }
         guard let sceneLease = attempt.sceneLease else {
@@ -2639,36 +2591,6 @@ final class IOSForegroundVoiceWorkflow {
         attempt.audio = nil
         if hadAudio {
             dependencies.recordDiagnostic(.audio(.deactivated))
-        }
-    }
-
-    private func installSceneObservation(on attempt: Attempt) {
-        guard case .foreground = attempt.origin else { return }
-        attempt.sceneObservation = dependencies.sceneRegistry.observeEvents {
-            [weak self, weak attempt] event in
-            guard let self, let attempt,
-                  self.activeAttempt === attempt else {
-                return
-            }
-            guard self.dependencies.sceneRegistry.validate(event) else {
-                return
-            }
-            switch event.kind {
-            case .lastActiveSceneLost(
-                .expectedMicrophonePermissionPrompt
-            ), .aggregateBecameActive,
-                 .initiatingSceneReactivatedAfterPermission:
-                break
-            case .lastActiveSceneLost(.voiceWorkMustStop):
-                self.dependencies.cancelStartBoundary()
-                self.requestStop(.interrupted, for: attempt)
-            case .initiatingSceneBecameUnavailable
-                where attempt.requiresInitiatingScene:
-                self.dependencies.cancelStartBoundary()
-                self.requestStop(.interrupted, for: attempt)
-            case .initiatingSceneBecameUnavailable:
-                break
-            }
         }
     }
 
