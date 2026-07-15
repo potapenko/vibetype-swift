@@ -1,321 +1,474 @@
-# HoldType iOS Keyboard Handoff Plan
+# HoldType iOS Keyboard Handoff Implementation Plan
 
-Status: canonical keyboard execution plan; revised and approved 2026-07-14.
+Status: approved product direction; implementation not started; revised
+2026-07-15.
 
-Product behavior is governed by:
+This file is the durable execution plan for the HoldType Keyboard to Voice
+handoff. Goal runs and direct implementation chats must read this file from the
+current checkout instead of reconstructing the plan from chat history.
 
-- `docs/specs/features/ios-keyboard-handoff-and-delivery.md` for the complete
-  keyboard microphone, app handoff, request reconnection, and text delivery;
-- `docs/specs/features/ios-keyboard-experience.md` for the keyboard's visual
-  composition, editing controls, voice/error area, and accessibility;
-- `docs/specs/features/ios-v1-release.md` for the containing app and overall iOS
-  release, except where the narrower handoff spec explicitly supersedes an
-  older no-launch or manual-session clause.
+Product behavior remains governed by:
 
-This is a direct-chat execution plan, not a backlog. Each implementation slice
-runs in a separate chat, stays on `master`, preserves unrelated work, and ends
-with one scoped checkpoint commit.
+- `docs/specs/features/ios-keyboard-handoff-and-delivery.md` for the keyboard
+  microphone, app handoff, request continuity, and text delivery contract;
+- `docs/specs/features/ios-keyboard-experience.md` for keyboard composition,
+  the central Voice indicator, the voice/error area, and accessibility;
+- `docs/specs/features/ios-settings-guided-recovery.md` for exact setup routing
+  and the rule that setup repair does not replay an earlier action;
+- `docs/specs/features/ios-v1-release.md` for the standalone iOS product.
 
-## Strategy
+The first implementation slice must update any conflicting clauses in those
+specs before changing production behavior.
 
-HoldType will build the keyboard only as an end-to-end voice entry point:
+This is a direct product plan, not a backlog. Work stays on `master`, preserves
+unrelated changes, and ends every file-changing slice with focused verification
+and one scoped checkpoint commit.
+
+## Product Decision
+
+HoldType remains a normal custom keyboard. Its Voice indicator is the single
+primary dictation control.
+
+The keyboard never tells the user to open HoldType, find a menu, or manually
+prepare a Keyboard Session. If app-owned recording is not currently available,
+the microphone tap opens HoldType automatically.
+
+There are three user paths.
+
+### Warm Session
 
 ```text
-tap existing keyboard microphone
-        -> open HoldType and start app-owned recording
-        -> user returns to the host app
-        -> recreated keyboard reconnects to the request
-        -> finish or cancel from the keyboard
-        -> accepted text inserts exactly once when the document still matches
+tap keyboard Voice indicator
+    -> Listening
+    -> speak
+    -> tap again to finish
+    -> Processing
+    -> insert accepted text into the originating input
 ```
 
-There is no separate black button, Open HoldType action, keyboard handoff
-screen, or user-prepared Keyboard Dictation Session. The existing microphone is
-the primary action. The existing keyboard voice/error area carries every
-handoff, permission, recording, processing, failure, and recovery message.
+HoldType does not become foreground when the current bounded keyboard session
+can already accept the request.
 
-The first Voice screen already being developed in the containing app remains
-the landing surface. This plan integrates with that screen and must not replace,
-fork, or redesign it.
+### Cold Session With Valid Setup
 
-The keyboard is an all-or-nothing release capability. App Store uncertainty is
-accepted as a release risk, not used to weaken the product in advance. If the
-complete flow cannot be approved, the fallback is an app-only build without
-the extension or keyboard onboarding. A manual-session keyboard is not a
-fallback.
+```text
+tap keyboard Voice indicator
+    -> keyboard writes a fresh bounded handoff intent
+    -> HoldType opens automatically
+    -> app validates setup and starts real app-owned capture
+    -> a large handoff sheet rises over the existing Voice screen
+    -> user swipes right on the system bottom bar
+    -> recreated keyboard reconnects in Listening
+    -> finish, process, and insert exactly once
+```
 
-## Validated Foundation
+The keyboard tap is the explicit start action. When setup is valid, the user
+does not press a second Voice button inside HoldType. The sheet is informational
+and cancellable; it is not a preparatory session screen.
 
-The earlier KBD-MVP work remains useful engineering evidence even though its
-manual-session product strategy is retired.
+### Setup Recovery
 
-| Existing slice | Reused evidence | Status |
+```text
+tap keyboard Voice indicator
+    -> HoldType opens automatically
+    -> preflight identifies one concrete setup blocker
+    -> no recording and no handoff sheet
+    -> HoldType opens the exact owning Settings field or permission surface
+    -> user repairs setup
+    -> user returns to the original app and taps the keyboard indicator again
+```
+
+Setup repair never replays the stale request, starts recording, or contacts a
+provider automatically. A fresh keyboard tap creates a fresh request.
+
+## Non-Negotiable Boundaries
+
+- Ordinary standalone Voice behavior must not change.
+- The existing Voice screen, recorder, workflow, permission owners, provider
+  pipeline, Latest, and History remain authoritative.
+- The handoff sheet is a separate presentation layer over Voice, not a copied
+  recorder or second Voice implementation.
+- The keyboard extension never records audio and never receives credentials.
+- The app never reports Listening before the real recorder acknowledges capture.
+- Setup instructions do not appear in the keyboard. The keyboard may show short
+  operational states and compact failures in its existing voice/error area.
+- An ordinary app launch never starts recording or presents the handoff sheet.
+- A stale, repeated, malformed, or superseded handoff never starts a second
+  capture.
+- Unsafe destination identity never inserts into a different text field.
+- Accepted text is inserted automatically at most once.
+- If the complete keyboard behavior cannot ship, the product fallback is an
+  app-only release, not a manual-session keyboard.
+
+## Keyboard Handoff Sheet Contract
+
+The handoff presentation is a large SwiftUI sheet over the existing first Voice
+screen. It is not a new tab, navigation destination, or replacement Voice page.
+
+### Appearance
+
+- large detent with the underlying Voice screen still visible around it;
+- rounded top corners and one close button in the top-right corner;
+- the existing HoldType Voice activity visual, reused rather than approximated;
+- a short title, one return instruction, and a simple system-bottom-bar swipe
+  illustration or animation;
+- no Draft editor, Copy, History, setup controls, mode picker, or second Start
+  button;
+- localizable copy, Light and Dark appearance, Dynamic Type, VoiceOver, Reduce
+  Motion, Reduce Transparency, and sufficient contrast.
+
+### Presentation States
+
+`starting`
+
+- The request and setup are valid and app-owned capture is arming.
+- The sheet may say `Starting dictation...` but must not claim Listening.
+- The return gesture instruction is visually secondary until capture begins.
+
+`listening`
+
+- Real capture has started.
+- Recommended copy:
+  - title: `HoldType is listening`;
+  - instruction: `Swipe right on the bottom bar to return to the app where you
+    were typing.`;
+  - supporting text: `Recording will continue.`
+- The user performs the normal iOS app-switch gesture; HoldType does not promise
+  a programmatic return to an arbitrary host app.
+
+`cancelled` or terminal
+
+- The sheet dismisses after explicit cancel, startup failure, expiry, or terminal
+  request completion.
+- It must not remain stale on a later ordinary HoldType launch.
+
+### Close Semantics
+
+- The close button cancels the keyboard-originated request.
+- If capture is active, cancel stops it before dismissing the sheet.
+- No partial result is automatically inserted after this cancellation.
+- The underlying ordinary Voice screen returns to its normal Ready state.
+- Interactive drag-to-dismiss is disabled while capture is active so the user
+  cannot confuse dismissing the sheet with swiping on the system bottom bar.
+
+## Setup Routing Matrix
+
+The handoff must reuse the existing Voice preflight and guided Settings routing.
+Do not duplicate configuration validity rules in the sheet or keyboard.
+
+| Blocker | Destination | Handoff result |
 | --- | --- | --- |
-| KBD-MVP-1 | Normal app shell, embedded extension, and keyboard action plumbing | Completed |
-| KBD-MVP-2 | Signed-device app-owned audio and App Group feasibility | Passed; commit `8829623` |
-| KBD-MVP-3 | Recorder, OpenAI, result state, and guarded insertion pipeline | Implemented; commit `2693855` |
-| KBD-MVP-4 | Brand Stage recovery and state presentation work | Useful UI foundation; old manual-session recovery contract superseded |
-| KBD-MVP-5 | Device qualification and TestFlight | Replaced by KBD-FLOW-7 |
+| Full Access unavailable | Keyboard Setup, targeted Full Access guidance | No sheet; fresh tap required after repair |
+| OpenAI key missing or unreadable | OpenAI Settings, API key field | No sheet; fresh tap required |
+| Transcription configuration invalid | Exact invalid Transcription field | No sheet; fresh tap required |
+| Translation action without a valid route | Exact invalid Translation field | No sheet; fresh tap required |
+| Correction action with invalid setup | Exact owning Writing Correction field | No sheet; fresh tap required |
+| Provider disclosure not authorized | Privacy and Permissions, provider consent | No sheet; fresh tap required |
+| Microphone permission undetermined | System permission prompt | Continue directly if granted while request is fresh |
+| Microphone permission denied | Privacy and Permissions, microphone guidance | No sheet; fresh tap required |
+| Keyboard setup incomplete | Keyboard Setup, exact incomplete step | No sheet; fresh tap required |
+| App-private storage unavailable | Existing storage-unavailable presentation | Request expires; fresh tap required |
 
-Existing code should be evolved, not discarded. In particular, keep the
-app-owned recorder/provider pipeline, bounded shared records, canonical Latest,
-and defensive insertion checks. Replace the assumptions that the app is
-already prepared and that extension-process lifetime defines destination
-ownership.
+Offline, timeout, audio interruption, empty audio, and provider failure are
+runtime failures, not setup routing. They use the existing bounded failure and
+Latest recovery behavior.
 
-## Target Architecture
+## Minimal Architecture Change
 
-```text
-Host text document
-    ^
-    | UITextDocumentProxy.insertText (at most once)
-    |
-HoldType Keyboard Extension
-    |  fresh request + source document identity
-    |  opens holdtype://... with opaque request identity
-    v
-Bounded App Group command record
-    |
-    v
-Containing app / existing first Voice screen
-    |  validates request, owns microphone, OpenAI, and accepted text
-    v
-Bounded App Group state/result record
-    |
-    +--> recreated extension reconnects by request + document identity
-    +--> matching document claims and inserts once
-    +--> unsafe or uncertain delivery stays in canonical Latest
-```
+The current app-owned recording and transcription pipeline stays in place. The
+handoff adds a narrow launch-intent layer and extends the existing session bridge
+only where round-trip identity requires it.
 
-### Coordination Boundary
+### Bounded Handoff Intent
 
-Keep the current two-record budget unless a physical-device finding proves it
-insufficient:
+Before opening HoldType, the keyboard writes one atomically replaced, expiring
+intent containing only:
 
-1. an extension-written current request/command record;
-2. an app-written current state/result record.
+- opaque handoff/request ID;
+- selected Standard, Translate, Improve, or combined action;
+- creation and expiry timestamps;
+- originating `UITextDocumentProxy.documentIdentifier` when iOS provides it;
+- schema version.
 
-Both records are atomically replaced, schema-versioned, bounded, expiring, and
-have one authoritative writer. They are not an append-only log, durable queue,
-or second History store.
+The launch URL carries only the opaque routing identity. It never carries typed
+text, transcript text, prompts, credentials, provider data, or audio.
 
-The next schema must support:
+### Session And Attempt Identity
 
-- keyboard-created opaque request ID;
-- command kind: start, finish, or cancel;
-- source `documentIdentifier` when available;
-- request creation and expiry;
-- app phases such as opening, awaiting permission, listening, processing,
-  result ready, failed, cancelled, and expired;
-- accepted result identity and expiry;
-- enough bounded claim state to prevent replay after extension recreation.
+The bridge must distinguish:
 
-Raw audio, credentials, prompts, provider payloads, durable host content, and
-canonical History remain outside the App Group.
+- a bounded app-owned keyboard session that can remain warm briefly; and
+- an individual dictation attempt and result inside that session.
 
-### Launch Validation
+The exact schema should remain small and have one authoritative writer per
+record. It must support fresh intent validation, session/attempt state,
+document-bound reconnection, expiry, and an at-most-once delivery claim. It must
+not become a durable queue, log, or second History database.
 
-- The custom URL carries opaque routing identity only.
-- HoldType starts recording only when the URL matches a fresh shared request.
-- An ordinary app launch never starts the microphone.
-- A repeated or stale URL never starts a second capture.
-- The app may surface microphone permission after the explicit keyboard tap,
-  but does not report Listening until real capture starts.
+### App Ownership
 
-### Destination And Exactly-Once Delivery
+A small app-owned handoff presentation owner coordinates:
 
-- Extension-process identity is not destination identity. iOS may destroy and
-  recreate the extension during the round trip.
-- Reconnection uses request identity plus the source document identity that iOS
-  exposes through `UITextDocumentProxy.documentIdentifier`.
-- Automatic insertion requires the same live request, the same source document,
-  an unexpired result, and no prior claim.
-- Claim happens before `insertText`. A recreated extension must observe the
-  claim and never replay the result.
-- If insertion success is uncertain, do not retry automatically. Preserve the
-  accepted result in Latest and expose an explicit recovery action.
+- accepted handoff URL;
+- preflight result;
+- targeted setup routing;
+- automatic session and capture start;
+- sheet state;
+- cancel and terminal dismissal.
+
+It calls the existing Voice workflow and Keyboard Session coordinator. The
+sheet itself contains no setup logic, recorder ownership, or provider code.
 
 ## Execution Rules
 
-- Execute KBD-FLOW slices in order. Do not combine the feasibility spike with a
-  production refactor.
-- Do not run keyboard implementation work in parallel with another task editing
-  the same files. Integrate with the parallel Voice-screen work at its public
-  boundary after that work is committed.
-- Do not spawn subagents unless the user explicitly asks.
-- Read `AGENTS.md`, `docs/agent-onboarding.md`, `SWIFT.md`, this plan, the three
-  governing specs, and only task-owned source/tests.
-- Do not create backlog tasks or use the backlog selector.
-- Work only on `master`. Preserve unrelated changes and stage only task-owned
-  paths.
-- Every file-changing iteration ends with focused verification and one scoped
+- Execute slices in order.
+- KBD-FLOW-1 is the first implementation slice and builds the isolated sheet
+  before any keyboard launch behavior.
+- Stop after KBD-FLOW-1 and present visual evidence for user confirmation before
+  wiring the production handoff.
+- Do not run overlapping implementation work against the same keyboard, Voice,
+  bridge, project, or spec files.
+- Read `AGENTS.md`, `docs/agent-onboarding.md`, `SWIFT.md`, this plan, and only
+  the governing specs/source files for the selected slice.
+- Do not create branches, worktrees, or backlog tasks.
+- Preserve unrelated edits and stage only task-owned paths.
+- Use `apply_patch` for file edits.
+- Every slice that changes files ends with focused verification and one scoped
   checkpoint commit.
-- Remove DEBUG-only probes before the iteration commit unless a bounded device
-  qualification route explicitly owns them.
-- A failed core feasibility gate stops keyboard implementation. Do not silently
-  restore the retired manual-session strategy.
-
-## Runtime Evidence Rules
-
-- Use the Simulator for UI/state determinism and actual extension-host
-  interaction that it can represent.
-- Use a signed physical iPhone for real microphone ownership, app switching,
-  extension recreation, source-document continuity, and insertion delivery.
-- iPhone Mirroring may operate the containing app only and does not prove direct
-  keyboard-extension interaction.
-- Before Simulator, Mirroring, or physical-device QA, follow the repository's
-  `iOS Simulator, Mirroring, And Physical Device QA` tooling contract.
-- Start scoped `caffeinate` before every UI automation session and stop it after
-  the session.
-- Launch automated app QA through the sanitized verification path. Never enter
-  a login-keychain password or approve `Always Allow`.
-- Do not use live OpenAI or `--live-debug` unless the user explicitly authorizes
-  that session. Use controllable fakes for normal automated verification.
-- Evidence must identify commit/build, device, iOS version, starting state,
-  actions, and observed result. A source inspection is not runtime proof.
+- Do not spawn subagents unless the user explicitly asks.
+- Do not use live OpenAI for automation unless the user explicitly authorizes a
+  live-provider session.
+- Physical-device work follows `docs/agent-tooling.md`, uses scoped `caffeinate`,
+  and keeps Simulator, Mirroring, and signed-device claims separate.
 
 ## Delivery Sequence
 
 | ID | Scope | Exit condition | Status |
 | --- | --- | --- | --- |
-| KBD-FLOW-0 | Product contract and revised execution plan | Canonical spec and plan adopt the Flow-like strategy | Completed 2026-07-14 |
-| KBD-FLOW-1 | One-tap signed-device feasibility spike | Existing mic opens HoldType, real capture starts, return recreates/reconnects keyboard, Finish stops capture, and a deterministic result reaches the source document | Next |
-| KBD-FLOW-2 | Bridge v2 request and destination identity | Versioned records support keyboard-created request, source document, app phases, expiry, and bounded claim state | Pending |
-| KBD-FLOW-3 | Launch and app-owned capture integration | Valid fresh handoff opens the existing Voice screen and begins capture; ordinary/stale launches do not | Pending |
-| KBD-FLOW-4 | Cross-lifetime command and exactly-once delivery | Start/Finish/Cancel survive extension recreation; safe result inserts once and mismatch falls back to Latest | Pending |
-| KBD-FLOW-5 | Production pipeline integration | Real transcription and existing text rules feed the same request without duplicate provider work | Pending |
-| KBD-FLOW-6 | Setup, error, accessibility, and app-only packaging | Existing voice/error area covers all states; release can cleanly include or exclude keyboard | Pending |
-| KBD-FLOW-7 | Device matrix, TestFlight, and review candidate | Signed-device matrix passes and one complete keyboard candidate is submitted or the explicit app-only decision is taken | Pending |
+| KBD-FLOW-0 | Durable strategy and execution plan | This checkout contains the approved plan and launch contract | Completed when this plan is checkpointed |
+| KBD-FLOW-1 | Isolated Keyboard Handoff Sheet | Sheet states, cancel behavior, accessibility, and visual evidence pass without production routing changes | Next |
+| KBD-FLOW-2 | Keyboard launch intent and app URL route | Missing session writes a bounded intent and opens only a matching HoldType route; warm path stays direct | Pending |
+| KBD-FLOW-3 | Shared Voice preflight and targeted setup recovery | Every setup blocker routes to its exact owner; no blocker presents Listening or the sheet | Pending |
+| KBD-FLOW-4 | Automatic app-owned capture and live sheet | A valid cold request starts real capture once and presents the sheet as Starting then Listening | Pending |
+| KBD-FLOW-5 | Keyboard reconnection and state UX | A recreated extension reconnects by session, attempt, and document identity with no manual instructions | Pending |
+| KBD-FLOW-6 | Finish, exactly-once delivery, and warm reuse | Finish processes once, safe output inserts once, and an unexpired session returns to Ready | Pending |
+| KBD-FLOW-7 | Legacy-copy cleanup and product completion | Manual-session recovery copy is absent and ordinary Voice remains unchanged | Pending |
+| KBD-FLOW-8 | Signed-device and TestFlight qualification | Full physical matrix passes or an explicit app-only release decision is recorded | Pending |
 
-## KBD-FLOW-1 — One-Tap Physical Feasibility Spike
+## KBD-FLOW-1 - Isolated Keyboard Handoff Sheet
 
-### Purpose
+### Scope
 
-Prove the only product path worth building before changing production bridge
-architecture. This is a disposable or narrowly isolated spike, not the final
-implementation.
+1. Update the governing spec language for a temporary sheet over Voice.
+2. Add a neutral sheet presentation model with `starting` and `listening`.
+3. Add `IOSKeyboardHandoffSheet` using the current Voice visual language.
+4. Add explicit cancel/close behavior through injected callbacks.
+5. Add a UI qualification route or deterministic host that does not affect the
+   production launch path.
+6. Cover Light/Dark, compact/regular width, Dynamic Type, VoiceOver, and Reduce
+   Motion.
+7. Capture visual evidence and stop for user review.
 
-### Required scenario
+### Non-Goals
 
-1. In a real host text field, select HoldType Keyboard.
-2. Tap its existing microphone button.
-3. Observe HoldType open from that user action.
-4. Observe the containing app start real microphone capture for the matching
-   request without a separately prepared session.
-5. Swipe back to the host.
-6. Observe the extension reconnect after likely recreation and show Listening.
-7. Tap the microphone again to Finish.
-8. Observe app-owned recording stop and a deterministic fake result become
-   available.
-9. Observe exactly one insertion into the originating document.
+- no keyboard URL launch;
+- no App Group intent;
+- no real microphone or provider work;
+- no change to ordinary Voice behavior;
+- no production sheet presentation.
 
-Also exercise Cancel, permission denial, repeated URL, stale request, changed
-document, and extension recreation before result delivery.
+### Verification
 
-### Exit decision
+- focused sheet presentation and interaction tests;
+- iOS build and relevant test target;
+- Simulator visual QA with scoped `caffeinate`;
+- `git diff --check`;
+- scoped checkpoint commit.
 
-- `pass`: evidence proves the whole round trip; proceed to KBD-FLOW-2;
-- `needs narrow follow-up`: one bounded public-API uncertainty remains and has a
-  named experiment;
-- `fail`: a core step cannot work reliably with public APIs on the supported
-  device/OS. Stop keyboard implementation and report the app-only consequence.
+## KBD-FLOW-2 - Intent And Launch Routing
 
-App Review is not decided by this spike and is not a reason to mark a working
-public-API flow failed.
+1. Add the bounded handoff intent record and atomic App Group store.
+2. Give the keyboard microphone two branches:
+   - valid warm session: use the existing Start path;
+   - no valid session: write intent and open the handoff URL.
+3. Keep the central Ready indicator visible when no session exists.
+4. Add an `Opening HoldType` operational state without manual instructions.
+5. Parse and validate the URL in the containing app.
+6. Select Voice only for a valid fresh matching intent.
+7. Make ordinary, malformed, expired, repeated, and superseded launches inert.
+8. Route no-Full-Access launches to the existing targeted setup path.
 
-## KBD-FLOW-2 — Bridge V2
+Exit when deterministic tests prove routing identity and show that no launch
+alone can falsely start capture.
 
-- Introduce the new request/state schema with explicit migration from current
-  transient records.
-- Make request ID originate in the keyboard before app launch.
-- Persist source document identity and expiry.
-- Replace extension-lifetime ownership with request/document ownership.
-- Add deterministic tests for stale URLs, phase transitions, record corruption,
-  expiry, supersession, and claim replay.
-- Keep the bridge bounded to two transient records unless KBD-FLOW-1 evidence
-  requires a documented exception.
+## KBD-FLOW-3 - Preflight And Setup Recovery
 
-Exit when bridge tests prove reconnection and at-most-once claims without UI or
-live microphone dependencies.
+1. Expose a structured keyboard-handoff preflight result from the existing Voice
+   workflow instead of duplicating its checks.
+2. Map every `RecoveryDestination` to `IOSSettingsAttention` and the exact owning
+   field.
+3. Add a correction-specific attention route only if the current correction
+   workflow can report a distinct invalid setup.
+4. Handle microphone-undetermined inline; continue only after a granted result.
+5. Consume/cancel requests routed to setup so returning from Settings cannot
+   replay them.
+6. Verify that setup repair requires a fresh keyboard tap.
 
-## KBD-FLOW-3 — App Launch And Capture
+Exit when each setup fixture opens the correct field and neither records nor
+presents the handoff sheet.
 
-- Route a valid handoff into the existing first Voice screen.
-- Reuse the screen's recorder/status model; do not build a second handoff UI.
-- Start capture once per fresh request after permission succeeds.
-- Publish Opening, permission, Listening, failure, and expiry truthfully.
-- Make repeated, malformed, expired, or unrelated launches harmless.
-- Preserve ordinary standalone Voice behavior.
+## KBD-FLOW-4 - Automatic Capture And Live Sheet
 
-Exit when app integration tests and signed-device evidence distinguish a valid
-handoff from ordinary launch and prove one real capture lifecycle.
+1. Add an app-owned entry point that starts the bounded keyboard session and its
+   first attempt from the validated handoff ID and selected action.
+2. Reuse the existing keyboard Voice workflow, recorder, permission owner,
+   provider pipeline, and accepted-output persistence.
+3. Present the sheet in `starting` while arming.
+4. Transition to `listening` only after real recorder acknowledgement.
+5. Keep recording while the user swipes back and the app becomes background.
+6. Make the close button cancel capture and dismiss to ordinary Voice Ready.
+7. Dismiss on failure, expiry, cancellation, or terminal completion.
+8. Keep normal app launches and ordinary Voice actions unchanged.
 
-## KBD-FLOW-4 — Keyboard Reconnection And Delivery
+Exit when app integration tests and signed-device evidence prove one valid cold
+handoff starts one real capture and one sheet.
 
-- Restore the active request when a new extension instance appears in the same
-  source document.
-- Drive the existing voice/error area from app-acknowledged state.
-- Route the existing microphone to Finish while Listening and back to Start
-  after a terminal state.
-- Keep Cancel explicit and idempotent.
-- Claim an eligible result before insertion and prevent replay across process
-  restarts.
-- Preserve Latest for document mismatch, missing identity, expiry, or uncertain
-  insertion.
+## KBD-FLOW-5 - Reconnection And Keyboard State UX
 
-Exit when automated bridge/controller tests plus signed-device QA prove the
-normal path and every no-wrong-field invariant.
+1. Reconnect a recreated extension through session ID, attempt ID, request ID,
+   and source document identity rather than extension-process identity.
+2. Drive the keyboard through:
+   `Ready -> Opening HoldType -> Listening -> Processing -> Ready`.
+3. Keep the existing central Voice indicator visible through nominal states.
+4. Route the microphone to Finish while Listening and keep Cancel explicit.
+5. Remove instructional navigation copy from every keyboard recovery state.
+6. Preserve compact operational and runtime failures in the existing error area.
+7. Make a changed or missing destination identity ineligible for automatic
+   insertion without discarding the accepted result.
 
-## KBD-FLOW-5 — Production Text Pipeline
+Exit when recreation, return, focus-change, and expiry tests pass without a
+wrong-field insertion or manual-session message.
 
-- Connect Finish to the existing bounded recorder, OpenAI transcription, and
-  correction/translation rules.
-- Keep one provider submission per request and no automatic retry after an
-  external failure.
-- Commit accepted output once to canonical Latest and current History policy.
-- Publish only bounded accepted result data to the keyboard bridge.
-- Verify timeout, offline, empty audio, provider failure, cancellation, and
-  app termination.
+## KBD-FLOW-6 - Delivery And Warm Session Reuse
 
-Exit when fake-provider automation passes and an explicitly authorized live
-smoke proves the production boundary without duplicate submission or delivery.
+1. Finish real capture from the keyboard.
+2. Run existing transcription and selected post-processing exactly once.
+3. Persist accepted output in canonical Latest and current History policy.
+4. Claim delivery before `insertText` and never replay an uncertain insertion.
+5. Fall back to Latest when document identity or delivery certainty is missing.
+6. Acknowledge terminal attempt delivery separately from session lifetime.
+7. Return an unexpired, healthy session to Ready for another keyboard attempt.
+8. Let an expired or unavailable session cause the next microphone tap to open
+   HoldType again.
 
-## KBD-FLOW-6 — Product Completion And Packaging
+Exit when one accepted result inserts at most once, fallback remains recoverable,
+and warm/cold transitions are deterministic.
 
-- Replace retired `Session not running` guidance with states appropriate to
-  one-tap handoff.
-- Keep the existing microphone as the only primary launch/finish control.
-- Keep all state and recovery copy in the voice/error area.
-- Complete Voice-screen return instruction, Full Access, microphone permission,
-  offline, timeout, failed, expired, and Latest recovery UX.
-- Verify VoiceOver names, focus order, Dynamic Type, contrast, and Light/Dark.
-- Add a build/release configuration that cleanly excludes the extension and
-  keyboard onboarding while preserving the standalone Voice product.
+## KBD-FLOW-7 - Product Completion
 
-Exit when Simulator UI QA passes and both keyboard-included and app-only
-artifacts are internally coherent.
+1. Remove keyboard production strings and presentations for:
+   - `Session not running`;
+   - `Start a voice session`;
+   - `Open HoldType -> Voice -> Keyboard Dictation Session`;
+   - all written manual navigation instructions.
+2. Keep the existing manual Keyboard Session surface temporarily as a bounded
+   diagnostic tool until physical qualification proves it is no longer needed.
+3. Reconcile the handoff, keyboard experience, release, and guided recovery
+   specs.
+4. Verify standalone Voice, Draft, Rules, History, Usage, Settings, and keyboard
+   typing behavior for regressions.
+5. Complete accessibility, localization readiness, diagnostics, and app-only
+   packaging behavior.
 
-## KBD-FLOW-7 — Release Qualification
+Exit when production search finds no retired keyboard guidance and the ordinary
+Voice flow has unchanged behavioral coverage.
 
-Run a bounded matrix across supported iOS versions and representative host apps:
+## KBD-FLOW-8 - Signed-Device Qualification
 
-- fresh install and upgrade;
+Run a bounded matrix on a signed physical iPhone:
+
+- cold and warm HoldType;
+- valid setup and each targeted setup blocker;
 - Full Access off/on;
-- microphone undecided/allowed/denied;
-- cold/warm app;
-- extension retained/recreated;
-- same document/focus changed/different document;
-- Start/Finish/Cancel;
-- offline, timeout, provider failure, interruption, and app termination;
-- result insertion, Latest fallback, and duplicate-delivery attempts.
+- microphone undecided/granted/denied;
+- Standard, Translate, Improve, and combined mode where available;
+- sheet Starting, Listening, close, expiry, and stale relaunch;
+- swipe back with extension retained and recreated;
+- same field, changed field, and changed host app;
+- Finish, Cancel, offline, timeout, interruption, provider failure, and app
+  termination;
+- automatic insertion, Latest fallback, and duplicate-delivery attempts;
+- repeated dictation inside a healthy warm session;
+- session expiry followed by a fresh cold handoff;
+- ordinary standalone Voice with no sheet.
 
-Then qualify one internal TestFlight build. If the complete keyboard is rejected
-and no compliant equivalent preserves the canonical flow, make an explicit
-release decision to submit the app-only artifact. Do not substitute the retired
-manual-session keyboard.
+Use deterministic providers for normal automation. A live provider smoke requires
+explicit user authorization. Record device, iOS version, build/commit, starting
+state, actions, and observed result.
 
-## Immediate Next Step
+Then qualify one internal TestFlight candidate. App Review uncertainty does not
+weaken the keyboard UX in advance. If the complete keyboard cannot ship, record
+an explicit app-only release decision.
 
-After KBD-FLOW-0 is committed, the next implementation chat is KBD-FLOW-1 only.
-Its job is to prove the end-to-end public-API round trip on a signed physical
-iPhone before production bridge or UI refactoring begins.
+## Likely File Ownership
+
+Specs and plan:
+
+- `docs/ios-keyboard-dictation-mvp-plan.md`;
+- `docs/specs/features/ios-keyboard-handoff-and-delivery.md`;
+- `docs/specs/features/ios-keyboard-experience.md`;
+- `docs/specs/features/ios-settings-guided-recovery.md`;
+- `docs/specs/features/ios-v1-release.md`.
+
+New or extended presentation and routing:
+
+- `HoldTypeIOS/IOSKeyboardHandoffSheet.swift`;
+- a small handoff presentation/owner type under `HoldTypeIOS/`;
+- `HoldTypeIOS/IOSContainingAppShell.swift`;
+- `HoldTypeIOS/IOSContainingAppDestination.swift`;
+- `HoldTypeIOS/IOSVoiceHomeView.swift`;
+- `HoldTypeIOS/IOSUIQualificationGallery.swift`.
+
+Bridge and runtime:
+
+- `KeyboardShared/KeyboardDictationBridge.swift` or one narrowly separated
+  handoff-intent file;
+- `KeyboardShared/KeyboardCommandSurface.swift`;
+- `HoldTypeKeyboard/KeyboardViewController.swift`;
+- `HoldTypeKeyboard/BrandStageKeyboardView.swift`;
+- `HoldTypeIOS/IOSKeyboardDictationSessionCoordinator.swift`;
+- `HoldTypeIOS/IOSForegroundVoiceWorkflow.swift`;
+- `HoldTypeIOS/IOSForegroundVoiceRuntime.swift`;
+- `HoldTypeIOS/IOSContainingAppSceneHost.swift`.
+
+Tests should mirror these owners. Do not assume every listed file needs to
+change; verify ownership at the start of each slice and keep the diff narrow.
+
+## Definition Of Done
+
+The feature is complete only when:
+
+- a keyboard with no valid session contains no manual setup instructions;
+- tapping its existing Voice indicator opens HoldType automatically;
+- valid setup starts real recording and shows the handoff sheet without another
+  app button tap;
+- missing setup opens the exact repair location and requires a fresh keyboard
+  tap afterward;
+- the user swipes back and sees the keyboard in Listening even after extension
+  recreation;
+- Finish and Cancel control the same app-owned attempt;
+- accepted text inserts into the originating input at most once;
+- unsafe delivery stays in Latest;
+- a healthy session supports its intended bounded warm path;
+- an expired session restarts the cold handoff;
+- ordinary standalone Voice behaves as before;
+- signed-device and TestFlight evidence cover the complete path;
+- the app-only release fallback remains coherent without a degraded manual
+  keyboard.
+
+## Goal Launch Contract
+
+When the user authorizes goal execution, the goal must treat this file as the
+source of truth, execute KBD-FLOW slices in order, and begin with KBD-FLOW-1
+only. After the KBD-FLOW-1 checkpoint it must present visual evidence and wait
+for user confirmation before wiring KBD-FLOW-2.
