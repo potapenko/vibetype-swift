@@ -364,6 +364,7 @@ struct IOSVoiceHomeView: View {
             }
         } label: {
             Image(systemName: presentation.systemImage)
+                .font(.system(size: 18, weight: .medium))
                 .frame(width: 36, height: 36)
         }
         .buttonStyle(.plain)
@@ -425,29 +426,99 @@ struct IOSVoiceHomeView: View {
     private var draftActionBar: some View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .center, spacing: 4) {
-                oneShotDraftActions
+                draftIconActions
                 Spacer(minLength: 12)
-                draftActionButtons
+                draftClearAction
             }
 
-            VStack(alignment: .trailing, spacing: 4) {
-                HStack(spacing: 4) {
-                    oneShotDraftActions
-                    Spacer(minLength: 12)
+            HStack(alignment: .center, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        oneShotDraftActions
+                    }
+                    HStack(spacing: 4) {
+                        draftEditingIconActions
+                    }
+                    .buttonStyle(.plain)
                 }
-                HStack(spacing: 4) {
-                    Spacer(minLength: 12)
-                    draftActionButtons
-                }
+                Spacer(minLength: 12)
+                draftClearAction
             }
         }
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .accessibilityIdentifier("ios.voice.draft-actions")
+    }
+
+    @ViewBuilder
+    private var draftIconActions: some View {
+        HStack(spacing: 4) {
+            oneShotDraftActions
+            draftEditingIconActions
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
     private var oneShotDraftActions: some View {
         oneShotVoiceIconButton(.startTranslation)
         oneShotVoiceIconButton(.startCorrection)
+    }
+
+    @ViewBuilder
+    private var draftEditingIconActions: some View {
+        Button {
+            draftActionNotice = nil
+            Task { await draftOwner.undo() }
+        } label: {
+            Image(systemName: "arrow.uturn.backward")
+                .font(.system(size: 18, weight: .medium))
+                .frame(width: 36, height: 36)
+        }
+        .disabled(!draftOwner.canUndo)
+        .accessibilityLabel("Undo Draft Change")
+
+        Button {
+            draftActionNotice = nil
+            Task { await draftOwner.redo() }
+        } label: {
+            Image(systemName: "arrow.uturn.forward")
+                .font(.system(size: 18, weight: .medium))
+                .frame(width: 36, height: 36)
+        }
+        .disabled(!draftOwner.canRedo)
+        .accessibilityLabel("Redo Draft Change")
+
+        Button {
+            copyDraft()
+        } label: {
+            Image(systemName: "doc.on.doc")
+                .font(.system(size: 18, weight: .medium))
+                .frame(width: 36, height: 36)
+        }
+        .disabled(draftOwner.visibleText.isEmpty)
+        .accessibilityLabel("Copy Draft")
+    }
+
+    @ViewBuilder
+    private var draftClearAction: some View {
+        if draftClearPresentation.isVisible {
+            Button {
+                clearDraft()
+            } label: {
+                Label("Clear", systemImage: "xmark.circle")
+                    .font(.subheadline.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .disabled(!draftClearPresentation.isEnabled)
+            .accessibilityLabel("Clear Current Draft")
+            .accessibilityHint(
+                "Clears only this Draft. Undo remains available."
+            )
+            .accessibilityIdentifier("ios.voice.draft.clear")
+        }
     }
 
     @ViewBuilder
@@ -552,60 +623,6 @@ struct IOSVoiceHomeView: View {
             _ = await draftOwner.finishEditing()
             draftEditSaveTask = nil
         }
-    }
-
-    @ViewBuilder
-    private var draftActionButtons: some View {
-        HStack(spacing: 4) {
-            Button {
-                draftActionNotice = nil
-                Task { await draftOwner.undo() }
-            } label: {
-                Image(systemName: "arrow.uturn.backward")
-                    .frame(width: 36, height: 36)
-            }
-            .disabled(!draftOwner.canUndo)
-            .accessibilityLabel("Undo Draft Change")
-
-            Button {
-                draftActionNotice = nil
-                Task { await draftOwner.redo() }
-            } label: {
-                Image(systemName: "arrow.uturn.forward")
-                    .frame(width: 36, height: 36)
-            }
-            .disabled(!draftOwner.canRedo)
-            .accessibilityLabel("Redo Draft Change")
-
-            Button {
-                copyDraft()
-            } label: {
-                Image(systemName: "doc.on.doc")
-                    .frame(width: 36, height: 36)
-            }
-            .disabled(draftOwner.visibleText.isEmpty)
-            .accessibilityLabel("Copy Draft")
-
-            if draftClearPresentation.isVisible {
-                Button {
-                    clearDraft()
-                } label: {
-                    Label("Clear", systemImage: "xmark.circle")
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 8)
-                        .frame(minHeight: 44)
-                }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .disabled(!draftClearPresentation.isEnabled)
-                .accessibilityLabel("Clear Current Draft")
-                .accessibilityHint(
-                    "Clears only this Draft. Undo remains available."
-                )
-                .accessibilityIdentifier("ios.voice.draft.clear")
-            }
-        }
-        .buttonStyle(.plain)
     }
 
     private var draftClearPresentation: IOSVoiceDraftClearPresentation {

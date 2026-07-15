@@ -18,9 +18,11 @@ without opening the custom keyboard.
   list or preview and adds no duplicate History toolbar action.
 - Append, Auto Translate, and Auto Correction are session modes in the bottom
   Draft settings row. The existing one-shot Translate and Correction actions,
-  plus Undo, Redo, Copy, and Clear, remain in the top action row. Clear is a
-  neutral labeled Draft action, not a red delete or History action. The action
-  row may wrap at large Dynamic Type sizes without removing the Clear label.
+  plus Undo, Redo, and Copy, remain together as a compact leading icon group
+  in the top action area. Clear remains the only trailing action and is a
+  neutral labeled Draft action, not a red delete or History action. On compact
+  widths or at large Dynamic Type sizes, the leading icon group may wrap
+  internally without moving Clear into that group or removing its label.
   Keyboard Dictation Session and the practice field remain reachable from the
   compact Voice More menu; the keyboard tools are presented as a sheet and
   none of them occupies the primary Voice canvas.
