@@ -10,7 +10,8 @@ automatic delivery ineligible.
 
 The containing app's ordinary Voice experience remains governed by the iOS
 release and voice specs. A keyboard handoff lands on that same first Voice
-screen; it does not create a separate handoff screen.
+screen and may present a temporary handoff sheet over it. The sheet is not a
+new tab, navigation destination, or second Voice implementation.
 
 ## Product Decision
 
@@ -45,9 +46,21 @@ resolved by silently degrading the keyboard into that manual-session design.
 - On first use, iOS may present microphone permission before recording begins.
   A denial produces a recoverable permission message; it never reports
   Listening.
-- HoldType opens to the existing first Voice screen. That screen shows the
-  current request and a short instruction to return to the host app. It is not
-  replaced by a keyboard-specific screen.
+- HoldType opens to the existing first Voice screen. A valid handoff presents a
+  large temporary sheet over that unchanged screen. The sheet may report
+  `Starting` while app-owned capture is arming, but it reports `Listening` only
+  after real capture begins.
+- Once Listening, the sheet asks the user to swipe right on the system bottom
+  bar to return to the host app and explains that recording will continue. It
+  contains no second Start button.
+- The sheet's explicit close action cancels the keyboard request, stops active
+  capture, dismisses the sheet, and leaves ordinary Voice Ready. Interactive
+  sheet dismissal is unavailable while capture is active so it cannot be
+  confused with the system return gesture.
+- If setup is incomplete, HoldType does not start capture or present the
+  handoff sheet. It opens the exact owning Settings or permission surface. A
+  completed repair does not replay the request; the user returns to the host
+  and taps the keyboard microphone again.
 - HoldType does not claim it can return to the host automatically. The user may
   need to swipe back or use the normal iOS app-switching gesture.
 - If the user taps keyboard Translate while its saved route is incomplete, the
@@ -149,8 +162,8 @@ microphone appear active.
 
 - Tapping the existing keyboard microphone opens HoldType and begins the same
   request without a separate preparatory session.
-- The first Voice screen reflects the keyboard-originated recording without a
-  new handoff destination.
+- The first Voice screen remains the underlying destination and the temporary
+  handoff sheet reflects Starting and Listening without duplicating Voice.
 - Returning to the host reconnects a recreated extension to the active request.
 - Finish and Cancel from the keyboard control the app-owned recording.
 - Accepted text inserts exactly once into the originating document when it is

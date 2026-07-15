@@ -26,6 +26,8 @@ nonisolated enum IOSUIQualificationRoute:
     case voiceOutputDelivery = "voice-output-delivery"
     case voiceCaptureRecovery = "voice-capture-recovery"
     case voicePendingRetry = "voice-pending-retry"
+    case keyboardHandoffStarting = "keyboard-handoff-starting"
+    case keyboardHandoffListening = "keyboard-handoff-listening"
     case keyboardSetup = "keyboard-setup"
     case latestEmpty = "latest-empty"
     case latestSuccess = "latest-success"
@@ -84,6 +86,10 @@ nonisolated enum IOSUIQualificationRoute:
             "Voice — Recover or Discard"
         case .voicePendingRetry:
             "Voice — Retry or Discard"
+        case .keyboardHandoffStarting:
+            "Keyboard Handoff — Starting"
+        case .keyboardHandoffListening:
+            "Keyboard Handoff — Listening"
         case .keyboardSetup:
             "Keyboard & Full Access Setup"
         case .latestEmpty:
@@ -131,6 +137,7 @@ nonisolated enum IOSUIQualificationRoute:
              .voiceArming, .voiceListening,
              .voiceFinalizing, .voiceProcessing, .voicePostProcessing,
              .voiceOutputDelivery, .voiceCaptureRecovery, .voicePendingRetry,
+             .keyboardHandoffStarting, .keyboardHandoffListening,
              .keyboardSetup:
             .voice
         case .latestEmpty, .latestSuccess, .latestFailure:
@@ -183,6 +190,29 @@ nonisolated enum IOSUIQualificationRoute:
              .privacyAccepted,
              .privacyUnreadable, .privacyFailure, .usageEmpty,
              .usageKnown, .usageMixed, .usageUnknown, .usageLoadFailure,
+             .usageWriteWarning, .usageResetFailure,
+             .keyboardHandoffStarting, .keyboardHandoffListening,
+             .diagnostics:
+            nil
+        }
+    }
+
+    fileprivate var keyboardHandoffPhase:
+        IOSKeyboardHandoffSheetPhase? {
+        switch self {
+        case .keyboardHandoffStarting:
+            .starting
+        case .keyboardHandoffListening:
+            .listening
+        case .gallery, .voiceStart, .voiceSetupBlocked,
+             .voiceReadinessCheck, .voiceArming, .voiceListening,
+             .voiceFinalizing, .voiceProcessing, .voicePostProcessing,
+             .voiceOutputDelivery, .voiceCaptureRecovery,
+             .voicePendingRetry, .keyboardSetup, .latestEmpty,
+             .latestSuccess, .latestFailure, .historyEntries,
+             .privacyChecking, .privacyReady, .privacyAccepted,
+             .privacyUnreadable, .privacyFailure, .usageEmpty,
+             .usageKnown, .usageMixed, .usageUnknown, .usageLoadFailure,
              .usageWriteWarning, .usageResetFailure, .diagnostics:
             nil
         }
@@ -208,7 +238,9 @@ nonisolated enum IOSUIQualificationRoute:
              .voiceCaptureRecovery, .voicePendingRetry, .latestEmpty,
              .latestSuccess, .latestFailure, .usageEmpty, .usageKnown,
              .usageMixed, .usageUnknown, .usageLoadFailure,
-             .usageWriteWarning, .usageResetFailure, .diagnostics:
+             .usageWriteWarning, .usageResetFailure,
+             .keyboardHandoffStarting, .keyboardHandoffListening,
+             .diagnostics:
             nil
         }
     }
@@ -237,7 +269,8 @@ nonisolated enum IOSUIQualificationRoute:
              .voiceCaptureRecovery, .voicePendingRetry, .latestEmpty,
              .latestSuccess, .latestFailure, .privacyChecking,
              .privacyReady, .privacyAccepted, .privacyUnreadable,
-             .privacyFailure, .diagnostics:
+             .privacyFailure, .keyboardHandoffStarting,
+             .keyboardHandoffListening, .diagnostics:
             nil
         }
     }
@@ -290,7 +323,9 @@ struct IOSUIQualificationRootView: View {
 
     @ViewBuilder
     private func destination(_ route: IOSUIQualificationRoute) -> some View {
-        if let scenario = route.voiceScenario {
+        if let phase = route.keyboardHandoffPhase {
+            IOSUIQualificationKeyboardHandoffHost(phase: phase)
+        } else if let scenario = route.voiceScenario {
             IOSUIQualificationVoiceHost(scenario: scenario)
         } else if route == .keyboardSetup {
             IOSUIQualificationKeyboardSetupHost()
@@ -321,6 +356,25 @@ struct IOSUIQualificationRootView: View {
         in section: IOSUIQualificationSection
     ) -> [IOSUIQualificationRoute] {
         IOSUIQualificationRoute.allCases.filter { $0.section == section }
+    }
+}
+
+private struct IOSUIQualificationKeyboardHandoffHost: View {
+    let phase: IOSKeyboardHandoffSheetPhase
+
+    @State private var isPresented = true
+
+    var body: some View {
+        IOSUIQualificationVoiceHost(scenario: .start)
+            .sheet(isPresented: $isPresented) {
+                IOSKeyboardHandoffSheet(
+                    presentation: IOSKeyboardHandoffSheetPresentation(
+                        phase: phase
+                    ),
+                    cancel: { isPresented = false }
+                )
+            }
+            .accessibilityIdentifier("ios.qualification.keyboard-handoff")
     }
 }
 
