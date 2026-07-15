@@ -37,6 +37,10 @@ public struct IOSVoiceDraftRecord: Equatable, Sendable {
     public let segments: [IOSVoiceDraftSegment]
 
     public var isEmpty: Bool { text.isEmpty && segments.isEmpty }
+    /// Whether the Draft contains text that is useful to present or restore.
+    public var hasMeaningfulText: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     public var isFull: Bool { segments.count >= Self.maximumSegmentCount }
 
     @_spi(HoldTypeIOSCore)
@@ -62,7 +66,9 @@ public struct IOSVoiceDraftRecord: Equatable, Sendable {
         guard segments.count <= Self.maximumSegmentCount else {
             throw IOSVoiceDraftRecordError.tooManyAcceptedResults
         }
-        if updatedText.isEmpty {
+        if updatedText.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty {
             return .empty
         }
         return Self(text: updatedText, segments: segments)

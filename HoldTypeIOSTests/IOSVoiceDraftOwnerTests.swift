@@ -12,6 +12,7 @@ struct IOSVoiceDraftOwnerTests {
             let old = try accepted(1, text: "Old")
             let replacement = try accepted(2, text: "New attempt")
             #expect(await owner.appendAccepted(old))
+            #expect(!owner.canUndo)
             #expect(owner.contentChange.revision == 2)
             #expect(owner.contentChange.kind == .append)
 
@@ -43,8 +44,11 @@ struct IOSVoiceDraftOwnerTests {
             let first = try accepted(1, text: "First paragraph")
             let second = try accepted(2, text: "Second paragraph")
             #expect(await owner.appendAccepted(first))
+            #expect(!owner.canUndo)
             #expect(await owner.appendAccepted(first))
+            #expect(!owner.canUndo)
             #expect(await owner.appendAccepted(second))
+            #expect(owner.canUndo)
             #expect(owner.text == "First paragraph\n\nSecond paragraph")
 
             let relaunched = IOSVoiceDraftOwner(repository: repository)
@@ -55,7 +59,26 @@ struct IOSVoiceDraftOwnerTests {
         }
     }
 
-    @Test func clearUndoRedoAndNewBranchHaveSessionLocalSemantics()
+    @Test func clearCanRestoreTextWithoutMakingBlankRedoable()
+        async throws {
+        try await withRepository { repository in
+            let owner = IOSVoiceDraftOwner(repository: repository)
+            #expect(await owner.refresh())
+            let first = try accepted(1, text: "One")
+            let second = try accepted(2, text: "Two")
+            #expect(await owner.appendAccepted(first))
+            #expect(await owner.appendAccepted(second))
+
+            #expect(await owner.clear())
+            #expect(owner.text.isEmpty)
+            #expect(owner.canUndo)
+            #expect(await owner.undo())
+            #expect(owner.text == "One\n\nTwo")
+            #expect(!owner.canRedo)
+        }
+    }
+
+    @Test func meaningfulUndoRedoAndNewBranchHaveSessionLocalSemantics()
         async throws {
         try await withRepository { repository in
             let owner = IOSVoiceDraftOwner(repository: repository)
@@ -66,18 +89,48 @@ struct IOSVoiceDraftOwnerTests {
             #expect(await owner.appendAccepted(first))
             #expect(await owner.appendAccepted(second))
 
-            #expect(await owner.clear())
-            #expect(owner.text.isEmpty)
-            #expect(owner.canUndo)
             #expect(await owner.undo())
-            #expect(owner.text == "One\n\nTwo")
+            #expect(owner.text == "One")
             #expect(owner.canRedo)
             #expect(await owner.redo())
-            #expect(owner.text.isEmpty)
+            #expect(owner.text == "One\n\nTwo")
 
             #expect(await owner.undo())
             #expect(await owner.appendAccepted(third))
-            #expect(owner.text == "One\n\nTwo\n\nThree")
+            #expect(owner.text == "One\n\nThree")
+            #expect(!owner.canRedo)
+        }
+    }
+
+    @Test func firstManualTextHasNoEmptyUndoTarget() async throws {
+        try await withRepository { repository in
+            let owner = IOSVoiceDraftOwner(repository: repository)
+            #expect(await owner.refresh())
+            #expect(owner.beginEditing())
+            owner.updateEditingText("Typed from empty")
+            #expect(await owner.finishEditing())
+
+            #expect(owner.text == "Typed from empty")
+            #expect(!owner.canUndo)
+            #expect(!owner.canRedo)
+        }
+    }
+
+    @Test func visuallyBlankEditIsCanonicalEmptyAndOnlyRestorable()
+        async throws {
+        try await withRepository { repository in
+            let owner = IOSVoiceDraftOwner(repository: repository)
+            #expect(await owner.refresh())
+            let first = try accepted(1, text: "One")
+            #expect(await owner.appendAccepted(first))
+            #expect(owner.beginEditing())
+            owner.updateEditingText(" \n\t ")
+            #expect(await owner.finishEditing())
+
+            #expect(owner.confirmedRecord == .empty)
+            #expect(owner.canUndo)
+            #expect(await owner.undo())
+            #expect(owner.text == "One")
             #expect(!owner.canRedo)
         }
     }
@@ -215,6 +268,31 @@ struct IOSVoiceDraftOwnerTests {
             #expect(!(await owner.clear()))
             #expect(owner.text == "One\n\nExternal")
             #expect(owner.notice == .draftChanged)
+            #expect(!owner.canUndo)
+            #expect(!owner.canRedo)
+        }
+    }
+
+    @Test func refreshOfChangedDraftClearsProcessLocalBranches()
+        async throws {
+        try await withRepository { repository in
+            let owner = IOSVoiceDraftOwner(repository: repository)
+            #expect(await owner.refresh())
+            let first = try accepted(1, text: "One")
+            let second = try accepted(2, text: "Two")
+            #expect(await owner.appendAccepted(first))
+            #expect(await owner.appendAccepted(second))
+            #expect(owner.canUndo)
+
+            _ = try await repository.append(
+                IOSVoiceDraftSegment(
+                    resultID: identifier(3),
+                    text: "External"
+                )
+            )
+
+            #expect(await owner.refresh())
+            #expect(owner.text == "One\n\nTwo\n\nExternal")
             #expect(!owner.canUndo)
             #expect(!owner.canRedo)
         }

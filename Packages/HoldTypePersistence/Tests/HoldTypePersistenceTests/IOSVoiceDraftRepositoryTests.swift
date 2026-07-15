@@ -83,6 +83,17 @@ struct IOSVoiceDraftRepositoryTests {
         #expect(fileSystem.readPolicies == [expectedPolicy])
     }
 
+    @Test func replacingWithVisuallyBlankTextCreatesCanonicalEmptyDraft()
+        throws {
+        let record = IOSVoiceDraftRecord(
+            segments: [try makeSegment(1, text: "Accepted")]
+        )
+
+        #expect(record.hasMeaningfulText)
+        #expect(try record.replacingText(" \n\t ") == .empty)
+        #expect(!IOSVoiceDraftRecord.empty.hasMeaningfulText)
+    }
+
     @Test func appendWritesCanonicalV2AndJoinsAcceptedTextWithBlankLines()
         async throws {
         let fileSystem = DraftFileSystemFake()

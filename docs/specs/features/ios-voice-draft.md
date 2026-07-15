@@ -67,21 +67,30 @@ without opening the custom keyboard.
 - Keyboard-controlled dictation follows the containing app's safe default and
   replaces the Draft unless a future keyboard contract exposes Append.
 - Replace and Append are atomic Draft mutations. Both preserve exact-once
-  accepted-result handling, create one process-local Undo snapshot, and never
-  roll back Latest, History, or Pending cleanup when Draft persistence fails.
+  accepted-result handling, create one process-local Undo snapshot when the
+  previous Draft contains meaningful text, and never roll back Latest, History,
+  or Pending cleanup when Draft persistence fails.
 - The current Draft survives relaunch. Its canonical editable text is stored
   separately from the bounded accepted result identifiers used for exact-once
   append. It contains no audio, provider payload, prompt, credential, host
   context, or creation-history log.
 - Copy writes the entire current Draft to the clipboard.
+- A Draft containing only spaces, tabs, or line breaks is treated as empty.
+  Committing such an edit stores the canonical empty Draft rather than a hidden
+  visually blank state.
 - Clear atomically replaces the current Draft with empty. It never changes
   Latest, History, Pending, Recording Cache, usage, settings, or the keyboard
   projection.
 - Undo and Redo cover successful replace, append, committed edit, and Clear
-  mutations in the current process only. They are bounded to twenty snapshots
-  and are not persisted.
+  mutations in the current process only. They retain at most twenty snapshots
+  with meaningful text and are not persisted. Empty or visually
+  blank Drafts are never Undo or Redo targets: creating the first meaningful
+  Draft has no empty Undo target, and Undo may restore a Draft after Clear or a
+  delete-to-empty edit without making that empty state available through Redo.
   A cold launch restores the current Draft but no hidden prior text.
 - New mutation after Undo removes the forward Redo branch.
+- A refresh that observes a different confirmed Draft removes the process-local
+  Undo and Redo branches instead of applying snapshots from an older state.
 - The durable Draft is one bounded protected atomic record with at most one
   hundred accepted result identifiers and four MiB of encoded data. Existing
   segment records migrate without losing text or exact-once identifiers. A
@@ -237,8 +246,9 @@ without opening the custom keyboard.
 - Focused persistence tests prove strict bounded decoding, exact-once append,
   atomic Clear/restore, identifier collision handling, and no hidden durable
   undo record.
-- State-owner tests prove load, append, edit, Clear, Undo, Redo, forward-branch
-  removal, conflict handling, and failure preservation.
+- State-owner tests prove load, append, edit, Clear, meaningful-only Undo and
+  Redo, forward-branch removal, refresh invalidation, conflict handling, and
+  failure preservation.
 - presentation tests cover empty, populated, loading, listening, processing,
   setup, Pending recovery, full Draft, unavailable states, adaptive type
   thresholds, and follow-tail suspension and resumption.

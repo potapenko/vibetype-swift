@@ -165,6 +165,10 @@ final class IOSVoiceDraftOwner {
         do {
             let record = try await client.load()
             guard complete() else { return false }
+            if let previous, previous != record {
+                undoStack.removeAll()
+                redoStack.removeAll()
+            }
             state = .ready(record)
             markContentChange(.replace)
             notice = nil
@@ -366,8 +370,7 @@ final class IOSVoiceDraftOwner {
             failureNotice: .undoFailed,
             onSuccess: {
                 _ = self.undoStack.popLast()
-                self.redoStack.append(current)
-                self.trim(&self.redoStack)
+                self.recordRedo(current)
                 self.markContentChange(.preservePosition)
             }
         )
@@ -436,8 +439,20 @@ final class IOSVoiceDraftOwner {
     }
 
     private func recordUndo(_ record: IOSVoiceDraftRecord) {
-        undoStack.append(record)
-        trim(&undoStack)
+        recordMeaningful(record, in: &undoStack)
+    }
+
+    private func recordRedo(_ record: IOSVoiceDraftRecord) {
+        recordMeaningful(record, in: &redoStack)
+    }
+
+    private func recordMeaningful(
+        _ record: IOSVoiceDraftRecord,
+        in stack: inout [IOSVoiceDraftRecord]
+    ) {
+        guard record.hasMeaningfulText, stack.last != record else { return }
+        stack.append(record)
+        trim(&stack)
     }
 
     private func markContentChange(_ kind: IOSVoiceDraftContentChangeKind) {

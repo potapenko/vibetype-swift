@@ -212,8 +212,11 @@ destination. History remains a separate tab and is not previewed on Voice.
   History, or Pending cleanup.
 - The Draft is editable only while Voice is inactive. It starts unfocused, so
   cold launch never opens the keyboard; a direct tap provides normal selection,
-  typing, paste, and emoji input. One completed edit is one app-level Undo
-  mutation and preserves accepted-result deduplication independently of text.
+  typing, paste, and emoji input. One completed edit between meaningful Draft
+  states is one app-level Undo mutation and preserves accepted-result
+  deduplication independently of text. Empty or visually blank Drafts are never
+  Undo or Redo targets; Undo may restore text after Clear without making the
+  empty state redoable.
 - Real recorder metering drives mirrored native level bars around the primary
   Voice control only while Listening. Meter values are ephemeral, bounded, and
   never persisted or logged.
