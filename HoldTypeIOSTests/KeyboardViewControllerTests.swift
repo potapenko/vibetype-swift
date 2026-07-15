@@ -172,14 +172,20 @@ struct KeyboardViewControllerTests {
         )
     }
 
-    @Test func missingSessionShowsCompleteRecoveryWithoutADeadSettingsAction()
+    @Test func missingSessionLaunchesBoundedHandoffFromTheReadyIndicator()
         throws {
-        let harness = KeyboardControllerHarness()
+        let requestID = UUID()
+        let harness = KeyboardControllerHarness(requestID: requestID)
         let controller = harness.makeController()
         controller.loadViewIfNeeded()
 
         #expect(controller.hasDictationKey)
-        #expect(statusText(in: controller.view) == "Session not running")
+        #expect(statusText(in: controller.view) == "Ready")
+        let microphone = try button(
+            "keyboard.brand-stage.voice",
+            in: controller.view
+        )
+        #expect(microphone.isEnabled)
         #expect(
             descendant(
                 UIButton.self,
@@ -187,14 +193,22 @@ struct KeyboardViewControllerTests {
                 in: controller.view
             ) == nil
         )
-        #expect(
-            descendant(
-                UILabel.self,
-                identifier: "keyboard.brand-stage.recovery-detail",
-                in: controller.view
-            )?.text
-                == "Open HoldType → Voice → Keyboard Dictation Session → Start Keyboard Session. Then return here."
-        )
+
+        controller.keyboardView.onMicrophoneRequested?()
+
+        let intent = try #require(harness.savedHandoffIntents.first)
+        #expect(harness.savedHandoffIntents.count == 1)
+        #expect(intent.requestID == requestID)
+        #expect(intent.sourceDocumentID == harness.proxy.documentIdentifier)
+        #expect(intent.action == .standard)
+        #expect(harness.savedCommands.isEmpty)
+        #expect(harness.openedURLs == [
+            try #require(
+                KeyboardHandoffLaunchRoute(requestID: requestID).url
+            ),
+        ])
+        #expect(statusText(in: controller.view) == "Opening HoldType…")
+        #expect(!microphone.isEnabled)
     }
 
     @Test func appStateDrivesCommandsAndMatchingResultInsertsOnce() throws {
@@ -217,6 +231,8 @@ struct KeyboardViewControllerTests {
 
         controller.keyboardView.onMicrophoneRequested?()
         #expect(harness.savedCommands.map(\.kind) == [.start])
+        #expect(harness.savedHandoffIntents.isEmpty)
+        #expect(harness.openedURLs.isEmpty)
 
         harness.dictationState = try #require(
             KeyboardDictationStateRecord(
@@ -246,7 +262,7 @@ struct KeyboardViewControllerTests {
         #expect(harness.proxy.insertedTexts == [
             "Processed keyboard text",
         ])
-        #expect(statusText(in: controller.view) == "Session not running")
+        #expect(statusText(in: controller.view) == "Ready")
     }
 
     @Test func automaticVoiceModesApplyOnMicrophoneStartAndGateTranslation() throws {
@@ -368,7 +384,7 @@ struct KeyboardViewControllerTests {
         controller.textDidChange(nil)
 
         #expect(harness.proxy.insertedTexts.isEmpty)
-        #expect(statusText(in: controller.view) == "Session not running")
+        #expect(statusText(in: controller.view) == "Ready")
     }
 
     @Test func resultFromAnotherRequestNeverInserts() throws {
@@ -402,7 +418,7 @@ struct KeyboardViewControllerTests {
         controller.textDidChange(nil)
 
         #expect(harness.proxy.insertedTexts.isEmpty)
-        #expect(statusText(in: controller.view) == "Session not running")
+        #expect(statusText(in: controller.view) == "Ready")
     }
 
     @Test func extensionLifetimeLossSuppressesAutomaticInsertion() throws {
@@ -440,7 +456,7 @@ struct KeyboardViewControllerTests {
         controller.textDidChange(nil)
 
         #expect(harness.proxy.insertedTexts.isEmpty)
-        #expect(statusText(in: controller.view) == "Session not running")
+        #expect(statusText(in: controller.view) == "Ready")
     }
 
     @Test func cancelDoesNotInsertAndRestrictedModeKeepsEditing() throws {
@@ -468,6 +484,7 @@ struct KeyboardViewControllerTests {
         let restricted = KeyboardControllerHarness(fullAccessOverride: false)
         let restrictedController = restricted.makeController()
         restrictedController.loadViewIfNeeded()
+        restrictedController.keyboardView.onMicrophoneRequested?()
         restrictedController.keyboardView.onQuickInsertRequested?(".")
         restrictedController.keyboardView.onSpaceRequested?()
         restrictedController.keyboardView.onDeleteStarted?()
@@ -478,22 +495,47 @@ struct KeyboardViewControllerTests {
             statusText(in: restrictedController.view)
                 == "Full Access required"
         )
-        #expect(
-            descendant(
-                UILabel.self,
-                identifier: "keyboard.brand-stage.recovery-detail",
-                in: restrictedController.view
-            )?.text?.contains("iPhone Settings → General → Keyboard") == true
-        )
-        #expect(
-            descendant(
-                UILabel.self,
-                identifier: "keyboard.brand-stage.recovery-shortcut",
-                in: restrictedController.view
-            )?.text == "Shortcut: hold 🌐 → Keyboard Settings."
-        )
+        #expect(restricted.openedURLs == [
+            URL(string: "holdtype://settings/fullAccess")!,
+        ])
+        #expect(restricted.savedHandoffIntents.isEmpty)
+        #expect(restricted.savedCommands.isEmpty)
         #expect(restricted.proxy.insertedTexts == [".", " ", "\n"])
         #expect(restricted.proxy.deleteBackwardCount == 1)
+    }
+
+    @Test func handoffLaunchFailureRestoresRetryableIndicator() async throws {
+        let requestID = UUID()
+        let harness = KeyboardControllerHarness(
+            requestID: requestID,
+            openContainingAppSucceeds: false
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+
+        controller.keyboardView.onMicrophoneRequested?()
+        await Task.yield()
+
+        #expect(harness.savedHandoffIntents.map(\.requestID) == [requestID])
+        #expect(statusText(in: controller.view) == "Couldn’t open HoldType")
+        let microphone = try button(
+            "keyboard.brand-stage.voice",
+            in: controller.view
+        )
+        #expect(microphone.isEnabled)
+    }
+
+    @Test func coldTranslationSelectionIsCarriedByTheHandoffIntent() throws {
+        let requestID = UUID()
+        let harness = KeyboardControllerHarness(requestID: requestID)
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+
+        controller.keyboardView.onAutomaticVoiceActionChanged?(.translate)
+        controller.keyboardView.onMicrophoneRequested?()
+
+        #expect(harness.savedHandoffIntents.map(\.action) == [.translate])
+        #expect(harness.openedURLs.count == 1)
     }
 }
 
@@ -505,7 +547,10 @@ private final class KeyboardControllerHarness {
     let proxy = KeyboardDocumentProxySpy()
     let inputModeSwitchKeyOverride: Bool?
     let fullAccessOverride: Bool
+    let requestID: UUID
+    let openContainingAppSucceeds: Bool
     var savedCommands: [KeyboardDictationCommandRecord] = []
+    var savedHandoffIntents: [KeyboardHandoffIntentRecord] = []
     var openedURLs: [URL] = []
     var scheduledExpiryDates: [Date] = []
     var scheduledExpiryActions: [@MainActor () -> Void] = []
@@ -515,13 +560,17 @@ private final class KeyboardControllerHarness {
         snapshot: KeyboardBridgeSnapshot? = nil,
         dictationState: KeyboardDictationStateRecord? = nil,
         inputModeSwitchKeyOverride: Bool? = true,
-        fullAccessOverride: Bool = true
+        fullAccessOverride: Bool = true,
+        requestID: UUID = UUID(),
+        openContainingAppSucceeds: Bool = true
     ) {
         self.now = now
         self.snapshot = snapshot
         self.dictationState = dictationState
         self.inputModeSwitchKeyOverride = inputModeSwitchKeyOverride
         self.fullAccessOverride = fullAccessOverride
+        self.requestID = requestID
+        self.openContainingAppSucceeds = openContainingAppSucceeds
     }
 
     func makeController() -> KeyboardViewController {
@@ -532,8 +581,12 @@ private final class KeyboardControllerHarness {
                 saveDictationCommand: { [self] command in
                     savedCommands.append(command)
                 },
+                saveHandoffIntent: { [self] intent in
+                    savedHandoffIntents.append(intent)
+                },
                 observeDictationState: { _ in nil },
                 now: { [self] in now },
+                makeRequestID: { [self] in requestID },
                 documentProxyOverride: proxy,
                 inputModeSwitchKeyOverride: inputModeSwitchKeyOverride,
                 fullAccessOverride: fullAccessOverride,
@@ -544,7 +597,7 @@ private final class KeyboardControllerHarness {
                 },
                 openContainingAppOverride: { [self] url, completion in
                     openedURLs.append(url)
-                    completion(true)
+                    completion(openContainingAppSucceeds)
                 },
                 recordDiagnostic: { _ in }
             )

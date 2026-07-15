@@ -15,10 +15,12 @@ struct KeyboardViewControllerDependencies {
     let loadSnapshot: () throws -> KeyboardBridgeSnapshot?
     let loadDictationState: () throws -> KeyboardDictationStateRecord?
     let saveDictationCommand: (KeyboardDictationCommandRecord) throws -> Void
+    let saveHandoffIntent: (KeyboardHandoffIntentRecord) throws -> Void
     let observeDictationState: (
         @escaping @MainActor () -> Void
     ) -> KeyboardDictationBridgeObserver?
     let now: () -> Date
+    let makeRequestID: () -> UUID
     let documentProxyOverride: (any UITextDocumentProxy)?
     let inputModeSwitchKeyOverride: Bool?
     let fullAccessOverride: Bool?
@@ -40,6 +42,10 @@ struct KeyboardViewControllerDependencies {
             try store.saveCommand(command)
             KeyboardDictationBridgeSignal.postCommandChanged()
         },
+        saveHandoffIntent: { intent in
+            let store = try KeyboardHandoffIntentStore.appGroup()
+            try store.save(intent)
+        },
         observeDictationState: { action in
             KeyboardDictationBridgeObserver(
                 name: KeyboardDictationBridgeConfiguration.stateNotification,
@@ -47,6 +53,7 @@ struct KeyboardViewControllerDependencies {
             )
         },
         now: { Date() },
+        makeRequestID: { UUID() },
         documentProxyOverride: nil,
         inputModeSwitchKeyOverride: nil,
         fullAccessOverride: nil,
@@ -93,6 +100,8 @@ final class KeyboardViewController: UIInputViewController {
     private var insertedDictationRequestID: UUID?
     private var lastSeenDictationSessionID: UUID?
     private var pendingDictationCommand: KeyboardDictationCommandKind?
+    private var pendingHandoffRequestID: UUID?
+    private var handoffLaunchFailed = false
     private var forcesSessionNotRunning = false
     private var showsInputModeSwitchKey = true
     private var extensionLifetimeID = UUID()
@@ -265,14 +274,21 @@ final class KeyboardViewController: UIInputViewController {
             recordKeyboardState(.noSharedAccess)
             return (
                 .fullAccessRequired,
-                .recovery(.enableFullAccess),
+                .ready,
+                false
+            )
+        }
+        if pendingHandoffRequestID != nil {
+            return (
+                .openingHoldType,
+                .opening,
                 false
             )
         }
         guard !forcesSessionNotRunning, let dictationState else {
             return (
-                .sessionNotRunning,
-                .recovery(.startSession),
+                handoffLaunchFailed ? .launchFailed : .ready,
+                .ready,
                 false
             )
         }
@@ -290,8 +306,8 @@ final class KeyboardViewController: UIInputViewController {
         case .listening
             where activeDictationRequestID != dictationState.requestID:
             return (
-                .sessionNotRunning,
-                .recovery(.startSession),
+                .ready,
+                .ready,
                 false
             )
         case .listening:
@@ -299,22 +315,22 @@ final class KeyboardViewController: UIInputViewController {
         case .processing
             where activeDictationRequestID != dictationState.requestID:
             return (
-                .sessionNotRunning,
-                .recovery(.startSession),
+                .ready,
+                .ready,
                 false
             )
         case .processing:
             return (.processing, .processing, true)
         case .resultReady, .unavailable:
             return (
-                .sessionNotRunning,
-                .recovery(.startSession),
+                .ready,
+                .ready,
                 false
             )
         case .failed:
             return (
                 .dictationFailed,
-                .recovery(.requestFailed),
+                .ready,
                 false
             )
         }
@@ -395,14 +411,65 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func handleMicrophoneCommand() {
-        guard let state = dictationState else { return }
+        guard hasSharedContainerAccess else {
+            openFullAccessSettings()
+            return
+        }
+        guard !forcesSessionNotRunning, let state = dictationState else {
+            beginHandoff()
+            return
+        }
         switch state.phase {
         case .ready:
             beginDictation(action: automaticVoiceAction)
         case .listening:
-            sendDictationCommand(.finish)
-        case .processing, .resultReady, .unavailable, .failed:
-            break
+            if activeDictationRequestID == state.requestID {
+                sendDictationCommand(.finish)
+            } else {
+                beginHandoff()
+            }
+        case .processing:
+            if activeDictationRequestID != state.requestID {
+                beginHandoff()
+            }
+        case .resultReady, .unavailable, .failed:
+            beginHandoff()
+        }
+    }
+
+    private func beginHandoff() {
+        guard pendingHandoffRequestID == nil else { return }
+        let issuedAt = dependencies.now()
+        let requestID = dependencies.makeRequestID()
+        guard let intent = KeyboardHandoffIntentRecord(
+            requestID: requestID,
+            sourceDocumentID: activeDocumentProxy.documentIdentifier,
+            action: automaticVoiceAction,
+            issuedAt: issuedAt,
+            expiresAt: issuedAt.addingTimeInterval(
+                KeyboardHandoffIntentConfiguration.lifetime
+            )
+        ), let url = KeyboardHandoffLaunchRoute(requestID: requestID).url else {
+            handoffLaunchFailed = true
+            render()
+            return
+        }
+        do {
+            try dependencies.saveHandoffIntent(intent)
+        } catch {
+            handoffLaunchFailed = true
+            render()
+            return
+        }
+        pendingHandoffRequestID = requestID
+        handoffLaunchFailed = false
+        render()
+        openContainingApp(url) { [weak self] in
+            guard let self,
+                  pendingHandoffRequestID == requestID else { return }
+            pendingHandoffRequestID = nil
+            handoffLaunchFailed = true
+            render()
         }
     }
 
@@ -426,7 +493,8 @@ final class KeyboardViewController: UIInputViewController {
 
     private func selectAutomaticVoiceAction(_ action: KeyboardVoiceAction) {
         if action.translates,
-           dictationState?.translationAvailable != true {
+           dictationState?.phase == .ready,
+           dictationState?.translationAvailable == false {
             openTranslationSettings()
             return
         }
@@ -438,13 +506,34 @@ final class KeyboardViewController: UIInputViewController {
         guard let url = URL(string: "holdtype://settings/translation") else {
             return
         }
+        openContainingApp(url) {
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: "Could not open HoldType Translation Settings."
+            )
+        }
+    }
+
+    private func openFullAccessSettings() {
+        guard let url = URL(string: "holdtype://settings/fullAccess") else {
+            return
+        }
+        openContainingApp(url) {
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: "Could not open HoldType Full Access setup."
+            )
+        }
+    }
+
+    private func openContainingApp(
+        _ url: URL,
+        onFailure: @escaping @MainActor () -> Void
+    ) {
         let completion: (Bool) -> Void = { didOpen in
             guard !didOpen else { return }
             Task { @MainActor in
-                UIAccessibility.post(
-                    notification: .announcement,
-                    argument: "Open HoldType and configure Translation in Settings."
-                )
+                onFailure()
             }
         }
         if let openContainingAppOverride = dependencies.openContainingAppOverride {
@@ -525,6 +614,8 @@ final class KeyboardViewController: UIInputViewController {
         activeDictationRequestID = nil
         activeDictationOwnership = nil
         pendingDictationCommand = nil
+        pendingHandoffRequestID = nil
+        handoffLaunchFailed = false
         automaticVoiceAction = .standard
     }
 
@@ -533,6 +624,7 @@ final class KeyboardViewController: UIInputViewController {
         activeDictationRequestID = nil
         activeDictationOwnership = nil
         pendingDictationCommand = nil
+        pendingHandoffRequestID = nil
     }
 
     private func invalidateHostContextOwnership() {

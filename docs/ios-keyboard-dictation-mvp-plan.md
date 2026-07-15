@@ -1,6 +1,6 @@
 # HoldType iOS Keyboard Handoff Implementation Plan
 
-Status: approved product direction; implementation not started; revised
+Status: approved product direction; implementation in progress; revised
 2026-07-15.
 
 This file is the durable execution plan for the HoldType Keyboard to Voice
@@ -248,7 +248,7 @@ sheet itself contains no setup logic, recorder ownership, or provider code.
 | --- | --- | --- | --- |
 | KBD-FLOW-0 | Durable strategy and execution plan | This checkout contains the approved plan and launch contract | Completed when this plan is checkpointed |
 | KBD-FLOW-1 | Isolated Keyboard Handoff Sheet | Sheet states, cancel behavior, accessibility, and visual evidence pass without production routing changes | Completed 2026-07-15 |
-| KBD-FLOW-2 | Keyboard launch intent and app URL route | Missing session writes a bounded intent and opens only a matching HoldType route; warm path stays direct | Pending |
+| KBD-FLOW-2 | Keyboard launch intent and app URL route | Missing session writes a bounded intent and opens only a matching HoldType route; warm path stays direct | Completed 2026-07-15 |
 | KBD-FLOW-3 | Shared Voice preflight and targeted setup recovery | Every setup blocker routes to its exact owner; no blocker presents Listening or the sheet | Pending |
 | KBD-FLOW-4 | Automatic app-owned capture and live sheet | A valid cold request starts real capture once and presents the sheet as Starting then Listening | Pending |
 | KBD-FLOW-5 | Keyboard reconnection and state UX | A recreated extension reconnects by session, attempt, and document identity with no manual instructions | Pending |

@@ -13,6 +13,8 @@ struct KeyboardCommandSurfaceIOSTests {
         #expect(KeyboardVoiceStatus.allCases.map(\.rawValue) == [
             "Ready",
             "Full Access required",
+            "Opening HoldType…",
+            "Couldn’t open HoldType",
             "Starting…",
             "Listening…",
             "Processing…",

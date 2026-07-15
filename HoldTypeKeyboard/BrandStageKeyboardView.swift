@@ -1336,7 +1336,7 @@ final class BrandStageKeyboardView: UIView {
 
     private var activeVoiceAccessibilityTarget: UIView {
         switch renderedVoiceStage {
-        case .ready, .listening, .processing:
+        case .ready, .opening, .listening, .processing:
             microphoneView
         case .recovery:
             recoveryStage
