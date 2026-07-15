@@ -10,6 +10,8 @@ import Foundation
 enum KeyboardVoiceStatus: String, CaseIterable, Equatable, Sendable {
     case ready = "Ready"
     case fullAccessRequired = "Full Access required"
+    case openingHoldType = "Opening HoldType…"
+    case launchFailed = "Couldn’t open HoldType"
     case starting = "Starting…"
     case listening = "Listening…"
     case processing = "Processing…"
@@ -23,6 +25,8 @@ enum KeyboardVoiceStatus: String, CaseIterable, Equatable, Sendable {
         case .ready:
             nil
         case .fullAccessRequired,
+             .openingHoldType,
+             .launchFailed,
              .starting,
              .listening,
              .processing,
@@ -97,6 +101,7 @@ enum KeyboardVoiceRecovery: Equatable, Sendable {
 enum KeyboardVoiceStagePresentation: Equatable, Sendable {
     case recovery(KeyboardVoiceRecovery)
     case ready
+    case opening
     case starting
     case listening
     case processing

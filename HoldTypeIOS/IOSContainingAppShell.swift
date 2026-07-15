@@ -17,6 +17,8 @@ struct IOSContainingAppShell: View {
     @State private var pendingDestination:
         IOSContainingAppDestination?
     @State private var pendingSettingsRoute: IOSSettingsRoute?
+    @State private var acceptedKeyboardHandoffIntent:
+        KeyboardHandoffIntentRecord?
     @State private var showsEditorDiscardConfirmation = false
     @State private var showsEditorOperationAlert = false
 
@@ -26,6 +28,7 @@ struct IOSContainingAppShell: View {
     let recordingCacheLifecycleActions:
         IOSRecordingCacheLifecycleActions?
     let layout: IOSContainingAppShellLayout
+    let launchRouter: IOSKeyboardHandoffLaunchRouter
 
     init(
         secureProviderAvailability: IOSSecureProviderAvailability,
@@ -33,7 +36,8 @@ struct IOSContainingAppShell: View {
         historyPlaybackActions: IOSHistoryPlaybackActions? = nil,
         recordingCacheLifecycleActions:
             IOSRecordingCacheLifecycleActions? = nil,
-        layout: IOSContainingAppShellLayout = .current
+        layout: IOSContainingAppShellLayout = .current,
+        launchRouter: IOSKeyboardHandoffLaunchRouter = .live
     ) {
         self.secureProviderAvailability = secureProviderAvailability
         self.foregroundVoiceRuntimeAvailable =
@@ -42,6 +46,7 @@ struct IOSContainingAppShell: View {
         self.recordingCacheLifecycleActions =
             recordingCacheLifecycleActions
         self.layout = layout
+        self.launchRouter = launchRouter
     }
 
     var body: some View {
@@ -72,10 +77,15 @@ struct IOSContainingAppShell: View {
             )
         }
         .onOpenURL { url in
-            guard let attention = IOSSettingsAttention(launchURL: url) else {
-                return
+            switch launchRouter.resolve(url) {
+            case .ignore:
+                break
+            case .settings(let attention):
+                openSettings(.attention(attention))
+            case .keyboardHandoff(let intent):
+                acceptedKeyboardHandoffIntent = intent
+                requestDestination(.voice)
             }
-            openSettings(.attention(attention))
         }
         .alert(
             "Finishing Dictation Rule Change",
