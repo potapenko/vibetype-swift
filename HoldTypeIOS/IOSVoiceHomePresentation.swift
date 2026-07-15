@@ -302,13 +302,10 @@ struct IOSVoiceDraftPendingResultPresentation: Equatable, Sendable {
 }
 
 enum IOSVoiceDraftActionNotice: Equatable, Sendable {
-    case copied
     case cleared
 
     var message: String {
         switch self {
-        case .copied:
-            "Copied"
         case .cleared:
             "Draft cleared"
         }
@@ -316,8 +313,6 @@ enum IOSVoiceDraftActionNotice: Equatable, Sendable {
 
     var systemImage: String {
         switch self {
-        case .copied:
-            "checkmark.circle"
         case .cleared:
             "xmark.circle"
         }
@@ -325,12 +320,14 @@ enum IOSVoiceDraftActionNotice: Equatable, Sendable {
 
     var accessibilityAnnouncement: String {
         switch self {
-        case .copied:
-            "Current Draft copied"
         case .cleared:
             "Draft cleared. Undo is available."
         }
     }
+}
+
+enum IOSVoiceDraftCopyPresentation {
+    static let accessibilityAnnouncement = "Current Draft copied"
 }
 
 enum IOSVoiceHomePresentation {

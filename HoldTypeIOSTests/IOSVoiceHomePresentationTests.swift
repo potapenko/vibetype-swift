@@ -254,10 +254,9 @@ struct IOSVoiceHomePresentationTests {
         }
     }
 
-    @Test func draftActionNoticesExplainCopyAndReversibleClear() {
-        #expect(IOSVoiceDraftActionNotice.copied.message == "Copied")
+    @Test func draftFeedbackKeepsCopyNonvisualAndClearReversible() {
         #expect(
-            IOSVoiceDraftActionNotice.copied.accessibilityAnnouncement
+            IOSVoiceDraftCopyPresentation.accessibilityAnnouncement
                 == "Current Draft copied"
         )
         #expect(
@@ -549,7 +548,6 @@ struct IOSVoiceHomePresentationTests {
                 .systemImage,
         ] + statuses.map(\.systemImage) + [
             "xmark.circle",
-            IOSVoiceDraftActionNotice.copied.systemImage,
             IOSVoiceDraftActionNotice.cleared.systemImage,
         ]
 

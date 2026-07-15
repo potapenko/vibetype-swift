@@ -99,7 +99,9 @@ without opening the custom keyboard.
   context, or creation-history log.
 - Copy writes the entire current Draft to the clipboard. It remains visible in
   the bottom Draft action area, is unavailable while the visible working text
-  is empty, and has at least a 44-point tap target.
+  is empty, and has at least a 44-point tap target. A successful Copy does not
+  add a visible notice or change the Draft card's layout; assistive technology
+  still receives a concise confirmation.
 - A Draft containing only spaces, tabs, or line breaks is treated as empty.
   Committing such an edit stores the canonical empty Draft rather than a hidden
   visually blank state.

@@ -1410,9 +1410,8 @@ struct IOSVoiceHomeView: View {
     private func copyDraft() {
         guard !draftOwner.visibleText.isEmpty else { return }
         IOSVoiceClipboard.copy(draftOwner.visibleText)
-        draftActionNotice = .copied
         IOSAccessibilityAnnouncement.post(
-            IOSVoiceDraftActionNotice.copied.accessibilityAnnouncement
+            IOSVoiceDraftCopyPresentation.accessibilityAnnouncement
         )
     }
 
