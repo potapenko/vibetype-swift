@@ -370,6 +370,7 @@ struct KeyboardViewControllerTests {
             )
         )
         controller.textDidChange(nil)
+        harness.proxy.documentIdentifier = UUID()
         controller.textWillChange(nil)
 
         harness.dictationState = try #require(
@@ -421,7 +422,7 @@ struct KeyboardViewControllerTests {
         #expect(statusText(in: controller.view) == "Ready")
     }
 
-    @Test func extensionLifetimeLossSuppressesAutomaticInsertion() throws {
+    @Test func recreatedExtensionReconnectsByDurableAttemptAndDocument() throws {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
         let requestID = UUID()
         let deadline = now.addingTimeInterval(60)
@@ -455,8 +456,129 @@ struct KeyboardViewControllerTests {
         )
         controller.textDidChange(nil)
 
-        #expect(harness.proxy.insertedTexts.isEmpty)
+        #expect(harness.proxy.insertedTexts == ["Latest fallback text"])
         #expect(statusText(in: controller.view) == "Ready")
+    }
+
+    @Test func newControllerReconnectsToListeningAndFinishesTheSameAttempt()
+        throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sessionID = UUID()
+        let attemptID = UUID()
+        let requestID = UUID()
+        let documentID = UUID()
+        let state = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
+                requestID: requestID,
+                sourceDocumentID: documentID,
+                phase: .listening,
+                publishedAt: now,
+                expiresAt: now.addingTimeInterval(60)
+            )
+        )
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: state,
+            requestID: documentID
+        )
+
+        let recreatedController = harness.makeController()
+        recreatedController.loadViewIfNeeded()
+
+        #expect(statusText(in: recreatedController.view) == "Listening…")
+        recreatedController.keyboardView.onMicrophoneRequested?()
+        let finish = try #require(harness.savedCommands.last)
+        #expect(finish.kind == .finish)
+        #expect(finish.sessionID == sessionID)
+        #expect(finish.attemptID == attemptID)
+        #expect(finish.requestID == requestID)
+        #expect(finish.sourceDocumentID == documentID)
+    }
+
+    @Test func changedOrMissingDocumentCannotReconnectOrAutoInsert() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sessionID = UUID()
+        let attemptID = UUID()
+        let requestID = UUID()
+        let originalDocumentID = UUID()
+        let currentDocumentID = UUID()
+        let changedDocumentHarness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: sessionID,
+                    attemptID: attemptID,
+                    requestID: requestID,
+                    sourceDocumentID: originalDocumentID,
+                    phase: .listening,
+                    publishedAt: now,
+                    expiresAt: now.addingTimeInterval(60)
+                )
+            ),
+            requestID: currentDocumentID
+        )
+        let changedDocumentController = changedDocumentHarness.makeController()
+        changedDocumentController.loadViewIfNeeded()
+
+        #expect(statusText(in: changedDocumentController.view) == "Ready")
+        changedDocumentController.keyboardView.onMicrophoneRequested?()
+        #expect(changedDocumentHarness.savedCommands.isEmpty)
+        #expect(changedDocumentHarness.savedHandoffIntents.count == 1)
+
+        let missingDocumentHarness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: UUID(),
+                    attemptID: UUID(),
+                    requestID: UUID(),
+                    sourceDocumentID: nil,
+                    phase: .resultReady,
+                    result: "Preserved in Latest",
+                    publishedAt: now,
+                    expiresAt: now.addingTimeInterval(60)
+                )
+            )
+        )
+        let missingDocumentController = missingDocumentHarness.makeController()
+        missingDocumentController.loadViewIfNeeded()
+
+        #expect(missingDocumentHarness.proxy.insertedTexts.isEmpty)
+        #expect(statusText(in: missingDocumentController.view) == "Ready")
+    }
+
+    @Test func expiredReconnectionReturnsToReadyAndNextTapStartsHandoff()
+        throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let documentID = UUID()
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: UUID(),
+                    attemptID: UUID(),
+                    requestID: UUID(),
+                    sourceDocumentID: documentID,
+                    phase: .processing,
+                    publishedAt: now,
+                    expiresAt: now.addingTimeInterval(60)
+                )
+            ),
+            requestID: documentID
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+        #expect(statusText(in: controller.view) == "Processing…")
+
+        let expire = try #require(harness.scheduledExpiryActions.last)
+        expire()
+        #expect(statusText(in: controller.view) == "Ready")
+
+        controller.keyboardView.onMicrophoneRequested?()
+        #expect(harness.savedHandoffIntents.count == 1)
+        #expect(statusText(in: controller.view) == "Opening HoldType…")
     }
 
     @Test func cancelDoesNotInsertAndRestrictedModeKeepsEditing() throws {
@@ -544,7 +666,7 @@ private final class KeyboardControllerHarness {
     var now: Date
     var snapshot: KeyboardBridgeSnapshot?
     var dictationState: KeyboardDictationStateRecord?
-    let proxy = KeyboardDocumentProxySpy()
+    let proxy: KeyboardDocumentProxySpy
     let inputModeSwitchKeyOverride: Bool?
     let fullAccessOverride: Bool
     let requestID: UUID
@@ -561,7 +683,7 @@ private final class KeyboardControllerHarness {
         dictationState: KeyboardDictationStateRecord? = nil,
         inputModeSwitchKeyOverride: Bool? = true,
         fullAccessOverride: Bool = true,
-        requestID: UUID = UUID(),
+        requestID: UUID? = nil,
         openContainingAppSucceeds: Bool = true
     ) {
         self.now = now
@@ -569,7 +691,13 @@ private final class KeyboardControllerHarness {
         self.dictationState = dictationState
         self.inputModeSwitchKeyOverride = inputModeSwitchKeyOverride
         self.fullAccessOverride = fullAccessOverride
-        self.requestID = requestID
+        let resolvedRequestID = requestID
+            ?? dictationState?.sessionID
+            ?? UUID()
+        self.requestID = resolvedRequestID
+        proxy = KeyboardDocumentProxySpy(
+            documentIdentifier: resolvedRequestID
+        )
         self.openContainingAppSucceeds = openContainingAppSucceeds
     }
 
@@ -587,6 +715,7 @@ private final class KeyboardControllerHarness {
                 observeDictationState: { _ in nil },
                 now: { [self] in now },
                 makeRequestID: { [self] in requestID },
+                makeAttemptID: { [self] in requestID },
                 documentProxyOverride: proxy,
                 inputModeSwitchKeyOverride: inputModeSwitchKeyOverride,
                 fullAccessOverride: fullAccessOverride,
@@ -617,7 +746,11 @@ private final class KeyboardDocumentProxySpy: NSObject, UITextDocumentProxy {
     var documentContextAfterInput: String?
     var selectedText: String?
     var documentInputMode: UITextInputMode?
-    let documentIdentifier = UUID()
+    var documentIdentifier: UUID
+
+    init(documentIdentifier: UUID = UUID()) {
+        self.documentIdentifier = documentIdentifier
+    }
 
     func insertText(_ text: String) {
         insertedTexts.append(text)
@@ -634,6 +767,30 @@ private final class KeyboardDocumentProxySpy: NSObject, UITextDocumentProxy {
     func setMarkedText(_ markedText: String, selectedRange: NSRange) {}
 
     func unmarkText() {}
+}
+
+private extension KeyboardDictationStateRecord {
+    init?(
+        requestID: UUID,
+        phase: KeyboardDictationStatePhase,
+        translationAvailable: Bool = false,
+        result: String? = nil,
+        publishedAt: Date,
+        expiresAt: Date
+    ) {
+        let hasAttempt = phase != .ready
+        self.init(
+            sessionID: requestID,
+            attemptID: hasAttempt ? requestID : nil,
+            requestID: hasAttempt ? requestID : nil,
+            sourceDocumentID: hasAttempt ? requestID : nil,
+            phase: phase,
+            translationAvailable: translationAvailable,
+            result: result,
+            publishedAt: publishedAt,
+            expiresAt: expiresAt
+        )
+    }
 }
 
 @MainActor

@@ -510,14 +510,11 @@ struct BrandStageKeyboardViewTests {
         #expect(isEffectivelyHidden(microphone))
         #expect(!isEffectivelyHidden(recovery))
         #expect(!isEffectivelyHidden(logo))
-        #expect(title.text == "Start a voice session")
-        #expect(
-            detail.text
-                == "Open HoldType → Voice → Keyboard Dictation Session → Start Keyboard Session. Then return here."
-        )
+        #expect(title.text == "Ready to dictate")
+        #expect(detail.text == "Tap the microphone to start.")
     }
 
-    @Test func startingUsesProgressAndProcessingUsesRecognitionActivity()
+    @Test func startingAndProcessingKeepTheCentralVoiceIndicatorVisible()
         throws {
         let view = makeView(width: 393)
 
@@ -537,13 +534,12 @@ struct BrandStageKeyboardViewTests {
                 identifier: "keyboard.brand-stage.progress"
             )
         )
-        let progressCancel = try button(
-            "keyboard.brand-stage.processing-cancel",
-            in: view
-        )
-        #expect(isEffectivelyHidden(microphone))
-        #expect(!isEffectivelyHidden(progress))
-        #expect(!isEffectivelyHidden(progressCancel))
+        let cancel = try button("keyboard.brand-stage.cancel", in: view)
+        #expect(!isEffectivelyHidden(microphone))
+        #expect(!microphone.isEnabled)
+        #expect(microphone.accessibilityValue == "Starting")
+        #expect(isEffectivelyHidden(progress))
+        #expect(!isEffectivelyHidden(cancel))
 
         view.render(
             presentation(
@@ -560,7 +556,6 @@ struct BrandStageKeyboardViewTests {
                 identifier: "keyboard.brand-stage.voice-indicator"
             )
         )
-        let cancel = try button("keyboard.brand-stage.cancel", in: view)
         #expect(!isEffectivelyHidden(microphone))
         #expect(!microphone.isEnabled)
         #expect(microphone.accessibilityValue == "Recognizing")
@@ -569,7 +564,7 @@ struct BrandStageKeyboardViewTests {
         #expect(!isEffectivelyHidden(cancel))
     }
 
-    @Test func fullAccessRecoveryEmphasizesTheCompleteRouteAndKeepsShortcutSecondary()
+    @Test func fullAccessRecoveryStaysCompactWithoutNavigationInstructions()
         throws {
         let view = makeView(width: 393)
         view.render(
@@ -601,14 +596,14 @@ struct BrandStageKeyboardViewTests {
 
         #expect(
             route.text
-                == "iPhone Settings → General → Keyboard → Keyboards → HoldType → Allow Full Access."
+                == "Full Access is required for keyboard voice controls."
         )
         #expect(route.font.fontDescriptor.symbolicTraits.contains(.traitBold))
-        #expect(followUp.text == "Then open HoldType and start a session.")
-        #expect(shortcut.text == "Shortcut: hold 🌐 → Keyboard Settings.")
+        #expect(followUp.text == nil)
+        #expect(shortcut.text == nil)
         #expect(!isEffectivelyHidden(route))
-        #expect(!isEffectivelyHidden(followUp))
-        #expect(!isEffectivelyHidden(shortcut))
+        #expect(isEffectivelyHidden(followUp))
+        #expect(isEffectivelyHidden(shortcut))
     }
 
     @Test func compactPhoneLandscapeKeepsVoiceIdentityAndControlsInBounds()

@@ -106,16 +106,19 @@ microphone appear active.
 
 ## Request And Destination Identity
 
-- Each microphone start creates a new opaque request identifier in the keyboard.
+- A session identifier names one bounded, app-owned warm bridge lifetime.
+- An attempt identifier names one recorder and provider execution inside that
+  session.
+- Each keyboard microphone tap creates a new opaque request identifier.
 - The request records the originating `UITextDocumentProxy.documentIdentifier`
   when iOS provides one.
 - The URL used to open HoldType carries only bounded opaque routing identity. It
   does not contain audio, transcript text, credentials, prompts, or host content.
 - The containing app starts recording only when the URL matches a fresh shared
   request. An unrelated ordinary app launch does not start the microphone.
-- A recreated keyboard extension may reconnect through the active request and
-  originating document identity. Extension-process identity alone is not a
-  valid ownership boundary.
+- A recreated keyboard extension may reconnect only when the session, attempt,
+  request, and available originating document identity match shared state.
+  Extension-process identity is never a valid ownership boundary.
 - Missing or changed document identity makes automatic insertion ineligible; it
   does not discard the accepted result.
 

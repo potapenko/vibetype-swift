@@ -30,32 +30,32 @@ struct KeyboardCommandSurfaceIOSTests {
         )
     }
 
-    @Test func recoveryCopyAlwaysNamesTheExactNextRoute() {
-        #expect(KeyboardVoiceRecovery.startSession.title == "Start a voice session")
+    @Test func recoveryCopyIsCompactAndContainsNoManualNavigation() {
+        #expect(KeyboardVoiceRecovery.startSession.title == "Ready to dictate")
         #expect(
             KeyboardVoiceRecovery.startSession.instruction
-                == "Open HoldType → Voice → Keyboard Dictation Session → Start Keyboard Session. Then return here."
+                == "Tap the microphone to start."
         )
         #expect(
             KeyboardVoiceRecovery.enableFullAccess.instruction
-                .contains("iPhone Settings → General → Keyboard → Keyboards → HoldType")
+                == "Full Access is required for keyboard voice controls."
         )
         #expect(
-            KeyboardVoiceRecovery.enableFullAccess.emphasizedInstruction
-                .hasSuffix("HoldType → Allow Full Access.")
+            KeyboardVoiceRecovery.enableFullAccess.followUpInstruction == nil
         )
         #expect(
-            KeyboardVoiceRecovery.enableFullAccess.followUpInstruction
-                == "Then open HoldType and start a session."
-        )
-        #expect(
-            KeyboardVoiceRecovery.enableFullAccess.shortcutInstruction
-                == "Shortcut: hold 🌐 → Keyboard Settings."
+            KeyboardVoiceRecovery.enableFullAccess.shortcutInstruction == nil
         )
         #expect(
             KeyboardVoiceRecovery.requestFailed.instruction
-                .contains("Open HoldType → Voice")
+                == "Tap the microphone to try again."
         )
+        let allInstructions = [
+            KeyboardVoiceRecovery.startSession.instruction,
+            KeyboardVoiceRecovery.enableFullAccess.instruction,
+            KeyboardVoiceRecovery.requestFailed.instruction,
+        ]
+        #expect(allInstructions.allSatisfy { !$0.contains("Open HoldType") })
     }
 
     @Test func cursorDragAccumulatesThresholdsAndReportsDirection() {

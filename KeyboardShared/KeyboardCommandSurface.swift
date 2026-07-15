@@ -47,7 +47,7 @@ enum KeyboardVoiceRecovery: Equatable, Sendable {
     var title: String {
         switch self {
         case .startSession:
-            "Start a voice session"
+            "Ready to dictate"
         case .enableFullAccess:
             "Enable Full Access"
         case .requestFailed:
@@ -58,33 +58,20 @@ enum KeyboardVoiceRecovery: Equatable, Sendable {
     var emphasizedInstruction: String {
         switch self {
         case .startSession:
-            "Open HoldType → Voice → Keyboard Dictation Session → Start "
-                + "Keyboard Session. Then return here."
+            "Tap the microphone to start."
         case .enableFullAccess:
-            "iPhone Settings → General → Keyboard → Keyboards → HoldType → "
-                + "Allow Full Access."
+            "Full Access is required for keyboard voice controls."
         case .requestFailed:
-            "Open HoldType → Voice to review the problem and start a new "
-                + "keyboard session."
+            "Tap the microphone to try again."
         }
     }
 
     var followUpInstruction: String? {
-        switch self {
-        case .enableFullAccess:
-            "Then open HoldType and start a session."
-        case .startSession, .requestFailed:
-            nil
-        }
+        nil
     }
 
     var shortcutInstruction: String? {
-        switch self {
-        case .enableFullAccess:
-            "Shortcut: hold 🌐 → Keyboard Settings."
-        case .startSession, .requestFailed:
-            nil
-        }
+        nil
     }
 
     var instruction: String {

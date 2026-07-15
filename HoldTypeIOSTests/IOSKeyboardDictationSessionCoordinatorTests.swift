@@ -16,7 +16,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
 
         #expect(owner.presentation?.phase == .starting)
         try await eventually {
-            harness.workflow.runRequestIDs == [intent.requestID]
+            harness.workflow.runRequestIDs == [harness.sessionID]
         }
         #expect(harness.workflow.runActions == [.translateAndImprove])
         #expect(harness.states.map(\.phase) == [.ready])
@@ -27,7 +27,8 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
         }
 
         #expect(harness.states.map(\.phase) == [.ready, .listening])
-        #expect(harness.workflow.runRequestIDs == [intent.requestID])
+        #expect(harness.workflow.runRequestIDs == [harness.sessionID])
+        #expect(harness.states.last?.requestID == intent.requestID)
 
         harness.workflow.emit(.processing)
         try await eventually { owner.presentation == nil }
@@ -49,7 +50,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
         let intent = harness.intent()
         await owner.start(intent)
         try await eventually {
-            harness.workflow.runRequestIDs == [intent.requestID]
+            harness.workflow.runRequestIDs == [harness.sessionID]
         }
         harness.workflow.emit(.listening)
         try await eventually {
@@ -60,7 +61,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
             await owner.cancelActiveHandoff()
         }
         try await eventually {
-            harness.workflow.cancelRequestIDs == [intent.requestID]
+            harness.workflow.cancelRequestIDs == [harness.sessionID]
         }
         #expect(owner.presentation?.phase == .listening)
 
@@ -86,7 +87,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
         let failedIntent = failedHarness.intent()
         await failedOwner.start(failedIntent)
         try await eventually {
-            failedHarness.workflow.runRequestIDs == [failedIntent.requestID]
+            failedHarness.workflow.runRequestIDs == [failedHarness.sessionID]
         }
         failedHarness.workflow.resolve(.failed)
         try await eventually { failedOwner.presentation == nil }
@@ -100,7 +101,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
         let expiredIntent = expiredHarness.intent()
         await expiredOwner.start(expiredIntent)
         try await eventually {
-            expiredHarness.workflow.runRequestIDs == [expiredIntent.requestID]
+            expiredHarness.workflow.runRequestIDs == [expiredHarness.sessionID]
         }
         expiredHarness.workflow.emit(.listening)
         try await eventually {
@@ -144,7 +145,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
         let first = harness.intent()
         await owner.start(first)
         try await eventually {
-            harness.workflow.runRequestIDs == [first.requestID]
+            harness.workflow.runRequestIDs == [harness.sessionID]
         }
 
         let second = harness.intent(requestID: UUID(), action: .improve)
@@ -152,14 +153,14 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
             await owner.start(second)
         }
         try await eventually {
-            harness.workflow.cancelRequestIDs == [first.requestID]
+            harness.workflow.cancelRequestIDs == [harness.sessionID]
         }
         harness.workflow.resolve(.cancelled)
         await replacement.value
         try await eventually {
             harness.workflow.runRequestIDs == [
-                first.requestID,
-                second.requestID,
+                harness.sessionID,
+                harness.sessionID,
             ]
         }
 
@@ -200,7 +201,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
         let harness = KeyboardSessionHarness()
         let coordinator = harness.makeCoordinator()
         await coordinator.startSession()
-        let requestID = try #require(harness.states.last?.requestID)
+        let requestID = UUID()
 
         harness.command = harness.command(
             .start,
@@ -235,7 +236,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
         let harness = KeyboardSessionHarness()
         let coordinator = harness.makeCoordinator()
         await coordinator.startSession()
-        let requestID = try #require(harness.states.last?.requestID)
+        let requestID = UUID()
 
         harness.command = harness.command(.start, requestID: requestID)
         coordinator.receiveCurrentCommand()
@@ -261,7 +262,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
         let harness = KeyboardSessionHarness()
         let coordinator = harness.makeCoordinator()
         await coordinator.startSession()
-        let requestID = try #require(harness.states.last?.requestID)
+        let requestID = UUID()
 
         harness.command = harness.command(
             .start,
@@ -269,7 +270,11 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
             issuedAt: harness.now.addingTimeInterval(-6)
         )
         coordinator.receiveCurrentCommand()
-        harness.command = harness.command(.start, requestID: UUID())
+        harness.command = harness.command(
+            .start,
+            requestID: UUID(),
+            sessionID: UUID()
+        )
         coordinator.receiveCurrentCommand()
         await Task.yield()
 
@@ -278,11 +283,40 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
     }
 
     @Test
+    func unavailableTranslationStartDoesNotClaimTheWarmSession() async throws {
+        let harness = KeyboardSessionHarness()
+        harness.workflow.translationAvailable = false
+        let coordinator = harness.makeCoordinator()
+        await coordinator.startSession()
+
+        harness.command = harness.command(
+            .start,
+            requestID: UUID(),
+            action: .translate
+        )
+        coordinator.receiveCurrentCommand()
+        await Task.yield()
+
+        let standardRequestID = UUID()
+        harness.command = harness.command(
+            .start,
+            requestID: standardRequestID
+        )
+        coordinator.receiveCurrentCommand()
+        try await eventually {
+            harness.workflow.runRequestIDs == [standardRequestID]
+        }
+
+        #expect(harness.states.map(\.phase) == [.ready])
+        harness.workflow.resolve(.cancelled)
+    }
+
+    @Test
     func providerFailurePublishesFailureWithoutTransientResult() async throws {
         let harness = KeyboardSessionHarness()
         let coordinator = harness.makeCoordinator()
         await coordinator.startSession()
-        let requestID = try #require(harness.states.last?.requestID)
+        let requestID = UUID()
 
         harness.command = harness.command(.start, requestID: requestID)
         coordinator.receiveCurrentCommand()
@@ -347,11 +381,15 @@ private final class KeyboardSessionHarness {
         _ kind: HoldTypeIOS.KeyboardDictationCommandKind,
         requestID: UUID,
         action: HoldTypeIOS.KeyboardVoiceAction = .standard,
-        issuedAt: Date? = nil
+        issuedAt: Date? = nil,
+        sessionID: UUID? = nil
     ) -> HoldTypeIOS.KeyboardDictationCommandRecord {
         let issuedAt = issuedAt ?? now
         return HoldTypeIOS.KeyboardDictationCommandRecord(
+            sessionID: sessionID ?? self.sessionID,
+            attemptID: requestID,
             requestID: requestID,
+            sourceDocumentID: nil,
             kind: kind,
             action: action,
             issuedAt: issuedAt,
@@ -392,6 +430,7 @@ private final class KeyboardWorkflowHarness {
     private(set) var runActions: [HoldTypeIOS.KeyboardVoiceAction] = []
     private(set) var finishRequestIDs: [UUID] = []
     private(set) var cancelRequestIDs: [UUID] = []
+    var translationAvailable = true
     var suspendsTranslationAvailability = false
     private(set) var translationAvailabilityLoadCount = 0
     private var translationAvailabilityContinuation:
@@ -438,7 +477,9 @@ private final class KeyboardWorkflowHarness {
 
     private func loadTranslationAvailability() async -> Bool {
         translationAvailabilityLoadCount += 1
-        guard suspendsTranslationAvailability else { return true }
+        guard suspendsTranslationAvailability else {
+            return translationAvailable
+        }
         return await withCheckedContinuation { continuation in
             translationAvailabilityContinuation = continuation
         }

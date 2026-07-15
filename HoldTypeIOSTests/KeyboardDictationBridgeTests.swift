@@ -8,10 +8,15 @@ struct KeyboardDictationBridgeTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = KeyboardDictationBridgeStore(directoryURL: directory)
         let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sessionID = UUID()
+        let attemptID = UUID()
         let requestID = UUID()
         let command = try #require(
             KeyboardDictationCommandRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
                 requestID: requestID,
+                sourceDocumentID: nil,
                 kind: .start,
                 action: .translateAndImprove,
                 issuedAt: now,
@@ -20,7 +25,10 @@ struct KeyboardDictationBridgeTests {
         )
         let state = try #require(
             KeyboardDictationStateRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
                 requestID: requestID,
+                sourceDocumentID: nil,
                 phase: .listening,
                 translationAvailable: true,
                 publishedAt: now,
@@ -37,6 +45,9 @@ struct KeyboardDictationBridgeTests {
         #expect(command.action.translates)
         #expect(command.action.corrects)
         #expect(command.action.selectedAutomaticModeCount == 2)
+        #expect(state.sessionID == command.sessionID)
+        #expect(state.attemptID == command.attemptID)
+        #expect(state.requestID == command.requestID)
         #expect(state.translationAvailable)
         #expect(
             try store.loadCommand(at: now.addingTimeInterval(5)) == nil
@@ -74,10 +85,14 @@ struct KeyboardDictationBridgeTests {
 
     @Test func resultIsBoundedAndOnlyAllowedForResultReady() {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sessionID = UUID()
+        let attemptID = UUID()
         let requestID = UUID()
 
         #expect(
             KeyboardDictationStateRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
                 requestID: requestID,
                 phase: .ready,
                 result: "unexpected",
@@ -87,6 +102,8 @@ struct KeyboardDictationBridgeTests {
         )
         #expect(
             KeyboardDictationStateRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
                 requestID: requestID,
                 phase: .resultReady,
                 result: nil,
@@ -96,6 +113,8 @@ struct KeyboardDictationBridgeTests {
         )
         #expect(
             KeyboardDictationStateRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
                 requestID: requestID,
                 phase: .resultReady,
                 result: String(repeating: "x", count: 3_073),
@@ -105,12 +124,46 @@ struct KeyboardDictationBridgeTests {
         )
         #expect(
             KeyboardDictationStateRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
                 requestID: requestID,
                 phase: .resultReady,
                 result: "Processed keyboard text",
                 publishedAt: now,
                 expiresAt: now.addingTimeInterval(60)
             ) != nil
+        )
+    }
+
+    @Test func attemptIdentityIsCompleteAndDocumentMatchingIsExact() {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sessionID = UUID()
+        let attemptID = UUID()
+        let requestID = UUID()
+        let documentID = UUID()
+        let state = KeyboardDictationStateRecord(
+            sessionID: sessionID,
+            attemptID: attemptID,
+            requestID: requestID,
+            sourceDocumentID: documentID,
+            phase: .listening,
+            publishedAt: now,
+            expiresAt: now.addingTimeInterval(60)
+        )
+
+        #expect(state?.hasActiveAttempt == true)
+        #expect(state?.belongsToDocument(documentID) == true)
+        #expect(state?.belongsToDocument(UUID()) == false)
+        #expect(state?.belongsToDocument(nil) == false)
+        #expect(
+            KeyboardDictationStateRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
+                requestID: nil,
+                phase: .listening,
+                publishedAt: now,
+                expiresAt: now.addingTimeInterval(60)
+            ) == nil
         )
     }
 }

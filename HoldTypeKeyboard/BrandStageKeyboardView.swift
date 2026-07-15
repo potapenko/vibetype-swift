@@ -14,9 +14,9 @@ struct BrandStageKeyboardPresentation: Equatable {
 private extension KeyboardVoiceStagePresentation {
     var isVoice: Bool {
         switch self {
-        case .ready, .opening, .listening, .processing:
+        case .ready, .opening, .starting, .listening, .processing:
             true
-        case .recovery, .starting:
+        case .recovery:
             false
         }
     }
@@ -29,12 +29,7 @@ private extension KeyboardVoiceStagePresentation {
     }
 
     var isProgress: Bool {
-        switch self {
-        case .starting:
-            true
-        case .recovery, .ready, .opening, .listening, .processing:
-            false
-        }
+        false
     }
 
     var keepsVoiceWorkspaceVisible: Bool {
@@ -230,10 +225,11 @@ final class BrandStageKeyboardView: UIView {
             cancelButton.isHidden = !cancelIsVisible
             cancelButton.isEnabled = cancelIsVisible
         case .starting:
-            progressTitleLabel.text = "Starting…"
-            progressStage.accessibilityLabel = "Starting keyboard dictation"
-            progressCancelButton.isHidden = !cancelIsVisible
-            progressCancelButton.isEnabled = cancelIsVisible
+            voiceActivityIndicator.render(.ready)
+            microphoneView.accessibilityLabel = "Starting keyboard dictation"
+            microphoneView.accessibilityValue = "Starting"
+            cancelButton.isHidden = !cancelIsVisible
+            cancelButton.isEnabled = cancelIsVisible
         case .processing:
             voiceActivityIndicator.render(.recognizing)
             microphoneView.accessibilityLabel = "Processing keyboard dictation"

@@ -251,7 +251,7 @@ sheet itself contains no setup logic, recorder ownership, or provider code.
 | KBD-FLOW-2 | Keyboard launch intent and app URL route | Missing session writes a bounded intent and opens only a matching HoldType route; warm path stays direct | Completed 2026-07-15 |
 | KBD-FLOW-3 | Shared Voice preflight and targeted setup recovery | Every setup blocker routes to its exact owner; no blocker presents Listening or the sheet | Completed 2026-07-15 |
 | KBD-FLOW-4 | Automatic app-owned capture and live sheet | A valid cold request starts real capture once and presents the sheet as Starting then Listening | Completed 2026-07-15; signed end-to-end retained in KBD-FLOW-8 |
-| KBD-FLOW-5 | Keyboard reconnection and state UX | A recreated extension reconnects by session, attempt, and document identity with no manual instructions | Pending |
+| KBD-FLOW-5 | Keyboard reconnection and state UX | A recreated extension reconnects by session, attempt, and document identity with no manual instructions | Completed 2026-07-15 |
 | KBD-FLOW-6 | Finish, exactly-once delivery, and warm reuse | Finish processes once, safe output inserts once, and an unexpired session returns to Ready | Pending |
 | KBD-FLOW-7 | Legacy-copy cleanup and product completion | Manual-session recovery copy is absent and ordinary Voice remains unchanged | Pending |
 | KBD-FLOW-8 | Signed-device and TestFlight qualification | Full physical matrix passes or an explicit app-only release decision is recorded | Pending |

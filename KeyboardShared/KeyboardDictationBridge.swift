@@ -2,16 +2,16 @@ import CoreFoundation
 import Foundation
 
 nonisolated enum KeyboardDictationBridgeConfiguration {
-    static let commandFilename = "keyboard-dictation-command-v1.json"
-    static let stateFilename = "keyboard-dictation-state-v1.json"
+    static let commandFilename = "keyboard-dictation-command-v2.json"
+    static let stateFilename = "keyboard-dictation-state-v2.json"
     static let maximumRecordBytes = 4 * 1_024
     static let commandLifetime: TimeInterval = 5
     static let sessionLifetime: TimeInterval = 60
     static let resultMaximumUTF8Bytes = 3 * 1_024
     static let commandNotification =
-        "app.holdtype.keyboard-dictation.command.v1"
+        "app.holdtype.keyboard-dictation.command.v2"
     static let stateNotification =
-        "app.holdtype.keyboard-dictation.state.v1"
+        "app.holdtype.keyboard-dictation.state.v2"
 }
 
 nonisolated enum KeyboardDictationCommandKind: String, Codable, Sendable {
@@ -71,17 +71,23 @@ nonisolated struct KeyboardDictationCommandRecord:
     Codable,
     Equatable,
     Sendable {
-    static let schemaVersion = 2
+    static let schemaVersion = 3
 
     let schemaVersion: Int
+    let sessionID: UUID
+    let attemptID: UUID
     let requestID: UUID
+    let sourceDocumentID: UUID?
     let kind: KeyboardDictationCommandKind
     let action: KeyboardVoiceAction
     let issuedAt: Date
     let expiresAt: Date
 
     init?(
+        sessionID: UUID,
+        attemptID: UUID,
         requestID: UUID,
+        sourceDocumentID: UUID?,
         kind: KeyboardDictationCommandKind,
         action: KeyboardVoiceAction = .standard,
         issuedAt: Date,
@@ -95,7 +101,10 @@ nonisolated struct KeyboardDictationCommandRecord:
             return nil
         }
         schemaVersion = Self.schemaVersion
+        self.sessionID = sessionID
+        self.attemptID = attemptID
         self.requestID = requestID
+        self.sourceDocumentID = sourceDocumentID
         self.kind = kind
         self.action = action
         self.issuedAt = issuedAt
@@ -126,10 +135,13 @@ nonisolated struct KeyboardDictationStateRecord:
     Codable,
     Equatable,
     Sendable {
-    static let schemaVersion = 2
+    static let schemaVersion = 3
 
     let schemaVersion: Int
-    let requestID: UUID
+    let sessionID: UUID
+    let attemptID: UUID?
+    let requestID: UUID?
+    let sourceDocumentID: UUID?
     let phase: KeyboardDictationStatePhase
     let translationAvailable: Bool
     let result: String?
@@ -137,7 +149,10 @@ nonisolated struct KeyboardDictationStateRecord:
     let expiresAt: Date
 
     init?(
-        requestID: UUID,
+        sessionID: UUID,
+        attemptID: UUID? = nil,
+        requestID: UUID? = nil,
+        sourceDocumentID: UUID? = nil,
         phase: KeyboardDictationStatePhase,
         translationAvailable: Bool = false,
         result: String? = nil,
@@ -150,16 +165,30 @@ nonisolated struct KeyboardDictationStateRecord:
                     <= KeyboardDictationBridgeConfiguration
                         .resultMaximumUTF8Bytes
         } ?? false
+        let hasCompleteAttemptIdentity = attemptID != nil && requestID != nil
+        let hasNoAttemptIdentity = attemptID == nil && requestID == nil
+        let identityIsValid: Bool
+        switch phase {
+        case .ready, .unavailable:
+            identityIsValid = hasCompleteAttemptIdentity
+                || (hasNoAttemptIdentity && sourceDocumentID == nil)
+        case .listening, .processing, .resultReady, .failed:
+            identityIsValid = hasCompleteAttemptIdentity
+        }
         guard publishedAt.timeIntervalSinceReferenceDate.isFinite,
               expiresAt.timeIntervalSinceReferenceDate.isFinite,
               expiresAt > publishedAt,
               expiresAt.timeIntervalSince(publishedAt)
                 <= KeyboardDictationBridgeConfiguration.sessionLifetime,
+              identityIsValid,
               (phase == .resultReady) == hasValidResult else {
             return nil
         }
         schemaVersion = Self.schemaVersion
+        self.sessionID = sessionID
+        self.attemptID = attemptID
         self.requestID = requestID
+        self.sourceDocumentID = sourceDocumentID
         self.phase = phase
         self.translationAvailable = translationAvailable
         self.result = result
@@ -177,13 +206,85 @@ nonisolated struct KeyboardDictationStateRecord:
                 <= KeyboardDictationBridgeConfiguration.sessionLifetime else {
             return false
         }
+        let hasCompleteAttemptIdentity = attemptID != nil && requestID != nil
+        let hasNoAttemptIdentity = attemptID == nil && requestID == nil
+        let identityIsValid: Bool
+        switch phase {
+        case .ready, .unavailable:
+            identityIsValid = hasCompleteAttemptIdentity
+                || (hasNoAttemptIdentity && sourceDocumentID == nil)
+        case .listening, .processing, .resultReady, .failed:
+            identityIsValid = hasCompleteAttemptIdentity
+        }
         let hasValidResult = result.map {
             !$0.isEmpty
                 && $0.utf8.count
                     <= KeyboardDictationBridgeConfiguration
                         .resultMaximumUTF8Bytes
         } ?? false
-        return (phase == .resultReady) == hasValidResult
+        return identityIsValid && (phase == .resultReady) == hasValidResult
+    }
+
+    var hasActiveAttempt: Bool {
+        attemptID != nil && requestID != nil
+    }
+
+    func belongsToDocument(_ documentID: UUID?) -> Bool {
+        guard let sourceDocumentID, let documentID else { return false }
+        return sourceDocumentID == documentID
+    }
+}
+
+nonisolated struct KeyboardDictationAttemptIdentity:
+    Equatable,
+    Sendable {
+    let sessionID: UUID
+    let attemptID: UUID
+    let requestID: UUID
+    let sourceDocumentID: UUID?
+
+    init(
+        sessionID: UUID,
+        attemptID: UUID,
+        requestID: UUID,
+        sourceDocumentID: UUID?
+    ) {
+        self.sessionID = sessionID
+        self.attemptID = attemptID
+        self.requestID = requestID
+        self.sourceDocumentID = sourceDocumentID
+    }
+
+    init?(_ state: KeyboardDictationStateRecord) {
+        guard let attemptID = state.attemptID,
+              let requestID = state.requestID else {
+            return nil
+        }
+        self.init(
+            sessionID: state.sessionID,
+            attemptID: attemptID,
+            requestID: requestID,
+            sourceDocumentID: state.sourceDocumentID
+        )
+    }
+
+    func matches(_ state: KeyboardDictationStateRecord) -> Bool {
+        sessionID == state.sessionID
+            && attemptID == state.attemptID
+            && requestID == state.requestID
+            && sourceDocumentID == state.sourceDocumentID
+    }
+
+    func matches(_ command: KeyboardDictationCommandRecord) -> Bool {
+        sessionID == command.sessionID
+            && attemptID == command.attemptID
+            && requestID == command.requestID
+            && sourceDocumentID == command.sourceDocumentID
+    }
+
+    func belongsToDocument(_ documentID: UUID?) -> Bool {
+        guard let sourceDocumentID, let documentID else { return false }
+        return sourceDocumentID == documentID
     }
 }
 

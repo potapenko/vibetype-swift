@@ -67,7 +67,8 @@ final class IOSKeyboardDictationSessionCoordinator {
 
     private let dependencies: IOSKeyboardDictationSessionDependencies
     private var commandObserver: KeyboardDictationBridgeObserver?
-    private var requestID: UUID?
+    private var sessionID: UUID?
+    private var activeAttempt: KeyboardDictationAttemptIdentity?
     private var deadline: Date?
     private var expiryTimer: Timer?
     private var backgroundTask = UIBackgroundTaskIdentifier.invalid
@@ -208,11 +209,12 @@ final class IOSKeyboardDictationSessionCoordinator {
         }
 
         let now = dependencies.now()
-        let requestID = dependencies.makeUUID()
+        let sessionID = dependencies.makeUUID()
         let deadline = now.addingTimeInterval(
             KeyboardDictationBridgeConfiguration.sessionLifetime
         )
-        self.requestID = requestID
+        self.sessionID = sessionID
+        activeAttempt = nil
         self.deadline = deadline
         translationAvailable = await dependencies.workflow
             .loadTranslationAvailability()
@@ -221,7 +223,6 @@ final class IOSKeyboardDictationSessionCoordinator {
         scheduleExpiry(at: deadline)
         guard publish(
             phase: .ready,
-            requestID: requestID,
             publishedAt: now,
             expiresAt: deadline
         ) else {
@@ -268,20 +269,29 @@ final class IOSKeyboardDictationSessionCoordinator {
         )
         workflowGeneration &+= 1
         let admissionGeneration = workflowGeneration
-        requestID = intent.requestID
+        let sessionID = dependencies.makeUUID()
+        let activeAttempt = KeyboardDictationAttemptIdentity(
+            sessionID: sessionID,
+            attemptID: dependencies.makeUUID(),
+            requestID: intent.requestID,
+            sourceDocumentID: intent.sourceDocumentID
+        )
+        self.sessionID = sessionID
+        self.activeAttempt = activeAttempt
         self.deadline = deadline
         handoffRequestID = intent.requestID
         handoffEventObserver = observe
         translationAvailable = await dependencies.workflow
             .loadTranslationAvailability()
         guard workflowGeneration == admissionGeneration,
-              requestID == intent.requestID,
+              self.sessionID == sessionID,
+              self.activeAttempt == activeAttempt,
               self.deadline == deadline,
               handoffRequestID == intent.requestID,
               intent.isPending(at: dependencies.now()),
               dependencies.applicationIsActive(),
               !intent.action.translates || translationAvailable else {
-            if requestID == intent.requestID {
+            if self.activeAttempt == activeAttempt {
                 finishSessionLifetime()
                 presentation = .failed("Try Again")
             }
@@ -293,7 +303,6 @@ final class IOSKeyboardDictationSessionCoordinator {
         scheduleExpiry(at: deadline)
         guard publish(
             phase: .ready,
-            requestID: intent.requestID,
             publishedAt: now,
             expiresAt: deadline
         ) else {
@@ -302,7 +311,7 @@ final class IOSKeyboardDictationSessionCoordinator {
         }
         presentation = .ready(deadline)
         startRecording(
-            requestID: intent.requestID,
+            attempt: activeAttempt,
             deadline: deadline,
             action: intent.action
         )
@@ -312,14 +321,14 @@ final class IOSKeyboardDictationSessionCoordinator {
     /// Cancels only the matching handoff and waits for the shared workflow to
     /// finish stopping capture before the presentation owner dismisses.
     func cancelHandoff(requestID: UUID) async {
-        guard self.requestID == requestID,
+        guard activeAttempt?.requestID == requestID,
               handoffRequestID == requestID else {
             return
         }
         let task = workflowTask
         cancelCurrentWorkflow()
         await task?.value
-        guard self.requestID == requestID else { return }
+        guard activeAttempt?.requestID == requestID else { return }
         publishUnavailableIfCurrent()
         finishSessionLifetime()
         workflowTask = nil
@@ -337,49 +346,77 @@ final class IOSKeyboardDictationSessionCoordinator {
     /// injected current time rejects stale commands before any workflow call.
     func receiveCurrentCommand() {
         let now = dependencies.now()
-        guard let requestID,
+        guard let sessionID,
               let deadline,
               deadline > now,
               let command = try? dependencies.loadCommand(now),
-              command.requestID == requestID,
+              command.sessionID == sessionID,
               command != lastHandledCommand else {
             return
         }
-        lastHandledCommand = command
-
         switch command.kind {
         case .start:
-            startRecording(
-                requestID: requestID,
+            guard activeAttempt == nil,
+                  workflowTask == nil,
+                  case .ready = presentation,
+                  !command.action.translates || translationAvailable else {
+                return
+            }
+            let attempt = KeyboardDictationAttemptIdentity(
+                sessionID: command.sessionID,
+                attemptID: command.attemptID,
+                requestID: command.requestID,
+                sourceDocumentID: command.sourceDocumentID
+            )
+            activeAttempt = attempt
+            guard startRecording(
+                attempt: attempt,
                 deadline: deadline,
                 action: command.action
-            )
+            ) else {
+                activeAttempt = nil
+                return
+            }
+            lastHandledCommand = command
         case .finish:
-            finishRecording(requestID: requestID, deadline: deadline)
+            guard let activeAttempt,
+                  activeAttempt.matches(command) else { return }
+            guard finishRecording(
+                attempt: activeAttempt,
+                deadline: deadline
+            ) else { return }
+            lastHandledCommand = command
         case .cancel:
-            cancelRecording(requestID: requestID, deadline: deadline)
+            guard let activeAttempt,
+                  activeAttempt.matches(command) else { return }
+            guard cancelRecording(
+                attempt: activeAttempt,
+                deadline: deadline
+            ) else { return }
+            lastHandledCommand = command
         }
     }
 
+    @discardableResult
     private func startRecording(
-        requestID: UUID,
+        attempt: KeyboardDictationAttemptIdentity,
         deadline: Date,
         action: KeyboardVoiceAction
-    ) {
+    ) -> Bool {
         guard workflowTask == nil,
               case .ready = presentation,
               !action.translates || translationAvailable else {
-            return
+            return false
         }
         workflowGeneration &+= 1
         let generation = workflowGeneration
         let workflow = dependencies.workflow
         workflowTask = Task { @MainActor [weak self] in
-            let resolution = await workflow.run(requestID, action) {
+            let resolution = await workflow.run(attempt.attemptID, action) {
                 [weak self] progress in
                 self?.receive(
                     progress,
-                    requestID: requestID,
+                    attempt: attempt,
                     deadline: deadline,
                     generation: generation
                 )
@@ -387,7 +424,7 @@ final class IOSKeyboardDictationSessionCoordinator {
             guard let self else { return }
             self.receive(
                 resolution,
-                requestID: requestID,
+                attempt: attempt,
                 deadline: deadline,
                 generation: generation
             )
@@ -395,43 +432,52 @@ final class IOSKeyboardDictationSessionCoordinator {
                 self.workflowTask = nil
             }
         }
+        return true
     }
 
-    private func finishRecording(requestID: UUID, deadline: Date) {
+    private func finishRecording(
+        attempt: KeyboardDictationAttemptIdentity,
+        deadline: Date
+    ) -> Bool {
         guard case .listening = presentation,
-              dependencies.workflow.finish(requestID) else {
-            return
+              dependencies.workflow.finish(attempt.attemptID) else {
+            return false
         }
         guard publish(
             phase: .processing,
-            requestID: requestID,
             expiresAt: deadline
         ) else {
             failAndStop("Session unavailable")
-            return
+            return true
         }
         presentation = .processing
+        return true
     }
 
-    private func cancelRecording(requestID: UUID, deadline: Date) {
-        guard dependencies.workflow.cancel(requestID) else { return }
+    private func cancelRecording(
+        attempt: KeyboardDictationAttemptIdentity,
+        deadline: Date
+    ) -> Bool {
+        guard dependencies.workflow.cancel(attempt.attemptID) else {
+            return false
+        }
         _ = publish(
             phase: .unavailable,
-            requestID: requestID,
             expiresAt: deadline
         )
         finishSessionLifetime(cancelWorkflowTask: false)
         presentation = .stopped
+        return true
     }
 
     private func receive(
         _ progress: IOSKeyboardDictationWorkflowProgress,
-        requestID: UUID,
+        attempt: KeyboardDictationAttemptIdentity,
         deadline: Date,
         generation: UInt64
     ) {
         guard ownsCurrentWorkflow(
-            requestID: requestID,
+            attempt: attempt,
             deadline: deadline,
             generation: generation
         ) else {
@@ -448,7 +494,6 @@ final class IOSKeyboardDictationSessionCoordinator {
         }
         guard publish(
             phase: phase,
-            requestID: requestID,
             expiresAt: deadline
         ) else {
             failAndStop("Session unavailable")
@@ -456,11 +501,11 @@ final class IOSKeyboardDictationSessionCoordinator {
         }
         switch progress {
         case .listening:
-            emitHandoff(.listening, requestID: requestID)
+            emitHandoff(.listening, requestID: attempt.requestID)
         case .processing:
             emitHandoff(
                 .captureEnded,
-                requestID: requestID,
+                requestID: attempt.requestID,
                 endsObservation: true
             )
         }
@@ -468,12 +513,12 @@ final class IOSKeyboardDictationSessionCoordinator {
 
     private func receive(
         _ resolution: IOSKeyboardDictationWorkflowResolution,
-        requestID: UUID,
+        attempt: KeyboardDictationAttemptIdentity,
         deadline: Date,
         generation: UInt64
     ) {
         guard ownsCurrentWorkflow(
-            requestID: requestID,
+            attempt: attempt,
             deadline: deadline,
             generation: generation
         ) else {
@@ -483,7 +528,6 @@ final class IOSKeyboardDictationSessionCoordinator {
         case .accepted(let text):
             guard publish(
                 phase: .resultReady,
-                requestID: requestID,
                 result: text,
                 expiresAt: deadline
             ) else {
@@ -494,13 +538,12 @@ final class IOSKeyboardDictationSessionCoordinator {
             presentation = .resultReady
             emitHandoff(
                 .terminal,
-                requestID: requestID,
+                requestID: attempt.requestID,
                 endsObservation: true
             )
         case .cancelled:
             _ = publish(
                 phase: .unavailable,
-                requestID: requestID,
                 expiresAt: deadline
             )
             finishSessionLifetime(cancelWorkflowTask: false)
@@ -511,30 +554,29 @@ final class IOSKeyboardDictationSessionCoordinator {
     }
 
     private func ownsCurrentWorkflow(
-        requestID: UUID,
+        attempt: KeyboardDictationAttemptIdentity,
         deadline: Date,
         generation: UInt64
     ) -> Bool {
-        self.requestID == requestID
+        activeAttempt == attempt
             && self.deadline == deadline
             && workflowGeneration == generation
             && deadline > dependencies.now()
     }
 
     private func cancelCurrentWorkflow() {
-        if let requestID {
-            _ = dependencies.workflow.cancel(requestID)
+        if let activeAttempt {
+            _ = dependencies.workflow.cancel(activeAttempt.attemptID)
         }
         workflowTask?.cancel()
     }
 
     private func failAndStop(_ message: String) {
-        if let requestID,
+        if sessionID != nil,
            let deadline,
            deadline > dependencies.now() {
             _ = publish(
                 phase: .failed,
-                requestID: requestID,
                 expiresAt: deadline
             )
         }
@@ -544,25 +586,23 @@ final class IOSKeyboardDictationSessionCoordinator {
     }
 
     private func publishUnavailableIfCurrent() {
-        guard let requestID,
+        guard sessionID != nil,
               let deadline,
               deadline > dependencies.now() else {
             return
         }
         _ = publish(
             phase: .unavailable,
-            requestID: requestID,
             expiresAt: deadline
         )
     }
 
     private func expireSession() {
-        guard let requestID else { return }
+        guard sessionID != nil else { return }
         cancelCurrentWorkflow()
         let now = dependencies.now()
         _ = publish(
             phase: .unavailable,
-            requestID: requestID,
             publishedAt: now,
             expiresAt: now.addingTimeInterval(1)
         )
@@ -572,14 +612,17 @@ final class IOSKeyboardDictationSessionCoordinator {
 
     private func publish(
         phase: KeyboardDictationStatePhase,
-        requestID: UUID,
         result: String? = nil,
         publishedAt: Date? = nil,
         expiresAt: Date
     ) -> Bool {
         let publicationDate = publishedAt ?? dependencies.now()
+        guard let sessionID else { return false }
         guard let record = KeyboardDictationStateRecord(
-            requestID: requestID,
+            sessionID: sessionID,
+            attemptID: activeAttempt?.attemptID,
+            requestID: activeAttempt?.requestID,
+            sourceDocumentID: activeAttempt?.sourceDocumentID,
             phase: phase,
             translationAvailable: translationAvailable,
             result: result,
@@ -617,7 +660,7 @@ final class IOSKeyboardDictationSessionCoordinator {
     }
 
     private func finishSessionLifetime(cancelWorkflowTask: Bool = true) {
-        if let requestID {
+        if let requestID = activeAttempt?.requestID {
             emitHandoff(
                 .terminal,
                 requestID: requestID,
@@ -627,7 +670,8 @@ final class IOSKeyboardDictationSessionCoordinator {
         workflowGeneration &+= 1
         expiryTimer?.invalidate()
         expiryTimer = nil
-        requestID = nil
+        sessionID = nil
+        activeAttempt = nil
         deadline = nil
         translationAvailable = false
         lastHandledCommand = nil

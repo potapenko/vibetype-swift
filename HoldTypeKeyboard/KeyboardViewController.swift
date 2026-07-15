@@ -21,6 +21,7 @@ struct KeyboardViewControllerDependencies {
     ) -> KeyboardDictationBridgeObserver?
     let now: () -> Date
     let makeRequestID: () -> UUID
+    let makeAttemptID: () -> UUID
     let documentProxyOverride: (any UITextDocumentProxy)?
     let inputModeSwitchKeyOverride: Bool?
     let fullAccessOverride: Bool?
@@ -54,6 +55,7 @@ struct KeyboardViewControllerDependencies {
         },
         now: { Date() },
         makeRequestID: { UUID() },
+        makeAttemptID: { UUID() },
         documentProxyOverride: nil,
         inputModeSwitchKeyOverride: nil,
         fullAccessOverride: nil,
@@ -78,12 +80,6 @@ struct KeyboardViewControllerDependencies {
 }
 
 final class KeyboardViewController: UIInputViewController {
-    private struct DictationRequestOwnership: Equatable {
-        let requestID: UUID
-        let extensionLifetimeID: UUID
-        let hostContextGeneration: UInt64
-    }
-
     let keyboardView = BrandStageKeyboardView()
     private let deleteRepeater = KeyboardDeleteRepeater()
     private var dependencies = KeyboardViewControllerDependencies.live
@@ -95,8 +91,8 @@ final class KeyboardViewController: UIInputViewController {
     private var dictationExpiryTimer: Timer?
     private var dictationObserver: KeyboardDictationBridgeObserver?
     private var dictationState: KeyboardDictationStateRecord?
-    private var activeDictationRequestID: UUID?
-    private var activeDictationOwnership: DictationRequestOwnership?
+    private var activeDictationOwnership:
+        KeyboardDictationAttemptIdentity?
     private var insertedDictationRequestID: UUID?
     private var lastSeenDictationSessionID: UUID?
     private var pendingDictationCommand: KeyboardDictationCommandKind?
@@ -104,8 +100,7 @@ final class KeyboardViewController: UIInputViewController {
     private var handoffLaunchFailed = false
     private var forcesSessionNotRunning = false
     private var showsInputModeSwitchKey = true
-    private var extensionLifetimeID = UUID()
-    private var hostContextGeneration: UInt64 = 0
+    private var allowsStateReconnection = true
     private var automaticVoiceAction: KeyboardVoiceAction = .standard
 
     convenience init(dependencies: KeyboardViewControllerDependencies) {
@@ -164,7 +159,7 @@ final class KeyboardViewController: UIInputViewController {
 
     override func textWillChange(_ textInput: UITextInput?) {
         super.textWillChange(textInput)
-        invalidateHostContextOwnership()
+        refreshStateReconnectionEligibility()
     }
 
     override func textDidChange(_ textInput: UITextInput?) {
@@ -293,18 +288,21 @@ final class KeyboardViewController: UIInputViewController {
             )
         }
         if pendingDictationCommand == .start,
-           activeDictationRequestID == dictationState.requestID {
+           owns(dictationState) {
             return (.starting, .starting, true)
         }
         if pendingDictationCommand == .finish,
-           activeDictationRequestID == dictationState.requestID {
+           owns(dictationState) {
             return (.processing, .processing, true)
         }
         switch dictationState.phase {
         case .ready:
+            if dictationState.hasActiveAttempt, owns(dictationState) {
+                return (.openingHoldType, .opening, true)
+            }
             return (.ready, .ready, false)
         case .listening
-            where activeDictationRequestID != dictationState.requestID:
+            where !owns(dictationState):
             return (
                 .ready,
                 .ready,
@@ -313,7 +311,7 @@ final class KeyboardViewController: UIInputViewController {
         case .listening:
             return (.listening, .listening, true)
         case .processing
-            where activeDictationRequestID != dictationState.requestID:
+            where !owns(dictationState):
             return (
                 .ready,
                 .ready,
@@ -341,7 +339,7 @@ final class KeyboardViewController: UIInputViewController {
         dictationExpiryTimer = nil
         guard hasSharedContainerAccess else {
             dictationState = nil
-            activeDictationRequestID = nil
+            activeDictationOwnership = nil
             pendingDictationCommand = nil
             render()
             return
@@ -351,38 +349,59 @@ final class KeyboardViewController: UIInputViewController {
                   state.isValid(at: dependencies.now()) else {
                 recordKeyboardState(.expired)
                 dictationState = nil
+                activeDictationOwnership = nil
                 forcesSessionNotRunning = true
                 render()
                 return
             }
-            if state.phase == .ready,
-               state.requestID != lastSeenDictationSessionID {
+            if state.sessionID != lastSeenDictationSessionID {
                 forcesSessionNotRunning = false
-                lastSeenDictationSessionID = state.requestID
+                lastSeenDictationSessionID = state.sessionID
                 insertedDictationRequestID = nil
-                activeDictationRequestID = nil
                 activeDictationOwnership = nil
+                allowsStateReconnection = true
+            }
+            dictationState = state
+            if let identity = KeyboardDictationAttemptIdentity(state) {
+                let mayReconnect = pendingHandoffRequestID
+                    == identity.requestID
+                    || (allowsStateReconnection
+                        && identity.belongsToDocument(
+                            activeDocumentProxy.documentIdentifier
+                        ))
+                if activeDictationOwnership == nil, mayReconnect {
+                    activeDictationOwnership = identity
+                    allowsStateReconnection = false
+                }
+                if activeDictationOwnership == identity,
+                   pendingHandoffRequestID == identity.requestID {
+                    pendingHandoffRequestID = nil
+                    handoffLaunchFailed = false
+                }
+            } else if state.phase == .ready {
+                activeDictationOwnership = nil
+                allowsStateReconnection = true
             }
             if state.phase == .listening || state.phase == .processing {
                 pendingDictationCommand = nil
             }
-            dictationState = state
             recordKeyboardState(diagnosticState(for: state.phase))
             if state.phase == .resultReady,
-               activeDictationRequestID == state.requestID,
-               ownsCurrentHostContext(for: state.requestID),
-               insertedDictationRequestID != state.requestID,
+               let requestID = state.requestID,
+               owns(state),
+               activeDictationOwnership?.belongsToDocument(
+                   activeDocumentProxy.documentIdentifier
+               ) == true,
+               insertedDictationRequestID != requestID,
                let result = state.result {
                 insertText(result)
                 dependencies.recordDiagnostic(.keyboardInserted(.dictation))
-                insertedDictationRequestID = state.requestID
-                activeDictationRequestID = nil
+                insertedDictationRequestID = requestID
                 activeDictationOwnership = nil
                 pendingDictationCommand = nil
                 forcesSessionNotRunning = true
             } else if (state.phase == .unavailable || state.phase == .failed),
-                      activeDictationRequestID == state.requestID {
-                activeDictationRequestID = nil
+                      owns(state) {
                 activeDictationOwnership = nil
                 pendingDictationCommand = nil
                 forcesSessionNotRunning = state.phase == .unavailable
@@ -391,11 +410,10 @@ final class KeyboardViewController: UIInputViewController {
                 state.expiresAt
             ) { [weak self] in
                 guard let self,
-                      self.dictationState?.requestID == state.requestID else {
+                      self.dictationState == state else {
                     return
                 }
                 self.dictationState = nil
-                self.activeDictationRequestID = nil
                 self.activeDictationOwnership = nil
                 self.pendingDictationCommand = nil
                 self.forcesSessionNotRunning = true
@@ -405,6 +423,7 @@ final class KeyboardViewController: UIInputViewController {
         } catch {
             recordKeyboardState(.failed)
             dictationState = nil
+            activeDictationOwnership = nil
             forcesSessionNotRunning = true
         }
         render()
@@ -421,15 +440,22 @@ final class KeyboardViewController: UIInputViewController {
         }
         switch state.phase {
         case .ready:
-            beginDictation(action: automaticVoiceAction)
+            if state.hasActiveAttempt {
+                if owns(state) {
+                    return
+                }
+                beginHandoff()
+            } else {
+                beginDictation(action: automaticVoiceAction)
+            }
         case .listening:
-            if activeDictationRequestID == state.requestID {
+            if owns(state) {
                 sendDictationCommand(.finish)
             } else {
                 beginHandoff()
             }
         case .processing:
-            if activeDictationRequestID != state.requestID {
+            if !owns(state) {
                 beginHandoff()
             }
         case .resultReady, .unavailable, .failed:
@@ -475,19 +501,21 @@ final class KeyboardViewController: UIInputViewController {
 
     private func beginDictation(action: KeyboardVoiceAction) {
         guard let state = dictationState,
-              state.phase == .ready else {
+              state.phase == .ready,
+              !state.hasActiveAttempt else {
             return
         }
         if action.translates, !state.translationAvailable {
             openTranslationSettings()
             return
         }
-        activeDictationRequestID = state.requestID
-        activeDictationOwnership = DictationRequestOwnership(
-            requestID: state.requestID,
-            extensionLifetimeID: extensionLifetimeID,
-            hostContextGeneration: hostContextGeneration
+        activeDictationOwnership = KeyboardDictationAttemptIdentity(
+            sessionID: state.sessionID,
+            attemptID: dependencies.makeAttemptID(),
+            requestID: dependencies.makeRequestID(),
+            sourceDocumentID: activeDocumentProxy.documentIdentifier
         )
+        allowsStateReconnection = false
         sendDictationCommand(.start, action: action)
     }
 
@@ -550,13 +578,20 @@ final class KeyboardViewController: UIInputViewController {
         guard hasSharedContainerAccess,
               let state = dictationState,
               state.expiresAt > dependencies.now(),
-              (activeDictationRequestID == state.requestID
-                || kind == .start) else {
+              let ownership = activeDictationOwnership,
+              ownership.sessionID == state.sessionID,
+              (kind == .start
+                || ownership.matches(state)
+                || (kind == .cancel
+                    && pendingDictationCommand == .start)) else {
             return
         }
         let now = dependencies.now()
         guard let command = KeyboardDictationCommandRecord(
-            requestID: state.requestID,
+            sessionID: ownership.sessionID,
+            attemptID: ownership.attemptID,
+            requestID: ownership.requestID,
+            sourceDocumentID: ownership.sourceDocumentID,
             kind: kind,
             action: action,
             issuedAt: now,
@@ -577,7 +612,6 @@ final class KeyboardViewController: UIInputViewController {
             )
             pendingDictationCommand = kind
             if kind == .cancel {
-                activeDictationRequestID = nil
                 activeDictationOwnership = nil
                 pendingDictationCommand = nil
                 forcesSessionNotRunning = true
@@ -591,7 +625,6 @@ final class KeyboardViewController: UIInputViewController {
                 )
             )
             pendingDictationCommand = nil
-            activeDictationRequestID = nil
             activeDictationOwnership = nil
             forcesSessionNotRunning = true
         }
@@ -609,10 +642,8 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func beginExtensionLifetime() {
-        extensionLifetimeID = UUID()
-        hostContextGeneration &+= 1
-        activeDictationRequestID = nil
         activeDictationOwnership = nil
+        allowsStateReconnection = true
         pendingDictationCommand = nil
         pendingHandoffRequestID = nil
         handoffLaunchFailed = false
@@ -620,24 +651,24 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func endExtensionLifetime() {
-        hostContextGeneration &+= 1
-        activeDictationRequestID = nil
         activeDictationOwnership = nil
+        allowsStateReconnection = true
         pendingDictationCommand = nil
         pendingHandoffRequestID = nil
     }
 
-    private func invalidateHostContextOwnership() {
-        hostContextGeneration &+= 1
-        activeDictationOwnership = nil
+    private func refreshStateReconnectionEligibility() {
+        guard let activeDictationOwnership else { return }
+        if !activeDictationOwnership.belongsToDocument(
+            activeDocumentProxy.documentIdentifier
+        ) {
+            self.activeDictationOwnership = nil
+            allowsStateReconnection = true
+        }
     }
 
-    private func ownsCurrentHostContext(for requestID: UUID) -> Bool {
-        activeDictationOwnership == DictationRequestOwnership(
-            requestID: requestID,
-            extensionLifetimeID: extensionLifetimeID,
-            hostContextGeneration: hostContextGeneration
-        )
+    private func owns(_ state: KeyboardDictationStateRecord) -> Bool {
+        activeDictationOwnership?.matches(state) == true
     }
 
     private func insertText(_ text: String) {
