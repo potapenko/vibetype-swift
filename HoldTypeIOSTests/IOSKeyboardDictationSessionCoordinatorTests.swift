@@ -333,6 +333,63 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
         #expect(harness.states.allSatisfy { $0.result == nil })
         #expect(harness.workflow.finishRequestIDs == [requestID])
     }
+
+    @Test
+    func deliveryClaimIsExclusiveAndAcknowledgementReusesWarmSession()
+        async throws {
+        let harness = KeyboardSessionHarness()
+        let coordinator = harness.makeCoordinator()
+        await coordinator.startSession()
+        let requestID = UUID()
+
+        harness.command = harness.command(.start, requestID: requestID)
+        coordinator.receiveCurrentCommand()
+        try await eventually { harness.workflow.runRequestIDs == [requestID] }
+        harness.workflow.emit(.listening)
+        harness.command = harness.command(.finish, requestID: requestID)
+        coordinator.receiveCurrentCommand()
+        harness.workflow.resolve(.accepted("Exactly once"))
+        try await eventually { coordinator.presentation == .resultReady }
+
+        let claimID = UUID()
+        harness.command = harness.command(
+            .claimDelivery,
+            requestID: requestID,
+            deliveryClaimID: claimID
+        )
+        coordinator.receiveCurrentCommand()
+        #expect(harness.states.last?.deliveryClaimID == claimID)
+        #expect(harness.states.last?.result == "Exactly once")
+
+        let stateCountAfterClaim = harness.states.count
+        harness.command = harness.command(
+            .claimDelivery,
+            requestID: requestID,
+            deliveryClaimID: UUID()
+        )
+        coordinator.receiveCurrentCommand()
+        #expect(harness.states.count == stateCountAfterClaim)
+
+        harness.command = harness.command(
+            .acknowledgeDelivery,
+            requestID: requestID,
+            deliveryClaimID: claimID
+        )
+        coordinator.receiveCurrentCommand()
+
+        #expect(harness.states.last?.phase == .ready)
+        #expect(harness.states.last?.hasActiveAttempt == false)
+        #expect(harness.states.last?.result == nil)
+        #expect(coordinator.presentation == .ready(harness.sessionDeadline))
+
+        let nextRequestID = UUID()
+        harness.command = harness.command(.start, requestID: nextRequestID)
+        coordinator.receiveCurrentCommand()
+        try await eventually {
+            harness.workflow.runRequestIDs == [requestID, nextRequestID]
+        }
+        harness.workflow.resolve(.cancelled)
+    }
 }
 
 @MainActor
@@ -344,6 +401,12 @@ private final class KeyboardSessionHarness {
     var states: [HoldTypeIOS.KeyboardDictationStateRecord] = []
     var postCount = 0
     var expiryAction: (@MainActor () -> Void)?
+
+    var sessionDeadline: Date {
+        now.addingTimeInterval(
+            KeyboardDictationBridgeConfiguration.sessionLifetime
+        )
+    }
 
     func makeCoordinator() -> IOSKeyboardDictationSessionCoordinator {
         IOSKeyboardDictationSessionCoordinator(
@@ -381,6 +444,7 @@ private final class KeyboardSessionHarness {
         _ kind: HoldTypeIOS.KeyboardDictationCommandKind,
         requestID: UUID,
         action: HoldTypeIOS.KeyboardVoiceAction = .standard,
+        deliveryClaimID: UUID? = nil,
         issuedAt: Date? = nil,
         sessionID: UUID? = nil
     ) -> HoldTypeIOS.KeyboardDictationCommandRecord {
@@ -390,6 +454,7 @@ private final class KeyboardSessionHarness {
             attemptID: requestID,
             requestID: requestID,
             sourceDocumentID: nil,
+            deliveryClaimID: deliveryClaimID,
             kind: kind,
             action: action,
             issuedAt: issuedAt,

@@ -127,8 +127,12 @@ microphone appear active.
 - One accepted result may be inserted automatically at most once.
 - Delivery eligibility requires the same request, a matching originating
   document, an unexpired result, and no prior insertion claim.
-- The keyboard claims delivery before calling `insertText` so an extension
-  recreation cannot replay the same accepted result.
+- The keyboard writes a fresh opaque delivery-claim identifier and waits for
+  the containing app to grant that exact claim before calling `insertText`.
+- A recreated extension does not inherit another process's granted claim, so
+  an uncertain insertion is never replayed.
+- A matching post-insertion acknowledgement retires only the completed attempt
+  and returns an unexpired app-owned session to Ready.
 - The containing app remains the canonical owner of Latest and any History
   entry. Shared state is transient coordination, not a second transcript store.
 - An uncertain insertion is never retried automatically. The user recovers from

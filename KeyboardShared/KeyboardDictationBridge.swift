@@ -2,22 +2,24 @@ import CoreFoundation
 import Foundation
 
 nonisolated enum KeyboardDictationBridgeConfiguration {
-    static let commandFilename = "keyboard-dictation-command-v2.json"
-    static let stateFilename = "keyboard-dictation-state-v2.json"
+    static let commandFilename = "keyboard-dictation-command-v3.json"
+    static let stateFilename = "keyboard-dictation-state-v3.json"
     static let maximumRecordBytes = 4 * 1_024
     static let commandLifetime: TimeInterval = 5
     static let sessionLifetime: TimeInterval = 60
     static let resultMaximumUTF8Bytes = 3 * 1_024
     static let commandNotification =
-        "app.holdtype.keyboard-dictation.command.v2"
+        "app.holdtype.keyboard-dictation.command.v3"
     static let stateNotification =
-        "app.holdtype.keyboard-dictation.state.v2"
+        "app.holdtype.keyboard-dictation.state.v3"
 }
 
 nonisolated enum KeyboardDictationCommandKind: String, Codable, Sendable {
     case start
     case finish
     case cancel
+    case claimDelivery = "claim_delivery"
+    case acknowledgeDelivery = "acknowledge_delivery"
 }
 
 /// One bounded per-request combination. It contains no settings, prompt,
@@ -71,13 +73,14 @@ nonisolated struct KeyboardDictationCommandRecord:
     Codable,
     Equatable,
     Sendable {
-    static let schemaVersion = 3
+    static let schemaVersion = 4
 
     let schemaVersion: Int
     let sessionID: UUID
     let attemptID: UUID
     let requestID: UUID
     let sourceDocumentID: UUID?
+    let deliveryClaimID: UUID?
     let kind: KeyboardDictationCommandKind
     let action: KeyboardVoiceAction
     let issuedAt: Date
@@ -88,16 +91,24 @@ nonisolated struct KeyboardDictationCommandRecord:
         attemptID: UUID,
         requestID: UUID,
         sourceDocumentID: UUID?,
+        deliveryClaimID: UUID? = nil,
         kind: KeyboardDictationCommandKind,
         action: KeyboardVoiceAction = .standard,
         issuedAt: Date,
         expiresAt: Date
     ) {
+        let deliveryIdentityIsValid = switch kind {
+        case .start, .finish, .cancel:
+            deliveryClaimID == nil
+        case .claimDelivery, .acknowledgeDelivery:
+            deliveryClaimID != nil
+        }
         guard issuedAt.timeIntervalSinceReferenceDate.isFinite,
               expiresAt.timeIntervalSinceReferenceDate.isFinite,
               expiresAt > issuedAt,
               expiresAt.timeIntervalSince(issuedAt)
-                <= KeyboardDictationBridgeConfiguration.commandLifetime else {
+                <= KeyboardDictationBridgeConfiguration.commandLifetime,
+              deliveryIdentityIsValid else {
             return nil
         }
         schemaVersion = Self.schemaVersion
@@ -105,6 +116,7 @@ nonisolated struct KeyboardDictationCommandRecord:
         self.attemptID = attemptID
         self.requestID = requestID
         self.sourceDocumentID = sourceDocumentID
+        self.deliveryClaimID = deliveryClaimID
         self.kind = kind
         self.action = action
         self.issuedAt = issuedAt
@@ -112,13 +124,20 @@ nonisolated struct KeyboardDictationCommandRecord:
     }
 
     func isValid(at date: Date) -> Bool {
-        schemaVersion == Self.schemaVersion
+        let deliveryIdentityIsValid = switch kind {
+        case .start, .finish, .cancel:
+            deliveryClaimID == nil
+        case .claimDelivery, .acknowledgeDelivery:
+            deliveryClaimID != nil
+        }
+        return schemaVersion == Self.schemaVersion
             && issuedAt.timeIntervalSinceReferenceDate.isFinite
             && expiresAt.timeIntervalSinceReferenceDate.isFinite
             && expiresAt > date
             && expiresAt > issuedAt
             && expiresAt.timeIntervalSince(issuedAt)
                 <= KeyboardDictationBridgeConfiguration.commandLifetime
+            && deliveryIdentityIsValid
     }
 }
 
@@ -135,13 +154,14 @@ nonisolated struct KeyboardDictationStateRecord:
     Codable,
     Equatable,
     Sendable {
-    static let schemaVersion = 3
+    static let schemaVersion = 4
 
     let schemaVersion: Int
     let sessionID: UUID
     let attemptID: UUID?
     let requestID: UUID?
     let sourceDocumentID: UUID?
+    let deliveryClaimID: UUID?
     let phase: KeyboardDictationStatePhase
     let translationAvailable: Bool
     let result: String?
@@ -153,6 +173,7 @@ nonisolated struct KeyboardDictationStateRecord:
         attemptID: UUID? = nil,
         requestID: UUID? = nil,
         sourceDocumentID: UUID? = nil,
+        deliveryClaimID: UUID? = nil,
         phase: KeyboardDictationStatePhase,
         translationAvailable: Bool = false,
         result: String? = nil,
@@ -181,6 +202,7 @@ nonisolated struct KeyboardDictationStateRecord:
               expiresAt.timeIntervalSince(publishedAt)
                 <= KeyboardDictationBridgeConfiguration.sessionLifetime,
               identityIsValid,
+              (phase == .resultReady || deliveryClaimID == nil),
               (phase == .resultReady) == hasValidResult else {
             return nil
         }
@@ -189,6 +211,7 @@ nonisolated struct KeyboardDictationStateRecord:
         self.attemptID = attemptID
         self.requestID = requestID
         self.sourceDocumentID = sourceDocumentID
+        self.deliveryClaimID = deliveryClaimID
         self.phase = phase
         self.translationAvailable = translationAvailable
         self.result = result
@@ -222,7 +245,9 @@ nonisolated struct KeyboardDictationStateRecord:
                     <= KeyboardDictationBridgeConfiguration
                         .resultMaximumUTF8Bytes
         } ?? false
-        return identityIsValid && (phase == .resultReady) == hasValidResult
+        return identityIsValid
+            && (phase == .resultReady || deliveryClaimID == nil)
+            && (phase == .resultReady) == hasValidResult
     }
 
     var hasActiveAttempt: Bool {
@@ -297,8 +322,9 @@ nonisolated enum KeyboardDictationBridgeStoreError: Error, Equatable {
     case recordTooLarge
 }
 
-/// Exactly two bounded atomic projections: extension-written command and
-/// containing-app-written state/result. This store has no history or queue.
+/// Exactly two bounded atomic projections: extension-written command/claim and
+/// containing-app-written state/result/grant. This store has no history or
+/// queue.
 nonisolated struct KeyboardDictationBridgeStore {
     private let directoryURL: URL
     private let fileManager: FileManager

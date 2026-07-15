@@ -257,10 +257,34 @@ struct KeyboardViewControllerTests {
             )
         )
         controller.textDidChange(nil)
+        #expect(harness.savedCommands.map(\.kind) == [
+            .start,
+            .finish,
+            .claimDelivery,
+        ])
+        #expect(harness.proxy.insertedTexts.isEmpty)
+
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                requestID: requestID,
+                deliveryClaimID: harness.deliveryClaimID,
+                phase: .resultReady,
+                result: "Processed keyboard text",
+                publishedAt: now,
+                expiresAt: deadline
+            )
+        )
+        controller.textDidChange(nil)
         controller.textDidChange(nil)
 
         #expect(harness.proxy.insertedTexts == [
             "Processed keyboard text",
+        ])
+        #expect(harness.savedCommands.map(\.kind) == [
+            .start,
+            .finish,
+            .claimDelivery,
+            .acknowledgeDelivery,
         ])
         #expect(statusText(in: controller.view) == "Ready")
     }
@@ -456,8 +480,52 @@ struct KeyboardViewControllerTests {
         )
         controller.textDidChange(nil)
 
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                requestID: requestID,
+                deliveryClaimID: harness.deliveryClaimID,
+                phase: .resultReady,
+                result: "Latest fallback text",
+                publishedAt: now,
+                expiresAt: deadline
+            )
+        )
+        controller.textDidChange(nil)
+
         #expect(harness.proxy.insertedTexts == ["Latest fallback text"])
         #expect(statusText(in: controller.view) == "Ready")
+    }
+
+    @Test func recreatedExtensionNeverReplaysAnotherProcessDeliveryClaim()
+        throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let documentID = UUID()
+        let grantedToPreviousProcess = UUID()
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: UUID(),
+                    attemptID: UUID(),
+                    requestID: UUID(),
+                    sourceDocumentID: documentID,
+                    deliveryClaimID: grantedToPreviousProcess,
+                    phase: .resultReady,
+                    result: "Uncertain previous insertion",
+                    publishedAt: now,
+                    expiresAt: now.addingTimeInterval(60)
+                )
+            ),
+            requestID: documentID
+        )
+
+        let recreatedController = harness.makeController()
+        recreatedController.loadViewIfNeeded()
+        recreatedController.textDidChange(nil)
+
+        #expect(harness.proxy.insertedTexts.isEmpty)
+        #expect(harness.savedCommands.isEmpty)
+        #expect(statusText(in: recreatedController.view) == "Ready")
     }
 
     @Test func newControllerReconnectsToListeningAndFinishesTheSameAttempt()
@@ -670,6 +738,7 @@ private final class KeyboardControllerHarness {
     let inputModeSwitchKeyOverride: Bool?
     let fullAccessOverride: Bool
     let requestID: UUID
+    let deliveryClaimID: UUID
     let openContainingAppSucceeds: Bool
     var savedCommands: [KeyboardDictationCommandRecord] = []
     var savedHandoffIntents: [KeyboardHandoffIntentRecord] = []
@@ -695,6 +764,7 @@ private final class KeyboardControllerHarness {
             ?? dictationState?.sessionID
             ?? UUID()
         self.requestID = resolvedRequestID
+        deliveryClaimID = UUID()
         proxy = KeyboardDocumentProxySpy(
             documentIdentifier: resolvedRequestID
         )
@@ -716,6 +786,7 @@ private final class KeyboardControllerHarness {
                 now: { [self] in now },
                 makeRequestID: { [self] in requestID },
                 makeAttemptID: { [self] in requestID },
+                makeDeliveryClaimID: { [self] in deliveryClaimID },
                 documentProxyOverride: proxy,
                 inputModeSwitchKeyOverride: inputModeSwitchKeyOverride,
                 fullAccessOverride: fullAccessOverride,
@@ -772,6 +843,7 @@ private final class KeyboardDocumentProxySpy: NSObject, UITextDocumentProxy {
 private extension KeyboardDictationStateRecord {
     init?(
         requestID: UUID,
+        deliveryClaimID: UUID? = nil,
         phase: KeyboardDictationStatePhase,
         translationAvailable: Bool = false,
         result: String? = nil,
@@ -784,6 +856,7 @@ private extension KeyboardDictationStateRecord {
             attemptID: hasAttempt ? requestID : nil,
             requestID: hasAttempt ? requestID : nil,
             sourceDocumentID: hasAttempt ? requestID : nil,
+            deliveryClaimID: deliveryClaimID,
             phase: phase,
             translationAvailable: translationAvailable,
             result: result,

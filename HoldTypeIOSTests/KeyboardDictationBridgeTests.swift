@@ -166,4 +166,71 @@ struct KeyboardDictationBridgeTests {
             ) == nil
         )
     }
+
+    @Test func deliveryClaimIsBoundToTerminalAttemptRecords() {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sessionID = UUID()
+        let attemptID = UUID()
+        let requestID = UUID()
+        let claimID = UUID()
+
+        #expect(
+            KeyboardDictationCommandRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
+                requestID: requestID,
+                sourceDocumentID: UUID(),
+                kind: .claimDelivery,
+                issuedAt: now,
+                expiresAt: now.addingTimeInterval(5)
+            ) == nil
+        )
+        #expect(
+            KeyboardDictationCommandRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
+                requestID: requestID,
+                sourceDocumentID: UUID(),
+                deliveryClaimID: claimID,
+                kind: .start,
+                issuedAt: now,
+                expiresAt: now.addingTimeInterval(5)
+            ) == nil
+        )
+        #expect(
+            KeyboardDictationCommandRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
+                requestID: requestID,
+                sourceDocumentID: UUID(),
+                deliveryClaimID: claimID,
+                kind: .claimDelivery,
+                issuedAt: now,
+                expiresAt: now.addingTimeInterval(5)
+            ) != nil
+        )
+        #expect(
+            KeyboardDictationStateRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
+                requestID: requestID,
+                deliveryClaimID: claimID,
+                phase: .processing,
+                publishedAt: now,
+                expiresAt: now.addingTimeInterval(60)
+            ) == nil
+        )
+        #expect(
+            KeyboardDictationStateRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
+                requestID: requestID,
+                deliveryClaimID: claimID,
+                phase: .resultReady,
+                result: "Claimed once",
+                publishedAt: now,
+                expiresAt: now.addingTimeInterval(60)
+            ) != nil
+        )
+    }
 }

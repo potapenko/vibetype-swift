@@ -22,6 +22,7 @@ struct KeyboardViewControllerDependencies {
     let now: () -> Date
     let makeRequestID: () -> UUID
     let makeAttemptID: () -> UUID
+    let makeDeliveryClaimID: () -> UUID
     let documentProxyOverride: (any UITextDocumentProxy)?
     let inputModeSwitchKeyOverride: Bool?
     let fullAccessOverride: Bool?
@@ -56,6 +57,7 @@ struct KeyboardViewControllerDependencies {
         now: { Date() },
         makeRequestID: { UUID() },
         makeAttemptID: { UUID() },
+        makeDeliveryClaimID: { UUID() },
         documentProxyOverride: nil,
         inputModeSwitchKeyOverride: nil,
         fullAccessOverride: nil,
@@ -94,6 +96,7 @@ final class KeyboardViewController: UIInputViewController {
     private var activeDictationOwnership:
         KeyboardDictationAttemptIdentity?
     private var insertedDictationRequestID: UUID?
+    private var pendingDeliveryClaimID: UUID?
     private var lastSeenDictationSessionID: UUID?
     private var pendingDictationCommand: KeyboardDictationCommandKind?
     private var pendingHandoffRequestID: UUID?
@@ -358,6 +361,7 @@ final class KeyboardViewController: UIInputViewController {
                 forcesSessionNotRunning = false
                 lastSeenDictationSessionID = state.sessionID
                 insertedDictationRequestID = nil
+                pendingDeliveryClaimID = nil
                 activeDictationOwnership = nil
                 allowsStateReconnection = true
             }
@@ -381,8 +385,13 @@ final class KeyboardViewController: UIInputViewController {
             } else if state.phase == .ready {
                 activeDictationOwnership = nil
                 allowsStateReconnection = true
+                pendingDeliveryClaimID = nil
             }
-            if state.phase == .listening || state.phase == .processing {
+            if state.phase == .listening
+                || state.phase == .processing
+                || state.phase == .resultReady
+                || state.phase == .unavailable
+                || state.phase == .failed {
                 pendingDictationCommand = nil
             }
             recordKeyboardState(diagnosticState(for: state.phase))
@@ -394,16 +403,34 @@ final class KeyboardViewController: UIInputViewController {
                ) == true,
                insertedDictationRequestID != requestID,
                let result = state.result {
-                insertText(result)
-                dependencies.recordDiagnostic(.keyboardInserted(.dictation))
-                insertedDictationRequestID = requestID
-                activeDictationOwnership = nil
-                pendingDictationCommand = nil
-                forcesSessionNotRunning = true
+                if let grantedClaimID = state.deliveryClaimID {
+                    if pendingDeliveryClaimID == grantedClaimID {
+                        insertedDictationRequestID = requestID
+                        insertText(result)
+                        dependencies.recordDiagnostic(
+                            .keyboardInserted(.dictation)
+                        )
+                        _ = sendDictationCommand(
+                            .acknowledgeDelivery,
+                            deliveryClaimID: grantedClaimID
+                        )
+                        pendingDeliveryClaimID = nil
+                    }
+                } else if pendingDeliveryClaimID == nil {
+                    let claimID = dependencies.makeDeliveryClaimID()
+                    pendingDeliveryClaimID = claimID
+                    if !sendDictationCommand(
+                        .claimDelivery,
+                        deliveryClaimID: claimID
+                    ) {
+                        pendingDeliveryClaimID = nil
+                    }
+                }
             } else if (state.phase == .unavailable || state.phase == .failed),
                       owns(state) {
                 activeDictationOwnership = nil
                 pendingDictationCommand = nil
+                pendingDeliveryClaimID = nil
                 forcesSessionNotRunning = state.phase == .unavailable
             }
             dictationExpiryTimer = dependencies.scheduleLatestExpiry(
@@ -416,6 +443,7 @@ final class KeyboardViewController: UIInputViewController {
                 self.dictationState = nil
                 self.activeDictationOwnership = nil
                 self.pendingDictationCommand = nil
+                self.pendingDeliveryClaimID = nil
                 self.forcesSessionNotRunning = true
                 self.recordKeyboardState(.expired)
                 self.render()
@@ -571,10 +599,12 @@ final class KeyboardViewController: UIInputViewController {
         }
     }
 
+    @discardableResult
     private func sendDictationCommand(
         _ kind: KeyboardDictationCommandKind,
-        action: KeyboardVoiceAction = .standard
-    ) {
+        action: KeyboardVoiceAction = .standard,
+        deliveryClaimID: UUID? = nil
+    ) -> Bool {
         guard hasSharedContainerAccess,
               let state = dictationState,
               state.expiresAt > dependencies.now(),
@@ -584,7 +614,7 @@ final class KeyboardViewController: UIInputViewController {
                 || ownership.matches(state)
                 || (kind == .cancel
                     && pendingDictationCommand == .start)) else {
-            return
+            return false
         }
         let now = dependencies.now()
         guard let command = KeyboardDictationCommandRecord(
@@ -592,6 +622,7 @@ final class KeyboardViewController: UIInputViewController {
             attemptID: ownership.attemptID,
             requestID: ownership.requestID,
             sourceDocumentID: ownership.sourceDocumentID,
+            deliveryClaimID: deliveryClaimID,
             kind: kind,
             action: action,
             issuedAt: now,
@@ -599,7 +630,7 @@ final class KeyboardViewController: UIInputViewController {
                 KeyboardDictationBridgeConfiguration.commandLifetime
             )
         ) else {
-            return
+            return false
         }
         do {
             try dependencies.saveDictationCommand(command)
@@ -610,10 +641,12 @@ final class KeyboardViewController: UIInputViewController {
                     outcome: .succeeded
                 )
             )
-            pendingDictationCommand = kind
-            if kind == .cancel {
+            if kind == .start || kind == .finish {
+                pendingDictationCommand = kind
+            } else if kind == .cancel {
                 activeDictationOwnership = nil
                 pendingDictationCommand = nil
+                pendingDeliveryClaimID = nil
                 forcesSessionNotRunning = true
             }
         } catch {
@@ -625,10 +658,14 @@ final class KeyboardViewController: UIInputViewController {
                 )
             )
             pendingDictationCommand = nil
+            pendingDeliveryClaimID = nil
             activeDictationOwnership = nil
             forcesSessionNotRunning = true
+            render()
+            return false
         }
         render()
+        return true
     }
 
     private var returnIsEnabled: Bool {
@@ -645,6 +682,7 @@ final class KeyboardViewController: UIInputViewController {
         activeDictationOwnership = nil
         allowsStateReconnection = true
         pendingDictationCommand = nil
+        pendingDeliveryClaimID = nil
         pendingHandoffRequestID = nil
         handoffLaunchFailed = false
         automaticVoiceAction = .standard
@@ -654,6 +692,7 @@ final class KeyboardViewController: UIInputViewController {
         activeDictationOwnership = nil
         allowsStateReconnection = true
         pendingDictationCommand = nil
+        pendingDeliveryClaimID = nil
         pendingHandoffRequestID = nil
     }
 
@@ -664,6 +703,7 @@ final class KeyboardViewController: UIInputViewController {
         ) {
             self.activeDictationOwnership = nil
             allowsStateReconnection = true
+            pendingDeliveryClaimID = nil
         }
     }
 
@@ -712,6 +752,10 @@ final class KeyboardViewController: UIInputViewController {
             .finish
         case .cancel:
             .cancel
+        case .claimDelivery:
+            .claimDelivery
+        case .acknowledgeDelivery:
+            .acknowledgeDelivery
         }
     }
 

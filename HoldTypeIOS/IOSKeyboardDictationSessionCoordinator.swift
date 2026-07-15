@@ -76,6 +76,8 @@ final class IOSKeyboardDictationSessionCoordinator {
     private var workflowTask: Task<Void, Never>?
     private var workflowGeneration: UInt64 = 0
     private var translationAvailable = false
+    private var acceptedResult: String?
+    private var deliveryClaimID: UUID?
     private var handoffRequestID: UUID?
     private var handoffEventObserver:
         (@MainActor @Sendable (
@@ -215,6 +217,8 @@ final class IOSKeyboardDictationSessionCoordinator {
         )
         self.sessionID = sessionID
         activeAttempt = nil
+        acceptedResult = nil
+        deliveryClaimID = nil
         self.deadline = deadline
         translationAvailable = await dependencies.workflow
             .loadTranslationAvailability()
@@ -278,6 +282,8 @@ final class IOSKeyboardDictationSessionCoordinator {
         )
         self.sessionID = sessionID
         self.activeAttempt = activeAttempt
+        acceptedResult = nil
+        deliveryClaimID = nil
         self.deadline = deadline
         handoffRequestID = intent.requestID
         handoffEventObserver = observe
@@ -369,6 +375,8 @@ final class IOSKeyboardDictationSessionCoordinator {
                 sourceDocumentID: command.sourceDocumentID
             )
             activeAttempt = attempt
+            acceptedResult = nil
+            deliveryClaimID = nil
             guard startRecording(
                 attempt: attempt,
                 deadline: deadline,
@@ -394,6 +402,36 @@ final class IOSKeyboardDictationSessionCoordinator {
                 deadline: deadline
             ) else { return }
             lastHandledCommand = command
+        case .claimDelivery:
+            guard let activeAttempt,
+                  activeAttempt.matches(command),
+                  case .resultReady = presentation,
+                  deliveryClaimID == nil,
+                  let claimID = command.deliveryClaimID,
+                  let acceptedResult else {
+                return
+            }
+            deliveryClaimID = claimID
+            guard publish(
+                phase: .resultReady,
+                result: acceptedResult,
+                deliveryClaimID: claimID,
+                expiresAt: deadline
+            ) else {
+                deliveryClaimID = nil
+                failAndStop("Result available in Latest")
+                return
+            }
+            lastHandledCommand = command
+        case .acknowledgeDelivery:
+            guard let activeAttempt,
+                  activeAttempt.matches(command),
+                  case .resultReady = presentation,
+                  command.deliveryClaimID == deliveryClaimID else {
+                return
+            }
+            lastHandledCommand = command
+            completeAttemptForWarmReuse(deadline: deadline)
         }
     }
 
@@ -526,6 +564,8 @@ final class IOSKeyboardDictationSessionCoordinator {
         }
         switch resolution {
         case .accepted(let text):
+            acceptedResult = text
+            deliveryClaimID = nil
             guard publish(
                 phase: .resultReady,
                 result: text,
@@ -613,6 +653,7 @@ final class IOSKeyboardDictationSessionCoordinator {
     private func publish(
         phase: KeyboardDictationStatePhase,
         result: String? = nil,
+        deliveryClaimID: UUID? = nil,
         publishedAt: Date? = nil,
         expiresAt: Date
     ) -> Bool {
@@ -623,6 +664,7 @@ final class IOSKeyboardDictationSessionCoordinator {
             attemptID: activeAttempt?.attemptID,
             requestID: activeAttempt?.requestID,
             sourceDocumentID: activeAttempt?.sourceDocumentID,
+            deliveryClaimID: deliveryClaimID,
             phase: phase,
             translationAvailable: translationAvailable,
             result: result,
@@ -659,6 +701,21 @@ final class IOSKeyboardDictationSessionCoordinator {
         backgroundTask = .invalid
     }
 
+    private func completeAttemptForWarmReuse(deadline: Date) {
+        activeAttempt = nil
+        acceptedResult = nil
+        deliveryClaimID = nil
+        guard publish(
+            phase: .ready,
+            expiresAt: deadline
+        ) else {
+            finishSessionLifetime()
+            presentation = .failed("Session unavailable")
+            return
+        }
+        presentation = .ready(deadline)
+    }
+
     private func finishSessionLifetime(cancelWorkflowTask: Bool = true) {
         if let requestID = activeAttempt?.requestID {
             emitHandoff(
@@ -672,6 +729,8 @@ final class IOSKeyboardDictationSessionCoordinator {
         expiryTimer = nil
         sessionID = nil
         activeAttempt = nil
+        acceptedResult = nil
+        deliveryClaimID = nil
         deadline = nil
         translationAvailable = false
         lastHandledCommand = nil

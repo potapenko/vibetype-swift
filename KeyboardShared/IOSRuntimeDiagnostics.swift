@@ -77,6 +77,8 @@ nonisolated enum IOSDiagnosticKeyboardCommand: String, Sendable {
     case start
     case finish
     case cancel
+    case claimDelivery = "claim_delivery"
+    case acknowledgeDelivery = "acknowledge_delivery"
 }
 
 nonisolated enum IOSDiagnosticInsertionKind: String, Sendable {
