@@ -206,9 +206,10 @@ The bridge must distinguish:
 - an individual dictation attempt and result inside that session.
 
 The exact schema should remain small and have one authoritative writer per
-record. It must support fresh intent validation, session/attempt state,
-document-bound reconnection, expiry, and an at-most-once delivery claim. It must
-not become a durable queue, log, or second History database.
+record. It must support fresh intent validation, consumed-intent-bound control
+reconnection, document-bound automatic delivery, expiry, and an at-most-once
+delivery claim. It must not become a durable queue, log, or second History
+database.
 
 ### App Ownership
 
@@ -256,7 +257,7 @@ sheet itself contains no setup logic, recorder ownership, or provider code.
 | KBD-FLOW-2 | Keyboard launch intent and app URL route | Missing session writes a bounded intent and opens only a matching HoldType route; warm path stays direct | Completed 2026-07-15 |
 | KBD-FLOW-3 | Shared Voice preflight and targeted setup recovery | Every setup blocker routes to its exact owner; no blocker presents Listening or the sheet | Completed 2026-07-15 |
 | KBD-FLOW-4 | Automatic app-owned capture and live sheet | A valid cold request starts real capture once and presents the sheet as Starting then Listening | Completed 2026-07-15; signed end-to-end retained in KBD-FLOW-8 |
-| KBD-FLOW-5 | Keyboard reconnection and state UX | A recreated extension reconnects by session, attempt, and document identity with no manual instructions | Completed 2026-07-15 |
+| KBD-FLOW-5 | Keyboard reconnection and state UX | A recreated extension reconnects by consumed handoff plus session, attempt, and request; document identity independently gates delivery | Completed 2026-07-15; signed-device nil-document correction in progress |
 | KBD-FLOW-6 | Finish, exactly-once delivery, and warm reuse | Finish processes once, safe output inserts once, and an unexpired session returns to Ready | Completed 2026-07-15 |
 | KBD-FLOW-7 | Legacy-copy cleanup and product completion | Manual-session recovery copy is absent and ordinary Voice remains unchanged | Completed 2026-07-15 |
 | KBD-FLOW-8 | Signed-device and TestFlight qualification | Full physical matrix passes or an explicit app-only release decision is recorded | In progress; signed build and install passed 2026-07-15, locked-device runtime matrix pending |
@@ -341,16 +342,19 @@ handoff starts one real capture and one sheet.
 
 ## KBD-FLOW-5 - Reconnection And Keyboard State UX
 
-1. Reconnect a recreated extension through session ID, attempt ID, request ID,
-   and source document identity rather than extension-process identity.
+1. Reconnect a recreated extension through the last app-consumed handoff plus
+   matching session ID, attempt ID, and request ID rather than
+   extension-process identity.
 2. Drive the keyboard through:
    `Ready -> Opening HoldType -> Listening -> Processing -> Ready`.
 3. Keep the existing central Voice indicator visible through nominal states.
 4. Route the microphone to Finish while Listening and keep Cancel explicit.
 5. Remove instructional navigation copy from every keyboard recovery state.
 6. Preserve compact operational and runtime failures in the existing error area.
-7. Make a changed or missing destination identity ineligible for automatic
-   insertion without discarding the accepted result.
+7. Keep source document identity as an independent automatic-insertion gate. A
+   changed or temporarily missing identity must not hide Listening or prevent
+   Finish for the matching consumed handoff, and it must not discard the
+   accepted result.
 
 Exit when recreation, return, focus-change, and expiry tests pass without a
 wrong-field insertion or manual-session message.

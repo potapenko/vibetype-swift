@@ -120,11 +120,14 @@ microphone appear active.
   does not contain audio, transcript text, credentials, prompts, or host content.
 - The containing app starts recording only when the URL matches a fresh shared
   request. An unrelated ordinary app launch does not start the microphone.
-- A recreated keyboard extension may reconnect only when the session, attempt,
-  request, and available originating document identity match shared state.
-  Extension-process identity is never a valid ownership boundary.
-- Missing or changed document identity makes automatic insertion ineligible; it
-  does not discard the accepted result.
+- A recreated keyboard extension reconnects control only when the session,
+  attempt, and request match both shared state and the last app-consumed
+  keyboard handoff. Extension-process identity is never a valid ownership
+  boundary.
+- Originating document identity is a separate delivery gate. A matching value
+  permits automatic insertion; a missing or changed value never prevents the
+  user from seeing Listening or finishing the matching capture, but it makes
+  automatic insertion ineligible and preserves the accepted result in Latest.
 
 ## Delivery Guarantees
 

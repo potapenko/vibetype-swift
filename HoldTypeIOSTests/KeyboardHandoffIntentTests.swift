@@ -63,6 +63,10 @@ struct KeyboardHandoffIntentTests {
             try fixture.store.loadPending(at: now.addingTimeInterval(2))
                 == nil
         )
+        let storedConsumed = try fixture.store.loadConsumed()
+        let consumed = try #require(storedConsumed)
+        #expect(consumed.requestID == intent.requestID)
+        #expect(consumed.disposition == .consumed)
     }
 
     @Test func expiredAndMismatchedRequestsAreInert() throws {
@@ -119,6 +123,8 @@ struct KeyboardHandoffIntentTests {
 
         try fixture.store.save(first)
         try fixture.store.save(second)
+
+        #expect(try fixture.store.loadConsumed() == nil)
 
         #expect(
             try fixture.store.consume(

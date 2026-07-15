@@ -620,6 +620,83 @@ struct KeyboardViewControllerTests {
         #expect(finish.sourceDocumentID == documentID)
     }
 
+    @Test func recreatedExtensionUsesConsumedHandoffWhenDocumentIsUnavailable()
+        throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sessionID = UUID()
+        let attemptID = UUID()
+        let requestID = UUID()
+        let sourceDocumentID = UUID()
+        let state = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: sessionID,
+                attemptID: attemptID,
+                requestID: requestID,
+                sourceDocumentID: sourceDocumentID,
+                phase: .listening,
+                publishedAt: now,
+                expiresAt: now.addingTimeInterval(60)
+            )
+        )
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: state,
+            requestID: UUID(),
+            consumedHandoffIntent: try #require(
+                consumedHandoffIntent(
+                    requestID: requestID,
+                    sourceDocumentID: sourceDocumentID,
+                    now: now
+                )
+            )
+        )
+        let recreatedController = harness.makeController()
+        recreatedController.loadViewIfNeeded()
+
+        #expect(statusText(in: recreatedController.view) == "Listening…")
+        recreatedController.keyboardView.onMicrophoneRequested?()
+        let finish = try #require(harness.savedCommands.last)
+        #expect(finish.kind == .finish)
+        #expect(finish.sessionID == sessionID)
+        #expect(finish.attemptID == attemptID)
+        #expect(finish.requestID == requestID)
+        #expect(finish.sourceDocumentID == sourceDocumentID)
+    }
+
+    @Test func consumedHandoffNeverWeakensAutomaticInsertionGate() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let requestID = UUID()
+        let sourceDocumentID = UUID()
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: UUID(),
+                    attemptID: UUID(),
+                    requestID: requestID,
+                    sourceDocumentID: sourceDocumentID,
+                    phase: .resultReady,
+                    result: "Preserved in Latest",
+                    publishedAt: now,
+                    expiresAt: now.addingTimeInterval(60)
+                )
+            ),
+            requestID: UUID(),
+            consumedHandoffIntent: try #require(
+                consumedHandoffIntent(
+                    requestID: requestID,
+                    sourceDocumentID: sourceDocumentID,
+                    now: now
+                )
+            )
+        )
+        let recreatedController = harness.makeController()
+        recreatedController.loadViewIfNeeded()
+
+        #expect(harness.proxy.insertedTexts.isEmpty)
+        #expect(harness.savedCommands.isEmpty)
+    }
+
     @Test func changedOrMissingDocumentCannotReconnectOrAutoInsert() throws {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
         let sessionID = UUID()
@@ -784,11 +861,26 @@ struct KeyboardViewControllerTests {
     }
 }
 
+private func consumedHandoffIntent(
+    requestID: UUID,
+    sourceDocumentID: UUID?,
+    now: Date
+) -> KeyboardHandoffIntentRecord? {
+    KeyboardHandoffIntentRecord(
+        requestID: requestID,
+        sourceDocumentID: sourceDocumentID,
+        action: .standard,
+        issuedAt: now,
+        expiresAt: now.addingTimeInterval(10)
+    )?.consuming(at: now.addingTimeInterval(1))
+}
+
 @MainActor
 private final class KeyboardControllerHarness {
     var now: Date
     var snapshot: KeyboardBridgeSnapshot?
     var dictationState: KeyboardDictationStateRecord?
+    var consumedHandoffIntent: KeyboardHandoffIntentRecord?
     let proxy: KeyboardDocumentProxySpy
     let inputModeSwitchKeyOverride: Bool?
     let fullAccessOverride: Bool
@@ -808,6 +900,7 @@ private final class KeyboardControllerHarness {
         inputModeSwitchKeyOverride: Bool? = true,
         fullAccessOverride: Bool = true,
         requestID: UUID? = nil,
+        consumedHandoffIntent: KeyboardHandoffIntentRecord? = nil,
         openContainingAppSucceeds: Bool = true
     ) {
         self.now = now
@@ -815,6 +908,7 @@ private final class KeyboardControllerHarness {
         self.dictationState = dictationState
         self.inputModeSwitchKeyOverride = inputModeSwitchKeyOverride
         self.fullAccessOverride = fullAccessOverride
+        self.consumedHandoffIntent = consumedHandoffIntent
         let resolvedRequestID = requestID
             ?? dictationState?.sessionID
             ?? UUID()
@@ -831,6 +925,9 @@ private final class KeyboardControllerHarness {
             dependencies: KeyboardViewControllerDependencies(
                 loadSnapshot: { [self] in snapshot },
                 loadDictationState: { [self] in dictationState },
+                loadConsumedHandoffIntent: { [self] in
+                    consumedHandoffIntent
+                },
                 saveDictationCommand: { [self] command in
                     savedCommands.append(command)
                 },

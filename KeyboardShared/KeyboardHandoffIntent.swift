@@ -235,6 +235,19 @@ nonisolated struct KeyboardHandoffIntentStore {
         return record
     }
 
+    /// Returns the one admitted handoff retained for extension reconnection.
+    ///
+    /// The launch deadline applies only while the record is pending. Once the
+    /// app has consumed it, the matching bounded dictation state owns expiry.
+    /// A newer keyboard tap atomically supersedes this record.
+    func loadConsumed() throws -> KeyboardHandoffIntentRecord? {
+        guard let record = try loadRecord(),
+              record.disposition == .consumed else {
+            return nil
+        }
+        return record
+    }
+
     func consume(
         requestID: UUID,
         at date: Date = Date()

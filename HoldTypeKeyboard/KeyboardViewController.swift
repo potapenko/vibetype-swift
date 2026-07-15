@@ -158,6 +158,7 @@ enum KeyboardContainingAppLaunchAdapter {
 struct KeyboardViewControllerDependencies {
     let loadSnapshot: () throws -> KeyboardBridgeSnapshot?
     let loadDictationState: () throws -> KeyboardDictationStateRecord?
+    let loadConsumedHandoffIntent: () throws -> KeyboardHandoffIntentRecord?
     let saveDictationCommand: (KeyboardDictationCommandRecord) throws -> Void
     let saveHandoffIntent: (KeyboardHandoffIntentRecord) throws -> Void
     let observeDictationState: (
@@ -182,6 +183,10 @@ struct KeyboardViewControllerDependencies {
         loadDictationState: {
             let store = try KeyboardDictationBridgeStore.appGroup()
             return try store.loadState()
+        },
+        loadConsumedHandoffIntent: {
+            let store = try KeyboardHandoffIntentStore.appGroup()
+            return try store.loadConsumed()
         },
         saveDictationCommand: { command in
             let store = try KeyboardDictationBridgeStore.appGroup()
@@ -518,9 +523,10 @@ final class KeyboardViewController: UIInputViewController {
                 let mayReconnect = pendingHandoffRequestID
                     == identity.requestID
                     || (allowsStateReconnection
-                        && identity.belongsToDocument(
-                            activeDocumentIdentifier
-                        ))
+                        && (hasDurableHandoffOwnership(identity)
+                            || identity.belongsToDocument(
+                                activeDocumentIdentifier
+                            )))
                 if activeDictationOwnership == nil, mayReconnect {
                     activeDictationOwnership = identity
                     allowsStateReconnection = false
@@ -853,11 +859,24 @@ final class KeyboardViewController: UIInputViewController {
         guard let activeDictationOwnership else { return }
         if !activeDictationOwnership.belongsToDocument(
             activeDocumentIdentifier
-        ) {
+        ), !hasDurableHandoffOwnership(activeDictationOwnership) {
             self.activeDictationOwnership = nil
             allowsStateReconnection = true
             pendingDeliveryClaimID = nil
         }
+    }
+
+    /// A consumed handoff is the durable control token for one app-admitted
+    /// request. It lets a recreated extension finish capture even when UIKit
+    /// temporarily withholds the document UUID. Automatic insertion remains
+    /// independently gated by an exact document match.
+    private func hasDurableHandoffOwnership(
+        _ identity: KeyboardDictationAttemptIdentity
+    ) -> Bool {
+        guard let intent = try? dependencies.loadConsumedHandoffIntent() else {
+            return false
+        }
+        return intent.requestID == identity.requestID
     }
 
     private func owns(_ state: KeyboardDictationStateRecord) -> Bool {
