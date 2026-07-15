@@ -2,6 +2,8 @@ import HoldTypeDomain
 
 /// The app-only, non-secret settings owned by the iOS containing app.
 public struct IOSAppSettings: Equatable, Sendable {
+    public static let defaultRecordingCachePolicy: RecordingCachePolicy =
+        .keepLast(RetentionConfiguration.acceptedHistoryEntryLimit)
     public static let defaults = IOSAppSettings()
 
     public var transcriptionConfiguration: TranscriptionConfiguration
@@ -17,7 +19,8 @@ public struct IOSAppSettings: Equatable, Sendable {
         localTextCleanupEnabled: Bool = true,
         translationConfiguration: TranslationConfiguration = .defaults,
         voiceSessionPreferences: VoiceSessionPreferences = .defaults,
-        recordingCachePolicy: RecordingCachePolicy = .deleteImmediately
+        recordingCachePolicy: RecordingCachePolicy =
+            IOSAppSettings.defaultRecordingCachePolicy
     ) {
         self.transcriptionConfiguration = transcriptionConfiguration
         self.textCorrectionConfiguration = textCorrectionConfiguration

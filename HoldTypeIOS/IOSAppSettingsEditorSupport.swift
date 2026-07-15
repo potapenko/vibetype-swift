@@ -175,7 +175,7 @@ enum IOSRecordingCachePolicyEditor {
         _ isEnabled: Bool
     ) -> RecordingCachePolicy {
         isEnabled
-            ? .keepLast(RecordingCachePolicy.defaultRetainedRecordingLimit)
+            ? IOSAppSettings.defaultRecordingCachePolicy
             : .deleteImmediately
     }
 
@@ -185,7 +185,12 @@ enum IOSRecordingCachePolicyEditor {
     ) -> RecordingCachePolicy {
         switch mode {
         case .keepLast:
-            .keepLast(currentPolicy.retainedRecordingLimit)
+            switch currentPolicy.normalized {
+            case .keepLast(let count):
+                .keepLast(count)
+            case .deleteImmediately, .unlimited:
+                IOSAppSettings.defaultRecordingCachePolicy
+            }
         case .unlimited:
             .unlimited
         }

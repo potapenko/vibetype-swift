@@ -12,7 +12,7 @@ struct IOSAppSettingsRepositoryTests {
         #expect(settings.localTextCleanupEnabled)
         #expect(settings.translationConfiguration == .defaults)
         #expect(settings.voiceSessionPreferences == .defaults)
-        #expect(settings.recordingCachePolicy == .deleteImmediately)
+        #expect(settings.recordingCachePolicy == .keepLast(20))
         #expect(settings == IOSAppSettings())
         requireSendable(IOSAppSettings.self)
         #expect(((settings as Any) is any Encodable) == false)
@@ -107,11 +107,25 @@ struct IOSAppSettingsRepositoryTests {
         expected.localTextCleanupEnabled = false
         expected.translationConfiguration.targetLanguage = .english
         expected.voiceSessionPreferences.audioCuesEnabled = false
-        expected.recordingCachePolicy = .deleteImmediately
+        expected.recordingCachePolicy = .keepLast(20)
 
         #expect(loaded == expected)
         #expect(partialFileSystem.data == partialData)
         #expect(partialFileSystem.replacementCallCount == 0)
+
+        let emptyCacheFileSystem = IOSAppSettingsFileSystemFake(
+            data: Data(
+                #"{"recordingCache":{},"schemaVersion":1}"#.utf8
+            )
+        )
+        let emptyCacheRepository = makeRepository(
+            fileSystem: emptyCacheFileSystem
+        )
+        #expect(
+            try await emptyCacheRepository.load().recordingCachePolicy
+                == .keepLast(20)
+        )
+        #expect(emptyCacheFileSystem.replacementCallCount == 0)
     }
 
     @Test func malformedAndNonObjectSourcesUseDistinctTypedErrorsAndStayUnchanged() async {
@@ -565,6 +579,13 @@ struct IOSAppSettingsRepositoryTests {
         let fileSystem = IOSAppSettingsFileSystemFake()
         let repository = makeRepository(fileSystem: fileSystem)
         var settings = IOSAppSettings.defaults
+
+        settings.recordingCachePolicy = .deleteImmediately
+        try await repository.save(settings)
+        #expect(
+            try await repository.load().recordingCachePolicy
+                == .deleteImmediately
+        )
 
         settings.recordingCachePolicy = .unlimited
         try await repository.save(settings)

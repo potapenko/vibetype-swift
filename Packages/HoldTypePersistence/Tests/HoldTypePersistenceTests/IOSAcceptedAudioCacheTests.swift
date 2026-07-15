@@ -61,6 +61,41 @@ struct IOSAcceptedAudioCacheTests {
         )
     }
 
+    @Test func defaultIOSPolicyKeepsAudioForEveryHistorySlot() async throws {
+        let fixture = AudioCacheFixture()
+        let policy = IOSAppSettings.defaultRecordingCachePolicy
+        let resultIDs = (0...IOSAcceptedTextHistoryRecord.maximumEntryCount)
+            .map { _ in UUID() }
+
+        #expect(
+            policy
+                == .keepLast(IOSAcceptedTextHistoryRecord.maximumEntryCount)
+        )
+
+        for (index, resultID) in resultIDs.enumerated() {
+            _ = try await fixture.cache.retainAcceptedAudio(
+                Data([UInt8(index)]),
+                resultID: resultID,
+                fileExtension: "m4a",
+                createdAt: Date(timeIntervalSince1970: Double(index + 1)),
+                policy: policy
+            )
+        }
+
+        #expect(
+            await fixture.cache.cachedAudioFileURLIfAvailable(
+                resultID: resultIDs[0]
+            ) == nil
+        )
+        for resultID in resultIDs.dropFirst() {
+            #expect(
+                await fixture.cache.cachedAudioFileURLIfAvailable(
+                    resultID: resultID
+                ) != nil
+            )
+        }
+    }
+
     @Test func boundedReconciliationIsIdempotentAndPreservesUnmanagedFiles()
         async throws {
         let fixture = AudioCacheFixture()

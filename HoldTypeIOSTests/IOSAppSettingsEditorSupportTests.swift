@@ -384,14 +384,14 @@ struct IOSAppSettingsEditorSupportTests {
         )
     }
 
-    @Test func recordingCacheEditorUsesExplicitOffLastTenAndUnlimitedPolicies() {
+    @Test func recordingCacheEditorUsesExplicitOffLastTwentyAndUnlimitedPolicies() {
         #expect(
             IOSRecordingCachePolicyEditor.policyAfterSettingEnabled(false)
                 == .deleteImmediately
         )
         #expect(
             IOSRecordingCachePolicyEditor.policyAfterSettingEnabled(true)
-                == .keepLast(10)
+                == .keepLast(20)
         )
         #expect(
             IOSRecordingCachePolicyEditor.policyAfterSelectingRetention(
@@ -403,7 +403,7 @@ struct IOSAppSettingsEditorSupportTests {
             IOSRecordingCachePolicyEditor.policyAfterSelectingRetention(
                 .keepLast,
                 currentPolicy: .unlimited
-            ) == .keepLast(10)
+            ) == .keepLast(20)
         )
         #expect(
             IOSRecordingCachePolicyEditor.policyAfterSelectingRetention(

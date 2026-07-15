@@ -262,6 +262,7 @@ struct IOSHistoryHomeView: View {
         .refreshable {
             guard !stateOwner.isBusy else { return }
             await stateOwner.refresh()
+            await refreshPlaybackAvailability()
         }
     }
 

@@ -216,7 +216,7 @@ struct IOSContainingAppCompositionTests {
         let recordingCachePolicy = try #require(
             capturedRecordingCachePolicy
         )
-        #expect(await recordingCachePolicy() == .deleteImmediately)
+        #expect(await recordingCachePolicy() == .keepLast(20))
         #expect(composition.acceptedTextHistoryStateOwner != nil)
         #expect(
             composition.acceptedTextHistoryStateOwner?.state == .notLoaded

@@ -12,7 +12,7 @@ struct IOSAppSettingsPersistenceIOSTests {
         #expect(settings.localTextCleanupEnabled)
         #expect(settings.translationConfiguration == .defaults)
         #expect(settings.voiceSessionPreferences == .defaults)
-        #expect(settings.recordingCachePolicy == .deleteImmediately)
+        #expect(settings.recordingCachePolicy == .keepLast(20))
         requireSendable(IOSAppSettings.self)
         #expect(((settings as Any) is any Encodable) == false)
         #expect(((settings as Any) is any Decodable) == false)

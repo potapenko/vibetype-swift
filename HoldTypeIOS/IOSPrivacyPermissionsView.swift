@@ -270,7 +270,9 @@ struct IOSPrivacyPermissionsView: View {
             Label {
                 Text(
                     "History keeps up to 20 successful transcriptions. "
-                        + "Recordings and failed attempts are not added."
+                        + "Recording Cache is on by default and keeps up to 20 "
+                        + "completed recordings for local playback. Failed "
+                        + "attempts are not added."
                 )
                 .fixedSize(horizontal: false, vertical: true)
             } icon: {

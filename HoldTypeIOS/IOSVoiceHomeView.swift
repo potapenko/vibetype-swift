@@ -1166,9 +1166,10 @@ struct IOSVoiceHomeView: View {
 
             Label {
                 Text(
-                    "Save History is on by default and keeps up to 20 "
-                        + "successful texts locally. It never stores audio or "
-                        + "failed attempts."
+                    "Save History and Recording Cache are on by default. "
+                        + "HoldType keeps up to 20 successful texts and their "
+                        + "recordings locally for playback. Failed attempts "
+                        + "are not added."
                 )
                 .fixedSize(horizontal: false, vertical: true)
             } icon: {

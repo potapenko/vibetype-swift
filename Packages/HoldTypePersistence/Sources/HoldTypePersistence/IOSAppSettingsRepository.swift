@@ -330,18 +330,28 @@ private enum IOSAppSettingsWireCodec {
     private static func decodeRecordingCache(
         from root: WireObjectReader
     ) throws -> RecordingCachePolicy {
+        let defaults = IOSAppSettings.defaultRecordingCachePolicy.normalized
         guard let reader = try root.object("recordingCache") else {
-            return .deleteImmediately
+            return defaults
         }
         try reader.rejectUnexpectedFields(allowing: recordingCacheFields)
 
+        let defaultMode: RecordingCachePolicyModeWireV1
+        switch defaults {
+        case .deleteImmediately:
+            defaultMode = .deleteImmediately
+        case .keepLast:
+            defaultMode = .keepLast
+        case .unlimited:
+            defaultMode = .unlimited
+        }
         let mode = try reader.enumeration(
             "mode",
-            defaultValue: RecordingCachePolicyModeWireV1.deleteImmediately
+            defaultValue: defaultMode
         )
         let retainedRecordingLimit = try reader.integer(
             "retainedRecordingLimit",
-            defaultValue: RecordingCachePolicy.defaultRetainedRecordingLimit
+            defaultValue: defaults.retainedRecordingLimit
         )
 
         switch mode {

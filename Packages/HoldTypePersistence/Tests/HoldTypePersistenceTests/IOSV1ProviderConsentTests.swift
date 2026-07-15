@@ -3,6 +3,30 @@ import Testing
 @testable import HoldTypePersistence
 
 struct IOSV1ProviderConsentTests {
+    @Test func versionTwoAcceptanceRequiresReviewForDefaultAudioRetention()
+        async throws {
+        try await withFixture { fixture in
+            let versionTwoRecord = Data(
+                #"{"decision":"accepted","decisionAtMilliseconds":1800000000000,"disclosureVersion":2,"revision":1,"schemaVersion":1}"#.utf8
+            )
+            try FileManager.default.createDirectory(
+                at: fixture.fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try versionTwoRecord.write(to: fixture.fileURL)
+
+            let observation = await fixture.coordinator.observe()
+
+            #expect(
+                IOSV1ProviderConsentCoordinator.currentDisclosureVersion == 3
+            )
+            #expect(observation.status == .reviewRequired)
+            #expect(
+                fixture.coordinator.makeAuthorization(from: observation) == nil
+            )
+        }
+    }
+
     @Test func missingObserveIsPassiveAndAcceptanceSurvivesRestart() async throws {
         try await withFixture { fixture in
             let missing = await fixture.coordinator.observe()

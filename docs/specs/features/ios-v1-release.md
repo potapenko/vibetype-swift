@@ -45,7 +45,8 @@ V1.1 includes:
 - one Latest Result;
 - one app-private composed Voice Draft governed by `ios-voice-draft.md`;
 - up to 20 successful text-only History entries;
-- an optional app-private Recording Cache for local History playback;
+- an optional app-private Recording Cache, enabled by default for the 20 newest
+  accepted recordings, for local History playback;
 - one production-quality iPhone command-keyboard surface with actionable Start,
   Finish, and Cancel voice controls while that session is available;
 - no Settings, History, or containing-app launch action inside the extension;
@@ -266,8 +267,9 @@ destination. History remains a separate tab and is not previewed on Voice.
   keeps Pending solely because History is unavailable.
 - History never owns audio and never contains failed provider attempts. A Play
   button resolves a separately retained Recording Cache file by `resultID`.
-- A new install enables `Save History` by default. Setup and Privacy state that
-  up to 20 successful texts are stored locally on this device.
+- A new install enables `Save History` and keeps the 20 newest accepted
+  recordings by default. Setup and Privacy state that up to 20 successful texts
+  and their completed recordings are stored locally on this device.
 - Turning `Save History` off requires confirmation, stops future appends, and
   atomically replaces the repository record with disabled plus no entries
   before the switch reports success. Cancel or storage failure leaves the
@@ -283,10 +285,12 @@ destination. History remains a separate tab and is not previewed on Voice.
 
 ## Recording Cache And History Playback
 
-- Recording Cache is app-private, off by default, and independent from the
-  text-only History repository. It reuses `RecordingCachePolicy`: enabling it
-  defaults to the 10 newest recordings; unlimited retention requires an
-  explicit choice.
+- Recording Cache is app-private and independent from the text-only History
+  repository. A new install and a settings record that predates the cache field
+  default to keeping the 20 newest recordings, matching the History limit.
+  A previously saved explicit off, bounded, or unlimited policy remains the
+  user's choice. Re-enabling the cache defaults to 20; unlimited retention
+  requires an explicit choice.
 - When the current saved policy keeps recordings, HoldType retains the
   validated Pending audio in the cache under that accepted `resultID` before
   Pending cleanup. Relaunch reconciliation is idempotent and never repeats
@@ -298,6 +302,9 @@ destination. History remains a separate tab and is not previewed on Voice.
   cache file for that row still exists. Saving cache-off reconciles managed
   cache files immediately; clearing or retention pruning a file also removes
   Play availability.
+- Enabling Recording Cache affects later accepted recordings only. HoldType
+  does not reconstruct or re-upload audio for an older History row whose file
+  was never retained.
 - Play is local only. It does not contact OpenAI, retry transcription, mutate
   Latest or History, write either clipboard, or insert text.
 - Deleting a History row does not delete its independent Recording Cache file;
@@ -437,9 +444,9 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
 - The API key remains in app-owned Keychain storage.
 - Provider consent is current, explicit, app-private, and checked before every
   remote stage.
-- The History-aware local-retention disclosure is contract version `2`.
-  Acceptance of the former no-History version `1` requires explicit review
-  before another provider request.
+- The default-audio-retention disclosure is contract version `3`. Acceptance
+  of the former History-without-default-audio version `2`, or the no-History
+  version `1`, requires explicit review before another provider request.
 - The main Privacy & Permissions screen shows microphone status, OpenAI
   processing status and action, and one concise local-data summary. It does not
   display transport schemas, process authority, storage implementation, or
@@ -497,8 +504,9 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
 - Dictation Rules and core Settings persist.
 - Compact History append, one-tap Copy, swipe Delete, Clear All, cap, and
   failure isolation pass; no detail route, Share, date, or time is rendered.
-- Recording Cache off/on, bounded retention, missing-file Play eligibility,
-  local playback failure, and playback-to-Voice handoff pass.
+- Recording Cache default-on at the 20-entry History limit, explicit off/on,
+  bounded retention, missing-file Play eligibility, local playback failure,
+  and playback-to-Voice handoff pass.
 - Release navigation contains no placeholder destination.
 - Normal iPhone launch shows Voice, Rules, History, and Settings in the tab
   shell; qualification routes never become a production root.

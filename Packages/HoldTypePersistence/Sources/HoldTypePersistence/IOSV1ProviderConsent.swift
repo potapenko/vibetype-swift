@@ -692,7 +692,7 @@ private final class IOSV1ProviderConsentFence: @unchecked Sendable {
 }
 
 public final class IOSV1ProviderConsentCoordinator: @unchecked Sendable {
-    public static let currentDisclosureVersion: Int64 = 2
+    public static let currentDisclosureVersion: Int64 = 3
 
     private let repository: IOSV1ProviderConsentRepository
     private let fence = IOSV1ProviderConsentFence()
