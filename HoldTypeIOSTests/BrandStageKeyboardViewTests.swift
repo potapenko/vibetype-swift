@@ -897,6 +897,8 @@ struct BrandStageKeyboardViewTests {
             )
         )
         let hostController = UIViewController()
+        hostController.traitOverrides.horizontalSizeClass = .compact
+        hostController.traitOverrides.verticalSizeClass = .compact
         window.rootViewController = hostController
         window.isHidden = false
         hostController.view.frame = window.bounds

@@ -52,6 +52,20 @@ completion, and exclusive delivery. A generic unsigned iOS
 state reduction; they do not substitute for physical microphone or host-field
 interaction.
 
+The broader keyboard/handoff matrix was repeated on 2026-07-16 after aligning
+the safe-area test fixture with its declared compact trait environment. Result:
+**100 tests in 11 suites passed** on the iPhone 17 Pro iOS 26.5 simulator. The
+change is confined to the test fixture's trait overrides; the production
+keyboard view is unchanged. The selected suites cover the keyboard surface,
+handoff intent and routing, sheet presentation, shared session coordination,
+snapshot and Latest delivery, extension recreation, document/host matching,
+and exactly-once insertion. No ordinary Voice test suite or macOS target was
+run.
+
+The iOS release spec was also reconciled with the validated keyboard handoff
+route: app launch from the keyboard is no longer listed as a release non-goal,
+while automatic return and unsupported policy bypass remain out of scope.
+
 ## Signed Product Inspection
 
 - Containing app bundle: `app.holdtype.HoldType.ios`

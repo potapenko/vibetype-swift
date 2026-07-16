@@ -85,8 +85,8 @@ alphabetic layouts.
 - pixel-identical Apple keyboard trade dress or Apple emoji assets;
 - a general background Quick Session unrelated to the explicit Keyboard
   Dictation Session;
-- launching the containing app from the keyboard, automatically returning to a
-  previous host app, or bypassing iOS extension policy;
+- automatically returning to a previous host app or bypassing iOS extension
+  policy outside the validated keyboard handoff route;
 - indefinite background recording, idle speech retention, or silent-audio
   keepalive tricks;
 - configurable session duration, cloud sync, accounts, analytics, profiles,
