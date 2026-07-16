@@ -12,14 +12,16 @@ running with operator observation on the unlocked iPhone.
   (`Keep keyboard handoff failures inside sheet`)
 - Current deterministic qualification checkpoint: `10c5fb1`
   (`Qualify keyboard safe-area handoff matrix`)
+- Current installed archive checkpoint: `be33560`
+  (`Align iOS release verifier with keyboard handoff`)
 - Device: Evgeny’s iPhone, iPhone 14 Pro Max (`iPhone15,3`)
 - iOS: 26.5.2 (`23F84`)
 - UDID: `00008120-001A19991E7BC01E`
 - CoreDevice identifier: `DE70161A-3200-5D58-BF1E-DEA8B56FABC2`
 - Development team: `PUA6HH22D7`
 - Build result: `HoldType-iOS` Debug device build succeeded for `b8bb0f2`
-- Installation result: the `b8bb0f2` app and embedded keyboard installed
-  successfully on 2026-07-16
+- Installation result: the local Release archive app and embedded keyboard from
+  `be33560` installed successfully on 2026-07-16 as version `1.0` build `1`
 
 The build command selected only the `HoldType-iOS` scheme and physical iPhone
 destination. It did not build or test the macOS app.
@@ -34,8 +36,8 @@ iOS build from a clean source archive. The later `10c5fb1` checkpoint now
 passes the same signed generic iOS build and embedded-binary validation. Its app
 and keyboard use development team `PUA6HH22D7`, share App Group
 `group.app.holdtype.HoldType.shared`, and contain the required microphone and
-Full Access declarations. The device was reported as unavailable immediately
-after this build, so `10c5fb1` is not installed yet.
+Full Access declarations. Its app code is unchanged in the later `be33560`
+archive now installed for the current physical matrix.
 
 ## Focused Handoff Verification
 
@@ -122,6 +124,13 @@ was not, or could not be, unlocked.
 Unlocking the physical phone is not available to Mac automation. No runtime
 state, microphone lifecycle, swipe-back behavior, host-field insertion, or
 TestFlight result is claimed from this attempt.
+
+Later on 2026-07-16 CoreDevice reported the unlocked phone as connected and
+installed the local Release archive from `be33560`. A device app inventory
+confirmed HoldType `1.0` build `1` at bundle
+`app.holdtype.HoldType.ios`. Installation does not itself prove keyboard
+activation or any handoff runtime behavior; the nominal case below remains the
+first physical claim.
 
 On 2026-07-16 CoreDevice confirmed the same phone is booted, paired, connected,
 in Developer Mode, and available for development services. The signed
