@@ -17,16 +17,16 @@ typealias KeyboardContainingAppOpener = (
 
 /// Reads UIKit's document identity without trusting its nonnull annotation.
 ///
-/// A freshly recreated keyboard can temporarily receive `nil` from the
-/// Objective-C proxy even though the SDK imports this property as a nonoptional
-/// Swift `UUID`. Accessing the imported property in that window traps inside
-/// Foundation's UUID bridge.
+/// A freshly recreated keyboard can temporarily receive `nil` from its
+/// Objective-C input-view controller even though the SDK imports this property
+/// as a nonoptional Swift `UUID`. Accessing the imported property in that
+/// window traps inside Foundation's UUID bridge.
 @MainActor
 enum KeyboardDocumentIdentifierAdapter {
     private static let selector = NSSelectorFromString("documentIdentifier")
 
-    static func load(from documentProxy: any UITextDocumentProxy) -> UUID? {
-        load(fromObjectiveCObject: documentProxy as AnyObject)
+    static func load(from inputViewController: UIInputViewController) -> UUID? {
+        load(fromObjectiveCObject: inputViewController)
     }
 
     static func load(fromObjectiveCObject object: AnyObject) -> UUID? {
@@ -173,7 +173,7 @@ struct KeyboardViewControllerDependencies {
     let makeAttemptID: () -> UUID
     let makeDeliveryClaimID: () -> UUID
     let documentProxyOverride: (any UITextDocumentProxy)?
-    let loadDocumentIdentifier: (any UITextDocumentProxy) -> UUID?
+    let loadDocumentIdentifier: (UIInputViewController) -> UUID?
     let inputModeSwitchKeyOverride: Bool?
     let fullAccessOverride: Bool?
     let scheduleLatestExpiry: KeyboardLatestExpiryScheduler
@@ -215,8 +215,8 @@ struct KeyboardViewControllerDependencies {
         makeAttemptID: { UUID() },
         makeDeliveryClaimID: { UUID() },
         documentProxyOverride: nil,
-        loadDocumentIdentifier: { documentProxy in
-            KeyboardDocumentIdentifierAdapter.load(from: documentProxy)
+        loadDocumentIdentifier: { inputViewController in
+            KeyboardDocumentIdentifierAdapter.load(from: inputViewController)
         },
         inputModeSwitchKeyOverride: nil,
         fullAccessOverride: nil,
@@ -293,7 +293,7 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private var activeDocumentIdentifier: UUID? {
-        dependencies.loadDocumentIdentifier(activeDocumentProxy)
+        dependencies.loadDocumentIdentifier(self)
     }
 
     private var shouldShowInputModeSwitchKey: Bool {

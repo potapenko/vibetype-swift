@@ -28,6 +28,20 @@ struct KeyboardViewControllerTests {
         )
     }
 
+    @Test func documentIdentifierLookupUsesTheInputControllerOwner() {
+        let harness = KeyboardControllerHarness()
+        let controller = harness.makeController()
+
+        controller.loadViewIfNeeded()
+        controller.keyboardView.onMicrophoneRequested?()
+
+        #expect(
+            harness.documentIdentifierOwnerIDs.contains(
+                ObjectIdentifier(controller)
+            )
+        )
+    }
+
     @Test func containingAppLaunchUsesTheResponderChain() throws {
         let url = try #require(URL(string: "holdtype://keyboard-handoff/test"))
         let applicationResponder = KeyboardOpenURLResponderSpy()
@@ -960,6 +974,7 @@ private final class KeyboardControllerHarness {
     var scheduledExpiryDates: [Date] = []
     var scheduledExpiryActions: [@MainActor () -> Void] = []
     var currentDocumentIdentifier: UUID?
+    var documentIdentifierOwnerIDs: [ObjectIdentifier] = []
     var scheduledDocumentIdentifierRetryActions:
         [@MainActor () -> Void] = []
 
@@ -1011,8 +1026,9 @@ private final class KeyboardControllerHarness {
                 makeAttemptID: { [self] in requestID },
                 makeDeliveryClaimID: { [self] in deliveryClaimID },
                 documentProxyOverride: proxy,
-                loadDocumentIdentifier: { [self] _ in
-                    currentDocumentIdentifier
+                loadDocumentIdentifier: { [self] owner in
+                    documentIdentifierOwnerIDs.append(ObjectIdentifier(owner))
+                    return currentDocumentIdentifier
                 },
                 inputModeSwitchKeyOverride: inputModeSwitchKeyOverride,
                 fullAccessOverride: fullAccessOverride,
