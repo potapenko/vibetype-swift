@@ -897,8 +897,7 @@ final class IOSForegroundVoiceWorkflow {
         action: KeyboardVoiceAction,
         progress: @escaping IOSKeyboardDictationWorkflowClient.Progress
     ) async -> IOSKeyboardDictationWorkflowResolution {
-        guard activeAttempt == nil,
-              !isRunningRecoveryOperation else {
+        guard await waitForKeyboardStartAvailability() else {
             return .failed
         }
         let token = IOSForegroundVoiceWorkflowAttemptToken()
@@ -927,6 +926,24 @@ final class IOSForegroundVoiceWorkflow {
         return resolution.failure == nil && resolution.outcome == nil
             ? .cancelled
             : .failed
+    }
+
+    /// A containing-app launch can still be completing local lifecycle
+    /// recovery when a fresh keyboard URL arrives. That recovery owns no user
+    /// request, so a keyboard tap waits briefly instead of surfacing a stale
+    /// failure or requiring a second tap.
+    private func waitForKeyboardStartAvailability() async -> Bool {
+        guard activeAttempt == nil else { return false }
+        for _ in 0..<60 {
+            guard !Task.isCancelled, activeAttempt == nil else { return false }
+            if !isRunningRecoveryOperation { return true }
+            do {
+                try await dependencies.sleep(.milliseconds(50))
+            } catch {
+                return false
+            }
+        }
+        return activeAttempt == nil && !isRunningRecoveryOperation
     }
 
     private func finishKeyboardDictation(requestID: UUID) -> Bool {

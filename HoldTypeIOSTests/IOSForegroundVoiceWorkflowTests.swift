@@ -2388,6 +2388,37 @@ struct IOSForegroundVoiceWorkflowTests {
     }
 
     @Test
+    func freshKeyboardRequestWaitsForLaunchRecoveryInsteadOfFailing()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            completedCapture: true,
+            preacceptConsent: true,
+            lifecycleRecoveryDelay: .milliseconds(150)
+        )
+        let recovery = Task { @MainActor in
+            await fixture.workflow.recoverLifecycle(.foregroundOpportunity)
+        }
+        try await waitUntil {
+            fixture.events.contains("lifecycle-recover-foreground")
+        }
+
+        let requestID = UUID()
+        let client = fixture.workflow.keyboardDictationClient
+        let keyboard = Task {
+            await client.run(requestID, .standard) { _ in }
+        }
+
+        try await waitUntil {
+            fixture.events.contains("recording-start")
+        }
+        #expect(client.cancel(requestID))
+        #expect(await keyboard.value == .cancelled)
+        _ = await recovery.value
+        #expect(fixture.events.count("recording-make") == 1)
+    }
+
+    @Test
     func foregroundCorrectionActionForcesCorrectionInProviderRequest()
         async throws {
         let fixture = try await WorkflowFixture(
@@ -2685,6 +2716,7 @@ private final class WorkflowFixture {
         useActualLifecycleRecovery: Bool = false,
         lifecycleRecoveryDisposition:
             IOSV1ContainingAppRecoveryDisposition = .complete,
+        lifecycleRecoveryDelay: Duration? = nil,
         captureRecoveryObservations:
             [IOSV1ForegroundVoiceCaptureRecoveryObservation]? = nil
     ) async throws {
@@ -2819,6 +2851,9 @@ private final class WorkflowFixture {
                     let event = "lifecycle-recover-\(name)"
                     events.record(event)
                     await applyHook(event)
+                    if let lifecycleRecoveryDelay {
+                        try? await Task.sleep(for: lifecycleRecoveryDelay)
+                    }
                     if useActualLifecycleRecovery {
                         return await owner.recoverContainingAppLifecycle(
                             opportunity

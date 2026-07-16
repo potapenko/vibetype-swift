@@ -5,53 +5,20 @@ enum IOSKeyboardHandoffSheetPhase: Equatable, Sendable {
     case listening
     case processing
     case blocked
-    case failed
-}
-
-enum IOSKeyboardHandoffRuntimeFailure: Equatable, Sendable {
-    case startUnavailable
-    case expired
-
-    var title: String {
-        switch self {
-        case .startUnavailable:
-            "Keyboard dictation couldn't start"
-        case .expired:
-            "Keyboard dictation expired"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .startUnavailable:
-            "Close this sheet and try again from the keyboard."
-        case .expired:
-            "This keyboard request took too long. Close this sheet and start a new one."
-        }
-    }
 }
 
 struct IOSKeyboardHandoffSheetPresentation: Equatable, Sendable {
     let phase: IOSKeyboardHandoffSheetPhase
     let issue: IOSKeyboardHandoffPreflightIssue?
-    let runtimeFailure: IOSKeyboardHandoffRuntimeFailure?
 
     init(phase: IOSKeyboardHandoffSheetPhase) {
         self.phase = phase
         issue = nil
-        runtimeFailure = nil
     }
 
     init(issue: IOSKeyboardHandoffPreflightIssue) {
         phase = .blocked
         self.issue = issue
-        runtimeFailure = nil
-    }
-
-    init(runtimeFailure: IOSKeyboardHandoffRuntimeFailure) {
-        phase = .failed
-        issue = nil
-        self.runtimeFailure = runtimeFailure
     }
 
     var title: String {
@@ -64,8 +31,6 @@ struct IOSKeyboardHandoffSheetPresentation: Equatable, Sendable {
             "Processing dictation…"
         case .blocked:
             issue?.title ?? "Keyboard dictation is unavailable"
-        case .failed:
-            runtimeFailure?.title ?? "Keyboard dictation is unavailable"
         }
     }
 
@@ -79,8 +44,6 @@ struct IOSKeyboardHandoffSheetPresentation: Equatable, Sendable {
             "HoldType is preparing the result for the keyboard."
         case .blocked:
             issue?.detail ?? "Close this sheet and try again."
-        case .failed:
-            runtimeFailure?.detail ?? "Close this sheet and try again."
         }
     }
 
@@ -94,7 +57,7 @@ struct IOSKeyboardHandoffSheetPresentation: Equatable, Sendable {
             "This gesture is ready as soon as HoldType starts listening."
         case .listening:
             "Recording will continue after you return."
-        case .processing, .blocked, .failed:
+        case .processing, .blocked:
             ""
         }
     }
@@ -107,7 +70,7 @@ struct IOSKeyboardHandoffSheetPresentation: Equatable, Sendable {
             .listening
         case .processing:
             .recognizing
-        case .blocked, .failed:
+        case .blocked:
             nil
         }
     }

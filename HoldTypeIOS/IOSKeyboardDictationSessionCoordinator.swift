@@ -857,9 +857,8 @@ final class IOSKeyboardHandoffPresentationOwner {
             return
         }
         if !started {
-            presentation = IOSKeyboardHandoffSheetPresentation(
-                runtimeFailure: .startUnavailable
-            )
+            activeRequestID = nil
+            presentation = nil
         }
     }
 
@@ -905,13 +904,9 @@ final class IOSKeyboardHandoffPresentationOwner {
         case .terminal(.completed), .terminal(.cancelled):
             activeRequestID = nil
             presentation = nil
-        case .terminal(.failed):
+        case .terminal(.failed), .terminal(.expired):
             activeRequestID = nil
             presentation = nil
-        case .terminal(.expired):
-            presentation = IOSKeyboardHandoffSheetPresentation(
-                runtimeFailure: .expired
-            )
         }
     }
 }

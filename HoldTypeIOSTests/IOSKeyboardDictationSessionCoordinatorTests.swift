@@ -81,7 +81,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
     }
 
     @Test
-    func failedHandoffDismissesWhileExpiryStaysInsideTheSheet() async throws {
+    func failedAndExpiredHandoffsDismissWithoutTerminalMessages() async throws {
         let failedHarness = KeyboardSessionHarness()
         let failedCoordinator = failedHarness.makeCoordinator()
         let failedOwner = IOSKeyboardHandoffPresentationOwner(
@@ -113,20 +113,18 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
 
         expiredHarness.expireSession()
 
-        #expect(expiredOwner.presentation?.runtimeFailure == .expired)
+        #expect(expiredOwner.presentation == nil)
         #expect(expiredCoordinator.presentation == .stopped)
         #expect(expiredHarness.states.map(\.phase) == [
             .ready,
             .listening,
             .unavailable,
         ])
-        expiredOwner.cancelFromSheet()
-        try await eventually { expiredOwner.presentation == nil }
         expiredHarness.workflow.resolve(.cancelled)
     }
 
     @Test
-    func staleDirectStartNeverStartsSessionAndReportsSheetFailure() async {
+    func staleDirectStartNeverStartsSessionOrReportsSheetFailure() async {
         let harness = KeyboardSessionHarness()
         let coordinator = harness.makeCoordinator()
         let owner = IOSKeyboardHandoffPresentationOwner(session: coordinator)
@@ -137,7 +135,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
 
         await owner.start(intent)
 
-        #expect(owner.presentation?.runtimeFailure == .startUnavailable)
+        #expect(owner.presentation == nil)
         #expect(harness.workflow.runRequestIDs.isEmpty)
         #expect(harness.states.isEmpty)
     }
@@ -194,6 +192,47 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
 
         #expect(owner.presentation?.phase == .starting)
         #expect(harness.workflow.runActions == [.standard, .improve])
+        harness.workflow.resolve(.cancelled)
+        try await eventually { owner.presentation == nil }
+    }
+
+    @Test
+    func microphoneTapInAnotherHostSilentlyReplacesActiveCapture()
+        async throws {
+        let harness = KeyboardSessionHarness()
+        let coordinator = harness.makeCoordinator()
+        let owner = IOSKeyboardHandoffPresentationOwner(session: coordinator)
+        let firstDocumentID = UUID()
+        let secondDocumentID = UUID()
+        let first = harness.intent(sourceDocumentID: firstDocumentID)
+
+        await owner.start(first)
+        try await eventually {
+            harness.workflow.runRequestIDs == [harness.sessionID]
+        }
+        harness.workflow.emit(.listening)
+        try await eventually { owner.presentation?.phase == .listening }
+
+        let second = harness.intent(
+            requestID: UUID(),
+            sourceDocumentID: secondDocumentID
+        )
+        let replacement = Task { @MainActor in
+            await owner.start(second)
+        }
+        try await eventually {
+            harness.workflow.cancelRequestIDs == [harness.sessionID]
+        }
+        #expect(owner.presentation?.phase == .starting)
+
+        harness.workflow.resolve(.cancelled)
+        await replacement.value
+        try await eventually {
+            harness.workflow.runRequestIDs.count == 2
+        }
+
+        #expect(owner.presentation?.phase == .starting)
+        #expect(harness.states.last?.sourceDocumentID == secondDocumentID)
         harness.workflow.resolve(.cancelled)
         try await eventually { owner.presentation == nil }
     }
@@ -584,13 +623,14 @@ private final class KeyboardSessionHarness {
     func intent(
         requestID: UUID = UUID(),
         action: HoldTypeIOS.KeyboardVoiceAction = .standard,
+        sourceDocumentID: UUID? = UUID(),
         issuedAt: Date? = nil,
         expiresAt: Date? = nil
     ) -> HoldTypeIOS.KeyboardHandoffIntentRecord {
         let issuedAt = issuedAt ?? now
         return HoldTypeIOS.KeyboardHandoffIntentRecord(
             requestID: requestID,
-            sourceDocumentID: UUID(),
+            sourceDocumentID: sourceDocumentID,
             action: action,
             issuedAt: issuedAt,
             expiresAt: expiresAt
