@@ -28,19 +28,34 @@ struct IOSDiagnosticsTests {
                 outcome: .succeeded
             )
         )
+        let requestID = UUID(
+            uuidString: "A0000000-0000-0000-0000-000000000001"
+        )!
+        keyboard.record(
+            .keyboardDelivery(
+                .insertReturned,
+                request: HoldTypeIOS.IOSDiagnosticCorrelationTag(requestID),
+                claim: nil,
+                proxyHasText: true
+            )
+        )
 
         let appLine = try #require(app.recentLines(limit: 10).first)
-        let keyboardLine = try #require(
-            keyboard.recentLines(limit: 10).first
-        )
+        let keyboardLines = try keyboard.recentLines(limit: 10)
+        let keyboardCommandLine = try #require(keyboardLines.first)
+        let keyboardDeliveryLine = try #require(keyboardLines.last)
         #expect(appLine.contains("process=app"))
         #expect(appLine.contains("event=voice_start_requested"))
         #expect(appLine.contains("action=translate"))
-        #expect(keyboardLine.contains("process=keyboard"))
-        #expect(keyboardLine.contains("command=start"))
-        #expect(keyboardLine.contains("action=improve"))
+        #expect(keyboardCommandLine.contains("process=keyboard"))
+        #expect(keyboardCommandLine.contains("command=start"))
+        #expect(keyboardCommandLine.contains("action=improve"))
+        #expect(keyboardDeliveryLine.contains("event=keyboard_delivery"))
+        #expect(keyboardDeliveryLine.contains("stage=insert_returned"))
+        #expect(keyboardDeliveryLine.contains("request_tag="))
+        #expect(keyboardDeliveryLine.contains("proxy_has_text=true"))
         #expect(!appLine.contains("transcript"))
-        #expect(!keyboardLine.contains("typed_text"))
+        #expect(!keyboardDeliveryLine.contains("typed_text"))
     }
 
     @Test func runtimeRetentionPrunesExpiredDays() throws {

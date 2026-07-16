@@ -28,7 +28,16 @@ struct KeyboardViewControllerTests {
         )
     }
 
-    @Test func documentIdentifierLookupUsesTheInputControllerOwner() {
+    @Test func documentIdentifierAdapterReadsTheUIKitDocumentProxy() {
+        let identifier = UUID()
+        let proxy = KeyboardDocumentProxySpy(documentIdentifier: identifier)
+
+        #expect(
+            KeyboardDocumentIdentifierAdapter.load(from: proxy) == identifier
+        )
+    }
+
+    @Test func documentIdentifierLookupUsesTheDocumentProxy() {
         let harness = KeyboardControllerHarness()
         let controller = harness.makeController()
 
@@ -37,7 +46,7 @@ struct KeyboardViewControllerTests {
 
         #expect(
             harness.documentIdentifierOwnerIDs.contains(
-                ObjectIdentifier(controller)
+                ObjectIdentifier(harness.proxy)
             )
         )
     }
@@ -956,6 +965,8 @@ private final class KeyboardControllerHarness {
     var documentIdentifierOwnerIDs: [ObjectIdentifier] = []
     var scheduledDocumentIdentifierRetryActions:
         [@MainActor () -> Void] = []
+    var scheduledDeliveryObservationActions:
+        [@MainActor () -> Void] = []
 
     init(
         now: Date = Date(timeIntervalSince1970: 1_750_000_000),
@@ -1005,8 +1016,10 @@ private final class KeyboardControllerHarness {
                 makeAttemptID: { [self] in requestID },
                 makeDeliveryClaimID: { [self] in deliveryClaimID },
                 documentProxyOverride: proxy,
-                loadDocumentIdentifier: { [self] owner in
-                    documentIdentifierOwnerIDs.append(ObjectIdentifier(owner))
+                loadDocumentIdentifier: { [self] documentProxy in
+                    documentIdentifierOwnerIDs.append(
+                        ObjectIdentifier(documentProxy as AnyObject)
+                    )
                     return currentDocumentIdentifier
                 },
                 inputModeSwitchKeyOverride: inputModeSwitchKeyOverride,
@@ -1018,6 +1031,10 @@ private final class KeyboardControllerHarness {
                 },
                 scheduleDocumentIdentifierRetry: { [self] action in
                     scheduledDocumentIdentifierRetryActions.append(action)
+                    return nil
+                },
+                scheduleDeliveryObservation: { [self] action in
+                    scheduledDeliveryObservationActions.append(action)
                     return nil
                 },
                 openContainingAppOverride: { [self] url, completion in

@@ -10,6 +10,10 @@ typealias KeyboardDocumentIdentifierRetryScheduler = (
     @escaping @MainActor () -> Void
 ) -> Timer?
 
+typealias KeyboardDeliveryObservationScheduler = (
+    @escaping @MainActor () -> Void
+) -> Timer?
+
 typealias KeyboardContainingAppOpener = (
     URL,
     @escaping (Bool) -> Void
@@ -18,15 +22,15 @@ typealias KeyboardContainingAppOpener = (
 /// Reads UIKit's document identity without trusting its nonnull annotation.
 ///
 /// A freshly recreated keyboard can temporarily receive `nil` from its
-/// Objective-C input-view controller even though the SDK imports this property
-/// as a nonoptional Swift `UUID`. Accessing the imported property in that
-/// window traps inside Foundation's UUID bridge.
+/// Objective-C document proxy even though the SDK imports this property as a
+/// nonoptional Swift `UUID`. Accessing the imported property in that window
+/// traps inside Foundation's UUID bridge.
 @MainActor
 enum KeyboardDocumentIdentifierAdapter {
     private static let selector = NSSelectorFromString("documentIdentifier")
 
-    static func load(from inputViewController: UIInputViewController) -> UUID? {
-        load(fromObjectiveCObject: inputViewController)
+    static func load(from documentProxy: any UITextDocumentProxy) -> UUID? {
+        load(fromObjectiveCObject: documentProxy as AnyObject)
     }
 
     static func load(fromObjectiveCObject object: AnyObject) -> UUID? {
@@ -173,12 +177,13 @@ struct KeyboardViewControllerDependencies {
     let makeAttemptID: () -> UUID
     let makeDeliveryClaimID: () -> UUID
     let documentProxyOverride: (any UITextDocumentProxy)?
-    let loadDocumentIdentifier: (UIInputViewController) -> UUID?
+    let loadDocumentIdentifier: (any UITextDocumentProxy) -> UUID?
     let inputModeSwitchKeyOverride: Bool?
     let fullAccessOverride: Bool?
     let scheduleLatestExpiry: KeyboardLatestExpiryScheduler
     let scheduleDocumentIdentifierRetry:
         KeyboardDocumentIdentifierRetryScheduler
+    let scheduleDeliveryObservation: KeyboardDeliveryObservationScheduler
     let openContainingAppOverride: KeyboardContainingAppOpener?
     let recordDiagnostic: (IOSRuntimeDiagnosticEvent) -> Void
 
@@ -215,8 +220,8 @@ struct KeyboardViewControllerDependencies {
         makeAttemptID: { UUID() },
         makeDeliveryClaimID: { UUID() },
         documentProxyOverride: nil,
-        loadDocumentIdentifier: { inputViewController in
-            KeyboardDocumentIdentifierAdapter.load(from: inputViewController)
+        loadDocumentIdentifier: { documentProxy in
+            KeyboardDocumentIdentifierAdapter.load(from: documentProxy)
         },
         inputModeSwitchKeyOverride: nil,
         fullAccessOverride: nil,
@@ -236,6 +241,18 @@ struct KeyboardViewControllerDependencies {
         scheduleDocumentIdentifierRetry: { action in
             let timer = Timer(
                 timeInterval: 0.1,
+                repeats: false
+            ) { _ in
+                Task { @MainActor in
+                    action()
+                }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            return timer
+        },
+        scheduleDeliveryObservation: { action in
+            let timer = Timer(
+                timeInterval: 0.5,
                 repeats: false
             ) { _ in
                 Task { @MainActor in
@@ -273,6 +290,11 @@ final class KeyboardViewController: UIInputViewController {
     private var documentIdentifierRetryRequestID: UUID?
     private var documentIdentifierRetryCount = 0
     private var documentIdentifierRetryIsScheduled = false
+    private var deliveryObservationTimer: Timer?
+    private var pendingDeliveryObservation: (
+        requestID: UUID,
+        claimID: UUID
+    )?
     private var dictationObserver: KeyboardDictationBridgeObserver?
     private var dictationState: KeyboardDictationStateRecord?
     private var activeDictationOwnership:
@@ -298,7 +320,7 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private var activeDocumentIdentifier: UUID? {
-        dependencies.loadDocumentIdentifier(self)
+        dependencies.loadDocumentIdentifier(activeDocumentProxy)
     }
 
     private var shouldShowInputModeSwitchKey: Bool {
@@ -338,6 +360,7 @@ final class KeyboardViewController: UIInputViewController {
         dictationExpiryTimer?.invalidate()
         dictationExpiryTimer = nil
         cancelDocumentIdentifierRetry()
+        cancelDeliveryObservation()
         endExtensionLifetime()
         super.viewWillDisappear(animated)
     }
@@ -349,11 +372,28 @@ final class KeyboardViewController: UIInputViewController {
 
     override func textWillChange(_ textInput: UITextInput?) {
         super.textWillChange(textInput)
+        if let observation = pendingDeliveryObservation {
+            recordDelivery(
+                .textWillChange,
+                requestID: observation.requestID,
+                claimID: observation.claimID,
+                proxyHasText: activeDocumentProxy.hasText
+            )
+        }
         refreshStateReconnectionEligibility()
     }
 
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
+        if let observation = pendingDeliveryObservation {
+            recordDelivery(
+                .textDidChange,
+                requestID: observation.requestID,
+                claimID: observation.claimID,
+                proxyHasText: activeDocumentProxy.hasText
+            )
+            cancelDeliveryObservation()
+        }
         showsInputModeSwitchKey = shouldShowInputModeSwitchKey
         reloadSharedSnapshot()
         reloadDictationState()
@@ -612,12 +652,14 @@ final class KeyboardViewController: UIInputViewController {
 
     private func handleResultReady(_ state: KeyboardDictationStateRecord) {
         Self.deliveryLogger.info("result observed")
+        recordDelivery(.resultObserved, requestID: state.requestID)
         guard let requestID = state.requestID,
               owns(state),
               insertedDictationRequestID != requestID,
               let result = state.result,
               let ownership = activeDictationOwnership else {
             Self.deliveryLogger.error("result rejected before document gate")
+            recordDelivery(.requestRejected, requestID: state.requestID)
             cancelDocumentIdentifierRetry()
             return
         }
@@ -625,24 +667,62 @@ final class KeyboardViewController: UIInputViewController {
         guard ownership.belongsToDocument(currentDocumentID) else {
             if currentDocumentID == nil, ownership.sourceDocumentID != nil {
                 Self.deliveryLogger.info("document unavailable; retry scheduled")
+                recordDelivery(.documentMissing, requestID: requestID)
                 scheduleDocumentIdentifierRetry(for: requestID)
             } else {
                 Self.deliveryLogger.error("document gate rejected result")
+                recordDelivery(.documentMismatch, requestID: requestID)
                 cancelDocumentIdentifierRetry()
             }
             return
         }
+        recordDelivery(.documentMatched, requestID: requestID)
         cancelDocumentIdentifierRetry()
         if let grantedClaimID = state.deliveryClaimID {
             guard pendingDeliveryClaimID == grantedClaimID else {
                 Self.deliveryLogger.error("delivery grant has no local claim")
+                recordDelivery(
+                    .grantRejected,
+                    requestID: requestID,
+                    claimID: grantedClaimID
+                )
                 return
             }
             Self.deliveryLogger.info("delivery grant accepted")
+            recordDelivery(
+                .grantAccepted,
+                requestID: requestID,
+                claimID: grantedClaimID
+            )
             insertedDictationRequestID = requestID
+            beginDeliveryObservation(
+                requestID: requestID,
+                claimID: grantedClaimID
+            )
+            recordDelivery(
+                .insertInvoked,
+                requestID: requestID,
+                claimID: grantedClaimID,
+                proxyHasText: activeDocumentProxy.hasText
+            )
             insertText(result)
+            recordDelivery(
+                .insertReturned,
+                requestID: requestID,
+                claimID: grantedClaimID,
+                proxyHasText: activeDocumentProxy.hasText
+            )
+            scheduleDeliveryObservationTimeout(
+                requestID: requestID,
+                claimID: grantedClaimID
+            )
             Self.deliveryLogger.info("document proxy insertion requested")
             dependencies.recordDiagnostic(.keyboardInserted(.dictation))
+            recordDelivery(
+                .acknowledgementRequested,
+                requestID: requestID,
+                claimID: grantedClaimID
+            )
             _ = sendDictationCommand(
                 .acknowledgeDelivery,
                 deliveryClaimID: grantedClaimID
@@ -652,6 +732,11 @@ final class KeyboardViewController: UIInputViewController {
             let claimID = dependencies.makeDeliveryClaimID()
             pendingDeliveryClaimID = claimID
             Self.deliveryLogger.info("delivery claim requested")
+            recordDelivery(
+                .claimRequested,
+                requestID: requestID,
+                claimID: claimID
+            )
             if !sendDictationCommand(
                 .claimDelivery,
                 deliveryClaimID: claimID
@@ -693,6 +778,45 @@ final class KeyboardViewController: UIInputViewController {
         documentIdentifierRetryRequestID = nil
         documentIdentifierRetryCount = 0
         documentIdentifierRetryIsScheduled = false
+    }
+
+    private func beginDeliveryObservation(
+        requestID: UUID,
+        claimID: UUID
+    ) {
+        cancelDeliveryObservation()
+        pendingDeliveryObservation = (requestID, claimID)
+    }
+
+    private func scheduleDeliveryObservationTimeout(
+        requestID: UUID,
+        claimID: UUID
+    ) {
+        guard pendingDeliveryObservation?.requestID == requestID,
+              pendingDeliveryObservation?.claimID == claimID else {
+            return
+        }
+        deliveryObservationTimer = dependencies.scheduleDeliveryObservation {
+            [weak self] in
+            guard let self,
+                  pendingDeliveryObservation?.requestID == requestID,
+                  pendingDeliveryObservation?.claimID == claimID else {
+                return
+            }
+            recordDelivery(
+                .textChangeNotObserved,
+                requestID: requestID,
+                claimID: claimID,
+                proxyHasText: activeDocumentProxy.hasText
+            )
+            cancelDeliveryObservation()
+        }
+    }
+
+    private func cancelDeliveryObservation() {
+        deliveryObservationTimer?.invalidate()
+        deliveryObservationTimer = nil
+        pendingDeliveryObservation = nil
     }
 
     private func handleMicrophoneCommand() {
@@ -977,6 +1101,22 @@ final class KeyboardViewController: UIInputViewController {
         guard lastDiagnosticState != state else { return }
         lastDiagnosticState = state
         dependencies.recordDiagnostic(.keyboardState(state))
+    }
+
+    private func recordDelivery(
+        _ stage: IOSDiagnosticKeyboardDeliveryStage,
+        requestID: UUID?,
+        claimID: UUID? = nil,
+        proxyHasText: Bool? = nil
+    ) {
+        dependencies.recordDiagnostic(
+            .keyboardDelivery(
+                stage,
+                request: requestID.map(IOSDiagnosticCorrelationTag.init),
+                claim: claimID.map(IOSDiagnosticCorrelationTag.init),
+                proxyHasText: proxyHasText
+            )
+        )
     }
 
     private func diagnosticState(
