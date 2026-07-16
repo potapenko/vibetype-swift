@@ -203,13 +203,51 @@ brew tap holdtype/tap && brew trust holdtype/tap && brew install --cask holdtype
 
 ## Platform
 
-HoldType currently supports macOS 14 Sonoma and newer. This repository contains
-the native macOS version.
+The published HoldType release currently supports macOS 14 Sonoma and newer.
+This repository also contains the iPhone app and custom keyboard sources
+described below.
 
 <p align="center">
   <a href="https://github.com/holdtype/holdtype-swift/releases/latest"><strong>Download HoldType for macOS</strong></a>
   <br>
   <sub>Free app · No HoldType subscription · OpenAI API usage billed directly · macOS 14+</sub>
+</p>
+
+## iPhone App — Work in Progress
+
+**HoldType for iPhone is already in the source.**
+
+The app and HoldType Keyboard are not in the App Store yet. Release work is
+still in progress, but you can build and run them yourself in Xcode today.
+
+<p>
+  <a href="#development"><strong>Build the iPhone app in Xcode</strong></a>
+</p>
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img alt="HoldType for iPhone Voice screen with a composed draft and five-tab navigation" src="website/assets/holdtype-ios-voice.png" width="260">
+      <br>
+      <sub>Voice: keep a draft under your control.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img alt="HoldType for iPhone Dictation Rules screen" src="website/assets/holdtype-ios-rules.png" width="260">
+      <br>
+      <sub>Rules: teach HoldType your words and how to clean up text.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img alt="HoldType for iPhone main Settings screen" src="website/assets/holdtype-ios-settings.png" width="260">
+      <br>
+      <sub>Settings: language, writing, voice, and privacy.</sub>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <img alt="HoldType Keyboard with voice control, quick actions, space, delete, and return" src="website/assets/holdtype-ios-keyboard.png" width="780">
+  <br>
+  <sub>HoldType Keyboard: voice and editing in one place.</sub>
 </p>
 
 ## License
@@ -259,5 +297,6 @@ For code work:
 5. Read `docs/specs/README.md` and `docs/specs/index.md` before behavior
    changes.
 
-The current product focus is the native macOS menu bar app. iOS keyboard work
-is future scope unless a task explicitly opts into it.
+The current published product focus is the native macOS menu bar app. The
+iPhone app and HoldType Keyboard are source-buildable work in progress and are
+not yet published in the App Store.
