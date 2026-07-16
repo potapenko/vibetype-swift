@@ -123,9 +123,12 @@ number deck, Shift, Caps Lock, `123`, prediction row, or manual Refresh.
 - Quick Insert remains available without provider setup, network, microphone
   permission, or Full Access. Opening it may temporarily cover recovery copy;
   closing it restores that copy unchanged.
-- Starting, Listening, and Processing keep their active Voice controls visible.
-  The Quick Insert toggle is unavailable during those states and an incoming
-  active state closes Quick Insert.
+- Quick Insert remains enabled in Ready, Opening, Starting, Listening,
+  Processing, failure, and recovery. Opening it may temporarily cover the
+  active Voice workspace, but it never starts, finishes, pauses, or cancels
+  dictation.
+- An incoming voice-state refresh does not close Quick Insert. Closing it or
+  selecting an item reveals the latest underlying Voice presentation.
 - A short Space tap inserts one space.
 - Long-press then horizontal drag on Space moves the cursor without inserting a
   space.
@@ -158,7 +161,7 @@ number deck, Shift, Caps Lock, `123`, prediction row, or manual Refresh.
   Changing a valid mode keeps the popover open so the user can change both modes
   in one visit. Opening the popover closes Quick Insert if necessary and returns
   to the Voice workspace. The popover closes on a second `Auto` tap, an outside
-  tap, opening Quick Insert, or entry into Starting, Listening, or Processing.
+  tap, or opening Quick Insert. Voice-state changes do not close it.
 - Auto Translate uses the saved Translation route. If that route is incomplete,
   selecting Auto Translate leaves it off and opens the containing app at the
   exact owning Translation input with inline guidance.
@@ -171,11 +174,12 @@ number deck, Shift, Caps Lock, `123`, prediction row, or manual Refresh.
 - Both modes start off when a keyboard extension lifetime begins, remain selected
   for subsequent requests in that lifetime until the user changes them, and do
   not rewrite durable Settings or share selection with containing-app Voice.
-- Starting, Listening, and Processing disable Quick Insert and Auto. The mode
-  combination chosen at Start is frozen for that request; later selections or
-  Settings changes do not change active work.
-- Ready keeps Auto enabled. Missing Full Access, provider setup, or a warm
-  session does not prevent choosing modes for the next request.
+- Auto remains enabled in Ready, Opening, Starting, Listening, Processing,
+  failure, and recovery. Missing Full Access, provider setup, or a warm session
+  does not prevent choosing modes for the next request.
+- The mode combination chosen at Start is frozen for that request. Auto changes
+  made while a request is opening, starting, listening, or processing apply
+  only to the next request and do not change active work.
 
 ## Keyboard Handoff Session
 
@@ -294,6 +298,10 @@ without showing `Inserted` or rendering a result preview.
 - Increase Contrast strengthens boundaries; Reduce Transparency replaces
   material effects with opaque system colors.
 - Theme follows system appearance. Light and Dark use identical geometry.
+- Re-rendering an unchanged voice phase does not rebuild the central activity
+  artwork, restart its orbit or pulse, move accessibility focus, or flash the
+  utility controls. A real phase, size, lifecycle, or Reduce Motion change may
+  update the presentation once.
 
 ## Release Acceptance
 
@@ -309,7 +317,8 @@ replace the signed-device keyboard/host-app release matrix below.
 Automated and Simulator coverage must prove composition, both appearances,
 absence of retired manual-session copy, local editing, state reduction, stale-request
 rejection, bounded record decoding, one insertion per accepted live request,
-and explicit Latest fallback.
+explicit Latest fallback, always-available Quick Insert and Auto, and stable
+same-phase activity rendering.
 
 Signed physical-iPhone evidence must additionally prove:
 

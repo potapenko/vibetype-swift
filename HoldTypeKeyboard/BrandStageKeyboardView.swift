@@ -10,17 +10,6 @@ struct BrandStageKeyboardPresentation: Equatable {
     let showsInputModeSwitchKey: Bool
 }
 
-private extension KeyboardVoiceStagePresentation {
-    var keepsVoiceWorkspaceVisible: Bool {
-        switch self {
-        case .opening, .starting, .listening, .processing:
-            true
-        case .ready:
-            false
-        }
-    }
-}
-
 /// The selected Brand Stage Adaptive composition. The controller owns document
 /// proxy behavior; this view owns only layout, appearance, and touch routing.
 final class BrandStageKeyboardView: UIView {
@@ -127,14 +116,6 @@ final class BrandStageKeyboardView: UIView {
     func render(_ presentation: BrandStageKeyboardPresentation) {
         renderedVoiceStage = presentation.voiceStage
         renderedAutomaticVoiceAction = presentation.automaticVoiceAction
-        if presentation.voiceStage.keepsVoiceWorkspaceVisible {
-            quickInsertIsPresented = false
-            automaticModesArePresented = false
-        }
-        quickInsertButton.isEnabled = !presentation.voiceStage
-            .keepsVoiceWorkspaceVisible
-        autoButton.isEnabled = !presentation.voiceStage
-            .keepsVoiceWorkspaceVisible
         latestButton.isEnabled = presentation.latestIsEnabled
         renderVoiceStage(presentation.voiceStage)
         updateInputModeSwitchKeyVisibility(

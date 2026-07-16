@@ -445,6 +445,63 @@ struct KeyboardViewControllerTests {
         )
     }
 
+    @Test func activeAttemptKeepsItsAutoModeAndLaterSelectionAppliesNext()
+        throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let deadline = now.addingTimeInterval(60)
+        let sessionID = UUID()
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: sessionID,
+                    phase: .ready,
+                    translationAvailable: true,
+                    publishedAt: now,
+                    expiresAt: deadline
+                )
+            )
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+
+        controller.keyboardView.onAutomaticVoiceActionChanged?(.translate)
+        controller.keyboardView.onMicrophoneRequested?()
+        let firstStart = try #require(harness.savedCommands.first)
+        #expect(firstStart.action == .translate)
+
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: sessionID,
+                attemptID: firstStart.attemptID,
+                requestID: firstStart.requestID,
+                sourceDocumentID: firstStart.sourceDocumentID,
+                phase: .listening,
+                translationAvailable: true,
+                publishedAt: now,
+                expiresAt: deadline
+            )
+        )
+        controller.textDidChange(nil)
+        controller.keyboardView.onAutomaticVoiceActionChanged?(.improve)
+
+        #expect(harness.savedCommands.map(\.action) == [.translate])
+
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: sessionID,
+                phase: .ready,
+                translationAvailable: true,
+                publishedAt: now,
+                expiresAt: deadline
+            )
+        )
+        controller.textDidChange(nil)
+        controller.keyboardView.onMicrophoneRequested?()
+
+        #expect(harness.savedCommands.map(\.action) == [.translate, .improve])
+    }
+
     @Test func hostContextLossSuppressesAutomaticInsertion() throws {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
         let requestID = UUID()

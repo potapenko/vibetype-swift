@@ -106,6 +106,11 @@ resolved by silently degrading the keyboard into that manual-session design.
 - The keyboard's existing voice/error area owns launch, permission, Listening,
   Processing, failure, expiry, and recovery messages. Identity or decorative
   areas do not duplicate these messages.
+- Opening, Starting, Listening, Processing, failure, and recovery never disable
+  or dismiss keyboard-local Quick Insert or next-request Auto selection. These
+  utilities do not alter the active request or its microphone lifecycle.
+- Each request freezes its automatic-mode selection when Start creates the
+  attempt. Auto changes made after that boundary apply only to the next request.
 - While real capture is active, the same microphone action finishes dictation.
   The keyboard workspace has no separate Cancel control beside the centered
   activity indicator. Before returning to the host, the sheet's close action
@@ -225,6 +230,8 @@ microphone appear active.
   handoff sheet reflects Starting, Listening, Processing, and runtime failure
   without duplicating or mutating Voice.
 - Returning to the host reconnects a recreated extension to the active request.
+- Quick Insert and Auto remain enabled throughout the handoff, and shared-state
+  refreshes do not dismiss either already-open local surface.
 - Finish from the keyboard and Cancel from the handoff sheet control the same
   app-owned recording.
 - Accepted text inserts exactly once into the originating document when it is

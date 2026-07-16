@@ -14,6 +14,8 @@ final class KeyboardVoiceActivityIndicatorView: UIView {
     private let coreImageView = UIImageView()
     private var accessibilityObservers: [NSObjectProtocol] = []
     private(set) var phase: KeyboardVoiceActivityPhase = .ready
+    private var renderedPhase: KeyboardVoiceActivityPhase?
+    private var renderedOrbitLayout: OrbitLayout?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -44,6 +46,9 @@ final class KeyboardVoiceActivityIndicatorView: UIView {
         contentView.frame = bounds
         orbitView.frame = contentView.bounds
         coreImageView.frame = contentView.bounds
+        let orbitLayout = OrbitLayout(size: bounds.size, phase: phase)
+        guard renderedOrbitLayout != orbitLayout else { return }
+        renderedOrbitLayout = orbitLayout
         rebuildOrbit()
     }
 
@@ -53,7 +58,9 @@ final class KeyboardVoiceActivityIndicatorView: UIView {
     }
 
     func render(_ phase: KeyboardVoiceActivityPhase) {
+        guard renderedPhase != phase else { return }
         self.phase = phase
+        renderedPhase = phase
         coreImageView.image = UIImage(named: phase.coreAssetName)
         accessibilityValue = phase.accessibilityValue
         applyAppearance()
@@ -78,23 +85,29 @@ final class KeyboardVoiceActivityIndicatorView: UIView {
     }
 
     private func configureAccessibilityObservers() {
-        for name in [
-            UIAccessibility.reduceMotionStatusDidChangeNotification,
-            UIAccessibility.reduceTransparencyStatusDidChangeNotification,
-        ] {
-            accessibilityObservers.append(
-                NotificationCenter.default.addObserver(
-                    forName: name,
-                    object: nil,
-                    queue: .main
-                ) { [weak self] _ in
-                    Task { @MainActor [weak self] in
-                        self?.applyAppearance()
-                        self?.restartAnimations()
-                    }
+        accessibilityObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.restartAnimations()
                 }
-            )
-        }
+            }
+        )
+        accessibilityObservers.append(
+            NotificationCenter.default.addObserver(
+                forName:
+                    UIAccessibility.reduceTransparencyStatusDidChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.applyAppearance()
+                }
+            }
+        )
     }
 
     private func rebuildOrbit() {
@@ -197,7 +210,6 @@ final class KeyboardVoiceActivityIndicatorView: UIView {
             : (traitCollection.userInterfaceStyle == .dark ? 0.28 : 0.16)
         layer.shadowOffset = .zero
         layer.shadowRadius = scaled(5)
-        rebuildOrbit()
     }
 
     private func restartAnimations() {
@@ -254,6 +266,11 @@ final class KeyboardVoiceActivityIndicatorView: UIView {
     }
 
     private static let sourceSize: CGFloat = 72
+}
+
+private struct OrbitLayout: Equatable {
+    let size: CGSize
+    let phase: KeyboardVoiceActivityPhase
 }
 
 private extension KeyboardVoiceActivityPhase {

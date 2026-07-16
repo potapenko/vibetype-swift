@@ -233,8 +233,10 @@ struct BrandStageKeyboardViewTests {
         #expect(isEffectivelyHidden(quickInsert))
     }
 
-    @Test func activeVoiceClosesAndDisablesQuickInsert() throws {
+    @Test func activeVoicePreservesQuickInsertAndAllowsLocalInsertion() throws {
         let view = makeView(width: 393)
+        var quickInsertions: [String] = []
+        view.onQuickInsertRequested = { quickInsertions.append($0) }
         view.render(presentation())
         layout(view)
 
@@ -248,6 +250,10 @@ struct BrandStageKeyboardViewTests {
                 identifier: "keyboard.brand-stage.quick-insert"
             )
         )
+        let emoji = try button(
+            "keyboard.brand-stage.quick-insert.emoji.smile",
+            in: view
+        )
         toggle.sendActions(for: .touchUpInside)
         layout(view)
         #expect(!isEffectivelyHidden(quickInsert))
@@ -260,13 +266,18 @@ struct BrandStageKeyboardViewTests {
         )
         layout(view)
 
-        #expect(isEffectivelyHidden(quickInsert))
-        #expect(!toggle.isEnabled)
-        #expect(
-            !(try button("keyboard.brand-stage.auto", in: view)).isEnabled
-        )
-        #expect(toggle.accessibilityLabel == "Open Quick Insert")
+        #expect(!isEffectivelyHidden(quickInsert))
+        #expect(toggle.isEnabled)
+        #expect((try button("keyboard.brand-stage.auto", in: view)).isEnabled)
+        #expect(toggle.accessibilityLabel == "Close Quick Insert")
         let microphone = try button("keyboard.brand-stage.voice", in: view)
+        #expect(isEffectivelyHidden(microphone))
+
+        emoji.sendActions(for: .touchUpInside)
+        layout(view)
+
+        #expect(quickInsertions == ["🙂"])
+        #expect(isEffectivelyHidden(quickInsert))
         #expect(!isEffectivelyHidden(microphone))
         #expect(microphone.accessibilityValue == "Listening")
         let activity = try #require(
@@ -278,24 +289,22 @@ struct BrandStageKeyboardViewTests {
         #expect(activity.phase == .listening)
     }
 
-    @Test func autoIsEnabledWhenReadyAndDisabledDuringActiveVoice()
-        throws {
-        let readyView = makeView(width: 393)
-        readyView.render(presentation(voiceStage: .ready))
-        #expect(
-            (try button("keyboard.brand-stage.auto", in: readyView)).isEnabled
-        )
-
+    @Test func utilityControlsStayEnabledInEveryVoiceStage() throws {
         for stage in [
-            KeyboardVoiceStagePresentation.opening,
+            KeyboardVoiceStagePresentation.ready,
+            .opening,
             KeyboardVoiceStagePresentation.starting,
             .listening,
             .processing,
         ] {
             let view = makeView(width: 393)
             view.render(presentation(voiceStage: stage))
+            #expect((try button("keyboard.brand-stage.auto", in: view)).isEnabled)
             #expect(
-                !(try button("keyboard.brand-stage.auto", in: view)).isEnabled
+                (try button(
+                    "keyboard.brand-stage.quick-insert-toggle",
+                    in: view
+                )).isEnabled
             )
         }
     }
@@ -403,7 +412,7 @@ struct BrandStageKeyboardViewTests {
         #expect(auto.configuration?.title == "Auto 2")
     }
 
-    @Test func autoPanelClosesForQuickInsertAndActiveVoice() throws {
+    @Test func autoPanelClosesForLocalActionsButSurvivesActiveVoice() throws {
         let view = makeView(width: 393)
         view.render(presentation())
         layout(view)
@@ -451,8 +460,31 @@ struct BrandStageKeyboardViewTests {
             )
         )
         layout(view)
-        #expect(isEffectivelyHidden(panel))
-        #expect(!auto.isEnabled)
+        #expect(!isEffectivelyHidden(panel))
+        #expect(auto.isEnabled)
+    }
+
+    @Test func repeatedVoiceActivityPhasePreservesOrbitLayers() throws {
+        let activity = KeyboardVoiceActivityIndicatorView(
+            frame: CGRect(x: 0, y: 0, width: 128, height: 128)
+        )
+        activity.render(.listening)
+        activity.layoutIfNeeded()
+
+        let listeningLayers = try orbitLayerIdentifiers(in: activity)
+        #expect(!listeningLayers.isEmpty)
+
+        activity.render(.listening)
+        activity.setNeedsLayout()
+        activity.layoutIfNeeded()
+
+        #expect(try orbitLayerIdentifiers(in: activity) == listeningLayers)
+
+        activity.render(.recognizing)
+        activity.layoutIfNeeded()
+
+        #expect(activity.phase == .recognizing)
+        #expect(try orbitLayerIdentifiers(in: activity) != listeningLayers)
     }
 
     @Test func narrowPhoneKeepsEveryEditingControlAtLeast44PointsWide()
@@ -1026,6 +1058,14 @@ struct BrandStageKeyboardViewTests {
             titleLabel.bounds.width + 0.5
                 >= titleLabel.intrinsicContentSize.width
         )
+    }
+
+    private func orbitLayerIdentifiers(
+        in activity: KeyboardVoiceActivityIndicatorView
+    ) throws -> [ObjectIdentifier] {
+        let contentView = try #require(activity.subviews.first)
+        let orbitView = try #require(contentView.subviews.first)
+        return (orbitView.layer.sublayers ?? []).map(ObjectIdentifier.init)
     }
 
     private func controlFrames(in view: UIView) -> [String: CGRect] {
