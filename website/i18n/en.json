@@ -248,6 +248,36 @@
       "fallbackIframeTitle": "{brand.youtube} tutorial"
     }
   },
+  "mobile": {
+    "label": "Also on {brand.iPhone}",
+    "title": "{brand.holdType} for {brand.iPhone} is already in the source.",
+    "body": "The app and {appUi.holdTypeKeyboard} are not in the {brand.appStore} yet. Release work is still in progress, but you can build and run them yourself in {brand.xcode} today.",
+    "sourceAction": "Open the {brand.iPhone} source on {brand.github}",
+    "status": "Work in progress · Not in the {brand.appStore} yet",
+    "galleryAria": "{brand.holdType} for {brand.iPhone} screenshots",
+    "gallery": {
+      "voice": {
+        "caption": "Voice: keep a draft under your control.",
+        "lightboxCaption": "Voice: keep a draft under your control.",
+        "alt": "{brand.holdType} for {brand.iPhone} Voice screen with a composed draft and five-tab navigation"
+      },
+      "rules": {
+        "caption": "Rules: teach {brand.holdType} your words and cleanup.",
+        "lightboxCaption": "Rules: teach {brand.holdType} your words and cleanup.",
+        "alt": "{brand.holdType} for {brand.iPhone} Dictation Rules screen"
+      },
+      "keyboard": {
+        "caption": "{appUi.holdTypeKeyboard}: voice and editing in one place.",
+        "lightboxCaption": "{appUi.holdTypeKeyboard}: voice and editing in one place.",
+        "alt": "{appUi.holdTypeKeyboard} with voice control, quick actions, space, delete, and return"
+      },
+      "settings": {
+        "caption": "Settings: language, writing, voice, and privacy.",
+        "lightboxCaption": "Settings: language, writing, voice, and privacy.",
+        "alt": "{brand.holdType} for {brand.iPhone} main Settings screen"
+      }
+    }
+  },
   "faq": {
     "title": "Frequently asked questions",
     "intro": "Short answers to the decisions that matter before installing.",

@@ -248,6 +248,36 @@
       "fallbackIframeTitle": "{brand.youtube} 教程"
     }
   },
+  "mobile": {
+    "label": "也有 {brand.iPhone} 版",
+    "title": "{brand.holdType} {brand.iPhone} 版的源代码已经公开。",
+    "body": "应用和 {appUi.holdTypeKeyboard} 尚未上架 {brand.appStore}。发布工作仍在进行中，但你现在就可以在 {brand.xcode} 中自行构建并运行。",
+    "sourceAction": "在 {brand.github} 上打开 {brand.iPhone} 版源代码",
+    "status": "开发中 · 尚未上架 {brand.appStore}",
+    "galleryAria": "{brand.holdType} {brand.iPhone} 版截图",
+    "gallery": {
+      "voice": {
+        "caption": "语音：让草稿始终由你掌控。",
+        "lightboxCaption": "语音：让草稿始终由你掌控。",
+        "alt": "{brand.holdType} {brand.iPhone} 版语音界面，显示已写好的草稿和五个标签页的导航"
+      },
+      "rules": {
+        "caption": "规则：让 {brand.holdType} 学会你的常用词和文本整理方式。",
+        "lightboxCaption": "规则：让 {brand.holdType} 学会你的常用词和文本整理方式。",
+        "alt": "{brand.holdType} {brand.iPhone} 版听写规则界面"
+      },
+      "keyboard": {
+        "caption": "{appUi.holdTypeKeyboard}：语音输入和编辑，尽在一处。",
+        "lightboxCaption": "{appUi.holdTypeKeyboard}：语音输入和编辑，尽在一处。",
+        "alt": "带有语音控制、快捷操作、空格、删除和回车键的 {appUi.holdTypeKeyboard}"
+      },
+      "settings": {
+        "caption": "设置：语言、写作、语音和隐私。",
+        "lightboxCaption": "设置：语言、写作、语音和隐私。",
+        "alt": "{brand.holdType} {brand.iPhone} 版的设置主界面"
+      }
+    }
+  },
   "faq": {
     "title": "常见问题",
     "intro": "简要回答安装前需要了解的重要问题。",

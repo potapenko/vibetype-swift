@@ -250,6 +250,39 @@ story, installation instructions, and a fuller FAQ.
 - No remaining actionable P0, P1, or P2 localization, responsive, interaction,
   accessibility, SEO, or RTL finding remained after the final pass.
 
+## iPhone source preview follow-up — 2026-07-16
+
+- Added a lower-page iPhone preview between setup and FAQ so the landing keeps
+  macOS as its primary product while announcing the source-buildable mobile app.
+  The copy explicitly says that the app and HoldType Keyboard are not yet in the
+  App Store and that release work remains in progress.
+- Captured Voice, Dictation Rules, the actual HoldType Keyboard, and one main
+  Settings screen from a production `HoldType-iOS` run in the iPhone 16 Pro
+  Simulator on iOS 18.6. No DEBUG qualifier screen, onboarding prompt, or
+  instruction to grant Full Access appears in the gallery or keyboard crop.
+- The existing landing was the accepted visual reference. The implementation
+  preserves its open white layout, system typography, thin rules, restrained
+  accent, real-product imagery, and shared lightbox; the intentionally wider
+  keyboard panel is the only gallery-specific deviation.
+- Verified the generated site at `1440×1000` and `390×844`. The desktop gallery
+  shows all four surfaces together. On mobile, its `1251px` internal rail scrolls
+  independently inside a `390px` page, while the document width remains exactly
+  `390px` and the final Settings card is reachable.
+- Opened the keyboard image in the shared lightbox, verified the focused Close
+  control and clean keyboard crop, then closed it with Escape. The modal cleared
+  its scroll lock, kept the page URL unchanged, and restored focus to the
+  keyboard screenshot link.
+- Checked English, Russian, and Arabic at the phone viewport. Russian copy wraps
+  cleanly; Arabic retains `dir="rtl"`, an RTL gallery rail, and no page-level
+  horizontal overflow. Browser console remained at zero warnings and errors.
+- Evidence was saved outside the repository at
+  `/tmp/holdtype-mobile-app-desktop.png`,
+  `/tmp/holdtype-mobile-app-mobile.png`,
+  `/tmp/holdtype-mobile-app-mobile-end.png`,
+  `/tmp/holdtype-mobile-app-lightbox.png`,
+  `/tmp/holdtype-mobile-app-ru.png`, and
+  `/tmp/holdtype-mobile-app-ar.png`.
+
 ## Final result
 
 final result: passed

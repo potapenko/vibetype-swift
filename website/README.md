@@ -106,7 +106,7 @@ records at the registrar.
 
 ## Full-size screenshot behavior
 
-The Translation and Billing screenshots themselves use one shared in-page
+The Translation, Billing, and iPhone gallery screenshots use one shared in-page
 modal when JavaScript is available; captions do not duplicate the action with a
 text link. The screenshots show the standard pointer cursor and keep a native
 link to the original image as their no-JavaScript fallback. The modal keeps the
@@ -196,9 +196,11 @@ maximum, or typical day.
 7. OpenAI billing, the qualified 100-dictation usage example, and exact
    data-boundary explanation.
 8. Authentic first-person founder story and microphone photo.
-9. GitHub/Homebrew setup, a three-step API-key guide with an opt-in video, and
-   native FAQ disclosures.
-10. Final download CTA and source-available footer.
+9. GitHub/Homebrew setup and a three-step API-key guide with an opt-in video.
+10. Lower-page iPhone source preview with authentic Simulator screens, an
+    explicit work-in-progress status, and a source-build path through Xcode.
+11. Native FAQ disclosures, final macOS download CTA, and source-available
+    footer.
 
 ## Asset provenance
 
@@ -219,6 +221,10 @@ Original repository assets are not modified.
 | `settings-billing.png` | `docs/readme-assets/settings-billing.png` | Proportionally resized to 1400 × 1066 |
 | `settings-billing-mobile.png` | `docs/readme-assets/settings-billing.png` | Truthful 1100 × 1000 focus crop of the main estimate panel |
 | `workflow-microphone.jpg` | `docs/readme-assets/workflow-microphone.jpg` | Copied unchanged |
+| `holdtype-ios-voice.png` | Fresh `HoldType-iOS` run in the iPhone 16 Pro Simulator on iOS 18.6 | Full 1206 × 2622 Simulator capture, copied unchanged |
+| `holdtype-ios-rules.png` | Fresh `HoldType-iOS` run in the iPhone 16 Pro Simulator on iOS 18.6 | Full 1206 × 2622 Simulator capture, copied unchanged |
+| `holdtype-ios-keyboard.png` | Real `HoldType Keyboard` shown inside the iPhone 16 Pro Simulator | Exact 1206 × 1132 crop of the keyboard surface; setup and permission instructions are excluded and the keyboard pixels are unchanged |
+| `holdtype-ios-settings.png` | Fresh `HoldType-iOS` run in the iPhone 16 Pro Simulator on iOS 18.6 | Full 1206 × 2622 capture of the main Settings screen only |
 
 The public page intentionally does not use the Dictionary screenshot because it
 contains personal vocabulary examples. The microphone photo is used only with a
@@ -254,6 +260,9 @@ UI states were redrawn or retouched.
 - The third-party API-key video is supplementary, attributed, and click-to-load.
   Written steps and official OpenAI links remain sufficient if YouTube is
   unavailable or the tutorial becomes outdated.
+- The iPhone app and HoldType Keyboard exist in the repository and can be built
+  in Xcode, but they are not yet published in the App Store; the release remains
+  explicitly labelled as work in progress.
 - Audio goes to OpenAI for transcription. Optional correction and translation
   are separate text requests.
 - Completed audio is not retained by default; bounded session-only Retry audio

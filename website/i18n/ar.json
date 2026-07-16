@@ -248,6 +248,36 @@
       "fallbackIframeTitle": "شرح على {brand.youtube}"
     }
   },
+  "mobile": {
+    "label": "أيضًا على {brand.iPhone}",
+    "title": "نسخة {brand.holdType} لـ {brand.iPhone} موجودة بالفعل ضمن الشفرة المصدرية.",
+    "body": "لا يتوفر التطبيق ولا {appUi.holdTypeKeyboard} على {brand.appStore} حتى الآن. لا يزال العمل على الإصدار جاريًا، لكن يمكنك بناءهما وتشغيلهما بنفسك في {brand.xcode} اليوم.",
+    "sourceAction": "افتح الشفرة المصدرية لتطبيق {brand.iPhone} على {brand.github}",
+    "status": "قيد التطوير · غير متوفر على {brand.appStore} بعد",
+    "galleryAria": "لقطات شاشة {brand.holdType} لـ {brand.iPhone}",
+    "gallery": {
+      "voice": {
+        "caption": "الصوت: احتفظ بمسودة يمكنك التحكم بها.",
+        "lightboxCaption": "الصوت: احتفظ بمسودة يمكنك التحكم بها.",
+        "alt": "شاشة الصوت في {brand.holdType} لـ {brand.iPhone} مع مسودة مكتوبة وتنقل من خمس علامات تبويب"
+      },
+      "rules": {
+        "caption": "القواعد: علّم {brand.holdType} كلماتك وطريقة تنقيح النص.",
+        "lightboxCaption": "القواعد: علّم {brand.holdType} كلماتك وطريقة تنقيح النص.",
+        "alt": "شاشة قواعد الإملاء في {brand.holdType} لـ {brand.iPhone}"
+      },
+      "keyboard": {
+        "caption": "{appUi.holdTypeKeyboard}: الإملاء الصوتي والتحرير في مكان واحد.",
+        "lightboxCaption": "{appUi.holdTypeKeyboard}: الإملاء الصوتي والتحرير في مكان واحد.",
+        "alt": "{appUi.holdTypeKeyboard} مع التحكم الصوتي والإجراءات السريعة ومفاتيح المسافة والحذف والإدخال"
+      },
+      "settings": {
+        "caption": "الإعدادات: اللغة والكتابة والصوت والخصوصية.",
+        "lightboxCaption": "الإعدادات: اللغة والكتابة والصوت والخصوصية.",
+        "alt": "شاشة الإعدادات الرئيسية في {brand.holdType} لـ {brand.iPhone}"
+      }
+    }
+  },
   "faq": {
     "title": "الأسئلة الشائعة",
     "intro": "إجابات مختصرة عن القرارات المهمة قبل التثبيت.",

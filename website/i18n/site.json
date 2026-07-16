@@ -45,6 +45,21 @@
       "translate": false,
       "direction": "ltr"
     },
+    "brand.iPhone": {
+      "value": "iPhone",
+      "translate": false,
+      "direction": "ltr"
+    },
+    "brand.appStore": {
+      "value": "App Store",
+      "translate": false,
+      "direction": "ltr"
+    },
+    "brand.xcode": {
+      "value": "Xcode",
+      "translate": false,
+      "direction": "ltr"
+    },
     "brand.macOSKeychain": {
       "value": "macOS Keychain",
       "translate": false,
@@ -113,6 +128,12 @@
     },
     "appUi.localDictionary": {
       "value": "Local Dictionary",
+      "translate": false,
+      "language": "en",
+      "direction": "ltr"
+    },
+    "appUi.holdTypeKeyboard": {
+      "value": "HoldType Keyboard",
       "translate": false,
       "language": "en",
       "direction": "ltr"
@@ -289,6 +310,42 @@
       "localizedAttrs": {
         "data-lightbox-caption": "privacy.billing.lightboxCaption"
       }
+    },
+    "mobileVoiceScreenshot": {
+      "href": "assets/holdtype-ios-voice.png",
+      "attrs": {
+        "data-lightbox-link": ""
+      },
+      "localizedAttrs": {
+        "data-lightbox-caption": "mobile.gallery.voice.lightboxCaption"
+      }
+    },
+    "mobileRulesScreenshot": {
+      "href": "assets/holdtype-ios-rules.png",
+      "attrs": {
+        "data-lightbox-link": ""
+      },
+      "localizedAttrs": {
+        "data-lightbox-caption": "mobile.gallery.rules.lightboxCaption"
+      }
+    },
+    "mobileKeyboardScreenshot": {
+      "href": "assets/holdtype-ios-keyboard.png",
+      "attrs": {
+        "data-lightbox-link": ""
+      },
+      "localizedAttrs": {
+        "data-lightbox-caption": "mobile.gallery.keyboard.lightboxCaption"
+      }
+    },
+    "mobileSettingsScreenshot": {
+      "href": "assets/holdtype-ios-settings.png",
+      "attrs": {
+        "data-lightbox-link": ""
+      },
+      "localizedAttrs": {
+        "data-lightbox-caption": "mobile.gallery.settings.lightboxCaption"
+      }
     }
   },
   "assets": {
@@ -300,7 +357,11 @@
     "settingsTranslationMobile": "assets/settings-translation-mobile.png",
     "settingsBilling": "assets/settings-billing.png",
     "settingsBillingMobile": "assets/settings-billing-mobile.png",
-    "workflowMicrophone": "assets/workflow-microphone.jpg"
+    "workflowMicrophone": "assets/workflow-microphone.jpg",
+    "holdTypeIOSVoice": "assets/holdtype-ios-voice.png",
+    "holdTypeIOSRules": "assets/holdtype-ios-rules.png",
+    "holdTypeIOSKeyboard": "assets/holdtype-ios-keyboard.png",
+    "holdTypeIOSSettings": "assets/holdtype-ios-settings.png"
   },
   "commands": {
     "homebrewInstall": "brew tap holdtype/tap\nbrew trust holdtype/tap\nbrew install --cask holdtype\nopen -a HoldType"

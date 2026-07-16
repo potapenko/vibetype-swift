@@ -170,11 +170,15 @@ class BuildSiteTests(unittest.TestCase):
                 self.assertTrue(
                     all(link.get("aria-label") for link in probe.header_social_links)
                 )
-                self.assertEqual(len(probe.lightbox_links), 2)
-                self.assertEqual(probe.lightbox_link_image_count, 2)
+                self.assertEqual(len(probe.lightbox_links), 6)
+                self.assertEqual(probe.lightbox_link_image_count, 6)
                 self.assertEqual(
                     {link["href"] for link in probe.lightbox_links},
                     {
+                        f"{asset_prefix}assets/holdtype-ios-keyboard.png",
+                        f"{asset_prefix}assets/holdtype-ios-rules.png",
+                        f"{asset_prefix}assets/holdtype-ios-settings.png",
+                        f"{asset_prefix}assets/holdtype-ios-voice.png",
                         f"{asset_prefix}assets/settings-billing.png",
                         f"{asset_prefix}assets/settings-translation.png",
                     },

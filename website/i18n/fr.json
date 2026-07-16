@@ -248,6 +248,36 @@
       "fallbackIframeTitle": "Tutoriel {brand.youtube}"
     }
   },
+  "mobile": {
+    "label": "Aussi sur {brand.iPhone}",
+    "title": "{brand.holdType} pour {brand.iPhone} est déjà disponible dans le code source.",
+    "body": "L’app et {appUi.holdTypeKeyboard} ne sont pas encore disponibles sur l’{brand.appStore}. La sortie est toujours en préparation, mais vous pouvez dès aujourd’hui les compiler et les exécuter vous-même dans {brand.xcode}.",
+    "sourceAction": "Ouvrir le code source de la version {brand.iPhone} sur {brand.github}",
+    "status": "En cours de développement · Pas encore disponible sur l’{brand.appStore}",
+    "galleryAria": "Captures d’écran de {brand.holdType} pour {brand.iPhone}",
+    "gallery": {
+      "voice": {
+        "caption": "Voix : gardez le contrôle de votre brouillon.",
+        "lightboxCaption": "Voix : gardez le contrôle de votre brouillon.",
+        "alt": "Écran Voix de {brand.holdType} pour {brand.iPhone} avec un brouillon rédigé et une navigation à cinq onglets"
+      },
+      "rules": {
+        "caption": "Règles : apprenez à {brand.holdType} vos mots et la façon de nettoyer le texte.",
+        "lightboxCaption": "Règles : apprenez à {brand.holdType} vos mots et la façon de nettoyer le texte.",
+        "alt": "Écran Règles de dictée de {brand.holdType} pour {brand.iPhone}"
+      },
+      "keyboard": {
+        "caption": "{appUi.holdTypeKeyboard} : voix et modification au même endroit.",
+        "lightboxCaption": "{appUi.holdTypeKeyboard} : voix et modification au même endroit.",
+        "alt": "{appUi.holdTypeKeyboard} avec commande vocale, actions rapides, espace, suppression et retour"
+      },
+      "settings": {
+        "caption": "Réglages : langue, écriture, voix et confidentialité.",
+        "lightboxCaption": "Réglages : langue, écriture, voix et confidentialité.",
+        "alt": "Écran principal des réglages de {brand.holdType} pour {brand.iPhone}"
+      }
+    }
+  },
   "faq": {
     "title": "Questions fréquentes",
     "intro": "Des réponses courtes aux questions importantes avant l’installation.",

@@ -248,6 +248,36 @@
       "fallbackIframeTitle": "{brand.youtube} チュートリアル"
     }
   },
+  "mobile": {
+    "label": "{brand.iPhone}でも",
+    "title": "{brand.iPhone}版{brand.holdType}のソースコードは、すでに公開されています。",
+    "body": "アプリと{appUi.holdTypeKeyboard}は、まだ{brand.appStore}では公開されていません。リリースに向けた作業は進行中ですが、今すぐ{brand.xcode}で自分でビルドして実行できます。",
+    "sourceAction": "{brand.github}で{brand.iPhone}版のソースを開く",
+    "status": "開発中 · {brand.appStore}では未公開",
+    "galleryAria": "{brand.holdType} {brand.iPhone}版のスクリーンショット",
+    "gallery": {
+      "voice": {
+        "caption": "音声入力：下書きを自分でコントロールできます。",
+        "lightboxCaption": "音声入力：下書きを自分でコントロールできます。",
+        "alt": "作成済みの下書きと5つのタブが表示された{brand.holdType} {brand.iPhone}版の音声入力画面"
+      },
+      "rules": {
+        "caption": "ルール：{brand.holdType}に固有の単語や文章の整え方を教えられます。",
+        "lightboxCaption": "ルール：{brand.holdType}に固有の単語や文章の整え方を教えられます。",
+        "alt": "{brand.holdType} {brand.iPhone}版の音声入力ルール画面"
+      },
+      "keyboard": {
+        "caption": "{appUi.holdTypeKeyboard}：音声入力と編集をひとつの場所で。",
+        "lightboxCaption": "{appUi.holdTypeKeyboard}：音声入力と編集をひとつの場所で。",
+        "alt": "音声操作、クイックアクション、スペース、削除、改行キーが表示された{appUi.holdTypeKeyboard}"
+      },
+      "settings": {
+        "caption": "設定：言語、文章、音声、プライバシー。",
+        "lightboxCaption": "設定：言語、文章、音声、プライバシー。",
+        "alt": "{brand.holdType} {brand.iPhone}版の設定メイン画面"
+      }
+    }
+  },
   "faq": {
     "title": "よくある質問",
     "intro": "インストール前に大切な判断を、短く説明します。",

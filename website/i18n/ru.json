@@ -248,6 +248,36 @@
       "fallbackIframeTitle": "Инструкция на {brand.youtube}"
     }
   },
+  "mobile": {
+    "label": "Ещё и на {brand.iPhone}",
+    "title": "{brand.holdType} для {brand.iPhone} уже есть в исходниках.",
+    "body": "Приложение и {appUi.holdTypeKeyboard} пока не опубликованы в {brand.appStore}. Подготовка релиза ещё идёт, но уже сейчас их можно самостоятельно собрать и запустить в {brand.xcode}.",
+    "sourceAction": "Открыть исходники версии для {brand.iPhone} на {brand.github}",
+    "status": "В разработке · Пока не в {brand.appStore}",
+    "galleryAria": "Скриншоты {brand.holdType} для {brand.iPhone}",
+    "gallery": {
+      "voice": {
+        "caption": "Voice: черновик остаётся под вашим контролем.",
+        "lightboxCaption": "Voice: черновик остаётся под вашим контролем.",
+        "alt": "Экран Voice в {brand.holdType} для {brand.iPhone} с готовым черновиком и навигацией из пяти вкладок"
+      },
+      "rules": {
+        "caption": "Rules: научите {brand.holdType} вашим словам и правилам очистки текста.",
+        "lightboxCaption": "Rules: научите {brand.holdType} вашим словам и правилам очистки текста.",
+        "alt": "Экран правил диктовки в {brand.holdType} для {brand.iPhone}"
+      },
+      "keyboard": {
+        "caption": "{appUi.holdTypeKeyboard}: голос и редактирование в одном месте.",
+        "lightboxCaption": "{appUi.holdTypeKeyboard}: голос и редактирование в одном месте.",
+        "alt": "{appUi.holdTypeKeyboard} с голосовым управлением, быстрыми действиями, пробелом, удалением и вводом"
+      },
+      "settings": {
+        "caption": "Settings: язык, письмо, голос и конфиденциальность.",
+        "lightboxCaption": "Settings: язык, письмо, голос и конфиденциальность.",
+        "alt": "Главный экран настроек {brand.holdType} для {brand.iPhone}"
+      }
+    }
+  },
   "faq": {
     "title": "Частые вопросы",
     "intro": "Короткие ответы на важные вопросы перед установкой.",

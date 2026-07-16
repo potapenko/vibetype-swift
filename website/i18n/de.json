@@ -248,6 +248,36 @@
       "fallbackIframeTitle": "Tutorial auf {brand.youtube}"
     }
   },
+  "mobile": {
+    "label": "Auch auf dem {brand.iPhone}",
+    "title": "{brand.holdType} für {brand.iPhone} ist bereits im Quellcode enthalten.",
+    "body": "Die App und {appUi.holdTypeKeyboard} sind noch nicht im {brand.appStore} verfügbar. Die Veröffentlichung ist noch in Arbeit, aber du kannst beides schon heute selbst in {brand.xcode} kompilieren und ausführen.",
+    "sourceAction": "{brand.iPhone}-Quellcode auf {brand.github} öffnen",
+    "status": "In Arbeit · Noch nicht im {brand.appStore}",
+    "galleryAria": "Screenshots von {brand.holdType} für {brand.iPhone}",
+    "gallery": {
+      "voice": {
+        "caption": "Spracheingabe: Behalte deinen Entwurf unter Kontrolle.",
+        "lightboxCaption": "Spracheingabe: Behalte deinen Entwurf unter Kontrolle.",
+        "alt": "Sprachbildschirm von {brand.holdType} für {brand.iPhone} mit ausgearbeitetem Entwurf und Navigation mit fünf Tabs"
+      },
+      "rules": {
+        "caption": "Regeln: Bring {brand.holdType} deine Wörter und die gewünschte Textbereinigung bei.",
+        "lightboxCaption": "Regeln: Bring {brand.holdType} deine Wörter und die gewünschte Textbereinigung bei.",
+        "alt": "Bildschirm für Diktierregeln von {brand.holdType} für {brand.iPhone}"
+      },
+      "keyboard": {
+        "caption": "{appUi.holdTypeKeyboard}: Spracheingabe und Bearbeitung an einem Ort.",
+        "lightboxCaption": "{appUi.holdTypeKeyboard}: Spracheingabe und Bearbeitung an einem Ort.",
+        "alt": "{appUi.holdTypeKeyboard} mit Sprachsteuerung, Schnellaktionen, Leertaste, Löschen und Zeilenumbruch"
+      },
+      "settings": {
+        "caption": "Einstellungen: Sprache, Schreibstil, Spracheingabe und Datenschutz.",
+        "lightboxCaption": "Einstellungen: Sprache, Schreibstil, Spracheingabe und Datenschutz.",
+        "alt": "Hauptbildschirm für Einstellungen von {brand.holdType} für {brand.iPhone}"
+      }
+    }
+  },
   "faq": {
     "title": "Häufig gestellte Fragen",
     "intro": "Kurze Antworten auf die wichtigen Fragen vor der Installation.",

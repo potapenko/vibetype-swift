@@ -248,6 +248,36 @@
       "fallbackIframeTitle": "Tutorial no {brand.youtube}"
     }
   },
+  "mobile": {
+    "label": "Também no {brand.iPhone}",
+    "title": "O {brand.holdType} para {brand.iPhone} já está no código-fonte.",
+    "body": "O app e o {appUi.holdTypeKeyboard} ainda não estão na {brand.appStore}. O lançamento continua em andamento, mas você já pode compilá-los e executá-los por conta própria no {brand.xcode} hoje mesmo.",
+    "sourceAction": "Abrir o código-fonte do {brand.iPhone} no {brand.github}",
+    "status": "Em desenvolvimento · Ainda não está na {brand.appStore}",
+    "galleryAria": "Capturas de tela do {brand.holdType} para {brand.iPhone}",
+    "gallery": {
+      "voice": {
+        "caption": "Voz: mantenha o rascunho sob seu controle.",
+        "lightboxCaption": "Voz: mantenha o rascunho sob seu controle.",
+        "alt": "Tela Voz do {brand.holdType} para {brand.iPhone} com um rascunho redigido e navegação de cinco abas"
+      },
+      "rules": {
+        "caption": "Regras: ensine ao {brand.holdType} suas palavras e como limpar o texto.",
+        "lightboxCaption": "Regras: ensine ao {brand.holdType} suas palavras e como limpar o texto.",
+        "alt": "Tela Regras de ditado do {brand.holdType} para {brand.iPhone}"
+      },
+      "keyboard": {
+        "caption": "{appUi.holdTypeKeyboard}: voz e edição no mesmo lugar.",
+        "lightboxCaption": "{appUi.holdTypeKeyboard}: voz e edição no mesmo lugar.",
+        "alt": "{appUi.holdTypeKeyboard} com controle de voz, ações rápidas, espaço, apagar e retorno"
+      },
+      "settings": {
+        "caption": "Ajustes: idioma, escrita, voz e privacidade.",
+        "lightboxCaption": "Ajustes: idioma, escrita, voz e privacidade.",
+        "alt": "Tela principal de Ajustes do {brand.holdType} para {brand.iPhone}"
+      }
+    }
+  },
   "faq": {
     "title": "Perguntas frequentes",
     "intro": "Respostas curtas para as decisões importantes antes da instalação.",
