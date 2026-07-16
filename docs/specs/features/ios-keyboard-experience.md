@@ -78,8 +78,13 @@ portrait and an approximately 88-point control in compact-height landscape,
 plus one bounded 21-bar waveform on each side of that activity. The waveforms
 stay centered with the activity, mirror the approved Brand Stage silhouette,
 and adapt their spacing and height without stretching the central artwork. The
-editing-key relationship remains close to `Globe : Space : Delete : Return` of
-`1 : 4.35 : 1.15 : 1.25`. Every action is at least 44 by 44 points.
+editing-key relationship remains close to
+`Globe : Space : Delete : Return` of `1 : 4.35 : 1.15 : 1.25` when Return uses
+its symbol or a short title. Return has a 56-point default width, expands to
+keep the current contextual title on one line, and never wraps. Space yields
+width first, down to its 44-point minimum. Only after Space reaches that
+minimum may Return use bounded single-line font scaling for a title that still
+cannot fit. Every action is at least 44 by 44 points.
 
 Compact-height landscape may use the existing two-column reflow. Wider iPad
 layouts keep a centered maximum content width. V1.1 release qualification is
@@ -137,7 +142,9 @@ number deck, Shift, Caps Lock, `123`, prediction row, or manual Refresh.
   space.
 - Delete removes once on tap and repeats with bounded acceleration while held.
 - Return follows the current text-input traits when public information is
-  available.
+  available. Changing traits recomputes its width in both directions so a long
+  action such as `Search` or `Continue` expands the key and a later short action
+  restores the default geometry.
 - Globe uses the system input-mode API and remains reachable whenever iOS
   requires it.
 - Quick Insert, Space, Delete, Return, Globe, and an already-available

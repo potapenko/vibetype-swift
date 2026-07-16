@@ -13,6 +13,9 @@ struct BrandStageKeyboardPresentation: Equatable {
 /// The selected Brand Stage Adaptive composition. The controller owns document
 /// proxy behavior; this view owns only layout, appearance, and touch routing.
 final class BrandStageKeyboardView: UIView {
+    private static let minimumEditingKeyWidth: CGFloat = 44
+    private static let defaultReturnKeyWidth: CGFloat = 56
+
     var onLatestRequested: (() -> Void)?
     var onMicrophoneRequested: (() -> Void)?
     var onQuickInsertRequested: ((String) -> Void)?
@@ -368,10 +371,10 @@ final class BrandStageKeyboardView: UIView {
             equalToConstant: 300
         )
         compactStageWidth.priority = UILayoutPriority(999)
-        let compactSpaceMinimumWidth = spaceButton.widthAnchor.constraint(
+        let compactSpacePreferredWidth = spaceButton.widthAnchor.constraint(
             greaterThanOrEqualToConstant: 120
         )
-        compactSpaceMinimumWidth.priority = UILayoutPriority(999)
+        compactSpacePreferredWidth.priority = .defaultHigh
         compactLayoutConstraints = [
             stageContainer.widthAnchor.constraint(
                 greaterThanOrEqualToConstant: 296
@@ -380,7 +383,7 @@ final class BrandStageKeyboardView: UIView {
             commandStack.widthAnchor.constraint(
                 greaterThanOrEqualToConstant: 320
             ),
-            compactSpaceMinimumWidth,
+            compactSpacePreferredWidth,
         ]
 
         NSLayoutConstraint.activate([
@@ -792,6 +795,16 @@ final class BrandStageKeyboardView: UIView {
         returnButton.titleLabel?.adjustsFontSizeToFitWidth = true
         returnButton.titleLabel?.minimumScaleFactor = 0.7
         returnButton.titleLabel?.numberOfLines = 1
+        spaceButton.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        spaceButton.setContentCompressionResistancePriority(
+            .defaultLow,
+            for: .horizontal
+        )
+        returnButton.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        returnButton.setContentCompressionResistancePriority(
+            UILayoutPriority(998),
+            for: .horizontal
+        )
 
         for button in [
             nextKeyboardButton,
@@ -814,19 +827,11 @@ final class BrandStageKeyboardView: UIView {
                 equalTo: nextKeyboardButton.widthAnchor,
                 multiplier: 1.15
             ),
-            returnButton.widthAnchor.constraint(
-                equalTo: nextKeyboardButton.widthAnchor,
-                multiplier: 1.25
-            ),
         ]
         editingRowWithoutGlobeConstraints = [
             spaceButton.widthAnchor.constraint(
                 equalTo: deleteButton.widthAnchor,
                 multiplier: 3.8
-            ),
-            returnButton.widthAnchor.constraint(
-                equalTo: deleteButton.widthAnchor,
-                multiplier: 1.07
             ),
         ]
         for constraint in editingRowWithGlobeConstraints
@@ -835,13 +840,16 @@ final class BrandStageKeyboardView: UIView {
         }
         let minimumEditingKeyWidths = [
             nextKeyboardButton.widthAnchor.constraint(
-                greaterThanOrEqualToConstant: 44
+                greaterThanOrEqualToConstant: Self.minimumEditingKeyWidth
+            ),
+            spaceButton.widthAnchor.constraint(
+                greaterThanOrEqualToConstant: Self.minimumEditingKeyWidth
             ),
             deleteButton.widthAnchor.constraint(
-                greaterThanOrEqualToConstant: 44
+                greaterThanOrEqualToConstant: Self.minimumEditingKeyWidth
             ),
             returnButton.widthAnchor.constraint(
-                greaterThanOrEqualToConstant: 44
+                greaterThanOrEqualToConstant: Self.defaultReturnKeyWidth
             ),
         ]
         for constraint in minimumEditingKeyWidths {
@@ -950,6 +958,10 @@ final class BrandStageKeyboardView: UIView {
         }
         configuration?.titleLineBreakMode = .byClipping
         returnButton.configuration = configuration
+        returnButton.titleLabel?.numberOfLines = 1
+        returnButton.titleLabel?.adjustsFontSizeToFitWidth = true
+        returnButton.titleLabel?.minimumScaleFactor = 0.7
+        returnButton.invalidateIntrinsicContentSize()
         returnButton.accessibilityLabel = presentation.accessibilityLabel
     }
 

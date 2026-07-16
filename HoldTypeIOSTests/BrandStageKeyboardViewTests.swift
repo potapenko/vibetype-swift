@@ -596,6 +596,137 @@ struct BrandStageKeyboardViewTests {
         }
     }
 
+    @Test func contextualReturnTitlesStaySingleLineAcrossPhoneWidths() throws {
+        let titles = [
+            "Go",
+            "Join",
+            "Next",
+            "Route",
+            "Search",
+            "Send",
+            "Done",
+            "Emergency Call",
+            "Continue",
+        ]
+
+        for showsGlobe in [true, false] {
+            for width: CGFloat in [320, 375, 393, 430] {
+                let view = makeView(width: width)
+
+                for title in titles {
+                    view.render(
+                        presentation(
+                            returnKey: .title(title),
+                            showsInputModeSwitchKey: showsGlobe
+                        )
+                    )
+                    layout(view)
+
+                    let space = try button("keyboard.brand-stage.space", in: view)
+                    let returnButton = try button(
+                        "keyboard.brand-stage.return",
+                        in: view
+                    )
+
+                    #expect(space.bounds.width >= 43.9)
+                    #expect(returnButton.bounds.width >= 55.9)
+                    assertSingleLineReturnTitle(title, in: returnButton)
+                    assertVisibleHierarchyHasNoAmbiguity(view)
+                }
+            }
+        }
+    }
+
+    @Test func contextualReturnExpandsBeforeSpaceAndContractsAgain() throws {
+        for showsGlobe in [true, false] {
+            let view = makeView(width: 393)
+            let space = try button("keyboard.brand-stage.space", in: view)
+            let returnButton = try button(
+                "keyboard.brand-stage.return",
+                in: view
+            )
+
+            view.render(
+                presentation(
+                    returnKey: .title("Go"),
+                    showsInputModeSwitchKey: showsGlobe
+                )
+            )
+            layout(view)
+            let goReturnWidth = returnButton.bounds.width
+            let goSpaceWidth = space.bounds.width
+
+            view.render(
+                presentation(
+                    returnKey: .title("Search"),
+                    showsInputModeSwitchKey: showsGlobe
+                )
+            )
+            layout(view)
+            let searchReturnWidth = returnButton.bounds.width
+            let searchSpaceWidth = space.bounds.width
+
+            #expect(searchReturnWidth > goReturnWidth + 0.5)
+            #expect(searchSpaceWidth < goSpaceWidth - 0.5)
+            assertSingleLineReturnTitle("Search", in: returnButton)
+
+            view.render(
+                presentation(
+                    returnKey: .returnSymbol,
+                    showsInputModeSwitchKey: showsGlobe
+                )
+            )
+            layout(view)
+
+            #expect(abs(returnButton.bounds.width - 56) < 0.5)
+            #expect(space.bounds.width > searchSpaceWidth + 0.5)
+            #expect(returnButton.configuration?.title == nil)
+        }
+    }
+
+    @Test func longReturnTitleStaysSingleLineInCompactAndAccessibilityLayouts()
+        throws {
+        let portrait = makeView(width: 320)
+        portrait.traitOverrides.preferredContentSizeCategory = .accessibilityLarge
+        portrait.render(
+            presentation(
+                returnKey: .title("Emergency Call"),
+                showsInputModeSwitchKey: true
+            )
+        )
+        portrait.updatePreferredHeight(for: portrait.traitCollection)
+        layout(portrait)
+
+        let portraitSpace = try button("keyboard.brand-stage.space", in: portrait)
+        let portraitReturn = try button("keyboard.brand-stage.return", in: portrait)
+        #expect(portraitSpace.bounds.width >= 43.9)
+        assertSingleLineReturnTitle("Emergency Call", in: portraitReturn)
+        assertVisibleHierarchyHasNoAmbiguity(portrait)
+
+        for showsGlobe in [true, false] {
+            let fixture = makeCompactLandscapeFixture(
+                width: Self.compactLandscapeWidths[0],
+                showsInputModeSwitchKey: showsGlobe
+            )
+            fixture.view.render(
+                presentation(
+                    returnKey: .title("Emergency Call"),
+                    showsInputModeSwitchKey: showsGlobe
+                )
+            )
+            layout(fixture)
+
+            let space = try button("keyboard.brand-stage.space", in: fixture.view)
+            let returnButton = try button(
+                "keyboard.brand-stage.return",
+                in: fixture.view
+            )
+            #expect(space.bounds.width >= 43.9)
+            assertSingleLineReturnTitle("Emergency Call", in: returnButton)
+            assertVisibleHierarchyHasNoAmbiguity(fixture.view)
+        }
+    }
+
     @Test func dynamicColorsChangeWithoutChangingControlGeometry() throws {
         let view = makeView(width: 393)
         view.render(presentation())
@@ -1191,6 +1322,19 @@ struct BrandStageKeyboardViewTests {
             titleLabel.bounds.width + 0.5
                 >= titleLabel.intrinsicContentSize.width
         )
+    }
+
+    private func assertSingleLineReturnTitle(
+        _ title: String,
+        in button: UIButton
+    ) {
+        guard let titleLabel = button.titleLabel else {
+            Issue.record("Return is missing its title label")
+            return
+        }
+        #expect(button.configuration?.title == title)
+        #expect(titleLabel.numberOfLines == 1)
+        #expect(titleLabel.bounds.height <= titleLabel.font.lineHeight + 1)
     }
 
     private func orbitLayerIdentifiers(
