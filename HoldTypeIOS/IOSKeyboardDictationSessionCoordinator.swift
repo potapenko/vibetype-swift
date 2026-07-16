@@ -816,6 +816,7 @@ final class IOSKeyboardHandoffPresentationOwner {
     }
 
     func start(_ intent: KeyboardHandoffIntentRecord) async {
+        let previousRequestID = activeRequestID
         generation &+= 1
         let currentGeneration = generation
         activeRequestID = intent.requestID
@@ -828,6 +829,10 @@ final class IOSKeyboardHandoffPresentationOwner {
         // immediately, but does not race that cleanup inside the shared
         // keyboard session.
         await cancellationTask?.value
+        if let previousRequestID,
+           previousRequestID != intent.requestID {
+            await session.cancelHandoff(requestID: previousRequestID)
+        }
         guard generation == currentGeneration,
               activeRequestID == intent.requestID else {
             return
@@ -901,9 +906,8 @@ final class IOSKeyboardHandoffPresentationOwner {
             activeRequestID = nil
             presentation = nil
         case .terminal(.failed):
-            presentation = IOSKeyboardHandoffSheetPresentation(
-                runtimeFailure: .interrupted
-            )
+            activeRequestID = nil
+            presentation = nil
         case .terminal(.expired):
             presentation = IOSKeyboardHandoffSheetPresentation(
                 runtimeFailure: .expired

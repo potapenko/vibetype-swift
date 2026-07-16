@@ -68,14 +68,14 @@ struct IOSKeyboardHandoffSheetTests {
         #expect(!presentation.returnInstructionIsActive)
     }
 
-    @Test func runtimeFailureStaysInsideTheSheetWithoutReturnInstruction() {
+    @Test func expiryStaysInsideTheSheetWithoutReturnInstruction() {
         let presentation = IOSKeyboardHandoffSheetPresentation(
-            runtimeFailure: .interrupted
+            runtimeFailure: .expired
         )
 
         #expect(presentation.phase == .failed)
-        #expect(presentation.title == "Keyboard dictation stopped")
-        #expect(presentation.detail.contains("result was ready"))
+        #expect(presentation.title == "Keyboard dictation expired")
+        #expect(presentation.detail.contains("took too long"))
         #expect(presentation.activityPhase == nil)
         #expect(!presentation.showsReturnInstruction)
         #expect(!presentation.returnInstructionIsActive)

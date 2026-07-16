@@ -81,7 +81,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
     }
 
     @Test
-    func failedAndExpiredHandoffsStayInsideTheSheet() async throws {
+    func failedHandoffDismissesWhileExpiryStaysInsideTheSheet() async throws {
         let failedHarness = KeyboardSessionHarness()
         let failedCoordinator = failedHarness.makeCoordinator()
         let failedOwner = IOSKeyboardHandoffPresentationOwner(
@@ -93,12 +93,8 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
             failedHarness.workflow.runRequestIDs == [failedHarness.sessionID]
         }
         failedHarness.workflow.resolve(.failed)
-        try await eventually {
-            failedOwner.presentation?.runtimeFailure == .interrupted
-        }
-        #expect(failedHarness.states.map(\.phase) == [.ready, .failed])
-        failedOwner.cancelFromSheet()
         try await eventually { failedOwner.presentation == nil }
+        #expect(failedHarness.states.map(\.phase) == [.ready, .failed])
 
         let expiredHarness = KeyboardSessionHarness()
         let expiredCoordinator = expiredHarness.makeCoordinator()
@@ -216,9 +212,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
         }
         let failedAttemptID = try #require(harness.states.last?.attemptID)
         harness.workflow.resolve(.failed)
-        try await eventually {
-            owner.presentation?.runtimeFailure == .interrupted
-        }
+        try await eventually { owner.presentation == nil }
 
         let second = harness.intent(requestID: UUID())
         await owner.start(second)

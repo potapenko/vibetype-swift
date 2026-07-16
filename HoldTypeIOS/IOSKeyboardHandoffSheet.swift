@@ -10,15 +10,12 @@ enum IOSKeyboardHandoffSheetPhase: Equatable, Sendable {
 
 enum IOSKeyboardHandoffRuntimeFailure: Equatable, Sendable {
     case startUnavailable
-    case interrupted
     case expired
 
     var title: String {
         switch self {
         case .startUnavailable:
             "Keyboard dictation couldn't start"
-        case .interrupted:
-            "Keyboard dictation stopped"
         case .expired:
             "Keyboard dictation expired"
         }
@@ -28,8 +25,6 @@ enum IOSKeyboardHandoffRuntimeFailure: Equatable, Sendable {
         switch self {
         case .startUnavailable:
             "Close this sheet and try again from the keyboard."
-        case .interrupted:
-            "The recording ended before a result was ready. Close this sheet and try again."
         case .expired:
             "This keyboard request took too long. Close this sheet and start a new one."
         }
@@ -70,7 +65,7 @@ struct IOSKeyboardHandoffSheetPresentation: Equatable, Sendable {
         case .blocked:
             issue?.title ?? "Keyboard dictation is unavailable"
         case .failed:
-            runtimeFailure?.title ?? "Keyboard dictation stopped"
+            runtimeFailure?.title ?? "Keyboard dictation is unavailable"
         }
     }
 

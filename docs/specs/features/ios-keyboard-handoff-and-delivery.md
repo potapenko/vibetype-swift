@@ -75,9 +75,11 @@ resolved by silently degrading the keyboard into that manual-session design.
   dismissible; it does not navigate, mutate, or add recovery presentation to
   ordinary Voice. A completed repair does not replay the request; the user
   returns to the host and taps the keyboard microphone again.
-- A runtime failure or expiry remains a keyboard-owned status in the handoff
-  sheet until the user closes it. Successful completion dismisses the sheet.
-  Neither outcome routes to or changes ordinary Voice presentation.
+- An interrupted or failed capture dismisses the handoff sheet instead of
+  leaving a blocking terminal error over the app. The keyboard returns to its
+  microphone action, and the next tap starts a fresh request. A pre-start setup
+  blocker or an expiry may remain in the sheet until dismissed. None of these
+  outcomes routes to or changes ordinary Voice presentation.
 - Every fresh keyboard microphone tap immediately supersedes the prior
   keyboard request, including a failed, expired, interrupted, processing, or
   undelivered attempt. Before admitting the new capture, HoldType cancels any
@@ -227,8 +229,9 @@ microphone appear active.
 - Tapping the existing keyboard microphone opens HoldType and begins the same
   request without a separate preparatory session.
 - The selected containing-app destination remains unchanged and the temporary
-  handoff sheet reflects Starting, Listening, Processing, and runtime failure
-  without duplicating or mutating Voice.
+  handoff sheet reflects Starting, Listening, Processing, pre-start blockers,
+  and expiry without duplicating or mutating Voice. Capture interruption never
+  leaves a blocking terminal sheet.
 - Returning to the host reconnects a recreated extension to the active request.
 - Quick Insert and Auto remain enabled throughout the handoff, and shared-state
   refreshes do not dismiss either already-open local surface.
