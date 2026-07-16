@@ -2338,6 +2338,56 @@ struct IOSForegroundVoiceWorkflowTests {
     }
 
     @Test
+    func healthyKeyboardSessionReusesAudioAcrossConsecutiveDictations()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            pendingLoads: [.value(nil)],
+            permission: .granted,
+            completedCapture: true,
+            processorAcceptedText: "Keyboard pipeline result",
+            preacceptConsent: true
+        )
+        let client = fixture.workflow.keyboardDictationClient
+
+        let firstRequestID = UUID()
+        let first = Task {
+            await client.run(firstRequestID, .standard) { _ in }
+        }
+        try await waitUntil {
+            fixture.events.count("recording-start") == 1
+        }
+        #expect(client.finish(firstRequestID))
+        #expect(
+            await first.value == .accepted("Keyboard pipeline result")
+        )
+
+        let secondRequestID = UUID()
+        let second = Task {
+            await client.run(secondRequestID, .standard) { _ in }
+        }
+        try await waitUntil {
+            fixture.events.count("recording-start") == 2
+        }
+        #expect(client.finish(secondRequestID))
+        #expect(
+            await second.value == .accepted("Keyboard pipeline result")
+        )
+
+        #expect(fixture.events.count("audio-activate") == 1)
+        #expect(fixture.events.count("history-stop") == 1)
+        #expect(fixture.events.count("start-boundary-audio-true") == 1)
+        #expect(fixture.events.count("start-boundary-audio-false") == 1)
+        #expect(fixture.events.count("keyboard-warm-input-begin") == 1)
+        #expect(fixture.events.count("keyboard-warm-input-end") == 0)
+        #expect(fixture.events.count("audio-deactivate") == 0)
+
+        client.endWarmSession()
+
+        #expect(fixture.events.count("keyboard-warm-input-end") == 1)
+        #expect(fixture.events.count("audio-deactivate") == 1)
+    }
+
+    @Test
     func foregroundCorrectionActionForcesCorrectionInProviderRequest()
         async throws {
         let fixture = try await WorkflowFixture(
@@ -2906,8 +2956,11 @@ private final class WorkflowFixture {
                         }
                     )
                 },
-                playStartBoundary: { [weak self] _ in
+                playStartBoundary: { [weak self] audioCuesEnabled in
                     events.record("start-boundary")
+                    events.record(
+                        "start-boundary-audio-\(audioCuesEnabled)"
+                    )
                     if let audioEventAtStartBoundary {
                         self?.audioEventHandler?(audioEventAtStartBoundary)
                     }
@@ -2924,6 +2977,12 @@ private final class WorkflowFixture {
                     if expireFinalizationAtStopBoundary {
                         self?.finalizationExpirationHandler?()
                     }
+                },
+                beginKeyboardWarmInput: {
+                    events.record("keyboard-warm-input-begin")
+                },
+                endKeyboardWarmInput: {
+                    events.record("keyboard-warm-input-end")
                 },
                 makeRecording: {
                     [weak self] attemptID,

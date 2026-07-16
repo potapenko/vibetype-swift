@@ -96,6 +96,13 @@ resolved by silently degrading the keyboard into that manual-session design.
 
 - After the user returns, HoldType Keyboard reconnects to the active request.
   Reconnection does not depend on the same extension process remaining alive.
+- After successful delivery, the unexpired app-owned session remains ready for
+  another keyboard dictation. The next microphone tap starts recording on its
+  first tap without reopening HoldType or requiring another return swipe.
+- During that bounded warm session, the containing app keeps a live microphone
+  input pipeline so iOS does not tear down background capture between distinct
+  dictations. Session stop, cancellation, expiry, or replacement releases that
+  pipeline and clears the system microphone indicator.
 - The keyboard's existing voice/error area owns launch, permission, Listening,
   Processing, failure, expiry, and recovery messages. Identity or decorative
   areas do not duplicate these messages.
@@ -222,6 +229,8 @@ microphone appear active.
   app-owned recording.
 - Accepted text inserts exactly once into the originating document when it is
   still eligible.
+- Repeated microphone taps within the same healthy warm session start distinct
+  dictation attempts without another containing-app handoff.
 - Focus/document changes, stale requests, process loss, and uncertain delivery
   preserve Latest without automatic insertion into the wrong destination.
 - Permission and setup failures discovered while HoldType is foreground are

@@ -118,6 +118,7 @@ final class IOSForegroundVoiceRuntime {
     let audioOwner: IOSForegroundVoiceWorkflowAudioOwner
     let feedbackBridge: IOSForegroundVoiceFeedbackBridge
     let finalizationOwner: IOSForegroundVoiceWorkflowFinalizationOwner
+    let keyboardWarmInputKeeper: IOSKeyboardWarmInputKeeper
     let recorderBridge: IOSForegroundVoiceRecorderBridge
     let providerBridge: IOSForegroundVoiceProviderBridge
     let historyPlaybackArbitrator:
@@ -175,6 +176,8 @@ final class IOSForegroundVoiceRuntime {
         self.feedbackBridge = feedbackBridge
         let finalizationOwner = factories.makeFinalizationOwner()
         self.finalizationOwner = finalizationOwner
+        let keyboardWarmInputKeeper = IOSKeyboardWarmInputKeeper()
+        self.keyboardWarmInputKeeper = keyboardWarmInputKeeper
         let recorderBridge = factories.makeRecorderBridge(
             persistenceOwner,
             feedbackBridge
@@ -271,6 +274,12 @@ final class IOSForegroundVoiceRuntime {
                 await feedbackBridge.playStopBoundary(
                     audioCuesEnabled: audioCuesEnabled
                 )
+            },
+            beginKeyboardWarmInput: {
+                try keyboardWarmInputKeeper.startIfNeeded()
+            },
+            endKeyboardWarmInput: {
+                keyboardWarmInputKeeper.stop()
             },
             makeRecording: {
                 attemptID,

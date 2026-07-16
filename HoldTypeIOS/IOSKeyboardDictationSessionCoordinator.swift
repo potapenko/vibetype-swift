@@ -748,6 +748,9 @@ final class IOSKeyboardDictationSessionCoordinator {
         cancelWorkflowTask: Bool = true,
         handoffTerminal: IOSKeyboardHandoffTerminalDisposition? = nil
     ) {
+        if sessionID != nil {
+            dependencies.workflow.endWarmSession()
+        }
         if let requestID = activeAttempt?.requestID,
            handoffRequestID == requestID {
             emitHandoff(

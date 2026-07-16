@@ -188,6 +188,7 @@ nonisolated struct IOSKeyboardDictationWorkflowClient: Sendable {
     ) async -> IOSKeyboardDictationWorkflowResolution
     let finish: @MainActor @Sendable (UUID) -> Bool
     let cancel: @MainActor @Sendable (UUID) -> Bool
+    let endWarmSession: @MainActor @Sendable () -> Void
     let loadTranslationAvailability: @Sendable () async -> Bool
 
     init(
@@ -198,6 +199,7 @@ nonisolated struct IOSKeyboardDictationWorkflowClient: Sendable {
         ) async -> IOSKeyboardDictationWorkflowResolution,
         finish: @escaping @MainActor @Sendable (UUID) -> Bool,
         cancel: @escaping @MainActor @Sendable (UUID) -> Bool,
+        endWarmSession: @escaping @MainActor @Sendable () -> Void = {},
         loadTranslationAvailability: @escaping @Sendable () async -> Bool = {
             false
         }
@@ -205,6 +207,7 @@ nonisolated struct IOSKeyboardDictationWorkflowClient: Sendable {
         self.run = run
         self.finish = finish
         self.cancel = cancel
+        self.endWarmSession = endWarmSession
         self.loadTranslationAvailability = loadTranslationAvailability
     }
 }
@@ -498,6 +501,8 @@ struct IOSForegroundVoiceWorkflowDependencies {
         Bool
     ) async -> Bool
     typealias PlayStopBoundary = @MainActor @Sendable (Bool) async -> Void
+    typealias BeginKeyboardWarmInput = @MainActor @Sendable () throws -> Void
+    typealias EndKeyboardWarmInput = @MainActor @Sendable () -> Void
     typealias MakeRecording = @MainActor @Sendable (
         UUID,
         DictationOutputIntent,
@@ -543,6 +548,8 @@ struct IOSForegroundVoiceWorkflowDependencies {
     let playStartBoundary: PlayStartBoundary
     let cancelStartBoundary: @MainActor @Sendable () -> Void
     let playStopBoundary: PlayStopBoundary
+    let beginKeyboardWarmInput: BeginKeyboardWarmInput
+    let endKeyboardWarmInput: EndKeyboardWarmInput
     let makeRecording: MakeRecording
     let beginFinalization: BeginFinalization
     let process: Process
@@ -688,6 +695,8 @@ final class IOSForegroundVoiceWorkflow {
     private var activeControllerToken: IOSForegroundVoiceWorkflowAttemptToken?
     private var isRunningRecoveryOperation = false
     private var acceptedKeyboardResult: (requestID: UUID, text: String)?
+    private var keyboardWarmAudio: IOSForegroundVoiceWorkflowAudioLease?
+    private var keyboardWarmInputIsRunning = false
 
     init(dependencies: IOSForegroundVoiceWorkflowDependencies) {
         self.dependencies = dependencies
@@ -769,6 +778,9 @@ final class IOSForegroundVoiceWorkflow {
             },
             cancel: { [weak self] requestID in
                 self?.cancelKeyboardDictation(requestID: requestID) ?? false
+            },
+            endWarmSession: { [weak self] in
+                self?.endKeyboardWarmSession()
             },
             loadTranslationAvailability: { [weak self] in
                 await self?.loadKeyboardTranslationAvailability() ?? false
@@ -1323,12 +1335,16 @@ final class IOSForegroundVoiceWorkflow {
             requireInitiatingScene: false
         ) else { return await blockedPreflight(failure: .unavailable) }
 
-        guard await dependencies.stopHistoryPlayback(),
-              canContinueArming(
-                attempt,
-                requireInitiatingScene: false
-              ) else {
-            return await blockedPreflight(failure: .operationFailed)
+        let reusesKeyboardWarmAudio = attempt.allowsBackgroundContinuation
+            && keyboardWarmAudio != nil
+        if !reusesKeyboardWarmAudio {
+            guard await dependencies.stopHistoryPlayback(),
+                  canContinueArming(
+                      attempt,
+                      requireInitiatingScene: false
+                  ) else {
+                return await blockedPreflight(failure: .operationFailed)
+            }
         }
 
         if attempt.clearsDraftOnStart {
@@ -1347,7 +1363,13 @@ final class IOSForegroundVoiceWorkflow {
         ) else { return await blockedPreflight(failure: .unavailable) }
         dependencies.recordDiagnostic(.audio(.activationStarted))
         do {
-            attempt.audio = try dependencies.activateAudio()
+            if reusesKeyboardWarmAudio {
+                attempt.audio = keyboardWarmAudio
+                keyboardWarmAudio = nil
+            } else {
+                endKeyboardWarmSession()
+                attempt.audio = try dependencies.activateAudio()
+            }
             dependencies.recordDiagnostic(.audio(.activated))
         } catch {
             dependencies.recordDiagnostic(.audio(.activationFailed))
@@ -1400,7 +1422,14 @@ final class IOSForegroundVoiceWorkflow {
 
         let cuesEnabled = configuration.settings
             .voiceSessionPreferences.audioCuesEnabled
-        guard await dependencies.playStartBoundary(cuesEnabled) else {
+        // Keep background repeat attempts input-only while preserving the
+        // boundary token and haptic. The initial foreground handoff retains
+        // the user's configured start cue.
+        let startBoundaryAudioCuesEnabled = cuesEnabled
+            && !reusesKeyboardWarmAudio
+        guard await dependencies.playStartBoundary(
+            startBoundaryAudioCuesEnabled
+        ) else {
             return await blockedPreflight(failure: .operationFailed)
         }
         guard canContinueArming(
@@ -1526,6 +1555,23 @@ final class IOSForegroundVoiceWorkflow {
                 origin: Self.diagnosticOrigin(attempt.origin)
             )
         )
+
+        if attempt.allowsBackgroundContinuation,
+           !keyboardWarmInputIsRunning {
+            do {
+                try dependencies.beginKeyboardWarmInput()
+                keyboardWarmInputIsRunning = true
+            } catch {
+                return await resolveStoppedAttempt(
+                    .interrupted,
+                    attempt: attempt,
+                    configuration: configuration,
+                    consent: consent,
+                    credential: credential,
+                    progress: progress
+                )
+            }
+        }
 
         guard canContinueArming(
             attempt,
@@ -1718,7 +1764,7 @@ final class IOSForegroundVoiceWorkflow {
                     failure: .localRecovery
                 )
             }
-            deactivateAudio(for: attempt)
+            retainAudioForKeyboardWarmReuseOrDeactivate(for: attempt)
             let pending: IOSV1PendingRecording
             do {
                 pending = try await capture.preparePending(
@@ -2590,6 +2636,36 @@ final class IOSForegroundVoiceWorkflow {
         attempt.audio?.deactivate()
         attempt.audio = nil
         if hadAudio {
+            dependencies.recordDiagnostic(.audio(.deactivated))
+        }
+    }
+
+    /// iOS rejects a new audio-session activation initiated after the app has
+    /// returned to the background. A successful keyboard capture therefore
+    /// keeps its already-active lease until the bounded keyboard session ends.
+    /// Foreground Voice never enters this path and keeps its existing cleanup.
+    private func retainAudioForKeyboardWarmReuseOrDeactivate(
+        for attempt: Attempt
+    ) {
+        guard attempt.allowsBackgroundContinuation,
+              let audio = attempt.audio else {
+            deactivateAudio(for: attempt)
+            return
+        }
+        keyboardWarmAudio?.deactivate()
+        keyboardWarmAudio = audio
+        attempt.audio = nil
+    }
+
+    private func endKeyboardWarmSession() {
+        if keyboardWarmInputIsRunning {
+            dependencies.endKeyboardWarmInput()
+            keyboardWarmInputIsRunning = false
+        }
+        let hadWarmAudio = keyboardWarmAudio != nil
+        keyboardWarmAudio?.deactivate()
+        keyboardWarmAudio = nil
+        if hadWarmAudio {
             dependencies.recordDiagnostic(.audio(.deactivated))
         }
     }

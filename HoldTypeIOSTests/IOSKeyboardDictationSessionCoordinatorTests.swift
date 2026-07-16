@@ -498,6 +498,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
 
         coordinator.stopSession()
         #expect(harness.endedBackgroundTaskIDs == [harness.backgroundTaskID])
+        #expect(harness.workflow.endWarmSessionCount == 1)
     }
 }
 
@@ -619,6 +620,7 @@ private final class KeyboardWorkflowHarness {
     private(set) var runActions: [HoldTypeIOS.KeyboardVoiceAction] = []
     private(set) var finishRequestIDs: [UUID] = []
     private(set) var cancelRequestIDs: [UUID] = []
+    private(set) var endWarmSessionCount = 0
     var translationAvailable = true
     var suspendsTranslationAvailability = false
     private(set) var translationAvailabilityLoadCount = 0
@@ -642,6 +644,9 @@ private final class KeyboardWorkflowHarness {
             cancel: { [weak self] requestID in
                 self?.cancelRequestIDs.append(requestID)
                 return self?.runRequestIDs.last == requestID
+            },
+            endWarmSession: { [weak self] in
+                self?.endWarmSessionCount += 1
             },
             loadTranslationAvailability: { [weak self] in
                 await self?.loadTranslationAvailability() ?? false
