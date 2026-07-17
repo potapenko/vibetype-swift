@@ -76,6 +76,31 @@ struct MenuBarPresentationTests {
         #expect(presentation.isTranslationActionEnabled == false)
     }
 
+    @Test func durableRecordingNoticeOverridesGenericProcessingStatus() {
+        let presentation = MenuBarPresentation(
+            dictationStatus: .transcribing,
+            outputStatusText: "Recording interrupted — saved to History."
+        )
+
+        #expect(
+            presentation.statusText
+                == "Recording interrupted — saved to History."
+        )
+    }
+
+    @Test func failureTitleOverridesPriorOutputNotice() {
+        let presentation = MenuBarPresentation(
+            dictationStatus: .failure(message: "Could not finish recording."),
+            failurePresentation: DictationFailurePresentation(
+                title: "Recording saved",
+                message: "Open History to recover the recording."
+            ),
+            outputStatusText: "Recording interrupted — saved to History."
+        )
+
+        #expect(presentation.statusText == "Error: Recording saved")
+    }
+
     @Test func translationActionFollowsShortcutToggleRatherThanCompletedLanguageConfiguration() {
         var settings = AppSettings.defaults
         settings.translationShortcutEnabled = true

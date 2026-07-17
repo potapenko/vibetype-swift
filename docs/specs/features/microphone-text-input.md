@@ -62,9 +62,10 @@ This spec covers:
   callback as an anomaly, but it must not downgrade or delete a limit-length
   recording. An early completion with no limit evidence is unexpected, keeps
   any non-empty artifact, uses normal stop feedback, visibly reports that the
-  recording ended unexpectedly and was saved to History, and continues the
-  same recovery/transcription workflow exactly once without claiming that the
-  configured limit elapsed.
+  recording ended unexpectedly and was saved to History, and does not start a
+  provider request unless user Finish had already claimed authority. The
+  provider-free Saved Recording offers an explicit Transcribe action and never
+  claims that the configured limit elapsed.
 - The last minute is visible as a countdown. HoldType warns with 60, 30, 10,
   8, and 6 seconds remaining, then once per second from 5 through 1. With a
   one-minute limit, countdown begins immediately but the 60-second warning at

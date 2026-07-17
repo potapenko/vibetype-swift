@@ -466,9 +466,11 @@ HoldType uses four distinct actions and never labels them all `Stop`:
   `processing`, Stop ends the armed microphone/audio state but does not cancel
   the journaled provider attempt.
 - `Cancel Processing` is available only for a journaled active provider chain.
-  It cancels that task, rejects its late result by attempt ID, and preserves one
-  Retry-or-Discard recovery attempt. It does not imply Stop Voice Session; the
-  user may stop the session separately.
+  It cancels that owned task and rejects its late result by attempt ID. The
+  playable audio remains durable. Cancellation before transcription dispatch
+  preserves Retry or Discard; cancellation after dispatch began is provider-
+  outcome-uncertain, hides ordinary Retry, and preserves Play and Discard. It
+  does not imply Stop Voice Session; the user may stop the session separately.
 
 The containing app presents every action that applies to its current phase.
 After M0C, the keyboard may send the same explicitly named action only while a
@@ -556,7 +558,7 @@ Full Access, none of these extension-to-app commands is available.
   cannot finish, HoldType preserves the journaled attempt and resumes only when
   allowed, normally after the app returns to foreground.
 - `Cancel Processing` follows the action contract above. A new utterance does
-  not begin until that pending recovery is resolved.
+  not begin until its retryable or outcome-uncertain recovery is resolved.
 - OpenAI transcription, optional correction, translation, accepted output, and
   history behavior remain governed by their dedicated specs.
 - Quick Session expiry ends the armed microphone/audio state but does not
@@ -758,9 +760,11 @@ completed capture is retained under an eligible failed-attempt owner; the exact
 Retry, Discard, setup, and repair actions remain separate. A transient error
 without that retained ownership is not recoverable.
 `interrupted` is reserved for a real audio/platform lifecycle interruption, not
-ordinary user cancellation or blocked preflight. `expired` is reserved for a
-listening attempt ended by the independent five-minute Quick Session deadline,
-not a provider timeout or the separate per-utterance maximum.
+ordinary user cancellation or blocked preflight. `expired` remains only as a
+compatibility outcome for a legacy attempt that was already terminal; an idle
+session TTL never ends retained Listening or Processing. If the platform can no
+longer continue capture, the positive-byte partial is `interrupted`; the frozen
+per-utterance maximum is the only automatic Listening deadline.
 
 Accepted-output retention expiry and detected delivery-record clock rollback
 are not `VoiceAttemptOutcome.expired`. They produce separate content-free output
@@ -768,11 +772,12 @@ recovery observations and never produce `resultReady`, Copy, Share, or Use in
 Practice while temporally ineligible, even if protected bytes remain available
 internally for Clear or later trustworthy maintenance.
 
-Quick Session expiry while merely `ready` creates no attempt outcome. Expiry
-while `processing` does not overwrite the still-valid attempt; its eventual
-terminal result remains authoritative. Reaching the per-utterance maximum
-automatically finishes capture and follows the ordinary Pending/provider path;
-its eventual provider result determines the terminal outcome.
+Quick Session expiry while merely `ready` creates no attempt outcome. Session
+expiry is suspended while `listening` or `processing` and does not overwrite
+the still-valid attempt; its eventual terminal result remains authoritative.
+Reaching the per-utterance maximum automatically finishes capture and follows
+the ordinary Pending/provider path; its eventual provider result determines the
+terminal outcome.
 
 The outcome carries no text, error, reason, identifier, timestamp, retry flag,
 setup destination, output-delivery state, user-facing copy, or stable

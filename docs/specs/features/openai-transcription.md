@@ -531,12 +531,18 @@ runtime request value still does not own its scratch-file lifecycle.
 - Request cleanup is identity-aware: completion or cancellation of an older
   request must not clear or cancel a newer request, and a later request can
   complete independently.
-- If the timeout expires, the attempt fails visibly as `Transcription timed
-  out`; the app returns to a recoverable state. Timeout cleanup cancels the
-  transport task without changing the attempt from `timedOut` to `cancelled`.
+- If the timeout expires before provider dispatch, the attempt fails visibly as
+  `Transcription timed out` and remains retryable. If timeout, transport loss,
+  or cancellation occurs after dispatch began, the provider outcome is
+  ambiguous: timeout cleanup still cancels the transport task, but the
+  playable attempt becomes `Transcription outcome uncertain` with ordinary
+  Retry hidden and its durable dispatch seal retained.
 - The MVP does not silently retry transcription requests.
 - The user may start a new recording after a timeout or provider failure.
 - The user may retry a recoverable failed attempt from Transcript History.
+  An outcome-uncertain post-dispatch attempt is deliberately not in that set;
+  a future explicit warning-gated `Transcribe Again` action may be added for
+  users who accept possible duplicate billing.
 - Retrying a failed attempt is an explicit user action and counts as a new
   bounded OpenAI transcription request.
 - Retry reuses the retained source recording but builds a fresh scratch body
@@ -558,8 +564,12 @@ runtime request value still does not own its scratch-file lifecycle.
   Settings action. Do not auto-open Settings.
 - Inaccessible API key: show that HoldType could not read the saved key. Do not
   describe this as an invalid provider key, and do not change Keychain storage.
-- Network unavailable: fail the attempt with a recoverable network error.
-- Timeout: fail the attempt with a timeout message and no transcript update.
+- Network unavailable before dispatch: fail the attempt with a recoverable
+  network error. A network loss after dispatch keeps playable audio but blocks
+  ordinary provider replay because the remote outcome is unknown.
+- Timeout before dispatch: fail the attempt with a timeout message and no
+  transcript update. Timeout after dispatch is outcome-uncertain and
+  non-retryable by default.
 - Rate limit: show that OpenAI rate limits were reached and ask the user to try
   later.
 - Provider unavailable or server error: show that OpenAI is unavailable and ask

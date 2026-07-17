@@ -163,7 +163,9 @@ resolved by silently degrading the keyboard into that manual-session design.
 - While real capture is active, the same microphone action finishes dictation.
   The keyboard workspace has no separate Cancel control beside the centered
   activity indicator. Before returning to the host, the sheet's close action
-  remains the explicit cancellation path.
+  remains the explicit surface-cancellation path. It is not confirmed Discard:
+  after capture may have retained bytes it interrupts and saves the partial to
+  History instead of unlinking it.
 - Finish stops recording and starts the existing app-owned transcription and
   optional correction/translation pipeline.
 - If capture reaches its selected limit first, HoldType performs the same Finish

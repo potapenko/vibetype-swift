@@ -25,18 +25,22 @@ Every terminal recording event has exactly one product cause:
   complete another local operation;
 - `ownerTeardown`: an app/controller task is cancelled, replaced, or the
   process is terminating;
-- `explicitUserDiscard`: the user explicitly confirms that the current audio
-  should be deleted.
+- `explicitUserDiscard`: the user explicitly requests that the current audio
+  be deleted.
 
 Only `explicitUserDiscard` may intentionally delete a non-empty retained
 recording. A descriptor- or file-handle-proven zero-byte source may enter
-cleanup-only Discard state without confirmation. Every other cause preserves
+cleanup-only Discard state without a user action. Every other cause preserves
 positive bytes under one durable owner.
 
 ## Capture ownership
 
 - HoldType creates durable attempt identity and capture ownership before the
   recorder is allowed to retain audio.
+- Before a recovery checkpoint exists, the active macOS capture and its
+  journal live in non-purgeable Application Support storage. A purgeable
+  recording cache is never the sole owner of retained audio; the finalized
+  original may move there only after a separate durable History owner commits.
 - Active and finalizing recordings are protected from cache Clear, individual
   cache Delete, and retention pruning.
 - Stop, recorder completion, the configured deadline, lifecycle termination,
@@ -68,12 +72,12 @@ positive bytes under one durable owner.
   provider-free Saved Recording. During Finalizing or Processing it disarms
   the warm session without cancelling the owned finalization or provider task.
 - Closing a handoff surface is not destructive authority after capture starts.
-  A destructive action must be labelled as Discard/Delete and confirmed.
+  Only a separate explicit destructive action may delete retained audio.
 - Loss of an auxiliary warm-input keeper disables warm reuse but does not stop
   a recorder that is otherwise still active.
 - Scene inactivity by itself is not proof that capture failed. HoldType stops
   only when the platform/audio boundary cannot continue or the product has an
-  explicit user Finish, configured limit, or confirmed Discard. If continued
+  explicit user Finish, configured limit, or explicit Discard. If continued
   capture becomes impossible, it preserves the partial as
   `platformInterrupted`.
 
@@ -116,7 +120,7 @@ positive bytes under one durable owner.
 For every platform terminal cause, tests assert:
 
 - positive bytes result in exactly one durable playable owner unless the user
-  explicitly confirmed Discard;
+  explicitly requested Discard;
 - zero-byte cleanup never deletes another attempt;
 - provider dispatch occurs at most once and only after durable ownership;
 - involuntary/internal termination performs no provider dispatch unless Finish

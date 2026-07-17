@@ -123,11 +123,14 @@ This spec covers:
   remove that seal only after the exact owned audio file is confirmed gone. If
   metadata rollback and audio removal both fail, relaunch keeps the playable
   orphan non-retryable.
-- A provider call that returns a classified retryable failure, or that the user
-  explicitly cancels, may retire its seal only after the retryable row is
-  durably written. Every later explicit Retry writes a fresh seal before its
-  upload. If the retryable transition cannot be persisted, the previous seal
-  remains and relaunch treats the outcome as uncertain and non-retryable.
+- A definitive pre-dispatch or provider-rejection failure may retire its seal
+  only after the retryable row is durably written. Every later explicit Retry
+  writes a fresh seal before its upload. Timeout, transport loss, or
+  cancellation after dispatch began is not a definitive retryable failure: the
+  seal remains for the lifetime of the audio and the playable row becomes
+  `Transcription outcome uncertain` with ordinary Retry hidden. If any
+  retryable transition cannot be persisted, the previous seal likewise remains
+  and relaunch treats the outcome as uncertain and non-retryable.
 - After a non-empty provider transcription is accepted, HoldType checkpoints
   that raw text before downstream correction or translation. A downstream
   failure leaves a fail-closed row labelled `Raw transcription recovered —

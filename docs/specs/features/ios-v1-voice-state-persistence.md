@@ -138,6 +138,10 @@ normalized text and stage evidence above survives process loss.
   `failed` with provider replay blocked. The audio remains visible with Play and
   Discard, but the app never uploads it again because the prior transcription
   outcome is unknown.
+- The same replay block is committed immediately when a live provider dispatch
+  ends in timeout, transport loss, or cancellation without a definitive remote
+  response. Relaunch preserves that non-retryable classification; it does not
+  downgrade the row to an ordinary failed Retry.
 - A relaunched downstream `processing` attempt becomes `failed` while retaining
   its exact checkpoint. `correctionInFlight` resumes fail-open locally,
   `translationReady` may start translation only after explicit Retry,

@@ -93,6 +93,7 @@ struct MenuBarView: View {
         MenuBarPresentation(
             dictationStatus: dictationRuntime.status,
             failurePresentation: dictationRuntime.failurePresentation,
+            outputStatusText: dictationRuntime.outputStatusText,
             recordingCountdown: dictationRuntime.recordingCountdown,
             settings: dictationRuntime.appSettings,
             isLastResultPasteAvailable: dictationRuntime.isLastResultPasteAvailable

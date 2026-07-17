@@ -5,6 +5,7 @@
 //  Created by Codex on 6/22/26.
 //
 
+import Foundation
 import HoldTypeDomain
 
 enum HoldTypeMenuBarIdentity {
@@ -50,6 +51,7 @@ struct MenuBarPresentation: Equatable {
     init(
         dictationStatus: DictationStatus,
         failurePresentation: DictationFailurePresentation? = nil,
+        outputStatusText: String? = nil,
         recordingCountdown: VoiceSessionCountdown? = nil,
         settings: AppSettings = .defaults,
         isLastResultPasteAvailable: Bool = false
@@ -58,6 +60,7 @@ struct MenuBarPresentation: Equatable {
         statusText = Self.statusText(
             for: dictationStatus,
             failurePresentation: failurePresentation,
+            outputStatusText: outputStatusText,
             recordingCountdown: recordingCountdown
         )
         recordingActionTitle = dictationStatus.recordingActionTitle
@@ -78,6 +81,7 @@ struct MenuBarPresentation: Equatable {
     private static func statusText(
         for dictationStatus: DictationStatus,
         failurePresentation: DictationFailurePresentation?,
+        outputStatusText: String?,
         recordingCountdown: VoiceSessionCountdown?
     ) -> String {
         if dictationStatus.voiceWorkPhase == .listening,
@@ -85,12 +89,21 @@ struct MenuBarPresentation: Equatable {
             return "Recording — \(recordingCountdown.remainingWholeSeconds)s remaining"
         }
 
-        guard case .failure = dictationStatus,
-              let failurePresentation else {
-            return dictationStatus.menuStatusText
+        if case .failure = dictationStatus,
+           let failurePresentation {
+            return DictationStatus.compactFailureStatusText(
+                for: failurePresentation.title
+            )
         }
 
-        return DictationStatus.compactFailureStatusText(for: failurePresentation.title)
+        let trimmedOutputStatusText = outputStatusText?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmedOutputStatusText,
+           !trimmedOutputStatusText.isEmpty {
+            return trimmedOutputStatusText
+        }
+
+        return dictationStatus.menuStatusText
     }
 
     private static func isFailure(_ dictationStatus: DictationStatus) -> Bool {
