@@ -363,7 +363,7 @@ final class IOSContainingAppComposition {
                     player: $0
                 )
             }
-        pendingRecordingHistoryStateOwner =
+        let pendingRecordingHistoryStateOwner =
             IOSPendingRecordingHistoryStateOwner(
                 actions: IOSPendingRecordingHistoryActions(
                     persistenceOwner: foregroundVoicePersistenceOwner,
@@ -372,6 +372,14 @@ final class IOSContainingAppComposition {
                     player: historyAudioPlaybackOwner
                 )
             )
+        self.pendingRecordingHistoryStateOwner =
+            pendingRecordingHistoryStateOwner
+        foregroundVoiceRuntime.workflow
+            .bindInterruptedCaptureRecoveryObserver {
+                [weak pendingRecordingHistoryStateOwner] in
+                await pendingRecordingHistoryStateOwner?
+                    .refreshAfterInterruption()
+            }
         let recordingCacheLifecycleActions =
             IOSRecordingCacheLifecycleActions(
                 cache: acceptedAudioCache,

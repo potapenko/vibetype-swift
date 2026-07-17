@@ -38,7 +38,7 @@ struct IOSV1ForegroundVoicePersistenceTests {
         #expect(!fixture.audio.contains(FacadeIDs.attempt))
     }
 
-    @Test func historyFailureWarnsButStillFinishesAcceptedCleanup()
+    @Test func historyFailureKeepsAcceptedCleanupUntilLifecycleRetry()
         async throws {
         let fixture = FacadeFixture()
         let expected = try await fixture.moveToOutputDelivery()
@@ -55,17 +55,101 @@ struct IOSV1ForegroundVoicePersistenceTests {
             return
         }
         #expect(notice == .historyWriteFailed)
-        #expect(try await fixture.repository.load().pending == nil)
-        #expect(try await fixture.repository.load().latest != nil)
-        #expect(!fixture.audio.contains(FacadeIDs.attempt))
+        let deferred = try await fixture.repository.load()
+        #expect(deferred.pending?.status == .acceptedCleanup(
+            IOSVoiceStateAcceptedResult(
+                resultID: FacadeIDs.result,
+                sourceAttemptID: FacadeIDs.attempt,
+                text: "accepted text",
+                createdAt: FacadeDates.accepted
+            )
+        ))
+        #expect(deferred.latest != nil)
+        #expect(fixture.audio.contains(FacadeIDs.attempt))
         #expect(
             fixture.events.values == [
                 "voice-write",
                 "history-write",
-                "audio-unlink",
-                "voice-write",
             ]
         )
+
+        fixture.events.clear()
+        #expect(
+            await fixture.owner.recoverContainingAppLifecycle(
+                .foregroundOpportunity
+            ) == .complete
+        )
+        #expect(try await fixture.repository.load().pending == nil)
+        #expect(!fixture.audio.contains(FacadeIDs.attempt))
+        #expect(try await fixture.history.load().entries.count == 1)
+        #expect(fixture.events.values == [
+            "history-write",
+            "audio-unlink",
+            "voice-write",
+        ])
+    }
+
+    @Test func reconciliationHistoryFailureRetainsAcceptedAudio() async throws {
+        let fixture = FacadeFixture()
+        let expected = try await fixture.moveToOutputDelivery()
+        fixture.historyMetadata.failNextWrite = true
+        _ = try await fixture.owner.accept(
+            try fixture.acceptance(),
+            expectedPending: expected
+        )
+        fixture.historyMetadata.failNextWrite = true
+        fixture.events.clear()
+
+        let result = try #require(
+            try await fixture.owner.reconcileAcceptance(
+                matching: fixture.acceptance()
+            )
+        )
+
+        guard case .resultReady(_, let notice) = result else {
+            Issue.record("Expected reconciled accepted result")
+            return
+        }
+        #expect(notice == .historyWriteFailed)
+        #expect(try await fixture.repository.load().pending != nil)
+        #expect(fixture.audio.contains(FacadeIDs.attempt))
+        #expect(fixture.events.values == ["history-write"])
+    }
+
+    @Test func clearLatestPreservesAcceptedCleanupWhenHistoryWriteFails()
+        async throws {
+        let fixture = FacadeFixture()
+        let expected = try await fixture.moveToOutputDelivery()
+        fixture.historyMetadata.failNextWrite = true
+        let accepted = try await fixture.owner.accept(
+            try fixture.acceptance(),
+            expectedPending: expected
+        )
+        guard case .resultReady(let record, _) = accepted else {
+            Issue.record("Expected accepted result")
+            return
+        }
+        let latest = IOSV1AcceptedOutputDeliveryExpectation(record: record)
+        fixture.historyMetadata.failNextWrite = true
+
+        await #expect(
+            throws: IOSV1ForegroundVoicePersistenceError.cleanupUncertain
+        ) {
+            _ = try await fixture.owner.clearLatestResult(expected: latest)
+        }
+        let preserved = try await fixture.repository.load()
+        #expect(preserved.latest?.resultID == record.resultID)
+        #expect(preserved.pending != nil)
+        #expect(fixture.audio.contains(FacadeIDs.attempt))
+
+        #expect(
+            try await fixture.owner.clearLatestResult(expected: latest)
+                == .cleared
+        )
+        #expect(try await fixture.repository.load().pending == nil)
+        #expect(try await fixture.repository.load().latest == nil)
+        #expect(!fixture.audio.contains(FacadeIDs.attempt))
+        #expect(try await fixture.history.load().entries.count == 1)
     }
 
     @Test func disabledHistoryIsNotAnAcceptanceFailure() async throws {
@@ -482,6 +566,42 @@ struct IOSV1ForegroundVoicePersistenceTests {
         #expect(try await fixture.repository.load().pending == nil)
         #expect(!fixture.audio.contains(FacadeIDs.attempt))
         #expect(fixture.events.values == ["audio-unlink", "voice-write"])
+    }
+
+    @Test func ambiguousDispatchFailureBlocksRetryAcrossRelaunch()
+        async throws {
+        let fixture = FacadeFixture()
+        let ready = try await fixture.installReady()
+        let dispatch = try await fixture.owner.beginTranscription(
+            expected: ready.expectation,
+            transcriptionID: FacadeIDs.operation
+        )
+        let failed = try await fixture.owner.markFailed(
+            expected: dispatch.expectation,
+            transcriptionReplayBlocked: true
+        )
+
+        #expect(failed.phase == .failed)
+        #expect(failed.transcriptionReplayBlocked)
+        #expect(
+            await fixture.owner.recoverContainingAppLifecycle(.processLaunch)
+                == .complete
+        )
+        let relaunched = try #require(
+            try await fixture.owner.load()?.recording
+        )
+        #expect(relaunched.transcriptionReplayBlocked)
+        await #expect(
+            throws: IOSV1ForegroundVoicePersistenceError.invalidTransition
+        ) {
+            _ = try await fixture.owner.retryTranscription(
+                expected: IOSV1PendingRecordingExpectation(
+                    recording: relaunched
+                ),
+                transcriptionID: FacadeIDs.otherOperation,
+                transcriptionConfiguration: .defaults
+            )
+        }
     }
 
     @Test func fiveMinuteProviderFailureRelaunchAndExplicitRetrySaveAudioOnce()

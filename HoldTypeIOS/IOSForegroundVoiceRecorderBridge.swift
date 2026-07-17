@@ -235,9 +235,13 @@ private final class IOSForegroundVoiceRecorderBridgeAttemptOwner {
                             for: feedbackHandle
                         )
                     }
+                    // The recorder has already crossed retained capture.
+                    // Feedback state cannot grant destructive authority.
                     terminalResultWasHandled = true
-                    let discarded = await driver.stop(token, .cancelled)
-                    release(discarded)
+                    pendingTerminalResult = await driver.stop(
+                        token,
+                        .interrupted
+                    )
                     return .failed
                 }
             }

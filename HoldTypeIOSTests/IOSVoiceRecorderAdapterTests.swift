@@ -142,10 +142,53 @@ struct IOSVoiceRecorderAdapterTests {
             #expect(await startTask.value == .cancelled)
             #expect(!fixture.log.calls.contains(.record(301)))
             assertOrdered(
-                [.beginDiscarding, .stop, .finishDiscard],
+                [.beginFinalizing, .stop, .complete],
                 in: fixture.log.calls
             )
+            #expect(!fixture.log.calls.contains(.beginDiscarding))
+            #expect(
+                (await adapter.waitForTerminal(for: token).value()).cause
+                    == .interrupted
+            )
             #expect(fixture.recorder.stopCount == 1)
+        }
+    }
+
+    @Test func armingStopPreservesDoneInterruptionAndMaximumReason()
+        async throws {
+        let reasons: [
+            (IOSVoiceRecorderStopReason, IOSVoiceRecorderTerminalCause)
+        ] = [
+            (.done, .done),
+            (.interrupted, .interrupted),
+            (.maximumDuration, .maximumDuration),
+        ]
+
+        for (reason, expectedCause) in reasons {
+            let fixture = VoiceRecorderFixture()
+            fixture.source.suspendedCheckpoint = 1
+            let adapter = fixture.makeAdapter()
+            let token = IOSVoiceRecorderAttemptToken()
+            let startTask = Task { await adapter.start(for: token) }
+            try await recorderEventually {
+                fixture.source.suspendedCheckpointCount == 1
+            }
+            let stopTask = Task {
+                await adapter.stop(for: token, reason: reason)
+            }
+            fixture.source.resumeCheckpoint()
+
+            #expect(await startTask.value == .cancelled)
+            guard case .completed(let capture) = await stopTask.value else {
+                Issue.record("Expected a completed arming source")
+                continue
+            }
+            #expect(
+                (await adapter.waitForTerminal(for: token).value()).cause
+                    == expectedCause
+            )
+            #expect(!fixture.log.calls.contains(.beginDiscarding))
+            capture.release()
         }
     }
 
@@ -225,7 +268,7 @@ struct IOSVoiceRecorderAdapterTests {
         }
     }
 
-    @Test func prepareFalseRevalidatesThenDiscardsBeforeStopping() async {
+    @Test func prepareFalsePreservesPotentialPositiveBytesAfterStopping() async {
         let fixture = VoiceRecorderFixture()
         fixture.recorder.prepareResult = false
         let adapter = fixture.makeAdapter()
@@ -236,15 +279,14 @@ struct IOSVoiceRecorderAdapterTests {
             ) == .failed(.prepareFailed)
         )
         #expect(fixture.source.checkpointCount == 2)
-        assertOrdered(
-            [.beginDiscarding, .stop, .finishDiscard],
-            in: fixture.log.calls
-        )
+        assertOrdered([.stop, .release], in: fixture.log.calls)
+        #expect(!fixture.log.calls.contains(.beginDiscarding))
+        #expect(!fixture.log.calls.contains(.finishDiscard))
         #expect(fixture.recorder.stopCount == 1)
-        #expect(fixture.source.releaseCount == 0)
+        #expect(fixture.source.releaseCount == 1)
     }
 
-    @Test func recordFalseDiscardsBeforeStoppingAndNeverStartsWatchdog()
+    @Test func recordFalsePreservesPotentialPositiveBytesWithoutWatchdog()
         async {
         let fixture = VoiceRecorderFixture()
         fixture.recorder.recordResult = false
@@ -255,12 +297,77 @@ struct IOSVoiceRecorderAdapterTests {
                 for: IOSVoiceRecorderAttemptToken()
             ) == .failed(.recordFailed)
         )
-        assertOrdered(
-            [.record(301), .beginDiscarding, .stop, .finishDiscard],
-            in: fixture.log.calls
-        )
+        assertOrdered([.record(301), .stop, .release], in: fixture.log.calls)
+        #expect(!fixture.log.calls.contains(.beginDiscarding))
+        #expect(!fixture.log.calls.contains(.finishDiscard))
         #expect(fixture.sleep.requestedDurations.isEmpty)
         #expect(fixture.recorder.stopCount == 1)
+        #expect(fixture.source.releaseCount == 1)
+    }
+
+    @Test func startFalsePositiveBytesBecomePlayableSavedRecording()
+        async throws {
+        for point in PositiveStartFailureRecorder.FailurePoint.allCases {
+            let root = FileManager.default.temporaryDirectory.appending(
+                path: "holdtype-positive-start-failure-\(UUID().uuidString)",
+                directoryHint: .isDirectory
+            )
+            try FileManager.default.createDirectory(
+                at: root,
+                withIntermediateDirectories: true
+            )
+            defer { try? FileManager.default.removeItem(at: root) }
+            let persistence = IOSV1ForegroundVoicePersistenceOwner(
+                applicationSupportDirectoryURL: root
+            )
+            let attemptID = UUID()
+            let lease = try await persistence.createCapture(
+                attemptID: attemptID,
+                outputIntent: .standard
+            )
+            let adapter = IOSVoiceRecorderAdapter(
+                lease: lease,
+                client: IOSVoiceRecorderClient(
+                    makeRecorder: { url, _, _ in
+                        PositiveStartFailureRecorder(
+                            url: url,
+                            failurePoint: point
+                        )
+                    },
+                    sleep: { _ in }
+                )
+            )
+
+            let expectedFailure: IOSVoiceRecorderFailure = point == .prepare
+                ? .prepareFailed
+                : .recordFailed
+            #expect(
+                await adapter.start(for: IOSVoiceRecorderAttemptToken())
+                    == .failed(expectedFailure)
+            )
+            #expect(
+                await persistence
+                    .repairInterruptedCaptureAfterRecorderStops()
+                    == .recoverable(attemptID: attemptID)
+            )
+            guard case .completedCapture(let saved) = try #require(
+                try await persistence.loadSavedRecording()
+            ) else {
+                Issue.record("Expected preserved completed capture")
+                continue
+            }
+            #expect(saved.byteCount == 4)
+            #expect(saved.availability == .available)
+            let playback = try await persistence
+                .prepareCompletedCapturePlaybackAudio(
+                    expected: IOSV1CompletedCaptureRecoveryExpectation(
+                        recording: saved
+                    )
+                )
+            #expect(
+                playback.withAudioData { $0 } == Data([1, 2, 3, 4])
+            )
+        }
     }
 
     @Test func doneMarksFinalizingBeforeStopAndUsesCanonicalCaptureFacts()
@@ -1415,6 +1522,49 @@ private func makePendingRecording() throws -> IOSV1PendingRecording {
         status: .ready
     )
     return IOSV1PendingRecording(state)
+}
+
+@MainActor
+private final class PositiveStartFailureRecorder: IOSVoiceAudioRecorder {
+    enum FailurePoint: CaseIterable {
+        case prepare
+        case record
+    }
+
+    private let url: URL
+    private let failurePoint: FailurePoint
+
+    init(url: URL, failurePoint: FailurePoint) {
+        self.url = url
+        self.failurePoint = failurePoint
+    }
+
+    var currentTime: TimeInterval { 0 }
+    var isRecording: Bool { false }
+
+    func prepareToRecord() -> Bool {
+        guard failurePoint == .prepare else { return true }
+        writePositiveBytes()
+        return false
+    }
+
+    func record(forDuration _: TimeInterval) -> Bool {
+        writePositiveBytes()
+        return false
+    }
+
+    func normalizedPowerLevel() -> Double? { nil }
+    func stop() {}
+
+    private func writePositiveBytes() {
+        do {
+            let handle = try FileHandle(forWritingTo: url)
+            try handle.write(contentsOf: Data([1, 2, 3, 4]))
+            try handle.close()
+        } catch {
+            Issue.record("Could not write positive-byte recorder fixture")
+        }
+    }
 }
 
 @MainActor

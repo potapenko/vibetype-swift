@@ -1708,14 +1708,18 @@ public actor IOSV1ForegroundVoicePersistenceOwner {
     }
 
     public func markFailed(
-        expected: IOSV1PendingRecordingExpectation
+        expected: IOSV1PendingRecordingExpectation,
+        transcriptionReplayBlocked: Bool = false
     ) async throws -> IOSV1PendingRecording {
         await acquireOperation()
         defer { releaseOperation() }
         _ = try await requirePending(expected)
         do {
             return IOSV1PendingRecording(
-                try await repository.markFailed(attemptID: expected.attemptID)
+                try await repository.markFailed(
+                    attemptID: expected.attemptID,
+                    transcriptionReplayBlocked: transcriptionReplayBlocked
+                )
             )
         } catch { throw mapRepositoryError(error) }
     }
@@ -1769,6 +1773,12 @@ public actor IOSV1ForegroundVoicePersistenceOwner {
         } catch { throw mapRepositoryError(error) }
         let record = IOSV1AcceptedOutputDeliveryRecord(accepted)
         var notice = await appendHistory(record)
+        guard notice != .historyWriteFailed else {
+            // Latest and acceptedCleanup are the durable repair marker until
+            // History commits. Never unlink the last playable audio owner on
+            // a failed History write.
+            return .resultReady(record, notice: notice)
+        }
         do {
             try await finishAcceptedCleanup(pending: pending, record: record)
         } catch {
@@ -1798,13 +1808,15 @@ public actor IOSV1ForegroundVoicePersistenceOwner {
            accepted.resultID == record.resultID,
            accepted.sourceAttemptID == record.sourceAttemptID {
             notice = await appendHistory(record)
-            do {
-                try await finishAcceptedCleanup(
-                    pending: IOSV1PendingRecording(state),
-                    record: record
-                )
-            } catch {
-                notice = Self.addCleanupNotice(to: notice)
+            if notice != .historyWriteFailed {
+                do {
+                    try await finishAcceptedCleanup(
+                        pending: IOSV1PendingRecording(state),
+                        record: record
+                    )
+                } catch {
+                    notice = Self.addCleanupNotice(to: notice)
+                }
             }
         }
         return .resultReady(record, notice: notice)
@@ -1840,7 +1852,9 @@ public actor IOSV1ForegroundVoicePersistenceOwner {
            accepted.resultID == latest.resultID,
            accepted.sourceAttemptID == latest.sourceAttemptID {
             let record = IOSV1AcceptedOutputDeliveryRecord(latest)
-            _ = await appendHistory(record)
+            guard await appendHistory(record) != .historyWriteFailed else {
+                throw IOSV1ForegroundVoicePersistenceError.cleanupUncertain
+            }
             try await finishAcceptedCleanup(
                 pending: IOSV1PendingRecording(state),
                 record: record
@@ -1877,7 +1891,9 @@ public actor IOSV1ForegroundVoicePersistenceOwner {
                     return .pendingLocalRecovery
                 }
                 let record = IOSV1AcceptedOutputDeliveryRecord(latest)
-                _ = await appendHistory(record)
+                guard await appendHistory(record) != .historyWriteFailed else {
+                    return .pendingLocalRecovery
+                }
                 try await finishAcceptedCleanup(
                     pending: IOSV1PendingRecording(state),
                     record: record

@@ -13,7 +13,7 @@ struct IOSKeyboardHandoffSupersessionClient: Sendable {
     static func live(
         persistenceOwner: IOSV1ForegroundVoicePersistenceOwner
     ) -> Self {
-        Self { attemptID in
+        Self { _ in
             // Complete accepted-output cleanup first. This preserves Latest
             // and History while removing only its obsolete local audio owner.
             _ = await persistenceOwner.recoverContainingAppLifecycle(
@@ -21,43 +21,37 @@ struct IOSKeyboardHandoffSupersessionClient: Sendable {
             )
 
             do {
-                if let pending = try await persistenceOwner.load(),
-                   pending.recording.attemptID == attemptID {
-                    guard pending.recording.phase != .acceptedCleanup else {
-                        return false
-                    }
-                    _ = try await persistenceOwner.discard(
-                        expected: pending.expectation
-                    )
+                // Supersession owns session routing only. Any canonical
+                // Pending recording is already durable user audio and blocks
+                // replacement until it succeeds or the user explicitly
+                // discards it.
+                if try await persistenceOwner.load() != nil {
+                    return false
                 }
 
                 switch await persistenceOwner
                     .reconcileCaptureSourcesAtLaunch() {
-                case .recoverable(let captureAttemptID)
-                    where captureAttemptID == attemptID:
+                case .recoverable, .blocked:
+                    return false
+                case .discardOnly(let captureAttemptID):
+                    // Exact zero-byte capture owns no user effort. It is the
+                    // sole automatic cleanup allowed during supersession.
                     try await persistenceOwner.discardCapture(
-                        attemptID: attemptID
+                        attemptID: captureAttemptID
                     )
-                case .discardOnly(let captureAttemptID)
-                    where captureAttemptID == attemptID:
-                    try await persistenceOwner.discardCapture(
-                        attemptID: attemptID
-                    )
-                case .empty, .blocked, .recoverable(_), .discardOnly(_):
+                case .empty:
                     break
                 }
 
-                let remainingPending = try await persistenceOwner.load()
-                guard remainingPending?.recording.attemptID != attemptID else {
+                guard try await persistenceOwner.load() == nil else {
                     return false
                 }
                 switch await persistenceOwner
                     .reconcileCaptureSourcesAtLaunch() {
-                case .recoverable(let captureAttemptID),
-                     .discardOnly(let captureAttemptID):
-                    return captureAttemptID != attemptID
-                case .empty, .blocked:
+                case .empty:
                     return true
+                case .recoverable, .discardOnly, .blocked:
+                    return false
                 }
             } catch {
                 return false

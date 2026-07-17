@@ -749,6 +749,12 @@ struct IOSForegroundVoiceControllerTests {
             try await voiceEventually {
                 fixture.cancellationAuthorities.count == 1
             }
+            let expectedProcessingCancellations =
+                scenario.action == .cancelProcessing ? 1 : 0
+            #expect(
+                fixture.processingCancellationAuthorities.count
+                    == expectedProcessingCancellations
+            )
             #expect(submitVoiceCommand(cancel, in: controller) == .stale)
             #expect(controller.presentation.phase == scenario.phase)
 
@@ -1254,6 +1260,8 @@ private final class IOSForegroundVoiceClientFixture {
     private(set) var finishAuthorities: [IOSForegroundVoiceAuthority] = []
     private(set) var cancellationAuthorities:
         [IOSForegroundVoiceAuthority] = []
+    private(set) var processingCancellationAuthorities:
+        [IOSForegroundVoiceAuthority] = []
     private(set) var providerConsentInvalidationAuthorities:
         [IOSForegroundVoiceAuthority] = []
 
@@ -1298,6 +1306,10 @@ private final class IOSForegroundVoiceClientFixture {
             },
             finishUtterance: { authority in
                 self.finish(authority)
+            },
+            cancelProcessing: { authority in
+                self.processingCancellationAuthorities.append(authority)
+                return .accepted
             },
             providerConsentInvalidated: { authority in
                 self.providerConsentInvalidationAuthorities.append(authority)

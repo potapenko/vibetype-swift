@@ -94,6 +94,7 @@ final class IOSKeyboardDictationSessionCoordinator {
     private var lastHandledCommand: KeyboardDictationCommandRecord?
     private var workflowTask: Task<Void, Never>?
     private var workflowGeneration: UInt64 = 0
+    private var sessionStopRequested = false
     private var translationAvailable = false
     private var acceptedResult: String?
     private var deliveryClaimID: UUID?
@@ -212,7 +213,7 @@ final class IOSKeyboardDictationSessionCoordinator {
         }
 
         let previousTask = workflowTask
-        cancelCurrentWorkflow()
+        interruptCurrentWorkflow()
         await previousTask?.value
         workflowTask = nil
         finishSessionLifetime()
@@ -288,6 +289,12 @@ final class IOSKeyboardDictationSessionCoordinator {
         case .stopped, .preparing, .ready, .resultReady, .failed:
             break
         }
+        if let activeAttempt,
+           dependencies.workflow.ownsRetainedCapture(
+               activeAttempt.attemptID
+           ) {
+            return false
+        }
 
         // Only pre-start or otherwise empty work may reach supersession here.
         // A terminal failed state can own the user's preserved Pending
@@ -295,7 +302,7 @@ final class IOSKeyboardDictationSessionCoordinator {
         // tapped again.
         let supersededAttemptID = activeAttempt?.attemptID
         let previousTask = workflowTask
-        cancelCurrentWorkflow()
+        interruptCurrentWorkflow()
         await previousTask?.value
         workflowTask = nil
         finishSessionLifetime()
@@ -379,8 +386,12 @@ final class IOSKeyboardDictationSessionCoordinator {
             IOSKeyboardHandoffCaptureEvent
         ) -> Void
     ) -> UUID? {
-        guard case .listening = presentation,
-              let activeAttempt else {
+        guard let activeAttempt else {
+            return nil
+        }
+        let ownsRetainedCapture = dependencies.workflow
+            .ownsRetainedCapture(activeAttempt.attemptID)
+        guard presentation.isListening || ownsRetainedCapture else {
             return nil
         }
         handoffRequestID = activeAttempt.requestID
@@ -395,20 +406,64 @@ final class IOSKeyboardDictationSessionCoordinator {
               handoffRequestID == requestID else {
             return
         }
+        let preservesCapture = activeAttempt.map {
+            dependencies.workflow.ownsRetainedCapture($0.attemptID)
+        } ?? false
         let task = workflowTask
-        cancelCurrentWorkflow()
+        if preservesCapture {
+            interruptCurrentWorkflow()
+        } else {
+            discardCurrentWorkflow()
+        }
         await task?.value
         guard activeAttempt?.requestID == requestID else { return }
         publishUnavailableIfCurrent()
-        finishSessionLifetime(handoffTerminal: .cancelled)
+        finishSessionLifetime(
+            handoffTerminal: preservesCapture ? .failed : .cancelled
+        )
+        workflowTask = nil
+        presentation = .stopped
+    }
+
+    /// Internal replacement retires coordination without inheriting the
+    /// sheet's explicit user-cancel authority.
+    func interruptHandoffForSupersession(requestID: UUID) async {
+        guard activeAttempt?.requestID == requestID,
+              handoffRequestID == requestID else {
+            return
+        }
+        let task = workflowTask
+        interruptCurrentWorkflow()
+        await task?.value
+        guard activeAttempt?.requestID == requestID else { return }
+        publishUnavailableIfCurrent()
+        finishSessionLifetime(handoffTerminal: .failed)
         workflowTask = nil
         presentation = .stopped
     }
 
     func stopSession() {
-        cancelCurrentWorkflow()
+        guard sessionID != nil else {
+            presentation = .stopped
+            return
+        }
+        sessionStopRequested = true
+        suspendIdleExpiry()
+        dependencies.workflow.stopSession(activeAttempt?.attemptID)
+        if case .resultReady = presentation {
+            // Provider and canonical Latest persistence are already complete.
+            // The coordinator still retains its attempt only for keyboard
+            // delivery, so Stop Session may tear that projection down now.
+            publishUnavailableIfCurrent()
+            finishSessionLifetime(cancelWorkflowTask: false)
+            workflowTask = nil
+            presentation = .stopped
+            return
+        }
+        guard activeAttempt == nil else { return }
         publishUnavailableIfCurrent()
-        finishSessionLifetime(handoffTerminal: .cancelled)
+        finishSessionLifetime(cancelWorkflowTask: false)
+        workflowTask = nil
         presentation = .stopped
     }
 
@@ -543,13 +598,13 @@ final class IOSKeyboardDictationSessionCoordinator {
         let deadline = stateDeadline(for: .processing)
         self.deadline = deadline
         beginBackgroundTaskIfNeeded()
-        guard publish(
+        _ = publish(
             phase: .processing,
             expiresAt: deadline
-        ) else {
-            failAndStop("Session unavailable")
-            return true
-        }
+        )
+        // App Group publication is a keyboard-coordination projection. Once
+        // Done owns the live workflow it cannot revoke recorder finalization
+        // or provider authority; the containing app keeps presenting it.
         presentation = .processing
         return true
     }
@@ -607,13 +662,13 @@ final class IOSKeyboardDictationSessionCoordinator {
             failAndStop("Session unavailable")
             return
         }
-        guard publish(
+        _ = publish(
             phase: phase,
             expiresAt: deadline
-        ) else {
-            failAndStop("Session unavailable")
-            return
-        }
+        )
+        // The shared-state write may fail while this process still owns a
+        // healthy recorder/finalizer. Keep the local workflow and handoff
+        // presentation alive; later durable recovery remains authoritative.
         switch progress {
         case .listening:
             emitHandoff(.listening, requestID: attempt.requestID)
@@ -661,6 +716,34 @@ final class IOSKeyboardDictationSessionCoordinator {
                 requestID: attempt.requestID,
                 endsObservation: true
             )
+        case .interruptedSaved:
+            let deadline = stateDeadline(for: .failed)
+            self.deadline = deadline
+            _ = publish(
+                phase: .failed,
+                expiresAt: deadline
+            )
+            finishSessionLifetime(
+                cancelWorkflowTask: false,
+                handoffTerminal: .failed
+            )
+            presentation = .failed(
+                "Recording interrupted — saved to History"
+            )
+        case .transcriptionUncertainSaved:
+            let deadline = stateDeadline(for: .failed)
+            self.deadline = deadline
+            _ = publish(
+                phase: .failed,
+                expiresAt: deadline
+            )
+            finishSessionLifetime(
+                cancelWorkflowTask: false,
+                handoffTerminal: .failed
+            )
+            presentation = .failed(
+                "Transcription outcome uncertain — recording saved to History"
+            )
         case .cancelled:
             let deadline = dependencies.now().addingTimeInterval(1)
             _ = publish(
@@ -685,9 +768,16 @@ final class IOSKeyboardDictationSessionCoordinator {
             && workflowGeneration == generation
     }
 
-    private func cancelCurrentWorkflow() {
+    private func discardCurrentWorkflow() {
         if let activeAttempt {
             _ = dependencies.workflow.cancel(activeAttempt.attemptID)
+        }
+        workflowTask?.cancel()
+    }
+
+    private func interruptCurrentWorkflow() {
+        if let activeAttempt {
+            _ = dependencies.workflow.interrupt(activeAttempt.attemptID)
         }
         workflowTask?.cancel()
     }
@@ -700,7 +790,7 @@ final class IOSKeyboardDictationSessionCoordinator {
                 expiresAt: failureDeadline
             )
         }
-        cancelCurrentWorkflow()
+        interruptCurrentWorkflow()
         finishSessionLifetime(handoffTerminal: .failed)
         presentation = .failed(message)
     }
@@ -718,7 +808,7 @@ final class IOSKeyboardDictationSessionCoordinator {
               presentation.allowsSessionExpiry else {
             return
         }
-        cancelCurrentWorkflow()
+        interruptCurrentWorkflow()
         let now = dependencies.now()
         _ = publish(
             phase: .unavailable,
@@ -816,6 +906,13 @@ final class IOSKeyboardDictationSessionCoordinator {
     }
 
     private func completeAttemptForWarmReuse() {
+        if sessionStopRequested {
+            publishUnavailableIfCurrent()
+            finishSessionLifetime(cancelWorkflowTask: false)
+            workflowTask = nil
+            presentation = .stopped
+            return
+        }
         activeAttempt = nil
         acceptedResult = nil
         deliveryClaimID = nil
@@ -838,7 +935,7 @@ final class IOSKeyboardDictationSessionCoordinator {
         cancelWorkflowTask: Bool = true,
         handoffTerminal: IOSKeyboardHandoffTerminalDisposition? = nil
     ) {
-        if sessionID != nil {
+        if sessionID != nil, !sessionStopRequested {
             dependencies.workflow.endWarmSession()
         }
         if let requestID = activeAttempt?.requestID,
@@ -859,6 +956,7 @@ final class IOSKeyboardDictationSessionCoordinator {
         deadline = nil
         translationAvailable = false
         lastHandledCommand = nil
+        sessionStopRequested = false
         if cancelWorkflowTask {
             workflowTask?.cancel()
         }
@@ -879,6 +977,13 @@ final class IOSKeyboardDictationSessionCoordinator {
             handoffRequestID = nil
             handoffEventObserver = nil
         }
+    }
+}
+
+private extension IOSKeyboardDictationSessionCoordinator.Presentation {
+    var isListening: Bool {
+        if case .listening = self { return true }
+        return false
     }
 }
 
@@ -965,7 +1070,9 @@ final class IOSKeyboardHandoffPresentationOwner {
         await cancellationTask?.value
         if let previousRequestID,
            previousRequestID != intent.requestID {
-            await session.cancelHandoff(requestID: previousRequestID)
+            await session.interruptHandoffForSupersession(
+                requestID: previousRequestID
+            )
         }
         guard generation == currentGeneration,
               activeRequestID == intent.requestID else {

@@ -787,7 +787,8 @@ actor IOSVoiceStateRepository {
 
     @discardableResult
     func markFailed(
-        attemptID: UUID
+        attemptID: UUID,
+        transcriptionReplayBlocked: Bool = false
     ) throws -> IOSVoiceStatePending {
         var snapshot = try load()
         let pending = try requirePending(attemptID, in: snapshot)
@@ -797,9 +798,15 @@ actor IOSVoiceStateRepository {
         case .acceptedCleanup:
             throw IOSVoiceStateRepositoryError.invalidTransition
         }
-        if pending.status == .failed { return pending }
+        let blocksReplay = pending.transcriptionReplayBlocked
+            || transcriptionReplayBlocked
+        if pending.status == .failed,
+           pending.transcriptionReplayBlocked == blocksReplay {
+            return pending
+        }
         let updated = try pending.replacing(
             status: .failed,
+            transcriptionReplayBlocked: blocksReplay,
             updatedAt: mutationDate(after: pending.updatedAt)
         )
         snapshot.pending = updated

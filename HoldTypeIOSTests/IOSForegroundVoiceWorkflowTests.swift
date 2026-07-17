@@ -456,7 +456,8 @@ struct IOSForegroundVoiceWorkflowTests {
     }
 
     @Test
-    func lastActiveSceneLossInterruptsCaptureAndNeverProcesses() async throws {
+    func sceneInactivityDoesNotStopCaptureWithoutAudioCapabilityLoss()
+        async throws {
         let fixture = try await WorkflowFixture(permission: .granted)
         let token = IOSForegroundVoiceWorkflowAttemptToken()
         let task = Task { @MainActor in
@@ -474,6 +475,10 @@ struct IOSForegroundVoiceWorkflowTests {
             fixture.events.contains("recording-start")
         }
         #expect(fixture.facade.updateActivity(.inactive) == .accepted)
+        await Task.yield()
+        #expect(fixture.stopReasons.isEmpty)
+
+        fixture.emitAudio(.interruption)
         let resolution = await task.value
 
         #expect(resolution.outcome == .interrupted)
@@ -832,7 +837,10 @@ struct IOSForegroundVoiceWorkflowTests {
 
         let interrupted = try await WorkflowFixture(
             settings: settings,
-            permission: .granted
+            permission: .granted,
+            completedCapture: true,
+            processorAcceptedText: "Accepted after interruption",
+            preacceptConsent: true
         )
         let interruptedToken = IOSForegroundVoiceWorkflowAttemptToken()
         let interruptedTask = Task { @MainActor in
@@ -853,9 +861,11 @@ struct IOSForegroundVoiceWorkflowTests {
                 == .accepted
         )
         await Task.yield()
-        _ = interrupted.facade.updateActivity(.inactive)
-        _ = await interruptedTask.value
+        interrupted.emitAudio(.interruption)
+        let interruptedResolution = await interruptedTask.value
         #expect(interrupted.stopReasons == [.interrupted])
+        #expect(interruptedResolution.outcome == .resultReady)
+        #expect(interrupted.events.count("provider-process") == 1)
 
         let maximum = try await WorkflowFixture(
             settings: settings,
@@ -1054,6 +1064,246 @@ struct IOSForegroundVoiceWorkflowTests {
         #expect(controller.submit(cancel) == .accepted)
         try await waitUntil { controller.presentation.phase == .inactive }
         #expect(fixture.stopReasons == [.cancelled])
+    }
+
+    @Test
+    func genericTaskCancellationPreservesCaptureAsInterruption()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            completedCapture: true,
+            preacceptConsent: true
+        )
+        let task = Task { @MainActor in
+            await fixture.workflow.start(
+                IOSForegroundVoiceWorkflowStartRequest(
+                    outputIntent: .standard,
+                    sceneLease: fixture.lease
+                ),
+                token: IOSForegroundVoiceWorkflowAttemptToken(),
+                progress: { _ in }
+            )
+        }
+        try await waitUntil { fixture.events.contains("recording-start") }
+
+        task.cancel()
+        _ = await task.value
+
+        #expect(fixture.stopReasons == [.interrupted])
+        #expect(!fixture.events.contains("recording-stop-cancelled"))
+        #expect(!fixture.events.contains("provider-process"))
+    }
+
+    @Test
+    func keyboardInterruptionReportsPositiveCaptureAsSaved() async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            preservePositiveCaptureOnInterruptedStop: true,
+            preacceptConsent: true
+        )
+        let requestID = UUID()
+        let client = fixture.workflow.keyboardDictationClient
+        let task = Task {
+            await client.run(requestID, .standard) { _ in }
+        }
+        try await waitUntil { fixture.events.contains("recording-start") }
+
+        #expect(client.interrupt(requestID))
+        #expect(await task.value == .interruptedSaved)
+        #expect(fixture.stopReasons == [.interrupted])
+        #expect(fixture.events.contains("capture-interruption-repair"))
+        #expect(!fixture.events.contains("provider-process"))
+        #expect(
+            fixture.diagnosticEvents.contains(
+                "stop-resolved-interrupted-recoverable_capture-absent-tagged"
+            )
+        )
+    }
+
+    @Test
+    func doneAuthoritySurvivesOwningTaskCancellationAndDispatchesOnce()
+        async throws {
+        var settings = IOSAppSettings.defaults
+        settings.voiceSessionPreferences.recordingStopTailDuration = .seconds2
+        let fixture = try await WorkflowFixture(
+            settings: settings,
+            permission: .granted,
+            completedCapture: true,
+            processorAcceptedText: "Accepted after owner cancellation",
+            preacceptConsent: true
+        )
+        let token = IOSForegroundVoiceWorkflowAttemptToken()
+        let task = Task { @MainActor in
+            await fixture.workflow.start(
+                IOSForegroundVoiceWorkflowStartRequest(
+                    outputIntent: .standard,
+                    sceneLease: fixture.lease
+                ),
+                token: token,
+                progress: { _ in }
+            )
+        }
+        try await waitUntil { fixture.events.contains("recording-start") }
+
+        #expect(fixture.workflow.finishUtterance(token) == .accepted)
+        task.cancel()
+        let resolution = await task.value
+
+        #expect(fixture.stopReasons == [.interrupted])
+        #expect(resolution.outcome == .resultReady)
+        #expect(fixture.events.count("provider-process") == 1)
+    }
+
+    @Test
+    func keyboardFinishRejectsLateCancelAndDispatchesProviderOnce()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            completedCapture: true,
+            pendingPrepareSuspendsUntilCancelled: true,
+            processorAcceptedText: "Accepted once",
+            preacceptConsent: true
+        )
+        let requestID = UUID()
+        let client = fixture.workflow.keyboardDictationClient
+        let task = Task {
+            await client.run(requestID, .standard) { _ in }
+        }
+        try await waitUntil { fixture.events.contains("recording-start") }
+
+        #expect(client.finish(requestID))
+        try await waitUntil { fixture.events.contains("pending-prepare") }
+        #expect(!client.cancel(requestID))
+
+        task.cancel()
+        #expect(await task.value == .accepted("Accepted once"))
+        #expect(fixture.stopReasons == [.done])
+        #expect(fixture.events.count("provider-process") == 1)
+    }
+
+    @Test
+    func interruptionClaimedBeforeLateFinishOrLimitRemainsProviderFree()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            completedCapture: true,
+            preacceptConsent: true
+        )
+        let token = IOSForegroundVoiceWorkflowAttemptToken()
+        let task = Task { @MainActor in
+            await fixture.workflow.start(
+                IOSForegroundVoiceWorkflowStartRequest(
+                    outputIntent: .standard,
+                    sceneLease: fixture.lease
+                ),
+                token: token,
+                progress: { _ in }
+            )
+        }
+        try await waitUntil { fixture.events.contains("recording-start") }
+
+        fixture.emitAudio(.interruption)
+        #expect(fixture.workflow.finishUtterance(token) == .unavailable)
+        fixture.emitTerminal(.maximumDuration)
+        let resolution = await task.value
+
+        #expect(resolution.outcome == .interrupted)
+        #expect(fixture.stopReasons == [.interrupted])
+        #expect(!fixture.events.contains("provider-process"))
+    }
+
+    @Test
+    func recorderStopClaimBeforeDoneCannotGainProviderAuthority()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            recordingActiveValues: [true, false],
+            completedCapture: true,
+            preacceptConsent: true
+        )
+        let token = IOSForegroundVoiceWorkflowAttemptToken()
+        let task = Task { @MainActor in
+            await fixture.workflow.start(
+                IOSForegroundVoiceWorkflowStartRequest(
+                    outputIntent: .standard,
+                    sceneLease: fixture.lease
+                ),
+                token: token,
+                progress: { _ in }
+            )
+        }
+        try await waitUntil { fixture.events.contains("recording-start") }
+
+        #expect(fixture.workflow.finishUtterance(token) == .unavailable)
+        fixture.emitTerminal(.interrupted)
+        let resolution = await task.value
+
+        #expect(resolution.outcome == .interrupted)
+        #expect(fixture.stopReasons == [.interrupted])
+        #expect(!fixture.events.contains("provider-process"))
+    }
+
+    @Test
+    func recorderLimitClaimBeforeDoneKeepsLimitRetentionAuthority()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            recordingActiveValues: [true, false],
+            completedCapture: true,
+            processorAcceptedText: "Accepted at recorder limit",
+            preacceptConsent: true
+        )
+        let token = IOSForegroundVoiceWorkflowAttemptToken()
+        let task = Task { @MainActor in
+            await fixture.workflow.start(
+                IOSForegroundVoiceWorkflowStartRequest(
+                    outputIntent: .standard,
+                    sceneLease: fixture.lease
+                ),
+                token: token,
+                progress: { _ in }
+            )
+        }
+        try await waitUntil { fixture.events.contains("recording-start") }
+
+        #expect(fixture.workflow.finishUtterance(token) == .unavailable)
+        fixture.emitTerminal(.maximumDuration)
+        let resolution = await task.value
+
+        #expect(resolution.outcome == .resultReady)
+        #expect(fixture.stopReasons == [.maximumDuration])
+        #expect(fixture.preparedPendingRetention == .savedFiveMinute)
+        #expect(fixture.events.count("provider-process") == 1)
+    }
+
+    @Test
+    func configuredLimitClaimSurvivesLaterInterruptionAndDispatchesOnce()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            completedCapture: true,
+            processorAcceptedText: "Accepted at limit",
+            preacceptConsent: true
+        )
+        let task = Task { @MainActor in
+            await fixture.workflow.start(
+                IOSForegroundVoiceWorkflowStartRequest(
+                    outputIntent: .standard,
+                    sceneLease: fixture.lease
+                ),
+                token: IOSForegroundVoiceWorkflowAttemptToken(),
+                progress: { _ in }
+            )
+        }
+        try await waitUntil { fixture.events.contains("recording-start") }
+
+        fixture.emitTerminal(.maximumDuration)
+        fixture.emitAudio(.interruption)
+        let resolution = await task.value
+
+        #expect(resolution.outcome == .resultReady)
+        #expect(fixture.stopReasons == [.maximumDuration])
+        #expect(fixture.events.count("provider-process") == 1)
     }
 
     @Test
@@ -2414,7 +2664,7 @@ struct IOSForegroundVoiceWorkflowTests {
     }
 
     @Test
-    func initialProviderCancelReconcilesPendingOutsideCancelledTask()
+    func explicitProviderCancelRejectsLateSuccessAndBlocksReplay()
         async throws {
         let record = try makeAcceptedDeliveryRecord()
         let fixture = try await WorkflowFixture(
@@ -2458,14 +2708,21 @@ struct IOSForegroundVoiceWorkflowTests {
         #expect(controller.presentation.stage == .transcription)
         try await waitUntil { controller.presentation.phase == .inactive }
         #expect(!fixture.events.contains("pending-load-cancelled"))
-        #expect(controller.presentation.recovery == .pendingRetryOrDiscard)
-        #expect(controller.presentation.outcome == .recoverableFailure)
+        #expect(controller.presentation.recovery == .blocked)
+        #expect(controller.presentation.outcome == nil)
         #expect(controller.presentation.failure == .localRecovery)
-        #expect(controller.actionCommands.contains {
+        #expect(!controller.actionCommands.contains {
             $0.action == .retryPending
         })
-        #expect(controller.actionCommands.contains { $0.action == .discard })
         #expect(controller.presentation.outcome != .resultReady)
+        #expect(fixture.currentPending?.transcriptionReplayBlocked == true)
+        #expect(
+            try await fixture.persistenceOwner.loadLatestResult() == .absent
+        )
+        let history = try await IOSAcceptedTextHistoryRepository(
+            applicationSupportDirectoryURL: fixture.root
+        ).load()
+        #expect(history.entries.isEmpty)
     }
 
     @Test
@@ -2589,6 +2846,33 @@ struct IOSForegroundVoiceWorkflowTests {
 
         #expect(fixture.events.count("keyboard-warm-input-end") == 1)
         #expect(fixture.events.count("audio-deactivate") == 1)
+    }
+
+    @Test
+    func warmInputKeeperFailureDoesNotStopTheActiveKeyboardRecording()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            completedCapture: true,
+            processorAcceptedText: "Current recording survived",
+            keyboardWarmInputFails: true,
+            preacceptConsent: true
+        )
+        let requestID = UUID()
+        let client = fixture.workflow.keyboardDictationClient
+        let task = Task {
+            await client.run(requestID, .standard) { _ in }
+        }
+
+        try await waitUntil {
+            fixture.events.contains("keyboard-warm-input-begin")
+        }
+        #expect(fixture.stopReasons.isEmpty)
+        #expect(client.finish(requestID))
+
+        #expect(await task.value == .accepted("Current recording survived"))
+        #expect(fixture.stopReasons == [.done])
+        #expect(fixture.events.count("provider-process") == 1)
     }
 
     @Test
@@ -2818,6 +3102,27 @@ struct IOSForegroundVoiceWorkflowTests {
     }
 
     @Test
+    func keyboardAmbiguousTranscriptionReportsSavedWithoutRetrySuggestion()
+        async throws {
+        let fixture = try await WorkflowFixture(
+            permission: .granted,
+            completedCapture: true,
+            processorReplayBlockedFailure: .timedOut,
+            preacceptConsent: true
+        )
+        let requestID = UUID()
+        let client = fixture.workflow.keyboardDictationClient
+        let task = Task {
+            await client.run(requestID, .standard) { _ in }
+        }
+        try await waitUntil { fixture.events.contains("recording-start") }
+        #expect(client.finish(requestID))
+
+        #expect(await task.value == .transcriptionUncertainSaved)
+        #expect(fixture.events.count("provider-process") == 1)
+    }
+
+    @Test
     func savedRecordingRetryUsesWorkflowWithoutMutatingVoicePresentation()
         async throws {
         let fixture = try await WorkflowFixture(
@@ -2957,6 +3262,7 @@ private struct WorkflowEventTrigger: Sendable {
 @MainActor
 private final class WorkflowFixture {
     let events = WorkflowEventRecorder()
+    let diagnosticEvents = WorkflowEventRecorder()
     let registry: IOSVoiceSceneRegistry
     let facade: IOSVoiceSceneFacade
     let lease: IOSVoiceSceneStartLease!
@@ -3019,6 +3325,7 @@ private final class WorkflowFixture {
         finalizedCaptureDurationMilliseconds: Int64 = 1_250,
         preserveCaptureOnCancelledStop: Bool = false,
         preserveCaptureOnInterruptedStop: Bool = false,
+        preservePositiveCaptureOnInterruptedStop: Bool = false,
         pendingPrepareSuspendsUntilCancelled: Bool = false,
         expireFinalizationImmediately: Bool = false,
         expireFinalizationAtStopBoundary: Bool = false,
@@ -3027,7 +3334,10 @@ private final class WorkflowFixture {
         processorReturnsSuccessAfterCancellation: Bool = false,
         processorEmitsLateProgressAfterCancellation: Bool = false,
         processorResolution: IOSForegroundVoiceProcessingResolution? = nil,
+        processorReplayBlockedFailure:
+            IOSForegroundVoiceProcessingFailure? = nil,
         processorAcceptedText: String? = nil,
+        keyboardWarmInputFails: Bool = false,
         throwTailSleep: Bool = false,
         throwMaximumSleep: Bool = false,
         lossReactivationTrigger: WorkflowEventTrigger? = nil,
@@ -3175,6 +3485,11 @@ private final class WorkflowFixture {
                     }
                     return await owner
                         .repairOrphanedCaptureAtProcessLaunch()
+                },
+                repairInterruptedCaptureAfterRecorderStops: {
+                    events.record("capture-interruption-repair")
+                    return await owner
+                        .repairInterruptedCaptureAfterRecorderStops()
                 },
                 reconcileCaptureSources: {
                     events.record("capture-reconcile")
@@ -3356,6 +3671,9 @@ private final class WorkflowFixture {
                 },
                 beginKeyboardWarmInput: {
                     events.record("keyboard-warm-input-begin")
+                    if keyboardWarmInputFails {
+                        throw WorkflowFixtureError.configuredFailure
+                    }
                 },
                 endKeyboardWarmInput: {
                     events.record("keyboard-warm-input-end")
@@ -3401,12 +3719,25 @@ private final class WorkflowFixture {
                                 capture?.release()
                                 return .preserved
                             }
-                            if preserveCaptureOnInterruptedStop,
+                            if preserveCaptureOnInterruptedStop
+                                || preservePositiveCaptureOnInterruptedStop,
                                reason == .interrupted {
                                 let capture = try? await owner.createCapture(
                                     attemptID: UUID(),
                                     outputIntent: .standard
                                 )
+                                if preservePositiveCaptureOnInterruptedStop {
+                                    try? capture?.withTransientRecordingURL {
+                                        url in
+                                        let handle = try FileHandle(
+                                            forWritingTo: url
+                                        )
+                                        try handle.write(
+                                            contentsOf: Data([0x01, 0x02, 0x03])
+                                        )
+                                        try handle.close()
+                                    }
+                                }
                                 capture?.release()
                                 return .preserved
                             }
@@ -3513,10 +3844,53 @@ private final class WorkflowFixture {
                             }
                             if processorReturnsSuccessAfterCancellation,
                                let processorResolution {
+                                if request.cancellationAuthority
+                                    .isExplicitlyCancelled {
+                                    let failed = try! makePendingRecording(
+                                        attemptID: request.pendingRecording
+                                            .attemptID,
+                                        outputIntent: request.pendingRecording
+                                            .outputIntent,
+                                        draftInsertionMode:
+                                            request.pendingRecording
+                                                .draftInsertionMode,
+                                        forcesTextCorrection:
+                                            request.pendingRecording
+                                                .forcesTextCorrection,
+                                        phase: .failed,
+                                        configuration: request.configuration
+                                            .settings
+                                            .transcriptionConfiguration,
+                                        transcriptionReplayBlocked: true
+                                    )
+                                    pendingBox.store(failed)
+                                }
                                 return processorResolution
                             }
                             return .notStarted(.cancelled)
                         }
+                    }
+                    if let processorReplayBlockedFailure {
+                        let failed = try! makePendingRecording(
+                            attemptID: request.pendingRecording.attemptID,
+                            outputIntent:
+                                request.pendingRecording.outputIntent,
+                            draftInsertionMode:
+                                request.pendingRecording.draftInsertionMode,
+                            forcesTextCorrection:
+                                request.pendingRecording.forcesTextCorrection,
+                            phase: .failed,
+                            configuration:
+                                request.configuration.settings
+                                    .transcriptionConfiguration,
+                            transcriptionReplayBlocked: true
+                        )
+                        pendingBox.store(failed)
+                        return .retryAvailable(
+                            failed,
+                            failure: processorReplayBlockedFailure,
+                            stage: .transcription
+                        )
                     }
                     if let processorAcceptedText {
                         let record = try! IOSV1AcceptedOutputDeliveryRecord(
@@ -3580,7 +3954,21 @@ private final class WorkflowFixture {
                     try await Task.sleep(for: duration)
                 },
                 makeUUID: { UUID() },
-                recordDiagnostic: { _ in }
+                recordDiagnostic: { [diagnosticEvents] event in
+                    if case .voiceStopResolved(
+                        let reason,
+                        let durability,
+                        let providerAuthority,
+                        let attempt
+                    ) = event {
+                        diagnosticEvents.record(
+                            "stop-resolved-\(reason.rawValue)-"
+                                + "\(durability.rawValue)-"
+                                + providerAuthority.rawValue
+                                + (attempt == nil ? "-missing" : "-tagged")
+                        )
+                    }
+                }
             )
         )
     }
@@ -3594,6 +3982,8 @@ private final class WorkflowFixture {
     var preparedPendingRetention: IOSAcceptedAudioRetention? {
         pendingBox.load()?.acceptedAudioRetention
     }
+
+    var currentPending: IOSV1PendingRecording? { pendingBox.load() }
 
     func emitAudio(_ event: IOSForegroundVoiceWorkflowAudioEvent) {
         audioEventHandler?(event)

@@ -21,6 +21,17 @@ struct IOSDiagnosticsTests {
         app.record(
             .voiceStartRequested(origin: .foreground, action: .translate)
         )
+        let attemptID = UUID(
+            uuidString: "A0000000-0000-0000-0000-000000000000"
+        )!
+        app.record(
+            .voiceStopResolved(
+                reason: .interrupted,
+                durability: .recoverableCapture,
+                providerAuthority: .absent,
+                attempt: HoldTypeIOS.IOSDiagnosticCorrelationTag(attemptID)
+            )
+        )
         keyboard.record(
             .keyboardCommand(
                 .start,
@@ -61,7 +72,13 @@ struct IOSDiagnosticsTests {
             )
         )
 
-        let appLine = try #require(app.recentLines(limit: 10).first)
+        let appLines = try app.recentLines(limit: 10)
+        let appLine = try #require(appLines.first)
+        let voiceStopLine = try #require(
+            appLines.first(where: {
+                $0.contains("event=voice_stop_resolved")
+            })
+        )
         let keyboardLines = try keyboard.recentLines(limit: 10)
         let keyboardCommandLine = try #require(keyboardLines.first)
         let keyboardInsertionLine = try #require(
@@ -77,6 +94,11 @@ struct IOSDiagnosticsTests {
         #expect(appLine.contains("process=app"))
         #expect(appLine.contains("event=voice_start_requested"))
         #expect(appLine.contains("action=translate"))
+        #expect(voiceStopLine.contains("reason=interrupted"))
+        #expect(voiceStopLine.contains("durability=recoverable_capture"))
+        #expect(voiceStopLine.contains("provider_authority=absent"))
+        #expect(voiceStopLine.contains("attempt_tag="))
+        #expect(!voiceStopLine.contains(attemptID.uuidString))
         #expect(keyboardCommandLine.contains("process=keyboard"))
         #expect(keyboardCommandLine.contains("command=start"))
         #expect(keyboardCommandLine.contains("action=improve"))

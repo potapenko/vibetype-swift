@@ -216,19 +216,22 @@ struct IOSForegroundVoiceResolution: Equatable, Sendable {
     let outcome: VoiceAttemptOutcome?
     let failure: IOSForegroundVoiceFailure?
     let warning: IOSForegroundVoiceWarning?
+    let transcriptionReplayBlocked: Bool
 
     init(
         observation: IOSForegroundVoiceObservation,
         stage: VoiceAttemptStage? = nil,
         outcome: VoiceAttemptOutcome? = nil,
         failure: IOSForegroundVoiceFailure? = nil,
-        warning: IOSForegroundVoiceWarning? = nil
+        warning: IOSForegroundVoiceWarning? = nil,
+        transcriptionReplayBlocked: Bool = false
     ) {
         self.observation = observation
         self.stage = stage
         self.outcome = outcome
         self.failure = failure
         self.warning = warning
+        self.transcriptionReplayBlocked = transcriptionReplayBlocked
     }
 }
 
@@ -260,6 +263,12 @@ struct IOSForegroundVoiceClient: Sendable {
     typealias FinishUtterance = @MainActor @Sendable (
         IOSForegroundVoiceAuthority
     ) -> IOSForegroundVoiceControlDisposition
+    typealias CancelUtterance = @MainActor @Sendable (
+        IOSForegroundVoiceAuthority
+    ) -> IOSForegroundVoiceControlDisposition
+    typealias CancelProcessing = @MainActor @Sendable (
+        IOSForegroundVoiceAuthority
+    ) -> IOSForegroundVoiceControlDisposition
     typealias ProviderConsentInvalidated = @MainActor @Sendable (
         IOSForegroundVoiceAuthority
     ) -> IOSForegroundVoiceControlDisposition
@@ -269,6 +278,8 @@ struct IOSForegroundVoiceClient: Sendable {
     let runStart: RunStart
     let run: Run
     let finishUtterance: FinishUtterance
+    let cancelUtterance: CancelUtterance
+    let cancelProcessing: CancelProcessing
     let providerConsentInvalidated: ProviderConsentInvalidated
     let inputLevel: InputLevel
 
@@ -277,6 +288,8 @@ struct IOSForegroundVoiceClient: Sendable {
         runStart: @escaping RunStart,
         run: @escaping Run,
         finishUtterance: @escaping FinishUtterance,
+        cancelUtterance: @escaping CancelUtterance = { _ in .unavailable },
+        cancelProcessing: @escaping CancelProcessing = { _ in .unavailable },
         providerConsentInvalidated: @escaping ProviderConsentInvalidated = {
             _ in .unavailable
         },
@@ -286,6 +299,8 @@ struct IOSForegroundVoiceClient: Sendable {
         self.runStart = runStart
         self.run = run
         self.finishUtterance = finishUtterance
+        self.cancelUtterance = cancelUtterance
+        self.cancelProcessing = cancelProcessing
         self.providerConsentInvalidated = providerConsentInvalidated
         self.inputLevel = inputLevel
     }
@@ -637,6 +652,18 @@ final class IOSForegroundVoiceController {
         }
         cancellationRequested = true
         cancellationKind = kind
+        if case .ordinary = kind, let authority = activeAuthority {
+            // Only the explicit Cancel Start / Cancel Utterance action grants
+            // destructive cleanup authority. Task cancellation by itself is
+            // an ownership interruption and must preserve captured audio.
+            _ = client.cancelUtterance(authority)
+        } else if case .processing = kind,
+                  let authority = activeAuthority {
+            // Processing cancellation has separate authority from capture
+            // Discard. It revokes the exact provider child and its late
+            // result, while durable dispatch evidence decides retryability.
+            _ = client.cancelProcessing(authority)
+        }
         publish(
             phase: presentation.phase,
             stage: presentation.stage,

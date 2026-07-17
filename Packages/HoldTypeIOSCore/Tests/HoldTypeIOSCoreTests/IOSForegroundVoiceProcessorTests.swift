@@ -72,13 +72,13 @@ struct IOSForegroundVoiceProcessorTests {
         )
     }
 
-    @Test func providerFailurePersistsFailedAndOnlyExplicitRetryReplays()
+    @Test func definitiveProviderFailureAllowsOnlyExplicitRetry()
         async throws {
         let fixture = try await ProcessorFixture()
         defer { fixture.removeFiles() }
         let providerSequence = ProcessorTranscriptionSequence(
             outcomes: [
-                .failure(.networkUnavailable),
+                .failure(.rateLimited),
                 .success("Explicit retry result"),
             ]
         )
@@ -92,7 +92,7 @@ struct IOSForegroundVoiceProcessorTests {
 
         guard case .retryAvailable(
             let failed,
-            failure: .networkUnavailable,
+            failure: .providerUnavailable,
             stage: .transcription
         ) = await processor.process(fixture.request()) else {
             Issue.record("Expected one durable failed Pending.")
@@ -134,6 +134,128 @@ struct IOSForegroundVoiceProcessorTests {
             providerSequence.models
                 == [fixture.pending.transcriptionModel, "current-retry-model"]
         )
+    }
+
+    @Test
+    func ambiguousDispatchedFailuresBlockTranscriptionReplayAcrossRelaunch()
+        async throws {
+        let cases: [(
+            OpenAITranscriptionServiceError,
+            IOSForegroundVoiceProcessingFailure
+        )] = [
+            (.networkUnavailable, .networkUnavailable),
+            (.timedOut, .timedOut),
+            (.networkFailure, .networkFailure),
+            (.cancelled, .cancelled),
+        ]
+
+        for (providerError, expectedFailure) in cases {
+            let fixture = try await ProcessorFixture()
+            defer { fixture.removeFiles() }
+            let calls = ProcessorCallLog()
+            let processor = fixture.makeProcessor(
+                provider: provider(
+                    transcribe: { _, _ in
+                        calls.record("transcription")
+                        throw providerError
+                    }
+                )
+            )
+
+            guard case .retryAvailable(
+                let failed,
+                failure: let failure,
+                stage: .transcription
+            ) = await processor.process(fixture.request()) else {
+                Issue.record("Expected durable ambiguous failure.")
+                continue
+            }
+            #expect(failure == expectedFailure)
+            #expect(failed.phase == .failed)
+            #expect(failed.transcriptionReplayBlocked)
+            #expect(calls.events == ["transcription"])
+
+            #expect(
+                await fixture.persistenceOwner.recoverContainingAppLifecycle(
+                    .processLaunch
+                ) == .complete
+            )
+            let relaunched = try #require(
+                try await fixture.persistenceOwner.load()?.recording
+            )
+            #expect(relaunched.transcriptionReplayBlocked)
+            await #expect(
+                throws: IOSV1ForegroundVoicePersistenceError
+                    .invalidTransition
+            ) {
+                _ = try await fixture.persistenceOwner.retryTranscription(
+                    expected: IOSV1PendingRecordingExpectation(
+                        recording: relaunched
+                    ),
+                    transcriptionID: UUID(),
+                    transcriptionConfiguration: .defaults
+                )
+            }
+            #expect(calls.events == ["transcription"])
+        }
+    }
+
+    @Test
+    func explicitCancelAfterDispatchRejectsHostileSuccessAndBlocksReplay()
+        async throws {
+        let fixture = try await ProcessorFixture()
+        defer { fixture.removeFiles() }
+        let cancellationAuthority =
+            IOSForegroundVoiceProcessingCancellationAuthority()
+        let hostileProvider = ProcessorCancellationHostileProvider()
+        let processor = fixture.makeProcessor(
+            provider: provider(
+                transcribe: { _, _ in
+                    await hostileProvider.transcribe()
+                }
+            )
+        )
+        let task = Task {
+            await processor.process(
+                fixture.request(
+                    cancellationAuthority: cancellationAuthority
+                )
+            )
+        }
+
+        await hostileProvider.waitUntilLaunched()
+        cancellationAuthority.cancelExplicitly()
+        task.cancel()
+        hostileProvider.returnSuccess()
+
+        guard case .retryAvailable(
+            let failed,
+            failure: .cancelled,
+            stage: .transcription
+        ) = await task.value else {
+            Issue.record("Expected one outcome-uncertain Pending.")
+            return
+        }
+        #expect(failed.phase == .failed)
+        #expect(failed.transcriptionReplayBlocked)
+        #expect(try await fixture.persistenceOwner.load()?.recording == failed)
+        #expect(
+            try await fixture.persistenceOwner.loadLatestResult()
+                == .absent
+        )
+        let history = try await IOSAcceptedTextHistoryRepository(
+            applicationSupportDirectoryURL: fixture.root
+        ).load()
+        #expect(history.entries.isEmpty)
+        await #expect(
+            throws: IOSV1ForegroundVoicePersistenceError.invalidTransition
+        ) {
+            _ = try await fixture.persistenceOwner.retryTranscription(
+                expected: IOSV1PendingRecordingExpectation(recording: failed),
+                transcriptionID: UUID(),
+                transcriptionConfiguration: .defaults
+            )
+        }
     }
 
     @Test func correctionFailureIsFailOpenAndCredentialRejectionIsRecorded()
@@ -800,7 +922,9 @@ private final class ProcessorFixture: @unchecked Sendable {
         mode: IOSForegroundVoiceProcessingMode = .initial,
         settings: IOSAppSettings? = nil,
         forcesTextCorrection: Bool = false,
-        consentObservation: IOSV1ProviderConsentObservation? = nil
+        consentObservation: IOSV1ProviderConsentObservation? = nil,
+        cancellationAuthority:
+            IOSForegroundVoiceProcessingCancellationAuthority = .init()
     ) -> IOSForegroundVoiceProcessingRequest {
         IOSForegroundVoiceProcessingRequest(
             sessionID: UUID(),
@@ -810,7 +934,8 @@ private final class ProcessorFixture: @unchecked Sendable {
             library: library,
             credential: credential,
             consentObservation: consentObservation ?? acceptedConsent,
-            forcesTextCorrection: forcesTextCorrection
+            forcesTextCorrection: forcesTextCorrection,
+            cancellationAuthority: cancellationAuthority
         )
     }
 
@@ -961,9 +1086,13 @@ private final class CommitThenThrowPersistence:
     }
 
     func markFailed(
-        expected: IOSV1PendingRecordingExpectation
+        expected: IOSV1PendingRecordingExpectation,
+        transcriptionReplayBlocked: Bool
     ) async throws -> IOSV1PendingRecording {
-        try await base.markFailed(expected: expected)
+        try await base.markFailed(
+            expected: expected,
+            transcriptionReplayBlocked: transcriptionReplayBlocked
+        )
     }
 
     func accept(
@@ -994,6 +1123,37 @@ private final class CommitThenThrowPersistence:
             injectedFailure = true
             return true
         }
+    }
+}
+
+private final class ProcessorCancellationHostileProvider:
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var launched = false
+    private var continuation: CheckedContinuation<String, Never>?
+
+    func transcribe() async -> String {
+        await withCheckedContinuation { continuation in
+            lock.withLock {
+                launched = true
+                self.continuation = continuation
+            }
+        }
+    }
+
+    func waitUntilLaunched() async {
+        while !lock.withLock({ launched }) {
+            await Task.yield()
+        }
+    }
+
+    func returnSuccess() {
+        let continuation = lock.withLock {
+            let continuation = self.continuation
+            self.continuation = nil
+            return continuation
+        }
+        continuation?.resume(returning: "Late cancelled success")
     }
 }
 

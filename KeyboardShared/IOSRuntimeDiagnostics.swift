@@ -36,6 +36,19 @@ nonisolated enum IOSDiagnosticVoiceStopReason: String, Sendable {
     case maximumDuration = "maximum_duration"
 }
 
+nonisolated enum IOSDiagnosticVoiceDurability: String, Sendable {
+    case none
+    case recoverableCapture = "recoverable_capture"
+    case discardOnlyCapture = "discard_only_capture"
+    case pendingRecording = "pending_recording"
+    case blocked
+}
+
+nonisolated enum IOSDiagnosticProviderAuthority: String, Sendable {
+    case granted
+    case absent
+}
+
 nonisolated enum IOSDiagnosticProviderMode: String, Sendable {
     case initial
     case retry
@@ -166,6 +179,12 @@ nonisolated enum IOSRuntimeDiagnosticEvent: Sendable {
     )
     case voiceRecordingStarted(origin: IOSDiagnosticVoiceOrigin)
     case voiceStopRequested(IOSDiagnosticVoiceStopReason)
+    case voiceStopResolved(
+        reason: IOSDiagnosticVoiceStopReason,
+        durability: IOSDiagnosticVoiceDurability,
+        providerAuthority: IOSDiagnosticProviderAuthority,
+        attempt: IOSDiagnosticCorrelationTag?
+    )
     case voiceRecordingStopped(IOSDiagnosticDurationBucket)
     case voiceCompleted(IOSDiagnosticOutcome)
     case audio(IOSDiagnosticAudioEvent)
@@ -194,7 +213,8 @@ nonisolated enum IOSRuntimeDiagnosticEvent: Sendable {
         case .appLaunched, .scenePhase:
             "lifecycle"
         case .voiceStartRequested, .voiceRecordingStarted,
-             .voiceStopRequested, .voiceRecordingStopped, .voiceCompleted:
+             .voiceStopRequested, .voiceStopResolved,
+             .voiceRecordingStopped, .voiceCompleted:
             "voice"
         case .audio:
             "audio"
@@ -220,6 +240,8 @@ nonisolated enum IOSRuntimeDiagnosticEvent: Sendable {
             "voice_recording_started"
         case .voiceStopRequested:
             "voice_stop_requested"
+        case .voiceStopResolved:
+            "voice_stop_resolved"
         case .voiceRecordingStopped:
             "voice_recording_stopped"
         case .voiceCompleted:
@@ -272,6 +294,17 @@ nonisolated enum IOSRuntimeDiagnosticEvent: Sendable {
             ["origin=\(origin.rawValue)"]
         case .voiceStopRequested(let reason):
             ["reason=\(reason.rawValue)"]
+        case .voiceStopResolved(
+            let reason,
+            let durability,
+            let providerAuthority,
+            let attempt
+        ):
+            [
+                "reason=\(reason.rawValue)",
+                "durability=\(durability.rawValue)",
+                "provider_authority=\(providerAuthority.rawValue)",
+            ] + (attempt.map { ["attempt_tag=\($0.formatted)"] } ?? [])
         case .voiceRecordingStopped(let duration):
             ["duration_bucket=\(duration.rawValue)"]
         case .voiceCompleted(let outcome),

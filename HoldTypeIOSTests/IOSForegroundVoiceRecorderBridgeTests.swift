@@ -266,6 +266,48 @@ struct IOSForegroundVoiceRecorderBridgeTests {
     }
 
     @Test
+    func feedbackHandshakeMismatchPreservesAlreadyStartedCapture()
+        async throws {
+        let feedback = IOSForegroundVoiceFeedbackBridge(
+            driver: IOSForegroundVoiceFeedbackBridgeDriver(
+                prepareStartBoundary: { _, _ in .completed },
+                cancelStart: { _, _ in },
+                retainedCaptureDidBegin: { _ in false },
+                abandonReadyBoundary: { _ in true },
+                recorderDidClose: { _, _, _ in .feedbackSkipped },
+                cancelSuccessFeedback: { _ in }
+            )
+        )
+        #expect(await feedback.playStartBoundary(audioCuesEnabled: false))
+        var releaseCount = 0
+        let fixture = RecorderBridgeFixture()
+        fixture.stopResult = .completed(
+            IOSVoiceRecorderCompletedCapture(
+                durationMilliseconds: 500,
+                byteCount: 2_048,
+                release: { releaseCount += 1 }
+            )
+        )
+        let recording = try await fixture.makeBridge(feedback: feedback)
+            .makeRecording(
+                attemptID: UUID(),
+                outputIntent: .standard
+            )
+
+        #expect(await recording.start() == .failed)
+        #expect(fixture.stopReasons == [.interrupted])
+        guard case .completed(let capture) = await recording.stop(
+            .interrupted
+        ) else {
+            Issue.record("Expected preserved completed capture")
+            return
+        }
+        capture.release()
+        #expect(releaseCount == 1)
+        #expect(!feedback.hasActiveAttempt)
+    }
+
+    @Test
     func authoritativeInterruptedTerminalOverridesRequestedDoneFeedback()
         async throws {
         var closeDispositions:

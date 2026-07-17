@@ -217,6 +217,10 @@ final class IOSForegroundVoiceRuntime {
                 await persistenceOwner
                     .repairOrphanedCaptureAtProcessLaunch()
             },
+            repairInterruptedCaptureAfterRecorderStops: {
+                await persistenceOwner
+                    .repairInterruptedCaptureAfterRecorderStops()
+            },
             reconcileCaptureSources: {
                 await persistenceOwner.reconcileCaptureSourcesAtLaunch()
             },

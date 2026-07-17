@@ -449,7 +449,6 @@ final class IOSVoiceRecorderAdapter {
         case maximumDuration
         case recorderEnded
         case preserveFailure(IOSVoiceRecorderFailure)
-        case discardFailure(IOSVoiceRecorderFailure)
     }
 
     private final class Attempt {
@@ -706,8 +705,7 @@ final class IOSVoiceRecorderAdapter {
         } catch {
             return await failStart(
                 attempt,
-                failure: .recorderCreationFailed,
-                preserveSource: true
+                failure: .recorderCreationFailed
             )
         }
 
@@ -732,8 +730,7 @@ final class IOSVoiceRecorderAdapter {
             // preserved when checkpoint proof did not complete.
             return await failStart(
                 attempt,
-                failure: .checkpointFailed,
-                preserveSource: true
+                failure: .checkpointFailed
             )
         }
         markTaskCancellationIfNeeded(attempt)
@@ -744,8 +741,7 @@ final class IOSVoiceRecorderAdapter {
         guard let recorder = attempt.recorder else {
             return await failStart(
                 attempt,
-                failure: .recorderCreationFailed,
-                preserveSource: true
+                failure: .recorderCreationFailed
             )
         }
         let prepared = recorder.prepareToRecord()
@@ -761,8 +757,7 @@ final class IOSVoiceRecorderAdapter {
             // The post-prepare proof is also fail-closed under cancellation.
             return await failStart(
                 attempt,
-                failure: .checkpointFailed,
-                preserveSource: true
+                failure: .checkpointFailed
             )
         }
         markTaskCancellationIfNeeded(attempt)
@@ -772,8 +767,7 @@ final class IOSVoiceRecorderAdapter {
         guard prepared else {
             return await failStart(
                 attempt,
-                failure: .prepareFailed,
-                preserveSource: false
+                failure: .prepareFailed
             )
         }
 
@@ -788,8 +782,7 @@ final class IOSVoiceRecorderAdapter {
         guard didRecord else {
             return await failStart(
                 attempt,
-                failure: .recordFailed,
-                preserveSource: false
+                failure: .recordFailed
             )
         }
 
@@ -948,13 +941,16 @@ final class IOSVoiceRecorderAdapter {
 
     private func failStart(
         _ attempt: Attempt,
-        failure: IOSVoiceRecorderFailure,
-        preserveSource: Bool
+        failure: IOSVoiceRecorderFailure
     ) async -> IOSVoiceRecorderStartResult {
-        let reason: InternalStopReason = preserveSource
-            ? .preserveFailure(failure)
-            : .discardFailure(failure)
-        let result = await beginStop(attempt, reason: reason)
+        // AVAudioRecorder may already have emitted container headers or media
+        // before prepare/record reports false. Internal arming failure has no
+        // authority to unlink that unclassified source; live/launch repair
+        // proves exact zero or promotes positive bytes after recorder close.
+        let result = await beginStop(
+            attempt,
+            reason: .preserveFailure(failure)
+        )
         if case let .preserved(cleanupFailure) = result,
            cleanupFailure != failure {
             return .failed(cleanupFailure)
@@ -970,15 +966,23 @@ final class IOSVoiceRecorderAdapter {
         let effectiveReason: InternalStopReason
         let startResult: IOSVoiceRecorderStartResult
         switch reason {
-        case let .preserveFailure(failure),
-             let .discardFailure(failure):
+        case let .preserveFailure(failure):
             effectiveReason = reason
             startResult = .failed(failure)
         case .recorderEnded:
             effectiveReason = .recorderEnded
             startResult = .failed(.recorderEndedUnexpectedly)
-        case .done, .cancelled, .interrupted, .maximumDuration:
+        case .done:
+            effectiveReason = .done
+            startResult = .cancelled
+        case .cancelled:
             effectiveReason = .cancelled
+            startResult = .cancelled
+        case .interrupted:
+            effectiveReason = .interrupted
+            startResult = .cancelled
+        case .maximumDuration:
+            effectiveReason = .maximumDuration
             startResult = .cancelled
         }
         let stopResult = await beginStop(attempt, reason: effectiveReason)
@@ -992,7 +996,9 @@ final class IOSVoiceRecorderAdapter {
         guard Task.isCancelled, attempt.pendingStopReason == nil else {
             return
         }
-        attempt.pendingStopReason = .cancelled
+        // Task ownership is not user authority to discard captured audio.
+        // Explicit Cancel reaches the adapter through stop(..., .cancelled).
+        attempt.pendingStopReason = .interrupted
     }
 
     private func requestStartTaskCancellation(
@@ -1007,10 +1013,10 @@ final class IOSVoiceRecorderAdapter {
         switch phase {
         case .arming:
             if attempt.pendingStopReason == nil {
-                attempt.pendingStopReason = .cancelled
+                attempt.pendingStopReason = .interrupted
             }
         case .recording:
-            _ = claimStopAuthority(attempt, reason: .cancelled)
+            _ = claimStopAuthority(attempt, reason: .interrupted)
         case .idle, .stopping:
             break
         }
@@ -1071,7 +1077,7 @@ final class IOSVoiceRecorderAdapter {
             // prevents the workflow from treating this as Done or dispatching
             // provider work automatically.
             return await finalizeCompletedAttempt(attempt)
-        case .cancelled, .discardFailure:
+        case .cancelled:
             return await discardAttempt(attempt, reason: reason)
         }
     }
@@ -1137,7 +1143,7 @@ final class IOSVoiceRecorderAdapter {
         case .maximumDuration:
             return .invalid(.maximumDurationReached)
         case .done, .cancelled, .interrupted, .recorderEnded,
-             .preserveFailure, .discardFailure:
+             .preserveFailure:
             return .discarded
         }
     }
@@ -1202,8 +1208,7 @@ final class IOSVoiceRecorderAdapter {
             .maximumDuration
         case .recorderEnded:
             .recorderEndedUnexpectedly
-        case .preserveFailure(let failure),
-             .discardFailure(let failure):
+        case .preserveFailure(let failure):
             .failed(failure)
         }
     }

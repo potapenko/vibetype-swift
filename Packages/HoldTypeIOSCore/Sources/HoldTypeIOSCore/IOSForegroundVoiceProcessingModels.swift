@@ -8,6 +8,27 @@ public enum IOSForegroundVoiceProcessingMode: Equatable, Sendable {
     case retry
 }
 
+/// One exact provider chain's explicit user-cancellation signal. Generic task
+/// cancellation deliberately does not set this bit: only an admitted
+/// `Cancel Processing` action may revoke late-result authority. Dispatch
+/// evidence still decides whether the retained audio is ordinarily retryable.
+@_spi(HoldTypeIOSCore)
+public final class IOSForegroundVoiceProcessingCancellationAuthority:
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var explicitlyCancelled = false
+
+    public init() {}
+
+    public var isExplicitlyCancelled: Bool {
+        lock.withLock { explicitlyCancelled }
+    }
+
+    public func cancelExplicitly() {
+        lock.withLock { explicitlyCancelled = true }
+    }
+}
+
 /// One frozen provider-processing input assembled by the process-owned voice
 /// preflight. It is runtime-only and deliberately redacts its credential,
 /// Library content, Pending owner, and consent observation.
@@ -21,6 +42,8 @@ public struct IOSForegroundVoiceProcessingRequest: Sendable {
     let credential: IOSResolvedOpenAICredential?
     let consentObservation: IOSV1ProviderConsentObservation?
     let forcesTextCorrection: Bool
+    let cancellationAuthority:
+        IOSForegroundVoiceProcessingCancellationAuthority
 
     public init(
         sessionID: UUID,
@@ -30,7 +53,9 @@ public struct IOSForegroundVoiceProcessingRequest: Sendable {
         library: IOSLibraryContent,
         credential: IOSResolvedOpenAICredential?,
         consentObservation: IOSV1ProviderConsentObservation?,
-        forcesTextCorrection: Bool = false
+        forcesTextCorrection: Bool = false,
+        cancellationAuthority:
+            IOSForegroundVoiceProcessingCancellationAuthority = .init()
     ) {
         self.sessionID = sessionID
         self.pendingRecording = pendingRecording
@@ -40,6 +65,7 @@ public struct IOSForegroundVoiceProcessingRequest: Sendable {
         self.credential = credential
         self.consentObservation = consentObservation
         self.forcesTextCorrection = forcesTextCorrection
+        self.cancellationAuthority = cancellationAuthority
     }
 }
 

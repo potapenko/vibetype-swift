@@ -48,7 +48,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
     }
 
     @Test
-    func handoffCloseWaitsForSharedCaptureCancellation() async throws {
+    func handoffClosePreservesCaptureAfterRecorderStarts() async throws {
         let harness = KeyboardSessionHarness()
         let coordinator = harness.makeCoordinator()
         let owner = IOSKeyboardHandoffPresentationOwner(session: coordinator)
@@ -66,20 +66,21 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
             await owner.cancelActiveHandoff()
         }
         try await eventually {
-            harness.workflow.cancelRequestIDs == [harness.sessionID]
+            harness.workflow.interruptRequestIDs == [harness.sessionID]
         }
         #expect(owner.presentation?.phase == .listening)
 
-        harness.workflow.resolve(.cancelled)
+        harness.workflow.resolve(.failed)
         await cancellation.value
 
         #expect(owner.presentation == nil)
-        #expect(coordinator.presentation == .stopped)
+        #expect(coordinator.presentation == .failed("Try Again"))
         #expect(harness.states.map(\.phase) == [
             .ready,
             .listening,
-            .unavailable,
+            .failed,
         ])
+        #expect(harness.workflow.cancelRequestIDs.isEmpty)
     }
 
     @Test
@@ -209,7 +210,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
             await owner.start(second)
         }
         try await eventually {
-            harness.workflow.cancelRequestIDs == [harness.sessionID]
+            harness.workflow.interruptRequestIDs == [harness.sessionID]
         }
         harness.workflow.resolve(.cancelled)
         await replacement.value
@@ -259,6 +260,59 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
         ))
 
         harness.workflow.resolve(.cancelled)
+    }
+
+    @Test
+    func retainedCaptureBlocksSupersessionBeforeListeningPublication()
+        async throws {
+        let harness = KeyboardSessionHarness()
+        let coordinator = harness.makeCoordinator()
+        let first = harness.intent()
+
+        #expect(await coordinator.startHandoff(first) { _, _ in })
+        try await eventually {
+            harness.workflow.runRequestIDs == [harness.sessionID]
+        }
+        harness.workflow.retainedCaptureRequestIDs.insert(harness.sessionID)
+
+        let secondStarted = await coordinator.startHandoff(
+            harness.intent(requestID: UUID())
+        ) { _, _ in }
+
+        #expect(!secondStarted)
+        #expect(harness.workflow.interruptRequestIDs.isEmpty)
+        #expect(harness.workflow.cancelRequestIDs.isEmpty)
+        #expect(harness.retiredAttemptIDs.isEmpty)
+        #expect(harness.workflow.runRequestIDs == [harness.sessionID])
+
+        harness.workflow.resolve(.failed)
+    }
+
+    @Test
+    func listeningStatePublicationFailureDoesNotStopRetainedWorkflow()
+        async throws {
+        let harness = KeyboardSessionHarness()
+        harness.failingStatePhases = [.listening]
+        let coordinator = harness.makeCoordinator()
+
+        #expect(await coordinator.startHandoff(harness.intent()) { _, _ in })
+        try await eventually {
+            harness.workflow.runRequestIDs == [harness.sessionID]
+        }
+        harness.workflow.emit(.listening(.defaultValue))
+        try await eventually {
+            coordinator.presentation == .listening(harness.listeningDeadline)
+        }
+        #expect(harness.workflow.interruptRequestIDs.isEmpty)
+        #expect(harness.workflow.cancelRequestIDs.isEmpty)
+
+        harness.workflow.resolve(.accepted("Survived publication failure"))
+        try await eventually {
+            coordinator.presentation == .resultReady
+        }
+
+        #expect(harness.states.map(\.phase) == [.ready, .resultReady])
+        #expect(harness.states.last?.result == "Survived publication failure")
     }
 
     @Test
@@ -478,7 +532,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
             await owner.start(harness.intent(requestID: UUID()))
         }
         try await eventually {
-            harness.workflow.cancelRequestIDs == [harness.sessionID]
+            harness.workflow.interruptRequestIDs == [harness.sessionID]
         }
         harness.workflow.resolve(.cancelled)
         await replacement.value
@@ -508,7 +562,7 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
 
         owner.cancelFromSheet()
         try await eventually {
-            harness.workflow.cancelRequestIDs == [harness.sessionID]
+            harness.workflow.interruptRequestIDs == [harness.sessionID]
         }
 
         let replacement = Task { @MainActor in
@@ -727,6 +781,182 @@ struct IOSKeyboardDictationSessionCoordinatorTests {
     }
 
     @Test
+    func finishStatePublicationFailureDoesNotCancelProviderAuthority()
+        async throws {
+        let harness = KeyboardSessionHarness()
+        let coordinator = harness.makeCoordinator()
+        await coordinator.startSession()
+        let requestID = UUID()
+
+        harness.command = harness.command(.start, requestID: requestID)
+        coordinator.receiveCurrentCommand()
+        try await eventually { harness.workflow.runRequestIDs == [requestID] }
+        harness.workflow.emit(.listening(.defaultValue))
+        harness.failingStatePhases = [.processing]
+        harness.command = harness.command(.finish, requestID: requestID)
+        coordinator.receiveCurrentCommand()
+
+        #expect(coordinator.presentation == .processing)
+        #expect(harness.workflow.finishRequestIDs == [requestID])
+        #expect(harness.workflow.interruptRequestIDs.isEmpty)
+        #expect(harness.workflow.cancelRequestIDs.isEmpty)
+
+        harness.workflow.resolve(.accepted("Accepted despite projection"))
+        try await eventually { coordinator.presentation == .resultReady }
+        #expect(harness.states.map(\.phase) == [
+            .ready,
+            .listening,
+            .resultReady,
+        ])
+    }
+
+    @Test
+    func stopSessionDuringListeningPreservesInsteadOfCancelling() async throws {
+        let harness = KeyboardSessionHarness()
+        let coordinator = harness.makeCoordinator()
+        await coordinator.startSession()
+        let requestID = UUID()
+
+        harness.command = harness.command(.start, requestID: requestID)
+        coordinator.receiveCurrentCommand()
+        try await eventually { harness.workflow.runRequestIDs == [requestID] }
+        harness.workflow.emit(.listening(.defaultValue))
+        try await eventually {
+            coordinator.presentation == .listening(harness.listeningDeadline)
+        }
+
+        coordinator.stopSession()
+
+        #expect(harness.workflow.stopSessionRequestIDs == [requestID])
+        #expect(harness.workflow.cancelRequestIDs.isEmpty)
+        #expect(coordinator.presentation == .listening(
+            harness.listeningDeadline
+        ))
+
+        harness.workflow.resolve(.interruptedSaved)
+        try await eventually {
+            coordinator.presentation == .failed(
+                "Recording interrupted — saved to History"
+            )
+        }
+        #expect(harness.states.last?.phase == .failed)
+    }
+
+    @Test
+    func ambiguousTranscriptionShowsSavedNoticeWithoutTryAgain() async throws {
+        let harness = KeyboardSessionHarness()
+        let coordinator = harness.makeCoordinator()
+        await coordinator.startSession()
+        let requestID = UUID()
+
+        harness.command = harness.command(.start, requestID: requestID)
+        coordinator.receiveCurrentCommand()
+        try await eventually { harness.workflow.runRequestIDs == [requestID] }
+        harness.workflow.emit(.listening(.defaultValue))
+        harness.command = harness.command(.finish, requestID: requestID)
+        coordinator.receiveCurrentCommand()
+        try await eventually { coordinator.presentation == .processing }
+
+        harness.workflow.resolve(.transcriptionUncertainSaved)
+        try await eventually {
+            coordinator.presentation == .failed(
+                "Transcription outcome uncertain — recording saved to History"
+            )
+        }
+        #expect(harness.states.last?.phase == .failed)
+    }
+
+    @Test
+    func stopSessionDuringProcessingDoesNotCancelProviderResult() async throws {
+        let harness = KeyboardSessionHarness()
+        let coordinator = harness.makeCoordinator()
+        await coordinator.startSession()
+        let requestID = UUID()
+
+        harness.command = harness.command(.start, requestID: requestID)
+        coordinator.receiveCurrentCommand()
+        try await eventually { harness.workflow.runRequestIDs == [requestID] }
+        harness.workflow.emit(.listening(.defaultValue))
+        harness.command = harness.command(.finish, requestID: requestID)
+        coordinator.receiveCurrentCommand()
+        try await eventually { coordinator.presentation == .processing }
+
+        coordinator.stopSession()
+
+        #expect(harness.workflow.stopSessionRequestIDs == [requestID])
+        #expect(harness.workflow.cancelRequestIDs.isEmpty)
+        // The finalization/provider background assertion remains active until
+        // the workflow resolves; Stop Session only disarms warm reuse.
+        #expect(harness.endedBackgroundTaskIDs == [harness.backgroundTaskID])
+        harness.workflow.resolve(.accepted("Preserved after Stop Session"))
+        try await eventually { coordinator.presentation == .resultReady }
+        #expect(harness.states.last?.result == "Preserved after Stop Session")
+    }
+
+    @Test
+    func stopSessionFromResultReadyTearsDownProjectionImmediately()
+        async throws {
+        let harness = KeyboardSessionHarness()
+        let coordinator = harness.makeCoordinator()
+        await coordinator.startSession()
+        let requestID = UUID()
+
+        harness.command = harness.command(.start, requestID: requestID)
+        coordinator.receiveCurrentCommand()
+        try await eventually { harness.workflow.runRequestIDs == [requestID] }
+        harness.workflow.emit(.listening(.defaultValue))
+        harness.command = harness.command(.finish, requestID: requestID)
+        coordinator.receiveCurrentCommand()
+        harness.workflow.resolve(.accepted("Already durable in Latest"))
+        try await eventually { coordinator.presentation == .resultReady }
+
+        coordinator.stopSession()
+
+        #expect(coordinator.presentation == .stopped)
+        #expect(harness.states.last?.phase == .unavailable)
+        #expect(harness.workflow.stopSessionRequestIDs == [requestID])
+        #expect(harness.workflow.cancelRequestIDs.isEmpty)
+    }
+
+    @Test
+    func productionSupersessionNeverDiscardsPositiveRawCapture()
+        async throws {
+        let root = FileManager.default.temporaryDirectory.appending(
+            path: "holdtype-keyboard-supersession-\(UUID().uuidString)",
+            directoryHint: .isDirectory
+        )
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let persistence = IOSV1ForegroundVoicePersistenceOwner(
+            applicationSupportDirectoryURL: root
+        )
+        let attemptID = UUID()
+        let lease = try await persistence.createCapture(
+            attemptID: attemptID,
+            outputIntent: .standard
+        )
+        try lease.withTransientRecordingURL { url in
+            let handle = try FileHandle(forWritingTo: url)
+            try handle.write(contentsOf: Data([1, 2, 3, 4]))
+            try handle.close()
+        }
+        lease.release()
+
+        let retired = await IOSKeyboardHandoffSupersessionClient.live(
+            persistenceOwner: persistence
+        ).retire(UUID())
+
+        #expect(!retired)
+        #expect(
+            await persistence.reconcileCaptureSourcesAtLaunch()
+                == .recoverable(attemptID: attemptID)
+        )
+    }
+
+    @Test
     func deliveryClaimIsExclusiveAndAcknowledgementReusesWarmSession()
         async throws {
         let harness = KeyboardSessionHarness()
@@ -812,6 +1042,7 @@ private final class KeyboardSessionHarness {
     var retiredAttemptIDs: [UUID] = []
     var supersessionResults: [Bool] = []
     var preflightRequestIDs: [UUID] = []
+    var failingStatePhases: Set<HoldTypeIOS.KeyboardDictationStatePhase> = []
     var postCount = 0
     var expiryAction: (@MainActor () -> Void)?
     let backgroundTaskID = UIBackgroundTaskIdentifier(rawValue: 42)
@@ -855,6 +1086,9 @@ private final class KeyboardSessionHarness {
                 },
                 loadState: { [weak self] _ in self?.persistedState },
                 saveState: { [weak self] state in
+                    if self?.failingStatePhases.contains(state.phase) == true {
+                        throw KeyboardDictationBridgeStoreError.writeFailed
+                    }
                     self?.states.append(state)
                     self?.persistedState = state
                 },
@@ -932,7 +1166,10 @@ private final class KeyboardWorkflowHarness {
     private(set) var runActions: [HoldTypeIOS.KeyboardVoiceAction] = []
     private(set) var finishRequestIDs: [UUID] = []
     private(set) var cancelRequestIDs: [UUID] = []
+    private(set) var interruptRequestIDs: [UUID] = []
+    private(set) var stopSessionRequestIDs: [UUID?] = []
     private(set) var endWarmSessionCount = 0
+    var retainedCaptureRequestIDs: Set<UUID> = []
     var translationAvailable = true
     var suspendsTranslationAvailability = false
     private(set) var translationAvailabilityLoadCount = 0
@@ -957,6 +1194,17 @@ private final class KeyboardWorkflowHarness {
                 self?.cancelRequestIDs.append(requestID)
                 return self?.runRequestIDs.last == requestID
             },
+            interrupt: { [weak self] requestID in
+                self?.interruptRequestIDs.append(requestID)
+                return self?.runRequestIDs.last == requestID
+            },
+            stopSession: { [weak self] requestID in
+                self?.stopSessionRequestIDs.append(requestID)
+                self?.endWarmSessionCount += 1
+            },
+            ownsRetainedCapture: { [weak self] requestID in
+                self?.retainedCaptureRequestIDs.contains(requestID) == true
+            },
             endWarmSession: { [weak self] in
                 self?.endWarmSessionCount += 1
             },
@@ -967,6 +1215,10 @@ private final class KeyboardWorkflowHarness {
     }
 
     func emit(_ value: IOSKeyboardDictationWorkflowProgress) {
+        if case .listening = value,
+           let requestID = runRequestIDs.last {
+            retainedCaptureRequestIDs.insert(requestID)
+        }
         progress?(value)
     }
 
@@ -974,6 +1226,9 @@ private final class KeyboardWorkflowHarness {
         continuation?.resume(returning: value)
         continuation = nil
         progress = nil
+        if let requestID = runRequestIDs.last {
+            retainedCaptureRequestIDs.remove(requestID)
+        }
     }
 
     func releaseTranslationAvailability(_ value: Bool = true) {

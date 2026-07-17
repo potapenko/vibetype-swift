@@ -42,7 +42,8 @@ protocol IOSForegroundVoicePersisting: Sendable {
     ) async throws -> IOSV1PendingRecording
 
     func markFailed(
-        expected: IOSV1PendingRecordingExpectation
+        expected: IOSV1PendingRecordingExpectation,
+        transcriptionReplayBlocked: Bool
     ) async throws -> IOSV1PendingRecording
 
     func accept(
@@ -416,7 +417,8 @@ public actor IOSForegroundVoiceProcessor {
         operationID: UUID,
         progress: @escaping IOSForegroundVoiceProcessingProgressHandler
     ) async -> IOSForegroundVoiceProcessingResolution {
-        guard activeOperationID == operationID, !Task.isCancelled else {
+        guard activeOperationID == operationID,
+              !processingWasCancelled(context) else {
             return .notStarted(.cancelled)
         }
 
@@ -452,7 +454,8 @@ public actor IOSForegroundVoiceProcessor {
                     let failed = try await persistenceOwner.markFailed(
                         expected: IOSV1PendingRecordingExpectation(
                             recording: context.pendingRecording
-                        )
+                        ),
+                        transcriptionReplayBlocked: false
                     )
                     dispatchSource = try await canonicalRecording(
                         continuing: failed,
@@ -514,7 +517,8 @@ public actor IOSForegroundVoiceProcessor {
                     stage: .transcription
                 )
             }
-            guard activeOperationID == operationID, !Task.isCancelled else {
+            guard activeOperationID == operationID,
+                  !processingWasCancelled(context) else {
                 return await persistFailure(
                     from: transcribing,
                     failure: .cancelled,
@@ -522,7 +526,8 @@ public actor IOSForegroundVoiceProcessor {
                 )
             }
             await progress(.transcription)
-            guard activeOperationID == operationID, !Task.isCancelled else {
+            guard activeOperationID == operationID,
+                  !processingWasCancelled(context) else {
                 return await persistFailure(
                     from: transcribing,
                     failure: .cancelled,
@@ -542,10 +547,25 @@ public actor IOSForegroundVoiceProcessor {
                 )
             }
 
+            let providerDispatchEvidence =
+                IOSForegroundVoiceProviderDispatchEvidence()
+            let provider = provider
+            let instrumentedProvider =
+                IOSForegroundVoiceOpenAIProviderOperations(
+                    transcribe: { request, credential in
+                        providerDispatchEvidence.recordLaunch()
+                        return try await provider.transcribe(
+                            request,
+                            credential
+                        )
+                    },
+                    correct: provider.correct,
+                    translate: provider.translate
+                )
             let executor = IOSForegroundVoiceTranscriptionExecutor(
                 authorization: authorization,
                 stageExecutor: stageExecutor,
-                provider: provider,
+                provider: instrumentedProvider,
                 credential: credential,
                 promptComposition: context.promptComposition
             )
@@ -570,14 +590,32 @@ public actor IOSForegroundVoiceProcessor {
                 }
                 return await persistFailure(
                     from: transcribing,
-                    failure: Task.isCancelled ? .cancelled : failure,
-                    stage: .transcription
+                    failure: processingWasCancelled(context)
+                        ? .cancelled : failure,
+                    stage: .transcription,
+                    transcriptionReplayBlocked:
+                        providerDispatchEvidence.didLaunch
+                        && (processingWasCancelled(context)
+                            || Self.hasAmbiguousTranscriptionOutcome(error))
                 )
             } catch {
                 return await persistFailure(
                     from: transcribing,
-                    failure: Task.isCancelled ? .cancelled : .invalidRecording,
-                    stage: .transcription
+                    failure: processingWasCancelled(context)
+                        ? .cancelled : .invalidRecording,
+                    stage: .transcription,
+                    transcriptionReplayBlocked:
+                        providerDispatchEvidence.didLaunch
+                )
+            }
+
+            guard !processingWasCancelled(context) else {
+                return await persistFailure(
+                    from: transcribing,
+                    failure: .cancelled,
+                    stage: .transcription,
+                    transcriptionReplayBlocked:
+                        providerDispatchEvidence.didLaunch
                 )
             }
 
@@ -596,7 +634,7 @@ public actor IOSForegroundVoiceProcessor {
                 // checkpoint write into an audio-authorized failed retry.
                 return .notStarted(.localPersistence)
             }
-            guard !Task.isCancelled else {
+            guard !processingWasCancelled(context) else {
                 return await persistFailure(
                     from: postProcessing,
                     failure: .cancelled,
@@ -605,7 +643,7 @@ public actor IOSForegroundVoiceProcessor {
             }
         }
         await progress(.postProcessing)
-        guard !Task.isCancelled else {
+        guard !processingWasCancelled(context) else {
             return await persistFailure(
                 from: postProcessing,
                 failure: .cancelled,
@@ -640,7 +678,7 @@ public actor IOSForegroundVoiceProcessor {
             )
         }
         await progress(.outputDelivery)
-        guard !Task.isCancelled else {
+        guard !processingWasCancelled(context) else {
             return await persistFailure(
                 from: outputDelivery,
                 failure: .cancelled,
@@ -662,6 +700,14 @@ public actor IOSForegroundVoiceProcessor {
             return await persistFailure(
                 from: outputDelivery,
                 failure: .invalidConfiguration,
+                stage: .outputDelivery
+            )
+        }
+
+        guard !processingWasCancelled(context) else {
+            return await persistFailure(
+                from: outputDelivery,
+                failure: .cancelled,
                 stage: .outputDelivery
             )
         }
@@ -700,7 +746,7 @@ public actor IOSForegroundVoiceProcessor {
         from recording: IOSV1PendingRecording,
         context: IOSForegroundVoicePipelineContext
     ) async -> IOSForegroundVoicePostProcessingResolution {
-        guard !Task.isCancelled else {
+        guard !processingWasCancelled(context) else {
             return .failure(.cancelled, recording)
         }
         guard let stage = recording.textCheckpointStage,
@@ -745,7 +791,7 @@ public actor IOSForegroundVoiceProcessor {
                     return .failure(.localPersistence, checkpointed)
                 }
                 source = await correctedTranscript(retained, context: context)
-                guard !Task.isCancelled else {
+                guard !processingWasCancelled(context) else {
                     return .failure(.cancelled, checkpointed)
                 }
             }
@@ -762,7 +808,7 @@ public actor IOSForegroundVoiceProcessor {
         recording: IOSV1PendingRecording,
         context: IOSForegroundVoicePipelineContext
     ) async -> IOSForegroundVoicePostProcessingResolution {
-        guard !Task.isCancelled else {
+        guard !processingWasCancelled(context) else {
             return .failure(.cancelled, recording)
         }
         let processedText = postProcessor.process(
@@ -939,7 +985,9 @@ public actor IOSForegroundVoiceProcessor {
                 IOSForegroundVoiceProviderFailureMapper.translation($0)
             }
         )
-        guard !Task.isCancelled else { return .failure(.cancelled) }
+        guard !processingWasCancelled(context) else {
+            return .failure(.cancelled)
+        }
         switch outcome {
         case .success(let translated):
             guard context.postProcessingConfiguration
@@ -983,7 +1031,8 @@ public actor IOSForegroundVoiceProcessor {
         }
         return await persistFailure(
             from: current,
-            failure: Task.isCancelled ? .cancelled : .localPersistence,
+            failure: processingWasCancelled(context)
+                ? .cancelled : .localPersistence,
             stage: .transcription
         )
     }
@@ -1122,7 +1171,8 @@ public actor IOSForegroundVoiceProcessor {
     private func persistFailure(
         from source: IOSV1PendingRecording,
         failure: IOSForegroundVoiceProcessingFailure,
-        stage: VoiceAttemptStage
+        stage: VoiceAttemptStage,
+        transcriptionReplayBlocked: Bool = false
     ) async -> IOSForegroundVoiceProcessingResolution {
         let current: IOSV1PendingRecording
         do {
@@ -1134,7 +1184,9 @@ public actor IOSForegroundVoiceProcessor {
         } catch {
             return .notStarted(.localPersistence)
         }
-        if current.phase == .failed {
+        if current.phase == .failed,
+           (!transcriptionReplayBlocked
+                || current.transcriptionReplayBlocked) {
             return .retryAvailable(current, failure: failure, stage: stage)
         }
         guard current.phase != .acceptedCleanup else {
@@ -1144,7 +1196,10 @@ public actor IOSForegroundVoiceProcessor {
         let owner = persistenceOwner
         let expectation = IOSV1PendingRecordingExpectation(recording: current)
         let result = await Task {
-            try await owner.markFailed(expected: expectation)
+            try await owner.markFailed(
+                expected: expectation,
+                transcriptionReplayBlocked: transcriptionReplayBlocked
+            )
         }.result
         if case .success(let failed) = result,
            let canonical = try? await canonicalRecording(
@@ -1159,6 +1214,26 @@ public actor IOSForegroundVoiceProcessor {
             return .retryAvailable(observed, failure: failure, stage: stage)
         }
         return .notStarted(.localPersistence)
+    }
+
+    private static func hasAmbiguousTranscriptionOutcome(
+        _ error: IOSForegroundVoiceTranscriptionStageError
+    ) -> Bool {
+        switch error {
+        case .failure(.networkUnavailable), .failure(.networkFailure),
+             .failure(.timedOut), .failure(.cancelled),
+             .failure(.unknown), .cancelled:
+            true
+        case .failure, .authorizationUnavailable:
+            false
+        }
+    }
+
+    private func processingWasCancelled(
+        _ context: IOSForegroundVoicePipelineContext
+    ) -> Bool {
+        Task.isCancelled
+            || context.cancellationAuthority.isExplicitlyCancelled
     }
 
     private func canonicalRecording(
@@ -1274,6 +1349,7 @@ public actor IOSForegroundVoiceProcessor {
             ),
             credential: request.credential,
             consentObservation: request.consentObservation,
+            cancellationAuthority: request.cancellationAuthority,
             transcriptionID: makeUUID(),
             deliveryID: makeUUID()
         )
@@ -1335,6 +1411,18 @@ public actor IOSForegroundVoiceProcessor {
     }
 }
 
+private final class IOSForegroundVoiceProviderDispatchEvidence:
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var launched = false
+
+    var didLaunch: Bool { lock.withLock { launched } }
+
+    func recordLaunch() {
+        lock.withLock { launched = true }
+    }
+}
+
 private struct IOSForegroundVoicePipelineContext: Sendable {
     let sessionID: UUID
     let pendingRecording: IOSV1PendingRecording
@@ -1346,6 +1434,8 @@ private struct IOSForegroundVoicePipelineContext: Sendable {
     let promptComposition: TranscriptionPromptComposition
     let credential: IOSResolvedOpenAICredential?
     let consentObservation: IOSV1ProviderConsentObservation?
+    let cancellationAuthority:
+        IOSForegroundVoiceProcessingCancellationAuthority
     let transcriptionID: UUID
     let deliveryID: UUID
 
