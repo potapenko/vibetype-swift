@@ -1,6 +1,7 @@
 # macOS 1.0.4 Regression Fix Plan
 
-Status: ready for review; implementation has not started.
+Status: implementation and deterministic verification complete; final runtime
+and production-artifact gates remain open.
 
 ## Goal
 
@@ -14,7 +15,38 @@ candidate:
 - the fix must preserve the lost-key-up recovery added after 1.0.3 and must not
   roll back unrelated recording durability or iOS work.
 
-The implementation goal should not be started until this plan is approved.
+The implementation goal was approved and started on 2026-07-17.
+
+## Execution Status
+
+Completed on 2026-07-17:
+
+- the Right Command mapper now treats the event flags as authoritative for
+  normal key-down/key-up edges and uses HID state only for ambiguous release
+  reconciliation;
+- unchanged countdown values and equivalent indicator presentations are
+  suppressed;
+- the indicator panel keeps one hosting view and changes animation identity
+  only when it becomes visible again or changes phase;
+- focused hotkey, countdown, coordinator, and panel-host tests pass;
+- the full macOS test suite, macOS build, and `git diff --check` pass;
+- debug and packaged menu recording both completed live transcription, and the
+  recording indicator remained visible with continuous orbit motion for more
+  than 12 seconds;
+- a signed local 1.0.4 (5) preview DMG was built, mounted read-only, launched,
+  and exercised through the real menu bar UI.
+
+Open gates:
+
+- Computer Use cannot synthesize a Right Command hardware edge that reaches
+  the CGSession event tap. One physical packaged-app hold/release is still
+  required before the real-hotkey runtime gate can pass.
+- This Mac has an Apple Development identity but no Developer ID Application
+  identity or notarization profile. The local preview is intentionally marked
+  non-notarized and non-public, so it cannot replace the public 1.0.4 artifact.
+
+Detailed evidence is recorded in
+`docs/qa/macos/macos-1.0.4-regression-runtime-2026-07-17.md`.
 
 ## Confirmed Starting Evidence
 

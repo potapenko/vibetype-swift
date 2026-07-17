@@ -97,6 +97,9 @@ final class DictationSessionController {
 
     private(set) var recordingCountdown: VoiceSessionCountdown? {
         didSet {
+            guard oldValue != recordingCountdown else {
+                return
+            }
             recordingCountdownDidChange?(recordingCountdown)
         }
     }

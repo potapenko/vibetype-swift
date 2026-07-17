@@ -19,6 +19,8 @@ final class FloatingIndicatorCoordinator {
     private var appSettings: AppSettings
     private var cancellables: Set<AnyCancellable> = []
     private var isStarted = false
+    private var hasDeliveredPresentation = false
+    private var lastDeliveredPresentation: FloatingIndicatorPresentation?
 
     convenience init() {
         self.init(
@@ -86,16 +88,23 @@ final class FloatingIndicatorCoordinator {
 
         isStarted = false
         cancellables.removeAll()
+        hasDeliveredPresentation = false
+        lastDeliveredPresentation = nil
         presenter.hide()
     }
 
     private func update() {
-        presenter.update(
-            with: FloatingIndicatorPresentation.presentation(
-                for: dictationRuntime.status,
-                settings: appSettings,
-                recordingCountdown: dictationRuntime.recordingCountdown
-            )
+        let presentation = FloatingIndicatorPresentation.presentation(
+            for: dictationRuntime.status,
+            settings: appSettings,
+            recordingCountdown: dictationRuntime.recordingCountdown
         )
+        guard !hasDeliveredPresentation || presentation != lastDeliveredPresentation else {
+            return
+        }
+
+        hasDeliveredPresentation = true
+        lastDeliveredPresentation = presentation
+        presenter.update(with: presentation)
     }
 }

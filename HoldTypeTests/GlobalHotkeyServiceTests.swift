@@ -77,6 +77,40 @@ struct GlobalHotkeyServiceTests {
         #expect(mapper.isRightCommandPressed == false)
     }
 
+    @Test func rightCommandKeyDownUsesEventFlagsWhenPhysicalSnapshotIsStale() {
+        var mapper = RightCommandHotkeyEventMapper()
+
+        let keyDown = mapper.event(
+            type: .flagsChanged,
+            keyCode: Int64(kVK_RightCommand),
+            flags: [.maskCommand],
+            rightCommandPhysicalState: .released
+        )
+
+        #expect(keyDown == .keyDown())
+        #expect(mapper.isRightCommandPressed)
+    }
+
+    @Test func rightCommandKeyUpUsesEventFlagsWhenPhysicalSnapshotIsStale() {
+        var mapper = RightCommandHotkeyEventMapper()
+
+        _ = mapper.event(
+            type: .flagsChanged,
+            keyCode: Int64(kVK_RightCommand),
+            flags: [.maskCommand],
+            rightCommandPhysicalState: .released
+        )
+        let keyUp = mapper.event(
+            type: .flagsChanged,
+            keyCode: Int64(kVK_RightCommand),
+            flags: [],
+            rightCommandPhysicalState: .pressed
+        )
+
+        #expect(keyUp == .keyUp())
+        #expect(mapper.isRightCommandPressed == false)
+    }
+
     @Test func rightCommandMapperCarriesOptionAsTranslationIntentOnKeyDown() {
         var mapper = RightCommandHotkeyEventMapper()
 
@@ -219,7 +253,7 @@ struct GlobalHotkeyServiceTests {
         #expect(unrelatedKeyDown == nil)
     }
 
-    @Test func rightCommandReleaseDoesNotDependOnAggregateCommandFlag() {
+    @Test func rightCommandReleaseWithLeftCommandHeldUsesReconciliation() {
         var mapper = RightCommandHotkeyEventMapper()
 
         let keyDown = mapper.event(
@@ -228,16 +262,40 @@ struct GlobalHotkeyServiceTests {
             flags: [.maskCommand],
             rightCommandPhysicalState: .pressed
         )
-        let keyUpWhileLeftCommandRemainsPressed = mapper.event(
+        let ambiguousRelease = mapper.event(
             type: .flagsChanged,
             keyCode: Int64(kVK_RightCommand),
             flags: [.maskCommand],
             rightCommandPhysicalState: .released
         )
+        let confirmedRelease = mapper.reconcilePhysicalState(.released)
 
         #expect(keyDown == .keyDown())
-        #expect(keyUpWhileLeftCommandRemainsPressed == .keyUp())
+        #expect(ambiguousRelease == nil)
+        #expect(confirmedRelease == .keyUp())
         #expect(mapper.isRightCommandPressed == false)
+    }
+
+    @Test func rightCommandAmbiguousReleaseRecoversAfterStaleSnapshot() {
+        var mapper = RightCommandHotkeyEventMapper()
+
+        _ = mapper.event(
+            type: .flagsChanged,
+            keyCode: Int64(kVK_RightCommand),
+            flags: [.maskCommand],
+            rightCommandPhysicalState: .pressed
+        )
+        let ambiguousRelease = mapper.event(
+            type: .flagsChanged,
+            keyCode: Int64(kVK_RightCommand),
+            flags: [.maskCommand],
+            rightCommandPhysicalState: .pressed
+        )
+
+        #expect(ambiguousRelease == nil)
+        #expect(mapper.reconcilePhysicalState(.released) == nil)
+        #expect(mapper.reconcilePhysicalState(.released) == .keyUp())
+        #expect(mapper.reconcilePhysicalState(.released) == nil)
     }
 
     @Test func rightCommandPhysicalReconciliationRequiresTwoReleasedObservations() {

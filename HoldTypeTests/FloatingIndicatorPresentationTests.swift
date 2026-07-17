@@ -116,6 +116,97 @@ struct FloatingIndicatorPresentationTests {
     }
 
     @MainActor
+    @Test func coordinatorDoesNotRedeliverEquivalentPresentation() async {
+        let presenter = FakeFloatingIndicatorPresenter()
+        let runtime = makeRuntime(initialStatus: .recording)
+        let coordinator = FloatingIndicatorCoordinator(
+            dictationRuntime: runtime,
+            appSettingsStore: AppSettingsStore(userDefaults: makeUserDefaults()),
+            presenter: presenter
+        )
+
+        coordinator.start()
+        await yieldSeveralTimes()
+
+        #expect(presenter.presentations.count == 1)
+        #expect(presenter.lastPresentation?.phase == .recording)
+
+        coordinator.stop()
+    }
+
+    @MainActor
+    @Test func hostingModelKeepsAnimationIdentityForCountdownUpdates() {
+        let model = FloatingIndicatorHostingModel(
+            presentation: FloatingIndicatorPresentation(
+                phase: .recording,
+                title: "Recording"
+            )
+        )
+        let initialIdentity = model.state.animationIdentity
+
+        model.update(
+            with: FloatingIndicatorPresentation(
+                phase: .recording,
+                title: "Recording",
+                countdown: VoiceSessionCountdown(
+                    remainingWholeSeconds: 60,
+                    urgency: .amber
+                )
+            ),
+            restartsAnimation: false
+        )
+
+        #expect(model.state.animationIdentity == initialIdentity)
+        #expect(model.state.presentation.countdown?.remainingWholeSeconds == 60)
+
+        model.update(
+            with: FloatingIndicatorPresentation(
+                phase: .transcribing,
+                title: "Transcribing"
+            ),
+            restartsAnimation: false
+        )
+
+        #expect(model.state.animationIdentity == initialIdentity + 1)
+        #expect(model.state.presentation.phase == .transcribing)
+    }
+
+    @MainActor
+    @Test func panelControllerKeepsHostingViewAcrossVisibleUpdates() {
+        let controller = FloatingIndicatorPanelController()
+        defer { controller.hide() }
+
+        controller.update(
+            with: FloatingIndicatorPresentation(
+                phase: .recording,
+                title: "Recording"
+            )
+        )
+        let initialHostingViewIdentity = controller.hostingViewIdentity
+
+        controller.update(
+            with: FloatingIndicatorPresentation(
+                phase: .recording,
+                title: "Recording",
+                countdown: VoiceSessionCountdown(
+                    remainingWholeSeconds: 60,
+                    urgency: .amber
+                )
+            )
+        )
+        #expect(initialHostingViewIdentity != nil)
+        #expect(controller.hostingViewIdentity == initialHostingViewIdentity)
+
+        controller.update(
+            with: FloatingIndicatorPresentation(
+                phase: .transcribing,
+                title: "Transcribing"
+            )
+        )
+        #expect(controller.hostingViewIdentity == initialHostingViewIdentity)
+    }
+
+    @MainActor
     private func makeRuntime(initialStatus: DictationStatus) -> DictationRuntime {
         let controller = DictationSessionController(initialStatus: initialStatus)
         return DictationRuntime(
@@ -140,6 +231,13 @@ struct FloatingIndicatorPresentationTests {
                 return
             }
 
+            await Task.yield()
+        }
+    }
+
+    @MainActor
+    private func yieldSeveralTimes() async {
+        for _ in 0..<20 {
             await Task.yield()
         }
     }

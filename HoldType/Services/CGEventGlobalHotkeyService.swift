@@ -48,16 +48,26 @@ struct RightCommandHotkeyEventMapper {
             return outputIntentChangeEventIfNeeded(for: flags)
         }
 
-        // maskCommand is aggregate and stays set when Left Command remains held.
-        if rightCommandPhysicalState == .pressed, !isRightCommandPressed {
+        // The event flags are the authoritative edge for the normal path. A
+        // separately queried key-state snapshot may still describe the state
+        // before this event while the event tap callback is running.
+        let eventHasCommand = flags.contains(.maskCommand)
+        if eventHasCommand, !isRightCommandPressed {
             isRightCommandPressed = true
             consecutiveReleasedObservationCount = 0
             activeOutputIntent = outputIntent(for: flags)
             return .keyDown(outputIntent: activeOutputIntent)
         }
 
-        if rightCommandPhysicalState == .released, isRightCommandPressed {
+        if !eventHasCommand, isRightCommandPressed {
             return releaseIfPressed()
+        }
+
+        // maskCommand is aggregate and stays set when Left Command remains
+        // held. Treat the callback-time HID value as the first reconciliation
+        // sample instead of trusting one potentially stale read.
+        if rightCommandPhysicalState == .released, isRightCommandPressed {
+            return reconcilePhysicalState(.released)
         }
 
         return outputIntentChangeEventIfNeeded(for: flags)
@@ -141,7 +151,7 @@ final class CGEventGlobalHotkeyService: GlobalHotkeyService {
     init(
         rightCommandPhysicalStateProvider: @escaping RightCommandPhysicalStateProvider = {
             CGEventSource.keyState(
-                .combinedSessionState,
+                .hidSystemState,
                 key: CGKeyCode(kVK_RightCommand)
             ) ? .pressed : .released
         }

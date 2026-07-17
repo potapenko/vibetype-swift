@@ -3430,6 +3430,55 @@ struct DictationSessionControllerTests {
         #expect(monitor.stopCount == 1)
     }
 
+    @Test func recordingCountdownPublishesOnlyChangedValues() async {
+        let monitor = FakeRecordingDurationMonitor()
+        let controller = makeController(
+            recorder: FakeAudioRecorderService(),
+            transcriptionService: FakeControllerTranscriptionService(),
+            transcriptOutput: FakeTranscriptOutput(),
+            recordingDurationMonitor: monitor
+        )
+        var publishedCountdowns: [VoiceSessionCountdown?] = []
+        controller.recordingCountdownDidChange = { countdown in
+            publishedCountdowns.append(countdown)
+        }
+
+        await controller.performRecordingAction()
+        monitor.emit(elapsedWholeSecond: 1)
+        monitor.emit(elapsedWholeSecond: 239)
+
+        #expect(publishedCountdowns.isEmpty)
+
+        monitor.emit(elapsedWholeSecond: 240)
+        monitor.emit(elapsedWholeSecond: 240)
+        monitor.emit(elapsedWholeSecond: 241)
+
+        #expect(publishedCountdowns == [
+            VoiceSessionCountdown(
+                remainingWholeSeconds: 60,
+                urgency: .amber
+            ),
+            VoiceSessionCountdown(
+                remainingWholeSeconds: 59,
+                urgency: .amber
+            ),
+        ])
+
+        controller.cancelRecording()
+
+        #expect(publishedCountdowns == [
+            VoiceSessionCountdown(
+                remainingWholeSeconds: 60,
+                urgency: .amber
+            ),
+            VoiceSessionCountdown(
+                remainingWholeSeconds: 59,
+                urgency: .amber
+            ),
+            nil,
+        ])
+    }
+
     @Test func selectedLimitIsFrozenForCurrentRecordingAndReloadedForNextRecording() async {
         var settings = AppSettings.defaults
         settings.recordingDurationLimit = RecordingDurationLimit(minutes: 1)
