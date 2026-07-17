@@ -31,29 +31,70 @@ struct IOSDiagnosticsTests {
         let requestID = UUID(
             uuidString: "A0000000-0000-0000-0000-000000000001"
         )!
+        let claimID = UUID(
+            uuidString: "A0000000-0000-0000-0000-000000000002"
+        )!
+        let sourceDocumentID = UUID(
+            uuidString: "A0000000-0000-0000-0000-000000000003"
+        )!
+        let currentDocumentID = UUID(
+            uuidString: "A0000000-0000-0000-0000-000000000004"
+        )!
+        let controllerLifetimeID = UUID(
+            uuidString: "A0000000-0000-0000-0000-000000000005"
+        )!
+        keyboard.record(.keyboardInsertInvoked(.latest))
         keyboard.record(
             .keyboardDelivery(
                 .insertReturned,
                 request: HoldTypeIOS.IOSDiagnosticCorrelationTag(requestID),
-                claim: nil,
-                proxyHasText: true
+                claim: HoldTypeIOS.IOSDiagnosticCorrelationTag(claimID),
+                sourceDocument: HoldTypeIOS.IOSDiagnosticCorrelationTag(
+                    sourceDocumentID
+                ),
+                currentDocument: HoldTypeIOS.IOSDiagnosticCorrelationTag(
+                    currentDocumentID
+                ),
+                controllerLifetime: HoldTypeIOS.IOSDiagnosticCorrelationTag(
+                    controllerLifetimeID
+                )
             )
         )
 
         let appLine = try #require(app.recentLines(limit: 10).first)
         let keyboardLines = try keyboard.recentLines(limit: 10)
         let keyboardCommandLine = try #require(keyboardLines.first)
-        let keyboardDeliveryLine = try #require(keyboardLines.last)
+        let keyboardInsertionLine = try #require(
+            keyboardLines.first(where: {
+                $0.contains("event=keyboard_insert_invoked")
+            })
+        )
+        let keyboardDeliveryLine = try #require(
+            keyboardLines.first(where: {
+                $0.contains("event=keyboard_delivery")
+            })
+        )
         #expect(appLine.contains("process=app"))
         #expect(appLine.contains("event=voice_start_requested"))
         #expect(appLine.contains("action=translate"))
         #expect(keyboardCommandLine.contains("process=keyboard"))
         #expect(keyboardCommandLine.contains("command=start"))
         #expect(keyboardCommandLine.contains("action=improve"))
+        #expect(keyboardInsertionLine.contains("kind=latest"))
+        #expect(!keyboardInsertionLine.contains("keyboard_result_inserted"))
         #expect(keyboardDeliveryLine.contains("event=keyboard_delivery"))
         #expect(keyboardDeliveryLine.contains("stage=insert_returned"))
         #expect(keyboardDeliveryLine.contains("request_tag="))
-        #expect(keyboardDeliveryLine.contains("proxy_has_text=true"))
+        #expect(keyboardDeliveryLine.contains("claim_tag="))
+        #expect(keyboardDeliveryLine.contains("source_document_tag="))
+        #expect(keyboardDeliveryLine.contains("current_document_tag="))
+        #expect(keyboardDeliveryLine.contains("controller_lifetime_tag="))
+        #expect(!keyboardDeliveryLine.contains("proxy_has_text="))
+        #expect(!keyboardDeliveryLine.contains(requestID.uuidString))
+        #expect(!keyboardDeliveryLine.contains(claimID.uuidString))
+        #expect(!keyboardDeliveryLine.contains(sourceDocumentID.uuidString))
+        #expect(!keyboardDeliveryLine.contains(currentDocumentID.uuidString))
+        #expect(!keyboardDeliveryLine.contains(controllerLifetimeID.uuidString))
         #expect(!appLine.contains("transcript"))
         #expect(!keyboardDeliveryLine.contains("typed_text"))
     }

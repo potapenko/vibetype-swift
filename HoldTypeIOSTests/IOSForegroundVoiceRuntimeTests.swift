@@ -11,6 +11,7 @@ struct IOSForegroundVoiceRuntimeTests {
         let publication = IOSVoiceRuntimeKeyboardPublicationProbe(
             result: false
         )
+        let historyRefresh = IOSVoiceRuntimeHistoryRefreshProbe()
         let draft = IOSVoiceRuntimeDraftAcceptanceProbe()
         let record = try IOSV1AcceptedOutputDeliveryRecord(
             resultID: UUID(),
@@ -26,10 +27,14 @@ struct IOSForegroundVoiceRuntimeTests {
             to: acceptance,
             draftInsertionMode: .append,
             acceptDraft: { await draft.accept($0, mode: $1) },
+            refreshAcceptedHistory: {
+                await historyRefresh.refresh()
+            },
             publish: { _ = await publication.publish() }
         )
         #expect(preserved == acceptance)
         #expect(await publication.callCount == 1)
+        #expect(await historyRefresh.callCount == 1)
         #expect(await draft.records == [record])
         #expect(await draft.modes == [.append])
 
@@ -39,10 +44,14 @@ struct IOSForegroundVoiceRuntimeTests {
         let unchanged = await IOSKeyboardSnapshotAcceptancePublication.apply(
             to: notStarted,
             acceptDraft: { await draft.accept($0, mode: $1) },
+            refreshAcceptedHistory: {
+                await historyRefresh.refresh()
+            },
             publish: { _ = await publication.publish() }
         )
         #expect(unchanged == notStarted)
         #expect(await publication.callCount == 1)
+        #expect(await historyRefresh.callCount == 1)
         #expect(await draft.records == [record])
     }
 
@@ -189,6 +198,14 @@ private actor IOSVoiceRuntimeDraftAcceptanceProbe {
     ) {
         records.append(record)
         modes.append(mode)
+    }
+}
+
+private actor IOSVoiceRuntimeHistoryRefreshProbe {
+    private(set) var callCount = 0
+
+    func refresh() {
+        callCount += 1
     }
 }
 

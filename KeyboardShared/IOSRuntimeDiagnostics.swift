@@ -92,6 +92,9 @@ nonisolated enum IOSDiagnosticKeyboardDeliveryStage: String, Sendable {
     case documentMissing = "document_missing"
     case documentMismatch = "document_mismatch"
     case documentMatched = "document_matched"
+    case controllerInactive = "controller_inactive"
+    case controllerLifetimeLost = "controller_lifetime_lost"
+    case deliveryPreviouslyDisqualified = "delivery_previously_disqualified"
     case claimRequested = "claim_requested"
     case grantAccepted = "grant_accepted"
     case grantRejected = "grant_rejected"
@@ -174,12 +177,14 @@ nonisolated enum IOSRuntimeDiagnosticEvent: Sendable {
         action: IOSDiagnosticVoiceAction,
         outcome: IOSDiagnosticOutcome
     )
-    case keyboardInserted(IOSDiagnosticInsertionKind)
+    case keyboardInsertInvoked(IOSDiagnosticInsertionKind)
     case keyboardDelivery(
         IOSDiagnosticKeyboardDeliveryStage,
         request: IOSDiagnosticCorrelationTag?,
         claim: IOSDiagnosticCorrelationTag?,
-        proxyHasText: Bool?
+        sourceDocument: IOSDiagnosticCorrelationTag?,
+        currentDocument: IOSDiagnosticCorrelationTag?,
+        controllerLifetime: IOSDiagnosticCorrelationTag?
     )
     case diagnosticsExported(IOSDiagnosticOutcome)
     case metricDiagnosticsReceived(IOSDiagnosticMetricKind, count: Int)
@@ -195,7 +200,7 @@ nonisolated enum IOSRuntimeDiagnosticEvent: Sendable {
             "audio"
         case .providerStarted, .providerCompleted:
             "provider"
-        case .keyboardState, .keyboardCommand, .keyboardInserted,
+        case .keyboardState, .keyboardCommand, .keyboardInsertInvoked,
              .keyboardDelivery:
             "keyboard"
         case .diagnosticsExported, .metricDiagnosticsReceived:
@@ -229,8 +234,8 @@ nonisolated enum IOSRuntimeDiagnosticEvent: Sendable {
             "keyboard_state_changed"
         case .keyboardCommand:
             "keyboard_command"
-        case .keyboardInserted:
-            "keyboard_result_inserted"
+        case .keyboardInsertInvoked:
+            "keyboard_insert_invoked"
         case .keyboardDelivery:
             "keyboard_delivery"
         case .diagnosticsExported:
@@ -285,18 +290,28 @@ nonisolated enum IOSRuntimeDiagnosticEvent: Sendable {
                 "action=\(action.rawValue)",
                 "outcome=\(outcome.rawValue)",
             ]
-        case .keyboardInserted(let kind):
+        case .keyboardInsertInvoked(let kind):
             ["kind=\(kind.rawValue)"]
         case .keyboardDelivery(
             let stage,
             let request,
             let claim,
-            let proxyHasText
+            let sourceDocument,
+            let currentDocument,
+            let controllerLifetime
         ):
             ["stage=\(stage.rawValue)"]
                 + (request.map { ["request_tag=\($0.formatted)"] } ?? [])
                 + (claim.map { ["claim_tag=\($0.formatted)"] } ?? [])
-                + (proxyHasText.map { ["proxy_has_text=\($0)"] } ?? [])
+                + (sourceDocument.map {
+                    ["source_document_tag=\($0.formatted)"]
+                } ?? [])
+                + (currentDocument.map {
+                    ["current_document_tag=\($0.formatted)"]
+                } ?? [])
+                + (controllerLifetime.map {
+                    ["controller_lifetime_tag=\($0.formatted)"]
+                } ?? [])
         case .metricDiagnosticsReceived(let kind, let count):
             ["kind=\(kind.rawValue)", "count=\(max(0, count))"]
         }

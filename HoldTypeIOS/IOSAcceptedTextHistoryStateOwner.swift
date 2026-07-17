@@ -152,6 +152,8 @@ final class IOSAcceptedTextHistoryStateOwner {
     private let client: IOSAcceptedTextHistoryClient
     @ObservationIgnored
     private let publishKeyboardSnapshot: PublishKeyboardSnapshot
+    @ObservationIgnored
+    private var presentationRefreshIsPending = false
 
     init(
         client: IOSAcceptedTextHistoryClient,
@@ -179,6 +181,24 @@ final class IOSAcceptedTextHistoryStateOwner {
 
     @discardableResult
     func refresh() async -> Bool {
+        await refresh(publishKeyboardSnapshotOnSuccess: true)
+    }
+
+    /// Reloads the observable History presentation after acceptance without
+    /// duplicating the runtime-owned keyboard snapshot publication. If a
+    /// user-initiated History operation is already active, one later reload
+    /// coalesces all acceptance notifications received during that operation.
+    func refreshPresentationAfterAcceptedResult() async {
+        guard operation == .idle else {
+            presentationRefreshIsPending = true
+            return
+        }
+        _ = await refresh(publishKeyboardSnapshotOnSuccess: false)
+    }
+
+    private func refresh(
+        publishKeyboardSnapshotOnSuccess: Bool
+    ) async -> Bool {
         guard begin(.refreshing) else { return false }
         let previous = state.lastConfirmed
         do {
@@ -186,7 +206,9 @@ final class IOSAcceptedTextHistoryStateOwner {
             guard complete() else { return false }
             state = .ready(record)
             notice = nil
-            _ = await publishKeyboardSnapshot()
+            if publishKeyboardSnapshotOnSuccess {
+                _ = await publishKeyboardSnapshot()
+            }
             return true
         } catch is CancellationError {
             _ = complete()
@@ -286,6 +308,12 @@ final class IOSAcceptedTextHistoryStateOwner {
     private func complete() -> Bool {
         guard operation != .idle else { return false }
         operation = .idle
+        if presentationRefreshIsPending {
+            presentationRefreshIsPending = false
+            Task { @MainActor [weak self] in
+                await self?.refreshPresentationAfterAcceptedResult()
+            }
+        }
         return true
     }
 }

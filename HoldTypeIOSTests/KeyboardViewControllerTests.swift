@@ -552,8 +552,8 @@ struct KeyboardViewControllerTests {
             )
         )
         controller.textDidChange(nil)
-        harness.proxy.documentIdentifier = UUID()
-        controller.textWillChange(nil)
+        harness.currentDocumentIdentifier = UUID()
+        controller.textDidChange(nil)
 
         harness.dictationState = try #require(
             KeyboardDictationStateRecord(
@@ -568,6 +568,14 @@ struct KeyboardViewControllerTests {
 
         #expect(harness.proxy.insertedTexts.isEmpty)
         #expect(statusText(in: controller.view) == "Ready")
+
+        let latestButton = try button(
+            "keyboard.brand-stage.latest",
+            in: controller.view
+        )
+        #expect(latestButton.isEnabled)
+        controller.keyboardView.onLatestRequested?()
+        #expect(harness.proxy.insertedTexts == ["Latest fallback text"])
     }
 
     @Test func resultFromAnotherRequestNeverInserts() throws {
@@ -604,7 +612,7 @@ struct KeyboardViewControllerTests {
         #expect(statusText(in: controller.view) == "Ready")
     }
 
-    @Test func recreatedExtensionReconnectsByDurableAttemptAndDocument() throws {
+    @Test func sameControllerRetainsEligibilityAcrossAppearanceCycle() throws {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
         let requestID = UUID()
         let deadline = now.addingTimeInterval(60)
@@ -622,6 +630,15 @@ struct KeyboardViewControllerTests {
         let controller = harness.makeController()
         controller.loadViewIfNeeded()
         controller.keyboardView.onMicrophoneRequested?()
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                requestID: requestID,
+                phase: .listening,
+                publishedAt: now,
+                expiresAt: deadline
+            )
+        )
+        controller.textDidChange(nil)
         controller.beginAppearanceTransition(false, animated: false)
         controller.endAppearanceTransition()
         controller.beginAppearanceTransition(true, animated: false)
@@ -652,6 +669,145 @@ struct KeyboardViewControllerTests {
 
         #expect(harness.proxy.insertedTexts == ["Latest fallback text"])
         #expect(statusText(in: controller.view) == "Ready")
+    }
+
+    @Test
+    func originatingControllerDifferentDocumentAppearanceStaysDisqualified()
+        throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sourceDocumentID = UUID()
+        let otherDocumentID = UUID()
+        let expiresAt = now.addingTimeInterval(60)
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: UUID(),
+                    phase: .ready,
+                    publishedAt: now,
+                    expiresAt: expiresAt
+                )
+            ),
+            requestID: sourceDocumentID
+        )
+        let controller = harness.makeController()
+        controller.keyboardView.onMicrophoneRequested?()
+        let start = try #require(harness.savedCommands.last)
+        harness.savedCommands.removeAll()
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: start.sourceDocumentID,
+                phase: .listening,
+                publishedAt: now,
+                expiresAt: expiresAt
+            )
+        )
+
+        controller.beginAppearanceTransition(false, animated: false)
+        controller.endAppearanceTransition()
+        harness.currentDocumentIdentifier = otherDocumentID
+        controller.beginAppearanceTransition(true, animated: false)
+        controller.endAppearanceTransition()
+
+        controller.beginAppearanceTransition(false, animated: false)
+        controller.endAppearanceTransition()
+        harness.currentDocumentIdentifier = sourceDocumentID
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: start.sourceDocumentID,
+                phase: .resultReady,
+                result: "Lifecycle A to B to A",
+                publishedAt: now,
+                expiresAt: expiresAt
+            )
+        )
+        controller.beginAppearanceTransition(true, animated: false)
+        controller.endAppearanceTransition()
+
+        #expect(harness.savedCommands.isEmpty)
+        #expect(harness.proxy.insertedTexts.isEmpty)
+        controller.keyboardView.onLatestRequested?()
+        #expect(harness.proxy.insertedTexts == ["Lifecycle A to B to A"])
+    }
+
+    @Test func hiddenControllerNeverClaimsOrConsumesDeliveryGrant() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let documentID = UUID()
+        let expiresAt = now.addingTimeInterval(60)
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: UUID(),
+                    phase: .ready,
+                    publishedAt: now,
+                    expiresAt: expiresAt
+                )
+            ),
+            requestID: documentID
+        )
+        let controller = harness.makeController()
+        controller.keyboardView.onMicrophoneRequested?()
+        let start = try #require(harness.savedCommands.last)
+        harness.savedCommands.removeAll()
+        let observe = try #require(harness.observedDictationStateChange)
+
+        controller.beginAppearanceTransition(false, animated: false)
+        controller.endAppearanceTransition()
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: start.sourceDocumentID,
+                phase: .resultReady,
+                result: "Deferred while hidden",
+                publishedAt: now,
+                expiresAt: expiresAt
+            )
+        )
+        observe()
+
+        #expect(harness.savedCommands.isEmpty)
+        #expect(harness.proxy.insertedTexts.isEmpty)
+
+        controller.beginAppearanceTransition(true, animated: false)
+        controller.endAppearanceTransition()
+        let claim = try #require(harness.savedCommands.last)
+        #expect(claim.kind == .claimDelivery)
+
+        controller.beginAppearanceTransition(false, animated: false)
+        controller.endAppearanceTransition()
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: start.sourceDocumentID,
+                deliveryClaimID: claim.deliveryClaimID,
+                phase: .resultReady,
+                result: "Deferred while hidden",
+                publishedAt: now,
+                expiresAt: expiresAt
+            )
+        )
+        observe()
+
+        #expect(harness.savedCommands.map(\.kind) == [.claimDelivery])
+        #expect(harness.proxy.insertedTexts.isEmpty)
+
+        controller.beginAppearanceTransition(true, animated: false)
+        controller.endAppearanceTransition()
+        #expect(harness.savedCommands.map(\.kind) == [.claimDelivery])
+        #expect(harness.proxy.insertedTexts.isEmpty)
+        controller.keyboardView.onLatestRequested?()
+        #expect(harness.proxy.insertedTexts == ["Deferred while hidden"])
     }
 
     @Test func recreatedExtensionNeverReplaysAnotherProcessDeliveryClaim()
@@ -801,9 +957,6 @@ struct KeyboardViewControllerTests {
         harness.dictationState = listeningState
         harness.now = startedAt.addingTimeInterval(290)
         controller.textDidChange(nil)
-        #expect(countdown.text == "10")
-        let expire = try #require(harness.scheduledExpiryActions.last)
-        expire()
         #expect(countdown.isHidden)
         #expect(statusText(in: controller.view) == "Ready")
     }
@@ -851,7 +1004,8 @@ struct KeyboardViewControllerTests {
         #expect(finish.sourceDocumentID == sourceDocumentID)
     }
 
-    @Test func consumedHandoffAnchorsReturnedDocumentAndInsertsOnce() throws {
+    @Test
+    func consumedHandoffReconnectsControlButNeverReanchorsDelivery() throws {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
         let requestID = UUID()
         let sourceDocumentID = UUID()
@@ -882,30 +1036,69 @@ struct KeyboardViewControllerTests {
         let recreatedController = harness.makeController()
         recreatedController.loadViewIfNeeded()
 
-        let claim = try #require(harness.savedCommands.last)
-        #expect(claim.kind == .claimDelivery)
+        #expect(harness.savedCommands.isEmpty)
         #expect(harness.proxy.insertedTexts.isEmpty)
 
-        harness.dictationState = try #require(
-            KeyboardDictationStateRecord(
-                sessionID: claim.sessionID,
-                attemptID: claim.attemptID,
-                requestID: requestID,
-                sourceDocumentID: sourceDocumentID,
-                deliveryClaimID: harness.deliveryClaimID,
-                phase: .resultReady,
-                result: "Returned document result",
-                publishedAt: now,
-                expiresAt: now.addingTimeInterval(60)
-            )
+        let latestButton = try button(
+            "keyboard.brand-stage.latest",
+            in: recreatedController.view
         )
-        recreatedController.textDidChange(nil)
+        #expect(latestButton.isEnabled)
+        recreatedController.keyboardView.onLatestRequested?()
 
-        #expect(harness.proxy.insertedTexts == ["Returned document result"])
-        #expect(harness.savedCommands.last?.kind == .acknowledgeDelivery)
+        #expect(harness.proxy.insertedTexts == ["Preserved in Latest"])
+        #expect(harness.savedCommands.isEmpty)
     }
 
-    @Test func documentChangeAfterReturnedAnchorPreventsInsertion() throws {
+    @Test func transientRecoveryTakesPriorityOverOlderHistoryLatest() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let requestID = UUID()
+        let sourceDocumentID = UUID()
+        let returnedDocumentID = UUID()
+        let olderLatest = try KeyboardBridgeItem.latest(
+            resultID: UUID(),
+            text: "Older History latest",
+            createdAt: now.addingTimeInterval(-60)
+        )
+        let harness = KeyboardControllerHarness(
+            now: now,
+            snapshot: try KeyboardBridgeSnapshot(
+                revision: 1,
+                publishedAt: now,
+                latest: olderLatest
+            ),
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: UUID(),
+                    attemptID: UUID(),
+                    requestID: requestID,
+                    sourceDocumentID: sourceDocumentID,
+                    phase: .resultReady,
+                    result: "Current transient result",
+                    publishedAt: now,
+                    expiresAt: now.addingTimeInterval(60)
+                )
+            ),
+            requestID: returnedDocumentID,
+            consumedHandoffIntent: try #require(
+                consumedHandoffIntent(
+                    requestID: requestID,
+                    sourceDocumentID: sourceDocumentID,
+                    now: now
+                )
+            )
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+
+        controller.keyboardView.onLatestRequested?()
+
+        #expect(harness.proxy.insertedTexts == ["Current transient result"])
+        #expect(harness.savedCommands.isEmpty)
+    }
+
+    @Test func recreatedControllerDocumentChangePreventsAutomaticInsertion()
+        throws {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
         let sessionID = UUID()
         let attemptID = UUID()
@@ -961,35 +1154,41 @@ struct KeyboardViewControllerTests {
         throws {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
         let sessionID = UUID()
-        let attemptID = UUID()
-        let requestID = UUID()
         let documentID = UUID()
+        let expiresAt = now.addingTimeInterval(60)
         let harness = KeyboardControllerHarness(
             now: now,
             dictationState: try #require(
                 KeyboardDictationStateRecord(
                     sessionID: sessionID,
-                    attemptID: attemptID,
-                    requestID: requestID,
-                    sourceDocumentID: documentID,
-                    phase: .resultReady,
-                    result: "Recovered document result",
+                    phase: .ready,
                     publishedAt: now,
-                    expiresAt: now.addingTimeInterval(60)
+                    expiresAt: expiresAt
                 )
             ),
-            requestID: documentID,
-            consumedHandoffIntent: try #require(
-                consumedHandoffIntent(
-                    requestID: requestID,
-                    sourceDocumentID: documentID,
-                    now: now
-                )
-            )
+            requestID: documentID
         )
-        harness.currentDocumentIdentifier = nil
         let controller = harness.makeController()
         controller.loadViewIfNeeded()
+        controller.keyboardView.onMicrophoneRequested?()
+        let start = try #require(harness.savedCommands.last)
+        #expect(start.kind == .start)
+
+        harness.savedCommands.removeAll()
+        harness.currentDocumentIdentifier = nil
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: start.sourceDocumentID,
+                phase: .resultReady,
+                result: "Recovered document result",
+                publishedAt: now,
+                expiresAt: expiresAt
+            )
+        )
+        controller.textDidChange(nil)
 
         #expect(harness.savedCommands.isEmpty)
         #expect(
@@ -1006,21 +1205,298 @@ struct KeyboardViewControllerTests {
 
         harness.dictationState = try #require(
             KeyboardDictationStateRecord(
-                sessionID: sessionID,
-                attemptID: attemptID,
-                requestID: requestID,
-                sourceDocumentID: documentID,
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: start.sourceDocumentID,
                 deliveryClaimID: harness.deliveryClaimID,
                 phase: .resultReady,
                 result: "Recovered document result",
                 publishedAt: now,
-                expiresAt: now.addingTimeInterval(60)
+                expiresAt: expiresAt
             )
         )
         controller.textDidChange(nil)
 
         #expect(harness.proxy.insertedTexts == ["Recovered document result"])
         #expect(harness.savedCommands.last?.kind == .acknowledgeDelivery)
+    }
+
+    @Test func missingSourceDocumentNeverClaimsAndUsesExplicitRecovery()
+        throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sessionID = UUID()
+        let requestID = UUID()
+        let expiresAt = now.addingTimeInterval(60)
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: sessionID,
+                    phase: .ready,
+                    publishedAt: now,
+                    expiresAt: expiresAt
+                )
+            ),
+            requestID: requestID
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+        harness.currentDocumentIdentifier = nil
+        controller.keyboardView.onMicrophoneRequested?()
+        let start = try #require(harness.savedCommands.last)
+        #expect(start.sourceDocumentID == nil)
+
+        harness.savedCommands.removeAll()
+        harness.currentDocumentIdentifier = UUID()
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: nil,
+                phase: .resultReady,
+                result: "Explicit recovery",
+                publishedAt: now,
+                expiresAt: expiresAt
+            )
+        )
+        controller.textDidChange(nil)
+
+        #expect(harness.savedCommands.isEmpty)
+        #expect(harness.scheduledDocumentIdentifierRetryActions.isEmpty)
+        #expect(harness.proxy.insertedTexts.isEmpty)
+        let latestButton = try button(
+            "keyboard.brand-stage.latest",
+            in: controller.view
+        )
+        #expect(latestButton.isEnabled)
+
+        controller.keyboardView.onLatestRequested?()
+        #expect(harness.proxy.insertedTexts == ["Explicit recovery"])
+        #expect(harness.savedCommands.isEmpty)
+    }
+
+    @Test func documentChangeAfterClaimPreventsInsertionAndAcknowledgement()
+        throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sessionID = UUID()
+        let documentID = UUID()
+        let expiresAt = now.addingTimeInterval(60)
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: sessionID,
+                    phase: .ready,
+                    publishedAt: now,
+                    expiresAt: expiresAt
+                )
+            ),
+            requestID: documentID
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+        controller.keyboardView.onMicrophoneRequested?()
+        let start = try #require(harness.savedCommands.last)
+        harness.savedCommands.removeAll()
+
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: start.sourceDocumentID,
+                phase: .resultReady,
+                result: "Claimed result",
+                publishedAt: now,
+                expiresAt: expiresAt
+            )
+        )
+        controller.textDidChange(nil)
+        let claim = try #require(harness.savedCommands.last)
+        #expect(claim.kind == .claimDelivery)
+
+        harness.currentDocumentIdentifier = UUID()
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: start.sourceDocumentID,
+                deliveryClaimID: claim.deliveryClaimID,
+                phase: .resultReady,
+                result: "Claimed result",
+                publishedAt: now,
+                expiresAt: expiresAt
+            )
+        )
+        controller.textDidChange(nil)
+
+        #expect(harness.proxy.insertedTexts.isEmpty)
+        #expect(harness.savedCommands.map(\.kind) == [.claimDelivery])
+    }
+
+    @Test func grantedDeliveryUsesProxyThatPassedTheFinalIdentityGate()
+        throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sessionID = UUID()
+        let documentID = UUID()
+        let expiresAt = now.addingTimeInterval(60)
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: sessionID,
+                    phase: .ready,
+                    publishedAt: now,
+                    expiresAt: expiresAt
+                )
+            ),
+            requestID: documentID
+        )
+        let controller = harness.makeController()
+        controller.keyboardView.onMicrophoneRequested?()
+        let start = try #require(harness.savedCommands.last)
+        harness.savedCommands.removeAll()
+
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: start.sourceDocumentID,
+                phase: .resultReady,
+                result: "Captured proxy result",
+                publishedAt: now,
+                expiresAt: expiresAt
+            )
+        )
+        controller.textDidChange(nil)
+        let claim = try #require(harness.savedCommands.last)
+        #expect(claim.kind == .claimDelivery)
+
+        let replacementProxy = KeyboardDocumentProxySpy(
+            documentIdentifier: documentID
+        )
+        harness.replacementDocumentProxy = replacementProxy
+        harness.replaceDocumentProxyAfterIdentifierLoadCall =
+            harness.documentIdentifierOwnerIDs.count + 2
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: start.sourceDocumentID,
+                deliveryClaimID: claim.deliveryClaimID,
+                phase: .resultReady,
+                result: "Captured proxy result",
+                publishedAt: now,
+                expiresAt: expiresAt
+            )
+        )
+        let observe = try #require(harness.observedDictationStateChange)
+        observe()
+
+        #expect(harness.proxy.insertedTexts == ["Captured proxy result"])
+        #expect(replacementProxy.insertedTexts.isEmpty)
+        #expect(harness.savedCommands.last?.kind == .acknowledgeDelivery)
+    }
+
+    @Test func documentReturnAfterObservedMismatchDoesNotRestoreEligibility()
+        throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sessionID = UUID()
+        let documentID = UUID()
+        let expiresAt = now.addingTimeInterval(60)
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: sessionID,
+                    phase: .ready,
+                    publishedAt: now,
+                    expiresAt: expiresAt
+                )
+            ),
+            requestID: documentID
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+        controller.keyboardView.onMicrophoneRequested?()
+        let start = try #require(harness.savedCommands.last)
+        harness.savedCommands.removeAll()
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: start.sourceDocumentID,
+                phase: .listening,
+                publishedAt: now,
+                expiresAt: expiresAt
+            )
+        )
+        controller.textDidChange(nil)
+
+        harness.currentDocumentIdentifier = UUID()
+        controller.textDidChange(nil)
+        harness.currentDocumentIdentifier = documentID
+        controller.textDidChange(nil)
+        harness.dictationState = try #require(
+            KeyboardDictationStateRecord(
+                sessionID: start.sessionID,
+                attemptID: start.attemptID,
+                requestID: start.requestID,
+                sourceDocumentID: start.sourceDocumentID,
+                phase: .resultReady,
+                result: "A to B to A",
+                publishedAt: now,
+                expiresAt: expiresAt
+            )
+        )
+        controller.textDidChange(nil)
+
+        #expect(harness.savedCommands.isEmpty)
+        #expect(harness.proxy.insertedTexts.isEmpty)
+        controller.keyboardView.onLatestRequested?()
+        #expect(harness.proxy.insertedTexts == ["A to B to A"])
+    }
+
+    @Test func recreatedControllerWithSameDocumentCannotAutoInsert() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let requestID = UUID()
+        let documentID = UUID()
+        let harness = KeyboardControllerHarness(
+            now: now,
+            dictationState: try #require(
+                KeyboardDictationStateRecord(
+                    sessionID: UUID(),
+                    attemptID: UUID(),
+                    requestID: requestID,
+                    sourceDocumentID: documentID,
+                    phase: .resultReady,
+                    result: "Recreated controller result",
+                    publishedAt: now,
+                    expiresAt: now.addingTimeInterval(60)
+                )
+            ),
+            requestID: documentID,
+            consumedHandoffIntent: try #require(
+                consumedHandoffIntent(
+                    requestID: requestID,
+                    sourceDocumentID: documentID,
+                    now: now
+                )
+            )
+        )
+        let controller = harness.makeController()
+        controller.loadViewIfNeeded()
+
+        #expect(harness.savedCommands.isEmpty)
+        #expect(harness.proxy.insertedTexts.isEmpty)
+        controller.keyboardView.onLatestRequested?()
+        #expect(harness.proxy.insertedTexts == ["Recreated controller result"])
     }
 
     @Test func changedOrMissingDocumentCannotReconnectOrAutoInsert() throws {
@@ -1099,6 +1575,7 @@ struct KeyboardViewControllerTests {
         #expect(statusText(in: controller.view) == "Processing…")
 
         let expire = try #require(harness.scheduledExpiryActions.last)
+        harness.now = now.addingTimeInterval(60)
         expire()
         #expect(statusText(in: controller.view) == "Ready")
 
@@ -1107,7 +1584,7 @@ struct KeyboardViewControllerTests {
         #expect(statusText(in: controller.view) == "Opening HoldType…")
     }
 
-    @Test func delayedResultReconnectsAfterOwnedListeningSnapshotExpires()
+    @Test func delayedResultReconnectsForExplicitRecoveryAfterExpiry()
         throws {
         let startedAt = Date(timeIntervalSince1970: 1_750_000_000)
         let sessionID = UUID()
@@ -1155,38 +1632,14 @@ struct KeyboardViewControllerTests {
         )
         controller.textDidChange(nil)
 
-        let claim = try #require(harness.savedCommands.last)
-        #expect(claim.kind == .claimDelivery)
-        #expect(claim.sessionID == sessionID)
-        #expect(claim.attemptID == attemptID)
-        #expect(claim.requestID == requestID)
+        #expect(harness.savedCommands.isEmpty)
         #expect(harness.proxy.insertedTexts.isEmpty)
-
-        harness.dictationState = try #require(
-            KeyboardDictationStateRecord(
-                sessionID: sessionID,
-                attemptID: attemptID,
-                requestID: requestID,
-                sourceDocumentID: documentID,
-                deliveryClaimID: harness.deliveryClaimID,
-                phase: .resultReady,
-                result: "Delayed five-minute result",
-                publishedAt: resultPublishedAt.addingTimeInterval(1),
-                expiresAt: resultPublishedAt.addingTimeInterval(61)
-            )
-        )
-        harness.now = resultPublishedAt.addingTimeInterval(1)
-        controller.textDidChange(nil)
-
+        controller.keyboardView.onLatestRequested?()
         #expect(harness.proxy.insertedTexts == ["Delayed five-minute result"])
-        #expect(
-            harness.savedCommands.map(\.kind) == [
-                .claimDelivery, .acknowledgeDelivery,
-            ]
-        )
+        #expect(harness.savedCommands.isEmpty)
     }
 
-    @Test func processingExpiryReloadsNewerResultAndDeliversExactlyOnce()
+    @Test func processingExpiryReloadsNewerResultForExplicitRecovery()
         throws {
         let startedAt = Date(timeIntervalSince1970: 1_750_000_000)
         let sessionID = UUID()
@@ -1236,42 +1689,20 @@ struct KeyboardViewControllerTests {
         // first and must discover the newer canonical Result without dropping
         // attempt ownership.
         staleProcessingExpiry()
-        let claim = try #require(harness.savedCommands.last)
-        #expect(claim.kind == .claimDelivery)
+        #expect(harness.savedCommands.isEmpty)
         #expect(harness.proxy.insertedTexts.isEmpty)
-
-        let grantedPublishedAt = processingExpiresAt.addingTimeInterval(0.1)
-        harness.dictationState = try #require(
-            KeyboardDictationStateRecord(
-                sessionID: sessionID,
-                attemptID: attemptID,
-                requestID: requestID,
-                sourceDocumentID: documentID,
-                deliveryClaimID: harness.deliveryClaimID,
-                phase: .resultReady,
-                result: "Result published before processing expiry",
-                publishedAt: grantedPublishedAt,
-                expiresAt: grantedPublishedAt.addingTimeInterval(60)
-            )
-        )
-
-        // Delayed notification of the grant inserts once. Replaying both the
-        // stale timer and notification cannot duplicate delivery.
-        controller.textDidChange(nil)
         staleProcessingExpiry()
         controller.textDidChange(nil)
-
+        #expect(harness.proxy.insertedTexts.isEmpty)
+        controller.keyboardView.onLatestRequested?()
         #expect(
             harness.proxy.insertedTexts
                 == ["Result published before processing expiry"]
         )
-        #expect(
-            harness.savedCommands.map(\.kind)
-                == [.claimDelivery, .acknowledgeDelivery]
-        )
+        #expect(harness.savedCommands.isEmpty)
     }
 
-    @Test func resultPublishedAfterProcessingExpiryReconnectsExactlyOnce()
+    @Test func resultAfterProcessingExpiryReconnectsForExplicitRecovery()
         throws {
         let startedAt = Date(timeIntervalSince1970: 1_750_000_000)
         let sessionID = UUID()
@@ -1328,40 +1759,17 @@ struct KeyboardViewControllerTests {
         )
         controller.textDidChange(nil)
 
-        let claim = try #require(harness.savedCommands.last)
-        #expect(claim.kind == .claimDelivery)
-        #expect(claim.sessionID == sessionID)
-        #expect(claim.attemptID == attemptID)
-        #expect(claim.requestID == requestID)
+        #expect(harness.savedCommands.isEmpty)
         #expect(harness.proxy.insertedTexts.isEmpty)
-
-        let grantedPublishedAt = resultPublishedAt.addingTimeInterval(1)
-        harness.now = grantedPublishedAt
-        harness.dictationState = try #require(
-            KeyboardDictationStateRecord(
-                sessionID: sessionID,
-                attemptID: attemptID,
-                requestID: requestID,
-                sourceDocumentID: documentID,
-                deliveryClaimID: harness.deliveryClaimID,
-                phase: .resultReady,
-                result: "Result published after Processing TTL",
-                publishedAt: grantedPublishedAt,
-                expiresAt: grantedPublishedAt.addingTimeInterval(60)
-            )
-        )
-        controller.textDidChange(nil)
         processingExpiry()
         controller.textDidChange(nil)
-
+        #expect(harness.proxy.insertedTexts.isEmpty)
+        controller.keyboardView.onLatestRequested?()
         #expect(
             harness.proxy.insertedTexts
                 == ["Result published after Processing TTL"]
         )
-        #expect(
-            harness.savedCommands.map(\.kind)
-                == [.claimDelivery, .acknowledgeDelivery]
-        )
+        #expect(harness.savedCommands.isEmpty)
     }
 
     @Test func canonicalReadyRetiresExpiredProcessingReconnect() throws {
@@ -1754,6 +2162,10 @@ private final class KeyboardControllerHarness {
         [@MainActor () -> Void] = []
     var scheduledDeliveryObservationActions:
         [@MainActor () -> Void] = []
+    var observedDictationStateChange: (@MainActor () -> Void)?
+    var activeDocumentProxy: any UITextDocumentProxy
+    var replacementDocumentProxy: (any UITextDocumentProxy)?
+    var replaceDocumentProxyAfterIdentifierLoadCall: Int?
 
     init(
         now: Date = Date(timeIntervalSince1970: 1_750_000_000),
@@ -1777,14 +2189,16 @@ private final class KeyboardControllerHarness {
         self.requestID = resolvedRequestID
         currentDocumentIdentifier = resolvedRequestID
         deliveryClaimID = UUID()
-        proxy = KeyboardDocumentProxySpy(
+        let proxy = KeyboardDocumentProxySpy(
             documentIdentifier: resolvedRequestID
         )
+        self.proxy = proxy
+        activeDocumentProxy = proxy
         self.openContainingAppSucceeds = openContainingAppSucceeds
     }
 
     func makeController() -> KeyboardViewController {
-        KeyboardViewController(
+        let controller = KeyboardViewController(
             dependencies: KeyboardViewControllerDependencies(
                 loadSnapshot: { [self] in snapshot },
                 loadDictationState: { [self] in dictationState },
@@ -1797,17 +2211,32 @@ private final class KeyboardControllerHarness {
                 saveHandoffIntent: { [self] intent in
                     savedHandoffIntents.append(intent)
                 },
-                observeDictationState: { _ in nil },
+                observeDictationState: { [self] action in
+                    observedDictationStateChange = action
+                    return nil
+                },
                 now: { [self] in now },
                 makeRequestID: { [self] in requestID },
                 makeAttemptID: { [self] in requestID },
                 makeDeliveryClaimID: { [self] in deliveryClaimID },
-                documentProxyOverride: proxy,
+                documentProxyOverride: nil,
+                documentProxyProviderOverride: { [self] in
+                    activeDocumentProxy
+                },
                 loadDocumentIdentifier: { [self] documentProxy in
                     documentIdentifierOwnerIDs.append(
                         ObjectIdentifier(documentProxy as AnyObject)
                     )
-                    return currentDocumentIdentifier
+                    let identifier = currentDocumentIdentifier
+                    if let replaceAt =
+                        replaceDocumentProxyAfterIdentifierLoadCall,
+                       documentIdentifierOwnerIDs.count == replaceAt,
+                       let replacementDocumentProxy {
+                        activeDocumentProxy = replacementDocumentProxy
+                        self.replacementDocumentProxy = nil
+                        replaceDocumentProxyAfterIdentifierLoadCall = nil
+                    }
+                    return identifier
                 },
                 inputModeSwitchKeyOverride: inputModeSwitchKeyOverride,
                 fullAccessOverride: fullAccessOverride,
@@ -1835,6 +2264,9 @@ private final class KeyboardControllerHarness {
                 recordDiagnostic: { _ in }
             )
         )
+        controller.beginAppearanceTransition(true, animated: false)
+        controller.endAppearanceTransition()
+        return controller
     }
 }
 

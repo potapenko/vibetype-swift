@@ -51,8 +51,8 @@ V1.1 includes:
   Finish, and Cancel voice controls while that session is available;
 - no separate Settings, History, or containing-app launch button inside the
   extension; the microphone owns cold handoff;
-- automatic insertion only for the same still-live keyboard request and host
-  context;
+- automatic insertion only from the same currently active and visible keyboard
+  controller for its still-live request and host context;
 - an explicit `Latest` insertion path after the user returns to the host;
 - a bounded keyboard projection of one Latest item with time-limited insertion
   eligibility only;
@@ -464,10 +464,14 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
 - After capture stops, `Processing…` reflects the app-owned provider chain.
   Provider work has explicit timeout and cancellation and never starts
   automatically after relaunch.
-- One accepted result auto-inserts exactly once only if the same live extension
-  request still owns the current host context. A dismissed/restarted extension,
-  host-context change, stale request, or ownership loss disables automatic
-  insertion.
+- One accepted result may invoke automatic insertion at most once only while
+  the originating live controller is currently active and visible, owns the
+  request, and the current non-empty document identifier exactly matches its
+  immutable non-empty source identifier. An inactive controller may observe
+  state but cannot claim or consume delivery; eligibility is rechecked when it
+  becomes visible again. Missing or changed identity, controller recreation,
+  stale ownership, or prior disqualification permanently disables automatic
+  insertion for that request.
 - The transient result is published only for the request whose accepted Latest
   record came from that same keyboard capture. Provider failure, cancellation,
   a duplicate command, or a result from another request never fabricates a
@@ -478,9 +482,10 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
 - The extension writes one replaceable command record and the app writes one
   replaceable state/result record. The command carries only a bounded action
   enum; state may carry only a boolean Translation-available capability. Both
-  are bounded and expiring. They are not
-  a delivery transaction, History store, outbox, receipt, acknowledgement
-  family, tombstone, lease, or replay queue.
+  are bounded and expiring. The handoff bridge also uses one opaque claim and
+  one claim-consumption acknowledgement for an at-most-once insertion
+  invocation. It is not a History store, outbox, receipt ledger, tombstone
+  family, lease, or replay queue.
 - The app publishes one replaceable History-latest snapshot to App Group
   storage. The extension remains able to read and insert that safe app-written
   item when restricted-mode access permits it.

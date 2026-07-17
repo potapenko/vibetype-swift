@@ -114,6 +114,57 @@ struct IOSAcceptedTextHistoryStateOwnerTests {
         #expect(owner.state == .ready(try historyRecord(1)))
     }
 
+    @Test func acceptedResultRefreshesPresentationWithoutPublishingSnapshot()
+        async throws {
+        let fixture = HistoryOwnerFixture(record: try historyRecord(1))
+        let publicationProbe = HistoryPublicationProbe()
+        let owner = IOSAcceptedTextHistoryStateOwner(
+            client: historyOwnerClient(fixture),
+            publishKeyboardSnapshot: {
+                await publicationProbe.record()
+                return true
+            }
+        )
+        #expect(await owner.refresh())
+        #expect(await publicationProbe.callCount == 1)
+
+        let updated = try historyRecord(1, 2)
+        await fixture.replaceRecord(updated)
+        await owner.refreshPresentationAfterAcceptedResult()
+
+        #expect(owner.state == .ready(updated))
+        #expect(await publicationProbe.callCount == 1)
+    }
+
+    @Test func acceptedResultRefreshCoalescesBehindActiveLoad()
+        async throws {
+        let fixture = HistoryOwnerFixture(
+            record: try historyRecord(1),
+            suspendNextLoad: true
+        )
+        let owner = IOSAcceptedTextHistoryStateOwner(
+            client: historyOwnerClient(fixture)
+        )
+        let activeRefresh = Task { await owner.refresh() }
+        try await historyOwnerEventually {
+            await fixture.loadCallCount == 1
+        }
+
+        await owner.refreshPresentationAfterAcceptedResult()
+        await owner.refreshPresentationAfterAcceptedResult()
+        let updated = try historyRecord(1, 2)
+        await fixture.replaceRecord(updated)
+        await fixture.resumeLoad()
+
+        #expect(await activeRefresh.value)
+        try await historyOwnerEventually {
+            await fixture.loadCallCount == 2
+                && owner.state == .ready(updated)
+                && owner.operation == .idle
+        }
+        #expect(await fixture.loadCallCount == 2)
+    }
+
     @Test func failedRefreshKeepsLastConfirmedHistoryVisible()
         async throws {
         let fixture = HistoryOwnerFixture(record: try historyRecord(1, 2))

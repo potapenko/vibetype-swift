@@ -181,6 +181,7 @@ struct KeyboardViewControllerDependencies {
     let makeAttemptID: () -> UUID
     let makeDeliveryClaimID: () -> UUID
     let documentProxyOverride: (any UITextDocumentProxy)?
+    let documentProxyProviderOverride: (() -> any UITextDocumentProxy)?
     let loadDocumentIdentifier: (any UITextDocumentProxy) -> UUID?
     let inputModeSwitchKeyOverride: Bool?
     let fullAccessOverride: Bool?
@@ -225,6 +226,7 @@ struct KeyboardViewControllerDependencies {
         makeAttemptID: { UUID() },
         makeDeliveryClaimID: { UUID() },
         documentProxyOverride: nil,
+        documentProxyProviderOverride: nil,
         loadDocumentIdentifier: { documentProxy in
             KeyboardDocumentIdentifierAdapter.load(from: documentProxy)
         },
@@ -325,8 +327,11 @@ final class KeyboardViewController: UIInputViewController {
     private var retiredDictationAttempt:
         KeyboardDictationAttemptIdentity?
     private var authoritativeIdleReadyPublishedAt: Date?
-    private var deliveryDocumentIdentifier: UUID?
-    private var mayAnchorReturnedDocument = false
+    private let controllerLifetimeID = UUID()
+    private var acceptsAutomaticDelivery = false
+    private var automaticDeliveryRequestID: UUID?
+    private var automaticDeliveryDisqualifiedRequestID: UUID?
+    private var recoverableDictationResult: (requestID: UUID, text: String)?
     private var insertedDictationRequestID: UUID?
     private var pendingDeliveryClaimID: UUID?
     private var lastSeenDictationSessionID: UUID?
@@ -341,8 +346,6 @@ final class KeyboardViewController: UIInputViewController {
     private struct ExpiredAttemptReconnect {
         let identity: KeyboardDictationAttemptIdentity
         let publishedAt: Date
-        let deliveryDocumentIdentifier: UUID?
-        let mayAnchorReturnedDocument: Bool
     }
 
     override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
@@ -361,7 +364,11 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private var activeDocumentProxy: any UITextDocumentProxy {
-        dependencies.documentProxyOverride ?? textDocumentProxy
+        if let documentProxyProviderOverride =
+            dependencies.documentProxyProviderOverride {
+            return documentProxyProviderOverride()
+        }
+        return dependencies.documentProxyOverride ?? textDocumentProxy
     }
 
     private var activeDocumentIdentifier: UUID? {
@@ -397,6 +404,8 @@ final class KeyboardViewController: UIInputViewController {
         showsInputModeSwitchKey = shouldShowInputModeSwitchKey
         reloadSharedSnapshot()
         reloadDictationState()
+        refreshAutomaticDeliveryEligibility()
+        render()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -419,27 +428,32 @@ final class KeyboardViewController: UIInputViewController {
     override func textWillChange(_ textInput: UITextInput?) {
         super.textWillChange(textInput)
         if let observation = pendingDeliveryObservation {
+            let currentDocumentID = activeDocumentIdentifier
             recordDelivery(
                 .textWillChange,
                 requestID: observation.requestID,
                 claimID: observation.claimID,
-                proxyHasText: activeDocumentProxy.hasText
+                sourceDocumentID: activeDictationOwnership?.sourceDocumentID,
+                currentDocumentID: currentDocumentID
             )
         }
-        refreshStateReconnectionEligibility()
+        refreshAutomaticDeliveryEligibility()
     }
 
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
         if let observation = pendingDeliveryObservation {
+            let currentDocumentID = activeDocumentIdentifier
             recordDelivery(
                 .textDidChange,
                 requestID: observation.requestID,
                 claimID: observation.claimID,
-                proxyHasText: activeDocumentProxy.hasText
+                sourceDocumentID: activeDictationOwnership?.sourceDocumentID,
+                currentDocumentID: currentDocumentID
             )
             cancelDeliveryObservation()
         }
+        refreshAutomaticDeliveryEligibility()
         showsInputModeSwitchKey = shouldShowInputModeSwitchKey
         reloadSharedSnapshot()
         reloadDictationState()
@@ -464,8 +478,7 @@ final class KeyboardViewController: UIInputViewController {
             self?.openHistory()
         }
         keyboardView.onLatestRequested = { [weak self] in
-            guard let self, let latestItem else { return }
-            insert(latestItem)
+            self?.insertLatestOrRecoverableResult()
         }
         keyboardView.onMicrophoneRequested = { [weak self] in
             self?.handleMicrophoneCommand()
@@ -526,7 +539,8 @@ final class KeyboardViewController: UIInputViewController {
                     for: dictationPresentation.voiceStage
                 ),
                 automaticVoiceAction: automaticVoiceAction,
-                latestIsEnabled: latestItem != nil,
+                latestIsEnabled: recoverableDictationResult != nil
+                    || latestItem != nil,
                 returnKey: KeyboardReturnKeyPresentation(
                     semantic: Self.returnSemantic(
                         for: activeDocumentProxy.returnKeyType ?? .default
@@ -629,8 +643,7 @@ final class KeyboardViewController: UIInputViewController {
         guard hasSharedContainerAccess else {
             dictationState = nil
             activeDictationOwnership = nil
-            deliveryDocumentIdentifier = nil
-            mayAnchorReturnedDocument = false
+            recoverableDictationResult = nil
             pendingDictationCommand = nil
             render()
             return
@@ -643,8 +656,7 @@ final class KeyboardViewController: UIInputViewController {
                 cancelDocumentIdentifierRetry()
                 dictationState = nil
                 activeDictationOwnership = nil
-                deliveryDocumentIdentifier = nil
-                mayAnchorReturnedDocument = false
+                recoverableDictationResult = nil
                 forcesSessionNotRunning = true
                 render()
                 return
@@ -659,8 +671,8 @@ final class KeyboardViewController: UIInputViewController {
                 insertedDictationRequestID = nil
                 pendingDeliveryClaimID = nil
                 activeDictationOwnership = nil
-                deliveryDocumentIdentifier = nil
-                mayAnchorReturnedDocument = false
+                automaticDeliveryDisqualifiedRequestID = nil
+                recoverableDictationResult = nil
                 allowsStateReconnection = true
             }
             retireExpiredAttemptReconnectIfReplaced(by: state)
@@ -678,16 +690,14 @@ final class KeyboardViewController: UIInputViewController {
                             )))
                 if activeDictationOwnership == nil, mayReconnect {
                     activeDictationOwnership = identity
-                    mayAnchorReturnedDocument = hasDurableHandoff
-                    deliveryDocumentIdentifier = activeDocumentIdentifier
                     allowsStateReconnection = false
                 }
-                captureReturnedDocumentAnchorIfAvailable(for: identity)
                 if activeDictationOwnership == identity,
                    pendingHandoffRequestID == identity.requestID {
                     pendingHandoffRequestID = nil
                     handoffLaunchFailed = false
                 }
+                refreshAutomaticDeliveryEligibility(for: identity)
             } else if state.phase == .ready {
                 cancelDocumentIdentifierRetry()
                 if let activeDictationOwnership {
@@ -700,8 +710,9 @@ final class KeyboardViewController: UIInputViewController {
                 }
                 expiredAttemptReconnect = nil
                 activeDictationOwnership = nil
-                deliveryDocumentIdentifier = nil
-                mayAnchorReturnedDocument = false
+                automaticDeliveryRequestID = nil
+                automaticDeliveryDisqualifiedRequestID = nil
+                recoverableDictationResult = nil
                 // An authoritative idle Ready closes every previous attempt
                 // in this session. A later attempt started by this controller
                 // receives explicit ownership in beginDictation; an
@@ -717,6 +728,9 @@ final class KeyboardViewController: UIInputViewController {
                 || state.phase == .failed {
                 pendingDictationCommand = nil
             }
+            if recoverableDictationResult?.requestID != state.requestID {
+                recoverableDictationResult = nil
+            }
             recordKeyboardState(diagnosticState(for: state.phase))
             if state.phase == .resultReady {
                 handleResultReady(state)
@@ -724,8 +738,9 @@ final class KeyboardViewController: UIInputViewController {
                       owns(state) {
                 cancelDocumentIdentifierRetry()
                 activeDictationOwnership = nil
-                deliveryDocumentIdentifier = nil
-                mayAnchorReturnedDocument = false
+                automaticDeliveryRequestID = nil
+                automaticDeliveryDisqualifiedRequestID = nil
+                recoverableDictationResult = nil
                 pendingDictationCommand = nil
                 pendingDeliveryClaimID = nil
                 forcesSessionNotRunning = state.phase == .unavailable
@@ -749,8 +764,7 @@ final class KeyboardViewController: UIInputViewController {
             cancelDocumentIdentifierRetry()
             dictationState = nil
             activeDictationOwnership = nil
-            deliveryDocumentIdentifier = nil
-            mayAnchorReturnedDocument = false
+            recoverableDictationResult = nil
             forcesSessionNotRunning = true
         }
         render()
@@ -790,12 +804,10 @@ final class KeyboardViewController: UIInputViewController {
         }
         // Listening/Processing TTLs remove a stale presentation snapshot;
         // they are not authority to reject a strictly newer terminal state
-        // from the same attempt. Preserve only opaque identity/document gates.
+        // from the same attempt. Preserve only opaque request identity.
         expiredAttemptReconnect = ExpiredAttemptReconnect(
             identity: identity,
-            publishedAt: state.publishedAt,
-            deliveryDocumentIdentifier: deliveryDocumentIdentifier,
-            mayAnchorReturnedDocument: mayAnchorReturnedDocument
+            publishedAt: state.publishedAt
         )
     }
 
@@ -835,51 +847,148 @@ final class KeyboardViewController: UIInputViewController {
             return
         }
         activeDictationOwnership = identity
-        deliveryDocumentIdentifier = reconnect.deliveryDocumentIdentifier
-        mayAnchorReturnedDocument = reconnect.mayAnchorReturnedDocument
         allowsStateReconnection = false
         forcesSessionNotRunning = false
         expiredAttemptReconnect = nil
     }
 
     private func handleResultReady(_ state: KeyboardDictationStateRecord) {
+        let documentProxy = activeDocumentProxy
+        let currentDocumentID = dependencies.loadDocumentIdentifier(
+            documentProxy
+        )
+        let sourceDocumentID = state.sourceDocumentID
         Self.deliveryLogger.info("result observed")
-        recordDelivery(.resultObserved, requestID: state.requestID)
+        recordDelivery(
+            .resultObserved,
+            requestID: state.requestID,
+            sourceDocumentID: sourceDocumentID,
+            currentDocumentID: currentDocumentID
+        )
         guard let requestID = state.requestID,
               owns(state),
-              insertedDictationRequestID != requestID,
               let result = state.result,
               let ownership = activeDictationOwnership else {
             Self.deliveryLogger.error("result rejected before document gate")
-            recordDelivery(.requestRejected, requestID: state.requestID)
+            recordDelivery(
+                .requestRejected,
+                requestID: state.requestID,
+                sourceDocumentID: sourceDocumentID,
+                currentDocumentID: currentDocumentID
+            )
             cancelDocumentIdentifierRetry()
             return
         }
-        captureReturnedDocumentAnchorIfAvailable(for: ownership)
-        let currentDocumentID = activeDocumentIdentifier
-        guard deliveryDocumentIdentifier == currentDocumentID,
-              currentDocumentID != nil else {
-            if currentDocumentID == nil
-                || deliveryDocumentIdentifier == nil {
-                Self.deliveryLogger.info("document unavailable; retry scheduled")
-                recordDelivery(.documentMissing, requestID: requestID)
+        guard insertedDictationRequestID != requestID else {
+            cancelDocumentIdentifierRetry()
+            return
+        }
+        guard acceptsAutomaticDelivery else {
+            Self.deliveryLogger.info(
+                "result deferred while controller is inactive"
+            )
+            recordDelivery(
+                .controllerInactive,
+                requestID: requestID,
+                sourceDocumentID: ownership.sourceDocumentID,
+                currentDocumentID: currentDocumentID
+            )
+            cancelDocumentIdentifierRetry()
+            return
+        }
+        guard automaticDeliveryRequestID == requestID else {
+            Self.deliveryLogger.info("originating controller is unavailable")
+            recordDelivery(
+                .controllerLifetimeLost,
+                requestID: requestID,
+                sourceDocumentID: ownership.sourceDocumentID,
+                currentDocumentID: currentDocumentID
+            )
+            disqualifyAutomaticDelivery(
+                requestID: requestID,
+                result: result
+            )
+            return
+        }
+        guard automaticDeliveryDisqualifiedRequestID != requestID else {
+            recordDelivery(
+                .deliveryPreviouslyDisqualified,
+                requestID: requestID,
+                sourceDocumentID: ownership.sourceDocumentID,
+                currentDocumentID: currentDocumentID
+            )
+            exposeRecoverableResult(requestID: requestID, result: result)
+            cancelDocumentIdentifierRetry()
+            return
+        }
+        guard let immutableSourceDocumentID = ownership.sourceDocumentID else {
+            Self.deliveryLogger.info("source document unavailable")
+            recordDelivery(
+                .documentMissing,
+                requestID: requestID,
+                sourceDocumentID: nil,
+                currentDocumentID: currentDocumentID
+            )
+            disqualifyAutomaticDelivery(
+                requestID: requestID,
+                result: result
+            )
+            return
+        }
+        guard let currentDocumentID else {
+            Self.deliveryLogger.info("current document unavailable")
+            recordDelivery(
+                .documentMissing,
+                requestID: requestID,
+                sourceDocumentID: immutableSourceDocumentID,
+                currentDocumentID: nil
+            )
+            if documentIdentifierRetryCount
+                < Self.maximumDocumentIdentifierRetryCount {
                 scheduleDocumentIdentifierRetry(for: requestID)
             } else {
-                Self.deliveryLogger.error("document gate rejected result")
-                recordDelivery(.documentMismatch, requestID: requestID)
-                cancelDocumentIdentifierRetry()
+                disqualifyAutomaticDelivery(
+                    requestID: requestID,
+                    result: result
+                )
             }
             return
         }
-        recordDelivery(.documentMatched, requestID: requestID)
+        guard immutableSourceDocumentID == currentDocumentID else {
+            Self.deliveryLogger.error("document gate rejected result")
+            recordDelivery(
+                .documentMismatch,
+                requestID: requestID,
+                sourceDocumentID: immutableSourceDocumentID,
+                currentDocumentID: currentDocumentID
+            )
+            disqualifyAutomaticDelivery(
+                requestID: requestID,
+                result: result
+            )
+            return
+        }
+        recordDelivery(
+            .documentMatched,
+            requestID: requestID,
+            sourceDocumentID: immutableSourceDocumentID,
+            currentDocumentID: currentDocumentID
+        )
         cancelDocumentIdentifierRetry()
+        recoverableDictationResult = nil
         if let grantedClaimID = state.deliveryClaimID {
             guard pendingDeliveryClaimID == grantedClaimID else {
                 Self.deliveryLogger.error("delivery grant has no local claim")
                 recordDelivery(
                     .grantRejected,
                     requestID: requestID,
-                    claimID: grantedClaimID
+                    claimID: grantedClaimID,
+                    sourceDocumentID: immutableSourceDocumentID,
+                    currentDocumentID: currentDocumentID
+                )
+                disqualifyAutomaticDelivery(
+                    requestID: requestID,
+                    result: result
                 )
                 return
             }
@@ -887,9 +996,12 @@ final class KeyboardViewController: UIInputViewController {
             recordDelivery(
                 .grantAccepted,
                 requestID: requestID,
-                claimID: grantedClaimID
+                claimID: grantedClaimID,
+                sourceDocumentID: immutableSourceDocumentID,
+                currentDocumentID: currentDocumentID
             )
             insertedDictationRequestID = requestID
+            recoverableDictationResult = nil
             beginDeliveryObservation(
                 requestID: requestID,
                 claimID: grantedClaimID
@@ -898,25 +1010,29 @@ final class KeyboardViewController: UIInputViewController {
                 .insertInvoked,
                 requestID: requestID,
                 claimID: grantedClaimID,
-                proxyHasText: activeDocumentProxy.hasText
+                sourceDocumentID: immutableSourceDocumentID,
+                currentDocumentID: currentDocumentID
             )
-            insertText(result)
+            dependencies.recordDiagnostic(.keyboardInsertInvoked(.dictation))
+            insertText(result, into: documentProxy)
             recordDelivery(
                 .insertReturned,
                 requestID: requestID,
                 claimID: grantedClaimID,
-                proxyHasText: activeDocumentProxy.hasText
+                sourceDocumentID: immutableSourceDocumentID,
+                currentDocumentID: currentDocumentID
             )
             scheduleDeliveryObservationTimeout(
                 requestID: requestID,
                 claimID: grantedClaimID
             )
             Self.deliveryLogger.info("document proxy insertion requested")
-            dependencies.recordDiagnostic(.keyboardInserted(.dictation))
             recordDelivery(
                 .acknowledgementRequested,
                 requestID: requestID,
-                claimID: grantedClaimID
+                claimID: grantedClaimID,
+                sourceDocumentID: immutableSourceDocumentID,
+                currentDocumentID: currentDocumentID
             )
             _ = sendDictationCommand(
                 .acknowledgeDelivery,
@@ -930,7 +1046,9 @@ final class KeyboardViewController: UIInputViewController {
             recordDelivery(
                 .claimRequested,
                 requestID: requestID,
-                claimID: claimID
+                claimID: claimID,
+                sourceDocumentID: immutableSourceDocumentID,
+                currentDocumentID: currentDocumentID
             )
             if !sendDictationCommand(
                 .claimDelivery,
@@ -940,6 +1058,23 @@ final class KeyboardViewController: UIInputViewController {
                 pendingDeliveryClaimID = nil
             }
         }
+    }
+
+    private func disqualifyAutomaticDelivery(
+        requestID: UUID,
+        result: String
+    ) {
+        automaticDeliveryDisqualifiedRequestID = requestID
+        pendingDeliveryClaimID = nil
+        cancelDocumentIdentifierRetry()
+        exposeRecoverableResult(requestID: requestID, result: result)
+    }
+
+    private func exposeRecoverableResult(
+        requestID: UUID,
+        result: String
+    ) {
+        recoverableDictationResult = (requestID, result)
     }
 
     private func scheduleDocumentIdentifierRetry(for requestID: UUID) {
@@ -1002,7 +1137,8 @@ final class KeyboardViewController: UIInputViewController {
                 .textChangeNotObserved,
                 requestID: requestID,
                 claimID: claimID,
-                proxyHasText: activeDocumentProxy.hasText
+                sourceDocumentID: activeDictationOwnership?.sourceDocumentID,
+                currentDocumentID: activeDocumentIdentifier
             )
             cancelDeliveryObservation()
         }
@@ -1072,6 +1208,11 @@ final class KeyboardViewController: UIInputViewController {
             render()
             return
         }
+        automaticDeliveryRequestID = requestID
+        automaticDeliveryDisqualifiedRequestID = intent.sourceDocumentID == nil
+            ? requestID
+            : nil
+        recoverableDictationResult = nil
         pendingHandoffRequestID = requestID
         handoffLaunchFailed = false
         render()
@@ -1094,14 +1235,22 @@ final class KeyboardViewController: UIInputViewController {
             openTranslationSettings()
             return
         }
+        let documentProxy = activeDocumentProxy
+        let sourceDocumentID = dependencies.loadDocumentIdentifier(
+            documentProxy
+        )
+        let requestID = dependencies.makeRequestID()
         activeDictationOwnership = KeyboardDictationAttemptIdentity(
             sessionID: state.sessionID,
             attemptID: dependencies.makeAttemptID(),
-            requestID: dependencies.makeRequestID(),
-            sourceDocumentID: activeDocumentIdentifier
+            requestID: requestID,
+            sourceDocumentID: sourceDocumentID
         )
-        deliveryDocumentIdentifier = activeDocumentIdentifier
-        mayAnchorReturnedDocument = false
+        automaticDeliveryRequestID = requestID
+        automaticDeliveryDisqualifiedRequestID = sourceDocumentID == nil
+            ? requestID
+            : nil
+        recoverableDictationResult = nil
         allowsStateReconnection = false
         sendDictationCommand(.start, action: action)
     }
@@ -1219,8 +1368,9 @@ final class KeyboardViewController: UIInputViewController {
                 pendingDictationCommand = kind
             } else if kind == .cancel {
                 activeDictationOwnership = nil
-                deliveryDocumentIdentifier = nil
-                mayAnchorReturnedDocument = false
+                automaticDeliveryRequestID = nil
+                automaticDeliveryDisqualifiedRequestID = nil
+                recoverableDictationResult = nil
                 pendingDictationCommand = nil
                 pendingDeliveryClaimID = nil
                 forcesSessionNotRunning = true
@@ -1236,8 +1386,9 @@ final class KeyboardViewController: UIInputViewController {
             pendingDictationCommand = nil
             pendingDeliveryClaimID = nil
             activeDictationOwnership = nil
-            deliveryDocumentIdentifier = nil
-            mayAnchorReturnedDocument = false
+            automaticDeliveryRequestID = nil
+            automaticDeliveryDisqualifiedRequestID = nil
+            recoverableDictationResult = nil
             forcesSessionNotRunning = true
             render()
             return false
@@ -1253,16 +1404,30 @@ final class KeyboardViewController: UIInputViewController {
 
     private func insert(_ item: KeyboardBridgeItem) {
         insertText(item.text)
-        dependencies.recordDiagnostic(.keyboardInserted(.latest))
+        dependencies.recordDiagnostic(.keyboardInsertInvoked(.latest))
+    }
+
+    private func insertLatestOrRecoverableResult() {
+        if let recoverableDictationResult {
+            automaticDeliveryDisqualifiedRequestID =
+                recoverableDictationResult.requestID
+            insertedDictationRequestID = recoverableDictationResult.requestID
+            pendingDeliveryClaimID = nil
+            cancelDocumentIdentifierRetry()
+            insertText(recoverableDictationResult.text)
+            dependencies.recordDiagnostic(.keyboardInsertInvoked(.latest))
+            return
+        }
+        guard let latestItem else { return }
+        insert(latestItem)
     }
 
     private func beginExtensionLifetime() {
+        acceptsAutomaticDelivery = true
         activeDictationOwnership = nil
         expiredAttemptReconnect = nil
         retiredDictationAttempt = nil
         authoritativeIdleReadyPublishedAt = nil
-        deliveryDocumentIdentifier = nil
-        mayAnchorReturnedDocument = false
         allowsStateReconnection = true
         pendingDictationCommand = nil
         pendingDeliveryClaimID = nil
@@ -1273,12 +1438,11 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func endExtensionLifetime() {
+        acceptsAutomaticDelivery = false
         activeDictationOwnership = nil
         expiredAttemptReconnect = nil
         retiredDictationAttempt = nil
         authoritativeIdleReadyPublishedAt = nil
-        deliveryDocumentIdentifier = nil
-        mayAnchorReturnedDocument = false
         allowsStateReconnection = true
         pendingDictationCommand = nil
         pendingDeliveryClaimID = nil
@@ -1286,33 +1450,42 @@ final class KeyboardViewController: UIInputViewController {
         forcesSessionNotRunning = false
     }
 
-    private func refreshStateReconnectionEligibility() {
-        guard let activeDictationOwnership else { return }
-        let currentDocumentIdentifier = activeDocumentIdentifier
-        if deliveryDocumentIdentifier != currentDocumentIdentifier,
-           !hasDurableHandoffOwnership(activeDictationOwnership) {
-            self.activeDictationOwnership = nil
-            deliveryDocumentIdentifier = nil
-            mayAnchorReturnedDocument = false
-            allowsStateReconnection = true
-            pendingDeliveryClaimID = nil
-        }
-    }
-
-    /// UIKit can issue a new document-proxy identifier after the user leaves
-    /// the host app and returns to the same field. The consumed handoff proves
-    /// which request may reconnect; the first available post-return proxy then
-    /// becomes the delivery anchor for the remainder of that keyboard life.
-    private func captureReturnedDocumentAnchorIfAvailable(
-        for identity: KeyboardDictationAttemptIdentity
+    private func refreshAutomaticDeliveryEligibility(
+        for preferredIdentity: KeyboardDictationAttemptIdentity? = nil
     ) {
-        guard mayAnchorReturnedDocument,
-              activeDictationOwnership == identity,
-              deliveryDocumentIdentifier == nil,
-              let currentDocumentIdentifier = activeDocumentIdentifier else {
+        guard let automaticDeliveryRequestID else { return }
+        let stateIdentity = dictationState.flatMap(
+            KeyboardDictationAttemptIdentity.init
+        )
+        guard let identity = [
+            preferredIdentity,
+            activeDictationOwnership,
+            stateIdentity,
+        ].compactMap({ $0 }).first(where: {
+            $0.requestID == automaticDeliveryRequestID
+        }),
+        automaticDeliveryDisqualifiedRequestID != identity.requestID else {
             return
         }
-        deliveryDocumentIdentifier = currentDocumentIdentifier
+        let currentDocumentIdentifier = activeDocumentIdentifier
+        if identity.sourceDocumentID == nil
+            || (currentDocumentIdentifier != nil
+                && !identity.belongsToDocument(
+                    currentDocumentIdentifier
+                )) {
+            recordDelivery(
+                identity.sourceDocumentID == nil
+                    ? .documentMissing
+                    : .documentMismatch,
+                requestID: identity.requestID,
+                sourceDocumentID: identity.sourceDocumentID,
+                currentDocumentID: currentDocumentIdentifier
+            )
+            automaticDeliveryDisqualifiedRequestID =
+                identity.requestID
+            pendingDeliveryClaimID = nil
+            cancelDocumentIdentifierRetry()
+        }
     }
 
     /// A consumed handoff is the durable control token for one app-admitted
@@ -1325,7 +1498,10 @@ final class KeyboardViewController: UIInputViewController {
         guard let intent = try? dependencies.loadConsumedHandoffIntent() else {
             return false
         }
-        guard intent.requestID == identity.requestID else { return false }
+        guard intent.requestID == identity.requestID,
+              intent.sourceDocumentID == identity.sourceDocumentID else {
+            return false
+        }
         guard let authoritativeIdleReadyPublishedAt else { return true }
         guard let consumedAt = intent.consumedAt else { return false }
         return consumedAt > authoritativeIdleReadyPublishedAt
@@ -1336,9 +1512,16 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func insertText(_ text: String) {
+        insertText(text, into: activeDocumentProxy)
+    }
+
+    private func insertText(
+        _ text: String,
+        into documentProxy: any UITextDocumentProxy
+    ) {
         guard insertionGate.beginEvent() else { return }
         defer { insertionGate.endEvent() }
-        activeDocumentProxy.insertText(text)
+        documentProxy.insertText(text)
     }
 
     private func recordKeyboardState(_ state: IOSDiagnosticKeyboardState) {
@@ -1351,14 +1534,23 @@ final class KeyboardViewController: UIInputViewController {
         _ stage: IOSDiagnosticKeyboardDeliveryStage,
         requestID: UUID?,
         claimID: UUID? = nil,
-        proxyHasText: Bool? = nil
+        sourceDocumentID: UUID? = nil,
+        currentDocumentID: UUID? = nil
     ) {
         dependencies.recordDiagnostic(
             .keyboardDelivery(
                 stage,
                 request: requestID.map(IOSDiagnosticCorrelationTag.init),
                 claim: claimID.map(IOSDiagnosticCorrelationTag.init),
-                proxyHasText: proxyHasText
+                sourceDocument: sourceDocumentID.map(
+                    IOSDiagnosticCorrelationTag.init
+                ),
+                currentDocument: currentDocumentID.map(
+                    IOSDiagnosticCorrelationTag.init
+                ),
+                controllerLifetime: IOSDiagnosticCorrelationTag(
+                    controllerLifetimeID
+                )
             )
         )
     }

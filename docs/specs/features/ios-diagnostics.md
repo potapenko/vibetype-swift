@@ -39,7 +39,8 @@ can browse system-owned iOS crash files.
 - It must not claim `Full Access: disabled` from stale containing-app state.
 - Recent Runtime Events shows short lifecycle lines such as app launch, voice
   session start/stop/expiry, recording start/stop, provider stage outcome,
-  retry, insertion acknowledgement, cache outcome, and export outcome.
+  retry, insertion-claim consumption acknowledgement, cache outcome, and export
+  outcome.
 - Event lines use stable categories and scalar metadata. They never show the
   transcript, prompt, dictionary term, audio path, API key, authorization
   header, ordinary keystroke, surrounding text, or full provider response.
@@ -48,6 +49,14 @@ can browse system-owned iOS crash files.
   revision, expiry category, retry count, and success/failure category. It does
   not accept arbitrary string dictionaries and does not treat punctuation
   replacement as redaction.
+- Keyboard delivery events may correlate one request and claim with source and
+  current document identity plus the current keyboard-controller lifetime. They
+  use only opaque content-free tags, never raw identifiers, host-app identity,
+  text-input contents, or surrounding text.
+- Delivery events distinguish an `insertText` invocation, its synchronous
+  return, optional text-change observations, and claim-consumption
+  acknowledgement. None of those events claims that text became visible or
+  remained in the intended host input.
 - Diagnostics may project `VoiceAttemptStage` to one closed content-free stage
   category. That projection is not serialization of the runtime enum and
   carries no error message, transcript, model, prompt, file path, provider
@@ -92,6 +101,9 @@ can browse system-owned iOS crash files.
   the typed allowlist and forbidden-value tests above.
 - An insertion snapshot may contain short-lived accepted text under its own
   contract, but Diagnostics must never include that field.
+- Diagnostics never labels an insertion as delivered, inserted, confirmed, or
+  successful solely because `insertText` returned or UIKit reported a document
+  change. Correlation tags are supporting evidence, never delivery authority.
 - Diagnostics never mutates system-owned crash or diagnostic files.
 - MetricKit subscription and local ingestion perform no network upload and do
   not replace TestFlight or App Store crash collection.
@@ -132,6 +144,9 @@ can browse system-owned iOS crash files.
 - Test MetricKit payload persistence, seven-day pruning, empty delivery, and
   diagnostic-file inclusion with content-free fixtures.
 - Test every forbidden field against recent-event copy and bundle contents.
+- Test keyboard delivery formatting with distinct request, claim, source
+  document, current document, and controller-lifetime tags. Verify that raw
+  identifiers, proxy text state, and successful-insertion claims are absent.
 - Test that arbitrary string metadata cannot enter the portable event API and
   that representative forbidden values never survive formatting or export.
 - Verify that normal diagnostics paths perform no Keychain, microphone,

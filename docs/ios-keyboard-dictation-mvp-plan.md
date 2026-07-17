@@ -362,12 +362,17 @@ handoff starts one real capture and one sheet.
    the keyboard activity indicator.
 5. Remove instructional navigation copy from every keyboard recovery state.
 6. Preserve compact operational and runtime failures in the existing error area.
-7. Keep document identity as an independent automatic-insertion gate. UIKit may
-   issue a new proxy identifier when the user returns to the same input, so the
-   first non-empty identifier after exact consumed-handoff reconnection becomes
-   the delivery anchor. A later change or temporarily missing identity must not
-   hide Listening or prevent Finish, and it must not discard the accepted
-   result.
+7. Keep request control and automatic-delivery eligibility independent. A
+   consumed handoff may reconnect Listening and Finish, but only the currently
+   active and visible controller that originated the request may auto-deliver,
+   and only while its immutable non-empty source identifier exactly matches the
+   current non-empty proxy identifier. A hidden controller may observe state
+   but cannot claim or consume delivery. A returned identifier never becomes a
+   replacement anchor.
+8. Make delivery eligibility monotonic: controller recreation, a missing source,
+   or an observed non-empty mismatch disables auto-delivery for that request,
+   including after `A -> B -> A`, without hiding Listening or discarding the
+   accepted result.
 
 Exit when recreation, return, focus-change, and expiry tests pass without a
 wrong-field insertion or manual-session message.
@@ -377,9 +382,12 @@ wrong-field insertion or manual-session message.
 1. Finish real capture from the keyboard.
 2. Run existing transcription and selected post-processing exactly once.
 3. Persist accepted output in canonical Latest and current History policy.
-4. Claim delivery before `insertText` and never replay an uncertain insertion.
+4. Claim delivery before `insertText`, recheck the immutable destination on the
+   same proxy after grant, and never replay an uncertain invocation.
 5. Fall back to Latest when document identity or delivery certainty is missing.
-6. Acknowledge terminal attempt delivery separately from session lifetime.
+6. Treat acknowledgement as consumption of one claim by one insertion
+   invocation, not as proof that the host visibly accepted the text, and keep
+   it separate from session lifetime.
 7. Return an unexpired, healthy session to Ready for another keyboard attempt.
 8. Let an expired or unavailable session cause the next microphone tap to open
    HoldType again.

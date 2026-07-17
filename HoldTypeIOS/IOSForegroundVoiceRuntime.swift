@@ -5,6 +5,7 @@ import HoldTypeDomain
 
 nonisolated enum IOSKeyboardSnapshotAcceptancePublication {
     typealias Publish = @Sendable () async -> Void
+    typealias RefreshAcceptedHistory = @Sendable () async -> Void
     typealias AcceptDraft = @Sendable (
         IOSV1AcceptedOutputDeliveryRecord,
         IOSVoiceDraftInsertionMode
@@ -14,10 +15,12 @@ nonisolated enum IOSKeyboardSnapshotAcceptancePublication {
         to resolution: IOSForegroundVoiceProcessingResolution,
         draftInsertionMode: IOSVoiceDraftInsertionMode = .replace,
         acceptDraft: @escaping AcceptDraft = { _, _ in },
+        refreshAcceptedHistory: @escaping RefreshAcceptedHistory = {},
         publish: @escaping Publish
     ) async -> IOSForegroundVoiceProcessingResolution {
         if case .acceptance(.resultReady(let record, _)) = resolution {
             await acceptDraft(record, draftInsertionMode)
+            await refreshAcceptedHistory()
             await publish()
         }
         return resolution
@@ -147,6 +150,7 @@ final class IOSForegroundVoiceRuntime {
         publishKeyboardSnapshot: @escaping @Sendable () async -> Bool = {
             true
         },
+        refreshAcceptedHistory: @escaping @Sendable () async -> Void = {},
         factories: Factories
     ) {
         let sceneRegistry = factories.makeSceneRegistry()
@@ -313,6 +317,7 @@ final class IOSForegroundVoiceRuntime {
                     acceptDraft: { record, mode in
                         _ = await voiceDraftOwner.accept(record, mode: mode)
                     },
+                    refreshAcceptedHistory: refreshAcceptedHistory,
                     publish: {
                         await latestResultOwner.refreshKeyboardProjection()
                     }

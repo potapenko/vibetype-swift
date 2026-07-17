@@ -278,11 +278,13 @@ final class IOSContainingAppComposition {
             guard let keyboardSnapshotPublisher else { return true }
             return await keyboardSnapshotPublisher.publishCurrent()
         }
-        acceptedTextHistoryStateOwner =
+        let acceptedTextHistoryStateOwner =
             IOSAcceptedTextHistoryStateOwner(
                 repository: acceptedTextHistoryRepository,
                 publishKeyboardSnapshot: publishKeyboardSnapshot
             )
+        self.acceptedTextHistoryStateOwner =
+            acceptedTextHistoryStateOwner
         let voiceDraftRepository = factories.makeVoiceDraftRepository(
             applicationSupportDirectoryURL
         )
@@ -344,6 +346,10 @@ final class IOSContainingAppComposition {
             credentialCoordinator: credentialCoordinator,
             processor: foregroundVoiceProcessor,
             publishKeyboardSnapshot: publishKeyboardSnapshot,
+            refreshAcceptedHistory: {
+                await acceptedTextHistoryStateOwner
+                    .refreshPresentationAfterAcceptedResult()
+            },
             factories: factories.voiceFactories
         )
         self.foregroundVoiceRuntime = foregroundVoiceRuntime

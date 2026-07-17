@@ -4,9 +4,8 @@ Status: active canonical contract for keyboard-originated dictation.
 
 This spec governs the path that begins with the microphone in HoldType
 Keyboard. It supersedes conflicting requirements in older iOS specs and plans
-that say the keyboard must not open HoldType, that the user must first start a
-Keyboard Dictation Session manually, or that an extension restart always makes
-automatic delivery ineligible.
+that say the keyboard must not open HoldType or that the user must first start
+a Keyboard Dictation Session manually.
 
 The containing app's ordinary Voice experience remains governed by the iOS
 release and voice specs. A keyboard handoff lands on that same first Voice
@@ -27,8 +26,14 @@ flow comparable to Wispr Flow:
 4. the keyboard reconnects to the same request even if the extension was
    recreated;
 5. the user finishes or cancels from the keyboard;
-6. accepted text is delivered back to the originating document exactly once
-   when that destination is still eligible.
+6. accepted text may cause one automatic insertion invocation only while the
+   originating keyboard controller is active and visible and can still prove
+   the same destination.
+
+A recreated extension may reconnect request control, but it never inherits
+automatic-delivery eligibility from the controller that originated the
+request. Request ownership and destination eligibility are independent
+capabilities.
 
 The product does not ship a keyboard whose normal voice workflow requires the
 user to open HoldType first and manually prepare a session. If this complete
@@ -155,12 +160,16 @@ resolved by silently degrading the keyboard into that manual-session design.
   automatically, saves Pending audio before provider work, and shows
   `Processing — recording limit reached; audio saved`. The user does not need to keep the
   extension alive for this finalization.
-- A fresh accepted result inserts automatically only when the current document
-  still matches the post-return delivery anchor for the exact consumed request
-  and delivery has not already been claimed.
+- A fresh accepted result may invoke automatic insertion only while the same
+  live keyboard controller that created the request is currently active and
+  visible, still owns it, the request has a non-empty immutable source document
+  identifier, the current proxy has the same non-empty identifier, eligibility
+  has never been invalidated, and the exact delivery claim is granted.
 - If safe automatic delivery is no longer possible, the result remains in
-  Latest and the keyboard offers an explicit Insert recovery action. That is an
-  exception path, not the normal workflow.
+  canonical Latest. While the bounded transient result is still available, the
+  keyboard's existing Latest action gives that result priority and inserts it
+  only after an explicit tap into the then-current input. That is an exception
+  path, not the normal workflow, and it produces no host-change warning.
 
 ## State Contract
 
@@ -191,41 +200,56 @@ microphone appear active.
 - An attempt identifier names one recorder and provider execution inside that
   session.
 - Each keyboard microphone tap creates a new opaque request identifier.
-- The request records the originating `UITextDocumentProxy.documentIdentifier`
-  when iOS provides one.
+- The originating live controller freezes the request's
+  `UITextDocumentProxy.documentIdentifier` when iOS provides one. That source
+  identifier is immutable for the attempt.
 - The URL used to open HoldType carries only bounded opaque routing identity. It
   does not contain audio, transcript text, credentials, prompts, or host content.
 - The containing app starts recording only when the URL matches a fresh shared
   request. An unrelated ordinary app launch does not start the microphone.
 - A recreated keyboard extension reconnects control only when the session,
   attempt, and request match both shared state and the last app-consumed
-  keyboard handoff. Extension-process identity is never a valid ownership
-  boundary.
-- Originating document identity remains pre-handoff evidence, but UIKit may
-  issue a different proxy identifier when the user returns to the same input
-  after the containing app handoff. After reconnection through the exact
-  consumed request, the first non-empty returned proxy identifier becomes the
-  delivery anchor for that keyboard lifetime.
-- A missing returned identifier never prevents the user from seeing Listening
-  or finishing the matching capture. The keyboard may repeat that local read
-  for a short bounded interval while the result remains fresh, but it must not
-  request a delivery claim or insert until a non-empty delivery anchor exists.
-- If the current identifier changes after the returned delivery anchor is
-  established, automatic insertion is ineligible and the accepted result
-  remains in Latest. Two missing values are never a match.
+  keyboard handoff. That evidence restores Listening, Processing, Finish, and
+  Cancel ownership only; it never proves an insertion destination.
+- Automatic delivery remains eligible only in the originating live controller
+  while that controller is currently active and visible, and only while the
+  current non-empty identifier exactly equals the immutable non-empty source
+  identifier. A hidden controller may observe shared state but cannot claim or
+  consume delivery.
+- UIKit may issue a different identifier after returning to the same visible
+  field. The extension cannot distinguish that case from a different field or
+  host app, so a returned identifier never becomes a replacement anchor.
+- A missing source identifier, a non-empty mismatch, controller recreation, or
+  any previously observed destination change permanently invalidates automatic
+  delivery for that request. Returning from `A -> B -> A` does not restore it.
+- A temporarily missing current identifier never hides Listening or prevents
+  Finish. The originating controller may repeat that local read for a short
+  bounded interval while the result remains fresh, but any identifier that
+  appears must still equal the frozen source. Two missing values are never a
+  match.
+- Loss of delivery eligibility is silent and independent from capture control.
+  The accepted result remains in canonical Latest and may be inserted into the
+  then-current input only by an explicit user action.
 
 ## Delivery Guarantees
 
-- One accepted result may be inserted automatically at most once.
-- Delivery eligibility requires the same consumed request, a current document
-  matching its post-return delivery anchor, an unexpired result, and no prior
-  insertion claim.
+- One accepted result may cause at most one automatic `insertText` invocation.
+- Delivery eligibility requires the originating controller to be currently
+  active and visible, its exact active request, an unexpired result, an exact
+  non-empty source/current document match, no prior disqualification, and no
+  prior insertion invocation.
 - The keyboard writes a fresh opaque delivery-claim identifier and waits for
   the containing app to grant that exact claim before calling `insertText`.
+- The controller rechecks eligibility after the grant and invokes `insertText`
+  on the same proxy instance whose document identifier passed that final gate.
 - A recreated extension does not inherit another process's granted claim, so
   an uncertain insertion is never replayed.
-- A matching post-insertion acknowledgement retires only the completed attempt
-  and returns an unexpired app-owned session to Ready.
+- A matching acknowledgement means only that one granted claim was consumed by
+  one `insertText` invocation. It does not prove that the host accepted or
+  visibly rendered the text. `insertText` return and text-change callbacks are
+  diagnostic observations, not delivery receipts.
+- That claim-consumption acknowledgement retires only the completed attempt and
+  returns an unexpired app-owned session to Ready.
 - An expiry callback owns only the snapshot that scheduled it. Before clearing
   attempt ownership it reloads the canonical bridge slot; a newer same-attempt
   Processing, Result, Failed, or Unavailable record is handled exactly once,
@@ -285,8 +309,11 @@ microphone appear active.
   refreshes do not dismiss either already-open local surface.
 - Finish from the keyboard and Cancel from the handoff sheet control the same
   app-owned recording.
-- Accepted text inserts exactly once into the originating document when it is
-  still eligible.
+- Accepted text causes at most one automatic insertion invocation, only from
+  the currently active and visible originating controller with an exact
+  non-empty source/current document match.
+- A recreated extension may reconnect and finish the exact capture, but it
+  cannot automatically insert that capture's result.
 - Repeated microphone taps within the same healthy warm session start distinct
   dictation attempts without another containing-app handoff.
 - Ready expires after 60 idle seconds, while Listening continues to its own
