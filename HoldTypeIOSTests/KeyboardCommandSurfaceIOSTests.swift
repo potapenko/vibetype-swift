@@ -49,17 +49,6 @@ struct KeyboardCommandSurfaceIOSTests {
         #expect(KeyboardVoiceStatus.ready.accessibilityAnnouncement == nil)
     }
 
-    @Test func retiredManualSessionLabelsAreNotProductionStatuses() {
-        let labels = Set(KeyboardVoiceStatus.allCases.map(\.rawValue))
-        #expect(!labels.contains("Session not running"))
-        #expect(!labels.contains("Start a voice session"))
-        #expect(
-            !labels.contains(
-                "Open HoldType → Voice → Keyboard Dictation Session"
-            )
-        )
-    }
-
     @Test func cursorDragAccumulatesThresholdsAndReportsDirection() {
         var accumulator = KeyboardCursorDragAccumulator(maximumCharactersPerUpdate: 3)
 

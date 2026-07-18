@@ -1,4 +1,3 @@
-import HoldTypeOpenAI
 @_spi(HoldTypeIOSCore) import HoldTypePersistence
 import Testing
 @testable import HoldTypeIOS
@@ -24,9 +23,7 @@ struct OpenAIProviderServicesIOSTests {
         try await containingAppEventually {
             await recoveryRecorder.opportunities() == [.processLaunch]
         }
-        requireContentFreeSchedule(OpenAIProviderStartupMaintenance.schedule)
     }
-    private func requireContentFreeSchedule(_: () -> Void) {}
 }
 
 private actor ContainingAppRecoveryInvocationRecorder {

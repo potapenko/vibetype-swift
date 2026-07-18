@@ -43,34 +43,6 @@ struct IOSContainingAppLifecycleSchedulerTests {
         )
     }
 
-    @Test func foregroundSignalQueuedDuringLaunchRunsAfterCurrentPass()
-        async throws {
-        let firstPass = LifecycleRecoveryLatch()
-        let recorder = LifecycleRecoveryRecorder(
-            results: [.complete, .complete],
-            blockedPasses: [0: firstPass]
-        )
-        let scheduler = IOSContainingAppLifecycleScheduler { opportunity in
-            await recorder.recover(opportunity)
-        }
-
-        scheduler.scheduleProcessLaunch()
-        try await lifecycleEventually {
-            await recorder.opportunities() == [.processLaunch]
-        }
-        scheduler.scheduleForeground()
-        #expect(await recorder.opportunities() == [.processLaunch])
-
-        await firstPass.open()
-        await scheduler.waitUntilIdle()
-        #expect(
-            await recorder.opportunities()
-                == [.processLaunch, .foregroundOpportunity]
-        )
-        #expect(await recorder.maximumConcurrentRecoveries() == 1)
-        #expect(scheduler.latestDisposition == .complete)
-    }
-
     @Test func aggregateForegroundRequiresValidatedFalseToTrueTransition()
         async {
         let recorder = LifecycleRecoveryRecorder(
@@ -149,6 +121,7 @@ struct IOSContainingAppLifecycleSchedulerTests {
                 == [.processLaunch, .foregroundOpportunity]
         )
         #expect(await recorder.maximumConcurrentRecoveries() == 1)
+        #expect(scheduler.latestDisposition == .complete)
     }
 
     @Test func mixedQueuedBurstCoalescesToLaunchBeforeForeground()
