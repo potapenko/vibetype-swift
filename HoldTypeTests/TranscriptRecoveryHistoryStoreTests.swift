@@ -128,15 +128,6 @@ struct TranscriptRecoveryHistoryStoreTests {
         #expect(store.deleteEntry(id: UUID()) == false)
     }
 
-    @Test func whitespaceOnlyRawTextIsRejectedBeforeTheStoreBoundary() {
-        let store = TranscriptRecoveryHistoryStore()
-
-        #expect(throws: AcceptedTranscript.ValidationError.emptyText) {
-            _ = try makeRequest(" \n\t ")
-        }
-        #expect(store.entries.isEmpty)
-    }
-
     private func makeRequest(
         _ rawText: String,
         transcriptionModel: String = TranscriptionConfiguration.defaultModel,

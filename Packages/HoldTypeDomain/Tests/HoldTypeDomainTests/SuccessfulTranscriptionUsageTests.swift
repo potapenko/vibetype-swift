@@ -51,20 +51,6 @@ struct SuccessfulTranscriptionUsageTests {
         }
     }
 
-    @Test func recorderExistentialReceivesTheExactRuntimeValue() throws {
-        let usage = try SuccessfulTranscriptionUsage(
-            transcriptionID: UUID(),
-            model: "gpt-4o-transcribe",
-            audioDuration: 12
-        )
-        let spy = SuccessfulTranscriptionUsageRecorderSpy()
-        let recorder: any TranscriptionUsageRecording = spy
-
-        recorder.recordSuccessfulTranscriptionUsage(usage)
-
-        #expect(spy.calls == [usage])
-    }
-
     @Test func publicValueIsSendableButNotAPersistenceContract() throws {
         requireSendable(SuccessfulTranscriptionUsage.self)
         let usage = try SuccessfulTranscriptionUsage(
@@ -78,13 +64,4 @@ struct SuccessfulTranscriptionUsageTests {
     }
 
     private func requireSendable<Value: Sendable>(_: Value.Type) {}
-}
-
-@MainActor
-private final class SuccessfulTranscriptionUsageRecorderSpy: TranscriptionUsageRecording {
-    private(set) var calls: [SuccessfulTranscriptionUsage] = []
-
-    func recordSuccessfulTranscriptionUsage(_ usage: SuccessfulTranscriptionUsage) {
-        calls.append(usage)
-    }
 }

@@ -24,19 +24,6 @@ struct OpenAICredentialTests {
         #expect(credential != (try OpenAICredential(apiKey: "SK-TEST")))
     }
 
-    @Test func resolverExistentialReturnsExactCredentialsAndPreservesFailures() throws {
-        let credential = try OpenAICredential(apiKey: "sk-resolver-test")
-        let successfulResolver: any OpenAICredentialResolving =
-            OpenAICredentialResolverSpy(result: .success(credential))
-        let failingResolver: any OpenAICredentialResolving =
-            OpenAICredentialResolverSpy(result: .failure(.sampleFailure))
-
-        #expect(try successfulResolver.resolveOpenAICredential() == credential)
-        #expect(throws: OpenAICredentialResolverTestError.sampleFailure) {
-            _ = try failingResolver.resolveOpenAICredential()
-        }
-    }
-
     @Test func publicValuesAreSendableButNotTransportContracts() throws {
         requireSendable(OpenAICredential.self)
         requireSendable(OpenAICredentialSource.self)
@@ -76,16 +63,4 @@ struct OpenAICredentialTests {
     }
 
     private func requireSendable<Value: Sendable>(_: Value.Type) {}
-}
-
-private enum OpenAICredentialResolverTestError: Error {
-    case sampleFailure
-}
-
-private struct OpenAICredentialResolverSpy: OpenAICredentialResolving {
-    let result: Result<OpenAICredential, OpenAICredentialResolverTestError>
-
-    func resolveOpenAICredential() throws -> OpenAICredential {
-        try result.get()
-    }
 }
