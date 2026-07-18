@@ -463,13 +463,6 @@ enum IOSVoiceHomePresentation {
                 image: "exclamationmark.circle",
                 tone: .warning
             )
-        case .expired:
-            status(
-                "Voice session unavailable",
-                detail: "This session state is not available in one-shot dictation.",
-                image: "exclamationmark.triangle",
-                tone: .warning
-            )
         }
     }
 

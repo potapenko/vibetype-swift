@@ -6,5 +6,4 @@ public enum VoiceAttemptOutcome: Equatable, Sendable {
     case resultReady
     case recoverableFailure
     case interrupted
-    case expired
 }

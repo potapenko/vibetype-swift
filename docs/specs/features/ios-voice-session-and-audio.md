@@ -20,7 +20,7 @@ activity or losing completed recordings.
   reference
 - recording tail, cues, interruptions, routes, lock, and background behavior
 - completed recording journaling and provider handoff
-- cancellation, expiry, and recovery
+- cancellation, interruption, and recovery
 
 ## Non-goals
 
@@ -540,8 +540,8 @@ Full Access, none of these extension-to-app commands is available.
   separate Latest card or direct Latest Copy, Share, Use in Practice, or Clear
   actions. The app-private Latest record is replaced only by a newer accepted
   result or fail-closed invalidation.
-- P4 never presents `ready`, Quick Session `expired`, or `Stop Voice Session`;
-  those states and actions remain behind P6/M0C.
+- P4 never presents `ready` or `Stop Voice Session`; Quick Session state and
+  actions remain outside the current release contract.
 - Every action is at-most-once for its current phase and identity. Repeated taps,
   stale callbacks, another scene, or a late provider completion cannot create a
   parallel recording, duplicate request, second accepted output, or discard a
@@ -649,7 +649,7 @@ Active voice work uses one payload-free runtime phase:
 
 `inactive` means no capture, finalization, or provider chain is currently
 running. It does not erase a setup requirement, latest result, recoverable
-failure, interruption/expiry reason, or delivery outcome. `arming` begins when
+failure, interruption reason, or delivery outcome. `arming` begins when
 an explicit start is accepted and covers preflight, any allowed permission
 request, and audio-session activation before retained capture or armed-ready
 operation. A blocked arming attempt returns to `inactive` with its separate
@@ -758,8 +758,8 @@ extracts the value, but those mappings do not redefine iOS preflight behavior.
 ### Runtime Attempt Outcome
 
 `VoiceAttemptOutcome` is the payload-free terminal result presented for one
-voice attempt. It has exactly four cases: `resultReady`, `recoverableFailure`,
-`interrupted`, and `expired`.
+voice attempt. It has exactly three cases: `resultReady`,
+`recoverableFailure`, and `interrupted`.
 
 `resultReady` means non-empty accepted text is safe in the containing app; it
 does not claim insertion or acknowledgement. `recoverableFailure` means the
@@ -767,24 +767,22 @@ completed capture is retained under an eligible failed-attempt owner; the exact
 Retry, Discard, setup, and repair actions remain separate. A transient error
 without that retained ownership is not recoverable.
 `interrupted` is reserved for a real audio/platform lifecycle interruption, not
-ordinary user cancellation or blocked preflight. `expired` remains only as a
-compatibility outcome for a legacy attempt that was already terminal; an idle
-session TTL never ends retained Listening or Processing. If the platform can no
-longer continue capture, the positive-byte partial is `interrupted`; the frozen
-per-utterance maximum is the only automatic Listening deadline.
+ordinary user cancellation or blocked preflight. If the platform can no longer
+continue capture, the positive-byte partial is `interrupted`; the frozen
+per-utterance maximum is the only automatic Listening deadline and follows the
+normal successful Finish path rather than creating another attempt outcome.
 
 Accepted-output retention expiry and detected delivery-record clock rollback
-are not `VoiceAttemptOutcome.expired`. They produce separate content-free output
+are not voice-attempt outcomes. They produce separate content-free output
 recovery observations and never produce `resultReady`, Copy, Share, or Use in
 Practice while temporally ineligible, even if protected bytes remain available
 internally for later trustworthy maintenance.
 
-Quick Session expiry while merely `ready` creates no attempt outcome. Session
-expiry is suspended while `listening` or `processing` and does not overwrite
-the still-valid attempt; its eventual terminal result remains authoritative.
-Reaching the per-utterance maximum automatically finishes capture and follows
-the ordinary Pending/provider path; its eventual provider result determines the
-terminal outcome.
+The current release has no Quick Session expiry outcome. Reaching the
+per-utterance maximum automatically finishes capture and follows the ordinary
+Pending/provider path; its eventual provider result determines the terminal
+outcome. Any future Quick Session expiry contract requires an active spec and
+must not silently expand this runtime enum.
 
 The outcome carries no text, error, reason, identifier, timestamp, retry flag,
 setup destination, output-delivery state, user-facing copy, or stable
@@ -798,9 +796,8 @@ the bridge-owned output-delivery observations. P1 macOS compatibility may
 project only a non-empty accepted final result as `resultReady`, or the current
 failed presentation as `recoverableFailure` when its eligible attempt is still
 retained. Ordinary cancel projects no outcome, and macOS does not synthesize
-`interrupted` or `expired`. iOS interruption/expiry adapters, detailed portable
-failure categories, and durable outcome reconciliation remain later milestone
-work.
+`interrupted`. Detailed portable failure categories and durable outcome
+reconciliation remain later milestone work.
 
 The containing app and keyboard presentations derive their understandable
 user-facing state from separate sources instead of persisting or transporting
@@ -809,15 +806,15 @@ the phase as a complete product state:
 - setup availability presents `needsSetup` or `needsActivation`;
 - active work presents `arming`, `ready`, `listening`, `finalizing`, or
   `processing`;
-- the attempt outcome presents `resultReady`, `recoverableFailure`,
-  `interrupted`, or `expired` while active work may already be `inactive`;
+- the attempt outcome presents `resultReady`, `recoverableFailure`, or
+  `interrupted` while active work may already be `inactive`;
 - output delivery presents `confirmedInserted` or `deliveryUnverified` under
   `ios-output-actions.md`.
 
 Each observer presents one understandable projection at a time, but these
-underlying concerns are not one mutually exclusive enum. Interruption and
-expiry remain distinct terminal reasons even when a compact surface gives them
-the same recovery layout. The UI must not label an armed background microphone
+underlying concerns are not one mutually exclusive enum. Interruption remains a
+distinct terminal reason even when a compact surface shares its recovery layout
+with another failure. The UI must not label an armed background microphone
 session as inactive, and must not label setup-dependent behavior as ready.
 
 ## Invariants
@@ -857,19 +854,16 @@ session as inactive, and must not label setup-dependent behavior as ready.
   Recording or Discard. Fresh zero-byte active is Discard-only. Preparing state
   with exact resumable Pending audio offers Recover Recording only; a valid
   `awaitingRecovery` Pending offers Retry or Discard. None auto-uploads.
-- An interruption or Quick Session expiry during `listening` stops capture. A
+- An interruption during `listening` stops capture. A
   valid minimum-duration partial first becomes a recoverable source and, only
   if bounded local handoff completes, an `awaitingRecovery` Pending. The former
   presents Recover Recording or Discard; the latter presents Retry or Discard.
   An exact empty partial enters cleanup-only discarding state; any bounded
   non-empty partial remains completed recovery even when duration metadata is
   suspect or unknown. The
-  terminal outcome is `interrupted` for the actual lifecycle interruption and
-  `expired` for the Quick Session
-  deadline; recovery actions remain separate from that reason.
-- Quick Session expiry in `ready` simply disarms the session. Expiry in
-  `processing` stops audio and preserves the active provider/pending state;
-  its matching result may still complete normally.
+  terminal outcome is `interrupted`; recovery actions remain separate from
+  that reason. The per-utterance maximum is a normal automatic Finish, not an
+  interruption or expiry outcome.
 - If Quick Session background behavior uses unacceptable battery, fails to stop
   deterministically, or is rejected by App Review, M0C fails and the product
   retains foreground one-shot dictation.

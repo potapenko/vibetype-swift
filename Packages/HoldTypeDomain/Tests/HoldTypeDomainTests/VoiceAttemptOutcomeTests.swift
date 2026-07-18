@@ -3,15 +3,14 @@ import Testing
 import HoldTypeDomain
 
 struct VoiceAttemptOutcomeTests {
-    @Test func representsExactlyTheFourTerminalAttemptOutcomes() {
+    @Test func representsExactlyTheThreeTerminalAttemptOutcomes() {
         let outcomes: [VoiceAttemptOutcome] = [
             .resultReady,
             .recoverableFailure,
             .interrupted,
-            .expired,
         ]
 
-        #expect(outcomes.map(marker(for:)) == [0, 1, 2, 3])
+        #expect(outcomes.map(marker(for:)) == [0, 1, 2])
         for leftIndex in outcomes.indices {
             for rightIndex in outcomes.indices {
                 #expect((outcomes[leftIndex] == outcomes[rightIndex]) == (leftIndex == rightIndex))
@@ -40,7 +39,6 @@ struct VoiceAttemptOutcomeTests {
         #expect(phase == .inactive)
         #expect(stage == .outputDelivery)
         #expect(outcome == .resultReady)
-        #expect(VoiceAttemptOutcome.expired == .expired)
     }
 
     private func marker(for outcome: VoiceAttemptOutcome) -> Int {
@@ -51,8 +49,6 @@ struct VoiceAttemptOutcomeTests {
             return 1
         case .interrupted:
             return 2
-        case .expired:
-            return 3
         }
     }
 

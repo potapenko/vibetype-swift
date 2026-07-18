@@ -2620,8 +2620,6 @@ final class IOSForegroundVoiceWorkflow {
             .succeeded
         case .interrupted:
             .cancelled
-        case .expired:
-            .stale
         case .recoverableFailure:
             .failed
         case nil:

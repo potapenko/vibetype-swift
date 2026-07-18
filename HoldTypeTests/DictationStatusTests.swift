@@ -74,7 +74,6 @@ struct DictationStatusTests {
 
         #expect(projectedOutcomes == [.resultReady, .resultReady])
         #expect(projectedOutcomes.contains(.interrupted) == false)
-        #expect(projectedOutcomes.contains(.expired) == false)
     }
 
 }

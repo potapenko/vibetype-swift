@@ -428,7 +428,6 @@ struct IOSVoiceHomePresentationTests {
             .resultReady,
             .recoverableFailure,
             .interrupted,
-            .expired,
         ]
         for outcome in outcomes {
             let resolved = IOSVoiceHomePresentation.resolve(
@@ -438,12 +437,6 @@ struct IOSVoiceHomePresentationTests {
             #expect(!resolved.detail.isEmpty)
         }
 
-        let unavailableSession = IOSVoiceHomePresentation.resolve(
-            voicePresentation(outcome: .expired)
-        )
-        #expect(unavailableSession.title == "Voice session unavailable")
-        #expect(unavailableSession.tone == .warning)
-        #expect(!unavailableSession.detail.contains("Latest Result"))
     }
 
     @Test func activePhaseThenBlockingSetupOwnTheVisibleNextStep() {
@@ -611,7 +604,6 @@ private func voiceStatusFixtures() -> [IOSForegroundVoicePresentation] {
         VoiceAttemptOutcome.resultReady,
         .recoverableFailure,
         .interrupted,
-        .expired,
     ].map { voicePresentation(outcome: $0) }
     values.append(
         voicePresentation(
