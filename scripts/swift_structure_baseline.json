@@ -64,7 +64,6 @@
     "Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests/OpenAIFileUploadTransportTests.swift": 1147,
     "Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests/OpenAIProviderStartupMaintenanceTests.swift": 1255,
     "Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests/OpenAIReaderTranscriptionRequestTests.swift": 833,
-    "Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests/OpenAITextCorrectionServiceTests.swift": 530,
     "Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests/OpenAITextTranslationServiceTests.swift": 615,
     "Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests/OpenAITranscriptionRequestBuilderTests.swift": 1663,
     "Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests/OpenAITranscriptionServiceTests.swift": 1372,
