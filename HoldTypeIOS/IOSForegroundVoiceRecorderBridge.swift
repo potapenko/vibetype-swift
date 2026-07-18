@@ -167,7 +167,6 @@ private final class IOSForegroundVoiceRecorderBridgeAttemptOwner {
         IOSForegroundVoiceWorkflowCaptureStopReason
     ) -> Void)?
     private var observationGeneration: UInt64 = 0
-    private var terminalWait: IOSVoiceRecorderTerminalWait?
     private var terminalTask: Task<Void, Never>?
     private var pendingTerminalResult: IOSVoiceRecorderStopResult?
     private var terminalResultWasHandled = false
@@ -301,7 +300,6 @@ private final class IOSForegroundVoiceRecorderBridgeAttemptOwner {
     private func installTerminalWaitIfNeeded() {
         guard terminalTask == nil else { return }
         let wait = driver.waitForTerminal(token)
-        terminalWait = wait
         terminalTask = Task { @MainActor [weak self, wait] in
             let event = await wait.value()
             guard !Task.isCancelled, let self else { return }
@@ -310,7 +308,6 @@ private final class IOSForegroundVoiceRecorderBridgeAttemptOwner {
     }
 
     private func receive(_ event: IOSVoiceRecorderTerminalEvent) async {
-        terminalWait = nil
         terminalTask = nil
         guard let reason = Self.map(event.cause) else {
             release(event.result)
