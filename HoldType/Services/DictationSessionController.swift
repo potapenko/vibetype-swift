@@ -1428,7 +1428,7 @@ final class DictationSessionController {
     private func preserveInterruptedCapture(
         completionKind: TranscriptionRecoveryCompletionKind,
         reuseCheckpointFallback: Bool = false,
-        terminalCause: RecordingTerminalCause? = nil,
+        terminalCause: RecordingTerminalCause?,
         providerAuthorized: Bool = false
     ) -> FailedTranscriptionAttempt? {
         guard let captureLease = activeRecordingCaptureLease else {

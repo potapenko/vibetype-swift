@@ -1477,8 +1477,8 @@ final class KeyboardViewController: UIInputViewController {
         _ stage: IOSDiagnosticKeyboardDeliveryStage,
         requestID: UUID?,
         claimID: UUID? = nil,
-        sourceDocumentID: UUID? = nil,
-        currentDocumentID: UUID? = nil
+        sourceDocumentID: UUID?,
+        currentDocumentID: UUID?
     ) {
         dependencies.recordDiagnostic(
             .keyboardDelivery(

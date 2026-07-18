@@ -47,25 +47,6 @@ struct TranscriptHistoryEntry: Codable, Equatable, Identifiable {
         self.cachedAudioFileURL = cachedAudioFileURL
     }
 
-    init(
-        id: UUID = UUID(),
-        createdAt: Date = Date(),
-        transcriptText: String,
-        transcriptionModel: String,
-        languageCode: String?,
-        audioDuration: TimeInterval? = nil
-    ) throws {
-        try self.init(
-            id: id,
-            createdAt: createdAt,
-            transcriptText: transcriptText,
-            transcriptionModel: transcriptionModel,
-            languageCode: languageCode,
-            audioDuration: audioDuration,
-            cachedAudioFileURL: nil
-        )
-    }
-
     private enum CodingKeys: String, CodingKey {
         case id
         case createdAt

@@ -93,9 +93,9 @@ final class IOSForegroundVoiceWorkflow {
         init(
             token: IOSForegroundVoiceWorkflowAttemptToken,
             origin: Origin,
-            forcesTextCorrection: Bool = false,
-            clearsDraftOnStart: Bool = false,
-            draftInsertionMode: IOSVoiceDraftInsertionMode = .replace
+            forcesTextCorrection: Bool,
+            clearsDraftOnStart: Bool,
+            draftInsertionMode: IOSVoiceDraftInsertionMode
         ) {
             self.token = token
             self.origin = origin
@@ -783,7 +783,7 @@ final class IOSForegroundVoiceWorkflow {
         _ intent: DictationOutputIntent,
         origin: Attempt.Origin,
         token: IOSForegroundVoiceWorkflowAttemptToken,
-        forcesTextCorrection: Bool = false,
+        forcesTextCorrection: Bool,
         clearsDraftOnStart: Bool = false,
         draftInsertionMode: IOSVoiceDraftInsertionMode = .replace,
         progress: @escaping IOSForegroundVoiceClient.Progress
