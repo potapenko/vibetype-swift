@@ -1,3 +1,4 @@
+import Foundation
 import HoldTypeDomain
 import HoldTypePersistence
 import SwiftUI
@@ -157,115 +158,25 @@ struct IOSCustomEmojiCommandEditorView: View {
     private func editorForm(
         _ current: IOSEmojiCommandEditorSession
     ) -> AnyView {
-        AnyView(Form {
-            IOSEmojiCommandEditorStatusSection(
-                phase: current.phase,
-                canReloadLatest: current.canReloadLatest,
-                canReplaceLatest: current.canReplaceLatest
-                    && current.validation(
-                        in: durableCustomCommands
-                    ) == .valid,
+        AnyView(
+            IOSEmojiCommandEditorForm(
+                isNew: mode.isNew,
+                session: current,
+                customCommands: durableCustomCommands,
+                output: draftBinding(\.output),
+                primaryPhrase: draftBinding(\.primaryPhrase),
+                aliasesText: draftBinding(\.aliasesText),
+                canDelete: canDelete,
+                isDisabled: current.isSaving || deleteInFlight,
                 reloadLatest: reloadLatest,
                 requestReplaceLatest: {
                     showsReplaceConfirmation = true
+                },
+                requestDelete: {
+                    showsDeleteConfirmation = true
                 }
             )
-
-            Section("Command") {
-                TextField(
-                    "Output",
-                    text: draftBinding(\.output),
-                    axis: .vertical
-                )
-                .lineLimit(1...3)
-                .autocorrectionDisabled()
-                .accessibilityHint(
-                    "Enter the text or emoji produced by the spoken phrase."
-                )
-
-                TextField(
-                    "Primary spoken phrase",
-                    text: draftBinding(\.primaryPhrase),
-                    axis: .vertical
-                )
-                .lineLimit(1...3)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            }
-
-            Section("Aliases") {
-                TextField(
-                    "One optional alias per line",
-                    text: draftBinding(\.aliasesText),
-                    axis: .vertical
-                )
-                .lineLimit(3...10)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-
-                Text(
-                    "Aliases are alternate spoken phrases for the same output."
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-
-            validationSection(current)
-
-            if !mode.isNew {
-                Section {
-                    Button("Delete Custom Command", role: .destructive) {
-                        showsDeleteConfirmation = true
-                    }
-                    .disabled(!canDelete)
-                }
-            }
-
-            Section {
-                Text(
-                    "Custom commands are normalized only when you Save. "
-                        + "They remain private to the containing app and are "
-                        + "never copied into the keyboard extension."
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-        }
-        .disabled(current.isSaving || deleteInFlight)
-        .scrollDismissesKeyboard(.interactively))
-    }
-
-    @ViewBuilder
-    private func validationSection(
-        _ current: IOSEmojiCommandEditorSession
-    ) -> some View {
-        if current.isDirty {
-            switch current.validation(in: durableCustomCommands) {
-            case .valid:
-                EmptyView()
-            case .missingOutput:
-                Section {
-                    IOSSettingsWarningLabel(
-                        "Enter a non-empty output.",
-                        color: .red
-                    )
-                }
-            case .missingPrimaryPhrase:
-                Section {
-                    IOSSettingsWarningLabel(
-                        "Enter a primary spoken phrase. An alias cannot replace it.",
-                        color: .red
-                    )
-                }
-            case .customPhraseCollision:
-                Section {
-                    IOSSettingsWarningLabel(
-                        "A primary phrase or alias already belongs to another custom command.",
-                        color: .red
-                    )
-                }
-            }
-        }
+        )
     }
 
     private var durableCustomCommands: [CustomEmojiCommand] {
@@ -487,133 +398,24 @@ struct IOSCustomEmojiCommandEditorView: View {
 
 }
 
-private struct IOSMissingCustomEmojiCommandView: View {
-    var body: some View {
-        ContentUnavailableView {
-            Label(
-                "Command Unavailable",
-                systemImage: "exclamationmark.triangle"
-            )
-        } description: {
-            Text(
-                "This custom command is no longer saved."
-            )
-        }
-    }
-}
-
-private struct IOSEmojiCommandEditorStatusSection: View {
-    let phase: IOSEmojiCommandEditorPhase
-    let canReloadLatest: Bool
-    let canReplaceLatest: Bool
-    let reloadLatest: () -> Void
-    let requestReplaceLatest: () -> Void
-
-    @ViewBuilder
-    var body: some View {
-        switch phase {
-        case .idle:
-            EmptyView()
-        case .saving:
-            Section {
-                ProgressView("Saving…")
-            }
-        case .saved:
-            Section {
-                Label("Saved", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            }
-        case .saveFailed:
-            Section {
-                IOSSettingsWarningLabel(
-                    "Not Saved. The saved command is unchanged and any draft is retained.",
-                    color: .red
-                )
-            }
-        case .changedElsewhere:
-            Section("Changed Elsewhere") {
-                IOSSettingsWarningLabel(
-                    "The saved command changed. This draft has not been saved.",
-                    color: .orange
-                )
-                Button("Reload Latest", action: reloadLatest)
-                    .disabled(!canReloadLatest)
-                Button("Replace Latest", role: .destructive) {
-                    requestReplaceLatest()
-                }
-                .disabled(!canReplaceLatest)
-            }
-        case .deletedElsewhere:
-            Section {
-                IOSSettingsWarningLabel(
-                    "This command was deleted elsewhere. Save cannot recreate it.",
-                    color: .orange
-                )
-            }
-        case .invalid:
-            Section {
-                IOSSettingsWarningLabel(
-                    "This draft is invalid or conflicts with another custom phrase.",
-                    color: .red
-                )
-            }
-        }
-    }
-}
-
-private struct IOSEmojiCommandEditorPersistentStatus: View {
-    let phase: IOSEmojiCommandEditorPhase
-
-    @ViewBuilder
-    var body: some View {
-        switch phase {
-        case .saveFailed:
-            status(
-                "Not Saved — saved command unchanged",
-                systemImage: "exclamationmark.triangle.fill",
-                color: .red
-            )
-        case .changedElsewhere:
-            status(
-                "Changed Elsewhere — draft not saved",
-                systemImage: "arrow.triangle.2.circlepath",
-                color: .orange
-            )
-        case .deletedElsewhere:
-            status(
-                "Deleted Elsewhere — Save unavailable",
-                systemImage: "trash",
-                color: .orange
-            )
-        case .idle, .saving, .saved, .invalid:
-            EmptyView()
-        }
-    }
-
-    private func status(
-        _ title: String,
-        systemImage: String,
-        color: Color
-    ) -> some View {
-        Label {
-            Text(title)
-                .foregroundStyle(.primary)
-        } icon: {
-            Image(systemName: systemImage)
-                .foregroundStyle(color)
-        }
-        .font(.footnote.weight(.semibold))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal)
-        .padding(.vertical, 10)
-        .background(.regularMaterial)
-        .overlay(alignment: .top) { Divider() }
-        .accessibilityIdentifier(
-            "ios.library.emoji-commands.editor.persistent-status"
-        )
-    }
-}
-
 extension IOSCustomEmojiCommandEditorView: CustomReflectable {
     var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+#Preview("Custom emoji command editor") {
+    let previewID = UUID(
+        uuid: (0x20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
+    )
+    let stateOwner = IOSLibraryStateOwner(
+        load: { .defaults },
+        commit: { $0 }
+    )
+
+    NavigationStack {
+        IOSCustomEmojiCommandEditorView(
+            mode: .add(previewID),
+            hasUnsavedSceneEditor: .constant(false)
+        )
+    }
+    .environment(stateOwner)
 }
