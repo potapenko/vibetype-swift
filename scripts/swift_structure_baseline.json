@@ -21,7 +21,7 @@
     "HoldTypeIOS/IOSForegroundVoiceController.swift": 1285,
     "HoldTypeIOS/IOSForegroundVoiceWorkflow.swift": 3000,
     "HoldTypeIOS/IOSHistoryHomeView.swift": 984,
-    "HoldTypeIOS/IOSKeyboardDictationSessionCoordinator.swift": 1251,
+    "HoldTypeIOS/IOSKeyboardDictationSessionCoordinator.swift": 983,
     "HoldTypeIOS/IOSKeyboardHandoffSheet.swift": 625,
     "HoldTypeIOS/IOSLibraryEditorSupport.swift": 597,
     "HoldTypeIOS/IOSOpenAISettingsView.swift": 622,
