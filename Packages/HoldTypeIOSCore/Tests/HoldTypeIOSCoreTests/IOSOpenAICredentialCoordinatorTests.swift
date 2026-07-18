@@ -399,7 +399,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         let outcome = try await coordinator.resolve(for: .openAISettingsRefresh)
 
         #expect(try resolvedKey(in: outcome) == "sk-present")
-        #expect(outcome.localMarkerIssue == nil)
+        #expect(outcome.status.localMarkerIssue == nil)
         #expect(markerStore.marker?.state == .present)
         #expect(markerStore.attemptedSaveStates == [.unknown, .present])
     }
@@ -412,7 +412,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         let outcome = try await coordinator.resolve(for: .voicePreflight)
 
         #expect(try resolvedKey(in: outcome) == "sk-present")
-        #expect(outcome.localMarkerIssue == .unavailable)
+        #expect(outcome.status.localMarkerIssue == .unavailable)
         #expect(markerStore.saveCallCount == 0)
         #expect(markerStore.removeCallCount == 0)
         let status = await coordinator.credentialStatusUpdate().status
@@ -433,7 +433,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         let outcome = try await coordinator.resolve(for: .openAISettingsRefresh)
 
         #expect(try resolvedKey(in: outcome) == "sk-present")
-        #expect(outcome.localMarkerIssue == .unavailable)
+        #expect(outcome.status.localMarkerIssue == .unavailable)
         #expect(markerStore.marker?.state == .unknown)
         let cached = try await coordinator.resolve(for: .voicePreflight)
         #expect(try resolvedKey(in: cached) == "sk-present")
@@ -459,7 +459,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         let streamedUpdate = await iterator.next()
 
         #expect(try resolvedKey(in: outcome) == "sk-present")
-        #expect(outcome.localMarkerIssue == .unavailable)
+        #expect(outcome.status.localMarkerIssue == .unavailable)
         #expect(streamedUpdate == outcome.statusUpdate)
         #expect(streamedUpdate?.status.localMarkerIssue == .unavailable)
         #expect(markerStore.marker?.state == .absent)
@@ -471,7 +471,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         let recovered = try await coordinator.resolve(
             for: .voicePreflight
         )
-        #expect(recovered.localMarkerIssue == nil)
+        #expect(recovered.status.localMarkerIssue == nil)
         #expect(markerStore.marker?.state == .present)
         #expect(
             (await coordinator.credentialStatusUpdate().status).localMarkerIssue == nil

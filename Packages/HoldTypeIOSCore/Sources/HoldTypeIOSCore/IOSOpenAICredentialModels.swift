@@ -89,10 +89,6 @@ public struct IOSOpenAICredentialResolutionOutcome: Equatable, Sendable {
         statusUpdate.status
     }
 
-    public var localMarkerIssue: IOSOpenAICredentialLocalMarkerIssue? {
-        status.localMarkerIssue
-    }
-
     public init(
         resolution: IOSOpenAICredentialResolution,
         status: IOSOpenAICredentialStatus
