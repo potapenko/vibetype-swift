@@ -414,10 +414,6 @@
 				9DB749B12FE800000053C3F3 /* HoldTypeIOSTests */,
 				D4A175032FF0000000000003 /* HoldTypeKeyboard */,
 				D4A175042FF0000000000004 /* KeyboardShared */,
-				D4A177012FF2000000000001 /* Packages/HoldTypeDomain/Tests/HoldTypeDomainTests */,
-				D4A178012FF3000000000001 /* Packages/HoldTypePersistence/Tests/HoldTypePersistenceTests */,
-				D4A179012FF4000000000001 /* Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests */,
-				D4A180012FF5000000000001 /* Packages/HoldTypeIOSCore/Tests/HoldTypeIOSCoreTests */,
 			);
 			name = HoldTypeIOSTests;
 			packageProductDependencies = (
