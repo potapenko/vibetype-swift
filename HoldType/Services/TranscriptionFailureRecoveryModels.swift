@@ -7,7 +7,6 @@
 
 import Combine
 import Foundation
-import HoldTypeDomain
 import HoldTypeOpenAI
 
 enum FailedTranscriptionReason: Codable, Equatable {

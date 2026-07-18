@@ -1,6 +1,4 @@
 import HoldTypeDomain
-@_spi(HoldTypeIOSCore) import HoldTypeIOSCore
-import HoldTypePersistence
 
 enum IOSVoiceStatusTone: Equatable, Sendable {
     case neutral
