@@ -118,10 +118,6 @@ struct AppSettings: Equatable {
         textCorrectionConfiguration.resolvedModel
     }
 
-    var resolvedTextCorrectionPrompt: String {
-        textCorrectionConfiguration.resolvedPrompt
-    }
-
     var isTextCorrectionPromptDefault: Bool {
         textCorrectionConfiguration.isPromptDefault
     }
@@ -141,14 +137,6 @@ struct AppSettings: Equatable {
             model: translationModel,
             prompt: translationPrompt
         )
-    }
-
-    var resolvedTranslationModel: String {
-        translationConfiguration.resolvedModel
-    }
-
-    var resolvedTranslationPrompt: String {
-        translationConfiguration.resolvedPrompt
     }
 
     var isTranslationPromptDefault: Bool {
@@ -267,28 +255,12 @@ struct AppSettings: Equatable {
         CustomDictionary(entries: customDictionary)
     }
 
-    var resolvedCustomDictionaryPrompt: String? {
-        resolvedCustomDictionary.promptText
-    }
-
     var emojiCommandsConfiguration: EmojiCommandsConfiguration {
         EmojiCommandsConfiguration(
             isEnabled: emojiCommandsEnabled,
             enabledBuiltInSetIDs: enabledEmojiCommandSetIDs,
             customCommands: customEmojiCommands
         )
-    }
-
-    var enabledEmojiCommandSets: [EmojiCommandSet] {
-        emojiCommandsConfiguration.enabledBuiltInSets
-    }
-
-    var enabledCustomEmojiCommands: [CustomEmojiCommand] {
-        emojiCommandsConfiguration.enabledCustomCommands
-    }
-
-    var resolvedEmojiCommandsPrompt: String? {
-        emojiCommandsConfiguration.promptText
     }
 
     var resolvedLanguageCode: String? {

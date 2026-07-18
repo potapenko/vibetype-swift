@@ -88,11 +88,6 @@ public actor IOSOpenAICredentialCoordinator {
         self.operationGate = operationGate
     }
 
-    /// Reads only the app-private non-secret marker. It never touches Keychain.
-    public func credentialStatus() -> IOSOpenAICredentialStatus {
-        credentialStatusUpdate().status
-    }
-
     /// Reads the same marker-only status plus its process-local ordering token.
     public func credentialStatusUpdate()
         -> IOSOpenAICredentialStatusUpdate {

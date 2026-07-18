@@ -24,16 +24,16 @@ struct AppSettingsTests {
         #expect(settings.customDictionary.isEmpty)
         #expect(settings.resolvedCustomDictionary == .empty)
         #expect(settings.resolvedCustomDictionaryEntries.isEmpty)
-        #expect(settings.resolvedCustomDictionaryPrompt == nil)
+        #expect(settings.resolvedCustomDictionary.promptText == nil)
         #expect(settings.emojiCommandsEnabled)
         #expect(settings.enabledEmojiCommandSetIDs == ["en"])
         #expect(settings.emojiCommandsConfiguration == .defaults)
-        #expect(settings.enabledEmojiCommandSets.map(\.id) == ["en"])
+        #expect(settings.emojiCommandsConfiguration.enabledBuiltInSets.map(\.id) == ["en"])
         #expect(EmojiCommandSet.builtIn.map(\.id) == ["en", "ru", "es", "de", "fr", "pt"])
         #expect(EmojiCommandSet.builtIn.allSatisfy { $0.commands.count == 21 })
         #expect(settings.customEmojiCommands.isEmpty)
-        #expect(settings.enabledCustomEmojiCommands.isEmpty)
-        #expect(settings.resolvedEmojiCommandsPrompt?.contains("emoji smile") == true)
+        #expect(settings.emojiCommandsConfiguration.enabledCustomCommands.isEmpty)
+        #expect(settings.emojiCommandsConfiguration.promptText?.contains("emoji smile") == true)
         #expect(settings.resolvedPrompt?.contains("Emoji command vocabulary") == true)
         #expect(settings.useActiveTextContext == false)
         #expect(settings.textCorrectionEnabled == false)
@@ -42,7 +42,10 @@ struct AppSettingsTests {
         #expect(settings.textCorrectionConfiguration == .defaults)
         #expect(settings.resolvedTextCorrectionModel == "gpt-5.5")
         #expect(settings.textCorrectionPrompt == AppSettings.defaultTextCorrectionPrompt)
-        #expect(settings.resolvedTextCorrectionPrompt == AppSettings.defaultTextCorrectionPrompt)
+        #expect(
+            settings.textCorrectionConfiguration.resolvedPrompt
+                == AppSettings.defaultTextCorrectionPrompt
+        )
         #expect(settings.isTextCorrectionPromptDefault)
         #expect(settings.localTextCleanupEnabled)
         #expect(settings.textReplacementRules.isEmpty)
@@ -57,9 +60,12 @@ struct AppSettingsTests {
         #expect(settings.translationTargetLanguage == .automatic)
         #expect(settings.resolvedTranslationTargetLanguageCode == nil)
         #expect(settings.translationModel == AppSettings.defaultTranslationModel)
-        #expect(settings.resolvedTranslationModel == "gpt-5.4-mini")
+        #expect(settings.translationConfiguration.resolvedModel == "gpt-5.4-mini")
         #expect(settings.translationPrompt == AppSettings.defaultTranslationPrompt)
-        #expect(settings.resolvedTranslationPrompt == AppSettings.defaultTranslationPrompt)
+        #expect(
+            settings.translationConfiguration.resolvedPrompt
+                == AppSettings.defaultTranslationPrompt
+        )
         #expect(settings.isTranslationPromptDefault)
         #expect(settings.translationConfigurationIssue == .missingTargetLanguage)
         #expect(settings.canRunTranslation == false)
@@ -89,7 +95,7 @@ struct AppSettingsTests {
         #expect(settings.transcriptionModel == "  ")
         #expect(settings.resolvedTranscriptionModel == AppSettings.defaultTranscriptionModel)
         #expect(settings.resolvedCustomDictionaryEntries == ["OpenWhispr", "Synty"])
-        #expect(settings.resolvedCustomDictionaryPrompt == "OpenWhispr, Synty")
+        #expect(settings.resolvedCustomDictionary.promptText == "OpenWhispr, Synty")
         #expect(
             settings.resolvedPrompt ==
                 """
@@ -123,7 +129,9 @@ struct AppSettingsTests {
             """
             \(prompt)
 
-            \(AppSettings.emojiCommandsPromptPrefix)\(settings.resolvedEmojiCommandsPrompt ?? "")
+            \(AppSettings.emojiCommandsPromptPrefix)\(
+                settings.emojiCommandsConfiguration.promptText ?? ""
+            )
             """
         })
     }
@@ -228,7 +236,7 @@ struct AppSettingsTests {
         ]
 
         #expect(settings.resolvedTextCorrectionModel == "custom-correction-model")
-        #expect(settings.resolvedTextCorrectionPrompt == "Fix only punctuation.")
+        #expect(settings.textCorrectionConfiguration.resolvedPrompt == "Fix only punctuation.")
         #expect(settings.enabledTextReplacementRules.count == 1)
         #expect(settings.enabledTextReplacementRules.first?.replacement == "plain")
         #expect(
@@ -240,7 +248,10 @@ struct AppSettingsTests {
         settings.textCorrectionPrompt = "  "
 
         #expect(settings.resolvedTextCorrectionModel == AppSettings.defaultTextCorrectionModel)
-        #expect(settings.resolvedTextCorrectionPrompt == AppSettings.defaultTextCorrectionPrompt)
+        #expect(
+            settings.textCorrectionConfiguration.resolvedPrompt
+                == AppSettings.defaultTextCorrectionPrompt
+        )
     }
 
     @Test func projectsRawTextCorrectionConfigurationWithoutOwningPersistence() {
@@ -257,16 +268,19 @@ struct AppSettingsTests {
         #expect(configuration.customModel == "  custom-correction-model  ")
         #expect(configuration.prompt == "  Correct names only.  ")
         #expect(settings.resolvedTextCorrectionModel == configuration.resolvedModel)
-        #expect(settings.resolvedTextCorrectionPrompt == configuration.resolvedPrompt)
+        #expect(settings.textCorrectionConfiguration.resolvedPrompt == configuration.resolvedPrompt)
         #expect(settings.isTextCorrectionPromptDefault == configuration.isPromptDefault)
     }
 
     @Test func resolvesEmojiCommandPromptFromActiveSet() {
         var settings = AppSettings.defaults
 
-        #expect(settings.enabledEmojiCommandSets.map(\.id) == ["en"])
-        #expect(settings.resolvedEmojiCommandsPrompt?.contains("emoji smile") == true)
-        #expect(settings.resolvedEmojiCommandsPrompt?.contains("эмодзи улыбка") == false)
+        #expect(settings.emojiCommandsConfiguration.enabledBuiltInSets.map(\.id) == ["en"])
+        #expect(settings.emojiCommandsConfiguration.promptText?.contains("emoji smile") == true)
+        #expect(
+            settings.emojiCommandsConfiguration.promptText?
+                .contains("эмодзи улыбка") == false
+        )
 
         settings.enabledEmojiCommandSetIDs = ["ru", "missing", "en", "ru", "de"]
         settings.customEmojiCommands = [
@@ -278,22 +292,31 @@ struct AppSettingsTests {
             )
         ]
 
-        #expect(settings.enabledEmojiCommandSets.map(\.id) == ["ru"])
-        #expect(settings.enabledCustomEmojiCommands.map(\.displayCommand) == ["emoji rocket"])
-        #expect(settings.resolvedEmojiCommandsPrompt?.contains("emoji smile") == false)
-        #expect(settings.resolvedEmojiCommandsPrompt?.contains("эмодзи улыбка") == true)
-        #expect(settings.resolvedEmojiCommandsPrompt?.contains("эмодзи смех") == true)
-        #expect(settings.resolvedEmojiCommandsPrompt?.contains("эмоции") == false)
-        #expect(settings.resolvedEmojiCommandsPrompt?.contains("эмоджи") == false)
-        #expect(settings.resolvedEmojiCommandsPrompt?.contains("emoji lächeln") == false)
-        #expect(settings.resolvedEmojiCommandsPrompt?.contains("emoji rocket") == true)
-        #expect(settings.resolvedEmojiCommandsPrompt?.contains("launch emoji") == true)
+        #expect(settings.emojiCommandsConfiguration.enabledBuiltInSets.map(\.id) == ["ru"])
+        #expect(
+            settings.emojiCommandsConfiguration.enabledCustomCommands
+                .map(\.displayCommand) == ["emoji rocket"]
+        )
+        #expect(settings.emojiCommandsConfiguration.promptText?.contains("emoji smile") == false)
+        #expect(
+            settings.emojiCommandsConfiguration.promptText?
+                .contains("эмодзи улыбка") == true
+        )
+        #expect(
+            settings.emojiCommandsConfiguration.promptText?
+                .contains("эмодзи смех") == true
+        )
+        #expect(settings.emojiCommandsConfiguration.promptText?.contains("эмоции") == false)
+        #expect(settings.emojiCommandsConfiguration.promptText?.contains("эмоджи") == false)
+        #expect(settings.emojiCommandsConfiguration.promptText?.contains("emoji lächeln") == false)
+        #expect(settings.emojiCommandsConfiguration.promptText?.contains("emoji rocket") == true)
+        #expect(settings.emojiCommandsConfiguration.promptText?.contains("launch emoji") == true)
 
         settings.emojiCommandsEnabled = false
 
-        #expect(settings.enabledEmojiCommandSets.isEmpty)
-        #expect(settings.enabledCustomEmojiCommands.isEmpty)
-        #expect(settings.resolvedEmojiCommandsPrompt == nil)
+        #expect(settings.emojiCommandsConfiguration.enabledBuiltInSets.isEmpty)
+        #expect(settings.emojiCommandsConfiguration.enabledCustomCommands.isEmpty)
+        #expect(settings.emojiCommandsConfiguration.promptText == nil)
     }
 
     @Test func projectsRawEmojiConfigurationAndDelegatesResolvedValues() {
@@ -309,9 +332,15 @@ struct AppSettingsTests {
         #expect(configuration.isEnabled)
         #expect(configuration.enabledBuiltInSetIDs == ["missing", " ru ", "en"])
         #expect(configuration.customCommands == settings.customEmojiCommands)
-        #expect(settings.enabledEmojiCommandSets == configuration.enabledBuiltInSets)
-        #expect(settings.enabledCustomEmojiCommands == configuration.enabledCustomCommands)
-        #expect(settings.resolvedEmojiCommandsPrompt == configuration.promptText)
+        #expect(
+            settings.emojiCommandsConfiguration.enabledBuiltInSets
+                == configuration.enabledBuiltInSets
+        )
+        #expect(
+            settings.emojiCommandsConfiguration.enabledCustomCommands
+                == configuration.enabledCustomCommands
+        )
+        #expect(settings.emojiCommandsConfiguration.promptText == configuration.promptText)
         #expect(
             AppSettings.normalizedEmojiCommandSetIDs(settings.enabledEmojiCommandSetIDs) ==
                 configuration.normalizedEnabledBuiltInSetIDs
@@ -369,16 +398,25 @@ struct AppSettingsTests {
 
         #expect(settings.resolvedTranslationSourceLanguageCode == "es")
         #expect(settings.resolvedTranslationTargetLanguageCode == "ja")
-        #expect(settings.resolvedTranslationModel == "custom-translation-model")
-        #expect(settings.resolvedTranslationPrompt == "Translate for product UI labels.")
+        #expect(settings.translationConfiguration.resolvedModel == "custom-translation-model")
+        #expect(
+            settings.translationConfiguration.resolvedPrompt
+                == "Translate for product UI labels."
+        )
         #expect(settings.canRunTranslation)
         #expect(settings.isTranslationPromptDefault == false)
 
         settings.translationModel = "  "
         settings.translationPrompt = "  "
 
-        #expect(settings.resolvedTranslationModel == AppSettings.defaultTranslationModel)
-        #expect(settings.resolvedTranslationPrompt == AppSettings.defaultTranslationPrompt)
+        #expect(
+            settings.translationConfiguration.resolvedModel
+                == AppSettings.defaultTranslationModel
+        )
+        #expect(
+            settings.translationConfiguration.resolvedPrompt
+                == AppSettings.defaultTranslationPrompt
+        )
 
         settings.resetTranslationPrompt()
 
@@ -417,8 +455,8 @@ struct AppSettingsTests {
             settings.resolvedTranslationTargetLanguageCode ==
                 configuration.resolvedTargetLanguageCode
         )
-        #expect(settings.resolvedTranslationModel == configuration.resolvedModel)
-        #expect(settings.resolvedTranslationPrompt == configuration.resolvedPrompt)
+        #expect(settings.translationConfiguration.resolvedModel == configuration.resolvedModel)
+        #expect(settings.translationConfiguration.resolvedPrompt == configuration.resolvedPrompt)
         #expect(settings.isTranslationPromptDefault == configuration.isPromptDefault)
         #expect(settings.translationConfigurationIssue == configuration.configurationIssue)
         #expect(settings.canRunTranslation == configuration.canRunAction)
@@ -456,12 +494,18 @@ struct AppSettingsTests {
         settings.textCorrectionPrompt = "Correct obvious names only."
 
         #expect(settings.isTextCorrectionPromptDefault == false)
-        #expect(settings.resolvedTextCorrectionPrompt == "Correct obvious names only.")
+        #expect(
+            settings.textCorrectionConfiguration.resolvedPrompt
+                == "Correct obvious names only."
+        )
 
         settings.resetTextCorrectionPrompt()
 
         #expect(settings.textCorrectionPrompt == AppSettings.defaultTextCorrectionPrompt)
-        #expect(settings.resolvedTextCorrectionPrompt == AppSettings.defaultTextCorrectionPrompt)
+        #expect(
+            settings.textCorrectionConfiguration.resolvedPrompt
+                == AppSettings.defaultTextCorrectionPrompt
+        )
         #expect(settings.isTextCorrectionPromptDefault)
     }
 
@@ -542,7 +586,7 @@ struct AppSettingsTests {
         let settings = store.load()
 
         #expect(settings.customDictionary == ["ACME, Inc.", "Line\nBreak"])
-        #expect(settings.resolvedCustomDictionaryPrompt == "ACME, Inc., Line\nBreak")
+        #expect(settings.resolvedCustomDictionary.promptText == "ACME, Inc., Line\nBreak")
 
         store.save(settings)
 

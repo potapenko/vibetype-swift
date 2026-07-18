@@ -44,13 +44,6 @@ final class IOSForegroundVoiceProcessLifecycleCoordinator {
             await refresh(opportunity)
         }
     }
-
-    var schedulerRecovery: IOSContainingAppLifecycleScheduler.Recovery {
-        { [weak self] opportunity in
-            guard let self else { return .pendingLocalRecovery }
-            return await self.recover(opportunity)
-        }
-    }
 }
 
 extension IOSForegroundVoiceProcessLifecycleCoordinator:

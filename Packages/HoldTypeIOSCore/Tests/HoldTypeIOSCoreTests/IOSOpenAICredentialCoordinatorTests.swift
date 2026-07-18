@@ -33,7 +33,7 @@ struct IOSOpenAICredentialCoordinatorTests {
             )
 
             #expect(await keychain.calls.isEmpty)
-            let status = await coordinator.credentialStatus()
+            let status = await coordinator.credentialStatusUpdate().status
 
             #expect(status.primary == expectedPrimary)
             #expect(status.statusNeedsRefresh == expectedRefresh)
@@ -53,7 +53,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         )
         let coordinator = makeCoordinator(keychain: keychain, markerStore: markerStore)
 
-        let status = await coordinator.credentialStatus()
+        let status = await coordinator.credentialStatusUpdate().status
 
         #expect(status.primary == .notCheckedInThisProcess)
         #expect(status.statusNeedsRefresh == false)
@@ -217,7 +217,7 @@ struct IOSOpenAICredentialCoordinatorTests {
 
         #expect(await keychain.storedKey == "sk-old")
         #expect(markerStore.marker?.state == .unknown)
-        let status = await coordinator.credentialStatus()
+        let status = await coordinator.credentialStatusUpdate().status
         #expect(status.primary == .notCheckedInThisProcess)
         #expect(status.statusNeedsRefresh)
     }
@@ -238,7 +238,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         #expect(await keychain.storedKey == "sk-new")
         #expect(await keychain.calls == [.save])
         #expect(markerStore.marker?.state == .mutationInProgress)
-        let status = await coordinator.credentialStatus()
+        let status = await coordinator.credentialStatusUpdate().status
         #expect(status.primary == .availableInThisProcess)
         #expect(status.statusNeedsRefresh)
     }
@@ -259,7 +259,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         #expect(await keychain.calls == [.save])
 
         let freshProcess = makeCoordinator(keychain: keychain, markerStore: markerStore)
-        let passiveStatus = await freshProcess.credentialStatus()
+        let passiveStatus = await freshProcess.credentialStatusUpdate().status
         #expect(passiveStatus.primary == .notCheckedInThisProcess)
         #expect(passiveStatus.statusNeedsRefresh)
         #expect(await keychain.calls == [.save])
@@ -325,7 +325,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         #expect(try await partialCoordinator.remove() == .appliedStatusNeedsRefresh)
         #expect(await partialKeychain.storedKey == nil)
         #expect(partialMarker.marker?.state == .mutationInProgress)
-        let partialStatus = await partialCoordinator.credentialStatus()
+        let partialStatus = await partialCoordinator.credentialStatusUpdate().status
         #expect(partialStatus.primary == .notConfigured)
         #expect(partialStatus.statusNeedsRefresh)
     }
@@ -343,7 +343,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         #expect(await keychain.calls == [.remove])
 
         let freshProcess = makeCoordinator(keychain: keychain, markerStore: markerStore)
-        let passiveStatus = await freshProcess.credentialStatus()
+        let passiveStatus = await freshProcess.credentialStatusUpdate().status
         #expect(passiveStatus.primary == .notCheckedInThisProcess)
         #expect(passiveStatus.statusNeedsRefresh)
         #expect(await keychain.calls == [.remove])
@@ -415,7 +415,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         #expect(outcome.localMarkerIssue == .unavailable)
         #expect(markerStore.saveCallCount == 0)
         #expect(markerStore.removeCallCount == 0)
-        let status = await coordinator.credentialStatus()
+        let status = await coordinator.credentialStatusUpdate().status
         #expect(status.primary == .availableInThisProcess)
         #expect(status.localMarkerIssue == .unavailable)
     }
@@ -464,7 +464,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         #expect(streamedUpdate?.status.localMarkerIssue == .unavailable)
         #expect(markerStore.marker?.state == .absent)
         #expect(
-            (await coordinator.credentialStatus()).localMarkerIssue
+            (await coordinator.credentialStatusUpdate().status).localMarkerIssue
                 == .unavailable
         )
 
@@ -474,7 +474,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         #expect(recovered.localMarkerIssue == nil)
         #expect(markerStore.marker?.state == .present)
         #expect(
-            (await coordinator.credentialStatus()).localMarkerIssue == nil
+            (await coordinator.credentialStatusUpdate().status).localMarkerIssue == nil
         )
     }
 
@@ -535,7 +535,10 @@ struct IOSOpenAICredentialCoordinatorTests {
         ) {
             _ = try await coordinator.resolve(for: .voicePreflight)
         }
-        #expect((await coordinator.credentialStatus()).primary == .unavailableWhileLocked)
+        #expect(
+            (await coordinator.credentialStatusUpdate().status).primary
+                == .unavailableWhileLocked
+        )
 
         await keychain.setLoadError(nil)
         let recovered = try await coordinator.resolve(for: .voicePreflight)
@@ -568,14 +571,17 @@ struct IOSOpenAICredentialCoordinatorTests {
         await expectCredentialAccessFailure(.unavailableWhileLocked) {
             _ = try await coordinator.resolve(for: .voicePreflight)
         }
-        #expect((await coordinator.credentialStatus()).primary == .unavailableWhileLocked)
+        #expect(
+            (await coordinator.credentialStatusUpdate().status).primary
+                == .unavailableWhileLocked
+        )
 
         await keychain.setLoadError(.keychainFailure)
         await expectCredentialAccessFailure(.keychainFailure) {
             _ = try await coordinator.resolve(for: .voicePreflight)
         }
 
-        #expect((await coordinator.credentialStatus()).primary == .savedLastKnown)
+        #expect((await coordinator.credentialStatusUpdate().status).primary == .savedLastKnown)
     }
 
     @Test func invalidStoredValueAfterLockedResolutionClearsTheLockedStatus() async throws {
@@ -605,7 +611,7 @@ struct IOSOpenAICredentialCoordinatorTests {
                 _ = try await coordinator.resolve(for: .voicePreflight)
             }
 
-            #expect((await coordinator.credentialStatus()).primary == .savedLastKnown)
+            #expect((await coordinator.credentialStatusUpdate().status).primary == .savedLastKnown)
         }
     }
 
@@ -628,7 +634,7 @@ struct IOSOpenAICredentialCoordinatorTests {
 
         #expect(resolved.resolution == .notConfigured)
         #expect(resolved.status.primary == .notConfigured)
-        #expect((await coordinator.credentialStatus()).primary == .notConfigured)
+        #expect((await coordinator.credentialStatusUpdate().status).primary == .notConfigured)
         #expect(markerStore.marker?.state == .absent)
     }
 
@@ -658,14 +664,17 @@ struct IOSOpenAICredentialCoordinatorTests {
         let firstResolution = try await coordinator.resolve(for: .voicePreflight)
         let first = try #require(availableHandle(in: firstResolution))
         await coordinator.recordProviderRejection(for: first.generation)
-        #expect((await coordinator.credentialStatus()).primary == .providerRejected)
+        #expect((await coordinator.credentialStatusUpdate().status).primary == .providerRejected)
         await expectCoordinatorError(.providerRejected) {
             _ = try await coordinator.resolve(for: .voicePreflight)
         }
 
         _ = try await coordinator.saveOrReplace("sk-second")
         await coordinator.recordProviderRejection(for: first.generation)
-        #expect((await coordinator.credentialStatus()).primary == .availableInThisProcess)
+        #expect(
+            (await coordinator.credentialStatusUpdate().status).primary
+                == .availableInThisProcess
+        )
         let second = try await coordinator.resolve(for: .voicePreflight)
         #expect(try resolvedKey(in: second) == "sk-second")
         #expect(await keychain.calls.filter { $0 == .load }.isEmpty)
@@ -857,7 +866,7 @@ struct IOSOpenAICredentialCoordinatorTests {
         _ = try await coordinator.saveOrReplace(sentinel)
         let outcome = try await coordinator.resolve(for: .voicePreflight)
         let handle = try #require(availableHandle(in: outcome))
-        let status = await coordinator.credentialStatus()
+        let status = await coordinator.credentialStatusUpdate().status
         let statusUpdate = await coordinator.credentialStatusUpdate()
         let values: [Any] = [
             coordinator,

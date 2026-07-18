@@ -24,7 +24,7 @@ struct IOSOpenAICredentialCoordinatorIOSTests {
         )
 
         #expect(!FileManager.default.fileExists(atPath: markerFileURL.path))
-        let status = await coordinator.credentialStatus()
+        let status = await coordinator.credentialStatusUpdate().status
         #expect(status.primary == .notCheckedInThisProcess)
         #expect(status.statusNeedsRefresh == false)
         #expect(status.localMarkerIssue == nil)

@@ -54,7 +54,9 @@ struct IOSForegroundVoiceProcessLifecycleCoordinatorTests {
             }
         )
         let scheduler = IOSContainingAppLifecycleScheduler(
-            recover: coordinator.schedulerRecovery
+            recover: { opportunity in
+                await coordinator.recover(opportunity)
+            }
         )
         scheduler.scheduleProcessLaunch()
         scheduler.scheduleForeground()
