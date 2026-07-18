@@ -27,7 +27,7 @@
     "HoldTypeIOS/IOSReplacementRuleEditorSupport.swift": 572,
     "HoldTypeIOS/IOSUIQualificationGallery.swift": 1017,
     "HoldTypeIOS/IOSVoiceBoundaryFeedbackAdapter.swift": 929,
-    "HoldTypeIOS/IOSVoiceDraftOwner.swift": 587,
+    "HoldTypeIOS/IOSVoiceDraftOwner.swift": 551,
     "HoldTypeIOS/IOSVoiceHomeView.swift": 1508,
     "HoldTypeIOS/IOSVoiceRecorderAdapter.swift": 1492,
     "HoldTypeIOS/IOSVoiceSceneRegistry.swift": 589,

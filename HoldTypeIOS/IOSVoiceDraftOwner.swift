@@ -96,16 +96,6 @@ struct IOSVoiceDraftContentChange: Equatable, Sendable {
     )
 }
 
-enum IOSVoiceDraftNotice: Equatable, Sendable {
-    case appendFailed
-    case editFailed
-    case draftFull
-    case clearFailed
-    case undoFailed
-    case redoFailed
-    case draftChanged
-}
-
 @MainActor
 @Observable
 final class IOSVoiceDraftOwner {
@@ -113,7 +103,6 @@ final class IOSVoiceDraftOwner {
 
     private(set) var state = IOSVoiceDraftState.notLoaded
     private(set) var operation = IOSVoiceDraftOperation.idle
-    private(set) var notice: IOSVoiceDraftNotice?
     private(set) var editingText: String?
     private(set) var contentChange = IOSVoiceDraftContentChange.initial
 
@@ -169,7 +158,6 @@ final class IOSVoiceDraftOwner {
             }
             state = .ready(record)
             markContentChange(.replace)
-            notice = nil
             return true
         } catch is CancellationError {
             _ = complete()
@@ -196,7 +184,6 @@ final class IOSVoiceDraftOwner {
             )
         } catch {
             _ = complete()
-            notice = .appendFailed
             return false
         }
 
@@ -211,15 +198,12 @@ final class IOSVoiceDraftOwner {
                 markContentChange(
                     mode == .append ? .append : .replace
                 )
-                notice = nil
                 return true
             case .duplicate(let record):
                 state = .ready(record)
-                notice = nil
                 return true
             case .full(let record):
                 state = .ready(record)
-                notice = .draftFull
                 return false
             }
         } catch is CancellationError {
@@ -228,7 +212,6 @@ final class IOSVoiceDraftOwner {
         } catch {
             guard complete() else { return false }
             if let previous { state = .ready(previous) }
-            notice = .appendFailed
             return false
         }
     }
@@ -243,14 +226,12 @@ final class IOSVoiceDraftOwner {
         editBaseline = current
         editHasConflict = false
         editingText = current.text
-        notice = nil
         return true
     }
 
     func updateEditingText(_ text: String) {
         guard editingText != nil else { return }
         editingText = text
-        if !editHasConflict { notice = nil }
     }
 
     @discardableResult
@@ -264,7 +245,6 @@ final class IOSVoiceDraftOwner {
         do {
             updated = try current.replacingText(editingText)
         } catch {
-            notice = .editFailed
             return false
         }
         guard updated != current else { return true }
@@ -278,14 +258,12 @@ final class IOSVoiceDraftOwner {
             switch result {
             case .confirmed(let record):
                 state = .ready(record)
-                notice = nil
                 return true
             case .stale(let record):
                 state = .ready(record)
                 undoStack.removeAll()
                 redoStack.removeAll()
                 editHasConflict = true
-                notice = .draftChanged
                 return false
             }
         } catch is CancellationError {
@@ -294,7 +272,6 @@ final class IOSVoiceDraftOwner {
         } catch {
             guard complete() else { return false }
             state = .ready(current)
-            notice = .editFailed
             return false
         }
     }
@@ -332,7 +309,6 @@ final class IOSVoiceDraftOwner {
         }
         let id = UUID()
         activeTransformationID = id
-        notice = nil
         return IOSVoiceDraftTransformationReservation(
             id: id,
             record: current
@@ -353,12 +329,10 @@ final class IOSVoiceDraftOwner {
             updated = try reservation.record.replacingText(text)
         } catch {
             finishTransformation(reservation)
-            notice = .editFailed
             return .failed
         }
         guard updated != reservation.record else {
             finishTransformation(reservation)
-            notice = nil
             return .confirmed(changed: false)
         }
 
@@ -378,13 +352,11 @@ final class IOSVoiceDraftOwner {
                 recordUndo(reservation.record)
                 redoStack.removeAll()
                 markContentChange(.replace)
-                notice = nil
                 return .confirmed(changed: true)
             case .stale(let record):
                 state = .ready(record)
                 undoStack.removeAll()
                 redoStack.removeAll()
-                notice = .draftChanged
                 return .stale
             }
         } catch is CancellationError {
@@ -397,7 +369,6 @@ final class IOSVoiceDraftOwner {
             }
             finishTransformation(reservation)
             state = .ready(reservation.record)
-            notice = .editFailed
             return .failed
         }
     }
@@ -422,7 +393,6 @@ final class IOSVoiceDraftOwner {
         return await replaceCurrent(
             with: .empty,
             operation: .clearing,
-            failureNotice: .clearFailed,
             onSuccess: {
                 self.recordUndo(current)
                 self.redoStack.removeAll()
@@ -450,7 +420,6 @@ final class IOSVoiceDraftOwner {
         return await replaceCurrent(
             with: target,
             operation: .undoing,
-            failureNotice: .undoFailed,
             onSuccess: {
                 _ = self.undoStack.popLast()
                 self.recordRedo(current)
@@ -468,7 +437,6 @@ final class IOSVoiceDraftOwner {
         return await replaceCurrent(
             with: target,
             operation: .redoing,
-            failureNotice: .redoFailed,
             onSuccess: {
                 _ = self.redoStack.popLast()
                 self.recordUndo(current)
@@ -480,7 +448,6 @@ final class IOSVoiceDraftOwner {
     private func replaceCurrent(
         with updated: IOSVoiceDraftRecord,
         operation: IOSVoiceDraftOperation,
-        failureNotice: IOSVoiceDraftNotice,
         onSuccess: @escaping () -> Void
     ) async -> Bool {
         guard let current = confirmedRecord,
@@ -496,14 +463,12 @@ final class IOSVoiceDraftOwner {
             switch result {
             case .confirmed(let record):
                 state = .ready(record)
-                notice = nil
                 onSuccess()
                 return true
             case .stale(let record):
                 state = .ready(record)
                 undoStack.removeAll()
                 redoStack.removeAll()
-                notice = .draftChanged
                 return false
             }
         } catch is CancellationError {
@@ -512,7 +477,6 @@ final class IOSVoiceDraftOwner {
         } catch {
             guard complete() else { return false }
             state = .ready(current)
-            notice = failureNotice
             return false
         }
     }

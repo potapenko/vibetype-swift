@@ -204,12 +204,10 @@ struct IOSVoiceDraftOwnerTests {
             #expect(!(await owner.finishEditing()))
             #expect(owner.text == "One\n\nExternal")
             #expect(owner.visibleText == "My unsaved edit")
-            #expect(owner.notice == .draftChanged)
 
             owner.updateEditingText("My unsaved edit, continued")
             #expect(!(await owner.persistEditing()))
             #expect(try await repository.load().text == "One\n\nExternal")
-            #expect(owner.notice == .draftChanged)
 
         }
     }
@@ -282,7 +280,6 @@ struct IOSVoiceDraftOwnerTests {
 
             #expect(!(await owner.clear()))
             #expect(owner.text == "Confirmed text")
-            #expect(owner.notice == .clearFailed)
             #expect(owner.operation == .idle)
         }
     }
@@ -300,7 +297,6 @@ struct IOSVoiceDraftOwnerTests {
 
             #expect(!(await owner.clear()))
             #expect(owner.text == "One\n\nExternal")
-            #expect(owner.notice == .draftChanged)
             #expect(!owner.canUndo)
             #expect(!owner.canRedo)
         }
@@ -410,7 +406,6 @@ struct IOSVoiceDraftOwnerTests {
                 ) == .stale
             )
             #expect(owner.text == "Original\n\nExternal")
-            #expect(owner.notice == .draftChanged)
             #expect(!owner.canUndo)
         }
     }
