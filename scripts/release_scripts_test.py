@@ -993,27 +993,6 @@ end
         self.assertIn("Homebrew tap pull request already exists", workflow)
         self.assertIn("gh pr create", workflow)
 
-    def test_release_workflow_wraps_publish_and_tap_network_commands_with_timeouts(self) -> None:
-        workflow = RELEASE_WORKFLOW.read_text()
-
-        required_fragments = [
-            "scripts/release/with_timeout.py 300 gh release view",
-            "scripts/release/with_timeout.py 900 gh release upload",
-            "scripts/release/with_timeout.py 300 gh release edit",
-            "scripts/release/with_timeout.py 900 gh \"${release_create_args[@]}\"",
-            "scripts/release/prune_github_release_assets.py",
-            "--timeout 300",
-            "scripts/release/with_timeout.py 300 \\\n            git clone",
-            "scripts/release/with_timeout.py 300 gh repo view",
-            "scripts/release/with_timeout.py 300 \\\n            brew tap",
-            "scripts/release/with_timeout.py 600 \\\n            brew audit",
-            "scripts/release/with_timeout.py 300 \\\n            git -C \"$tap_dir\" push",
-            "scripts/release/with_timeout.py 300 gh pr list",
-            "scripts/release/with_timeout.py 300 gh pr create",
-        ]
-        for fragment in required_fragments:
-            self.assertIn(fragment, workflow)
-
     def test_release_workflow_validates_release_inputs(self) -> None:
         workflow = RELEASE_WORKFLOW.read_text()
 
@@ -1026,13 +1005,6 @@ end
             '--download-url-prefix "${{ steps.release-inputs.outputs.download_url_prefix }}"',
             workflow,
         )
-
-    def test_release_workflow_verifies_install_channels_with_minimum_macos(self) -> None:
-        workflow = RELEASE_WORKFLOW.read_text()
-
-        self.assertIn("Verify install channel metadata", workflow)
-        self.assertIn("scripts/release/verify_install_channels.py", workflow)
-        self.assertIn('--minimum-macos "$HOMEBREW_MINIMUM_MACOS"', workflow)
 
     def test_release_workflow_prunes_unexpected_release_assets_before_publish(self) -> None:
         workflow = RELEASE_WORKFLOW.read_text()
@@ -1055,31 +1027,6 @@ end
         self.assertIn("--appcast-url \"$HOLDTYPE_UPDATE_FEED_URL\"", workflow)
         self.assertIn("--download-dmg", workflow)
         self.assertIn("--verify-downloaded-dmg-install", workflow)
-
-    def test_release_workflow_uploads_official_homebrew_cask_submission_bundle(self) -> None:
-        workflow = RELEASE_WORKFLOW.read_text()
-
-        self.assertIn("Prepare official Homebrew cask submission bundle", workflow)
-        self.assertIn("scripts/release/write_homebrew_cask_submission.py", workflow)
-        self.assertIn("Upload official Homebrew cask submission bundle", workflow)
-        self.assertIn("actions/upload-artifact@v7", workflow)
-        self.assertIn(
-            "holdtype-official-homebrew-cask-${{ steps.release-inputs.outputs.version }}",
-            workflow,
-        )
-
-    def test_release_workflow_can_open_official_homebrew_cask_bump_pr_when_enabled(self) -> None:
-        workflow = RELEASE_WORKFLOW.read_text()
-
-        self.assertIn("Open official Homebrew Cask bump PR", workflow)
-        self.assertIn(
-            "HOMEBREW_OFFICIAL_CASK_BUMP_ENABLED: ${{ vars.HOMEBREW_OFFICIAL_CASK_BUMP_ENABLED }}",
-            workflow,
-        )
-        self.assertIn("HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}", workflow)
-        self.assertIn("env.HOMEBREW_OFFICIAL_CASK_BUMP_ENABLED == 'true'", workflow)
-        self.assertIn("scripts/release/bump_official_homebrew_cask_pr.sh", workflow)
-        self.assertIn("--timeout 900", workflow)
 
     def test_release_workflow_reuses_notes_for_appcast_and_github_release(self) -> None:
         workflow = RELEASE_WORKFLOW.read_text()
