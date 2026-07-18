@@ -153,6 +153,8 @@ contains no transcript card, alphabet layout, number deck, Shift, Caps Lock,
   Access.
 - `Latest` inserts the first entry in accepted History and remains enabled for
   as long as that entry exists. It has no independent age or expiry policy.
+- Keyboard `Latest` is not the app-private Latest Result recovery record and
+  neither exposes nor clears that record.
 - History opens the containing app at its canonical History destination. The
   keyboard never receives History rows, text previews, or History actions.
   The launch remains subject to the same platform and App Review gate as other

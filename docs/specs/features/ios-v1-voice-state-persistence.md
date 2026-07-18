@@ -108,7 +108,10 @@ normalized text and stage evidence above survives process loss.
 - Once Latest is committed, a local cleanup failure never hides or rolls back
   that result. The UI may show a nonblocking cleanup warning while relaunch or
   a later lifecycle opportunity retries only the remaining local cleanup.
-- Clear Latest is idempotent and never changes an unrelated Pending attempt.
+- App-private Latest has no user-triggered Clear path. It changes only through
+  a newer accepted-result replacement or fail-closed reconciliation that proves
+  the stored record invalid, and neither path changes an unrelated Pending
+  attempt.
 
 ## Relaunch And Recovery
 
@@ -226,7 +229,8 @@ Focused tests must prove:
   never proves publication and never authorizes Pending deletion;
 - relaunch before provider, during provider, after Latest, and after History,
   with zero automatic provider calls;
-- idempotent History reconciliation and Latest Clear;
+- idempotent History reconciliation and internal Latest replacement or
+  fail-closed invalidation;
 - one-Pending admission and corrupt/unavailable-state preservation;
 - atomic-write failure leaves the last confirmed state unchanged.
 

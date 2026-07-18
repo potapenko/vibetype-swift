@@ -509,12 +509,12 @@ Full Access, none of these extension-to-app commands is available.
   the exact Pending owner to Retry-or-Discard without another provider request.
   Once a destination exists, local retirement failure can retry only the exact
   remaining cleanup checkpoints.
-- While a new result is in `Saving Result`, Voice may also display the preceding
-  confirmed, unexpired Latest Result. The new accepted bytes do not become
-  Latest until atomic replacement is durably confirmed. A failed invisible
-  replacement preserves the prior result; an uncertain replacement blocks Clear
-  or another replacement until reconciled. A discarded, expired, or tombstoned
-  predecessor is never restored as prior text.
+- While a new result is in `Saving Result`, the preceding confirmed Latest
+  remains an internal recovery record rather than a separate Voice card. The
+  new accepted bytes do not become Latest until atomic replacement is durably
+  confirmed. A failed invisible replacement preserves the prior record; an
+  uncertain replacement blocks another replacement until reconciled. A proven
+  invalid predecessor is never restored as prior text.
 - A valid positive-byte `active-v1`, `finalizing-v1`, or `completed-v1` source
   presents `Recover Recording` and confirmed `Discard`. Preparing state has both
   actions only with empty Pending inventory. Recover Recording finishes the
@@ -534,10 +534,11 @@ Full Access, none of these extension-to-app commands is available.
   unavailable until that local repair is durable.
 - Recoverable pending audio presents `Retry` and confirmed `Discard`. A new
   Start remains unavailable until one of those actions reaches a durable result.
-- Result-ready presents selectable final text, Copy, Share, Use in Practice,
-  and confirmed Clear under `ios-output-actions.md`. A prior valid latest result
-  may remain visible while a later attempt runs and is replaced only by a newer
-  accepted result or explicit Clear.
+- Result-ready publishes accepted text through the composed Draft and compact
+  History surfaces governed by `ios-v1-release.md`. It does not create a
+  separate Latest card or direct Latest Copy, Share, Use in Practice, or Clear
+  actions. The app-private Latest record is replaced only by a newer accepted
+  result or fail-closed invalidation.
 - P4 never presents `ready`, Quick Session `expired`, or `Stop Voice Session`;
   those states and actions remain behind P6/M0C.
 - Every action is at-most-once for its current phase and identity. Repeated taps,
@@ -775,7 +776,7 @@ Accepted-output retention expiry and detected delivery-record clock rollback
 are not `VoiceAttemptOutcome.expired`. They produce separate content-free output
 recovery observations and never produce `resultReady`, Copy, Share, or Use in
 Practice while temporally ineligible, even if protected bytes remain available
-internally for Clear or later trustworthy maintenance.
+internally for later trustworthy maintenance.
 
 Quick Session expiry while merely `ready` creates no attempt outcome. Session
 expiry is suspended while `listening` or `processing` and does not overwrite

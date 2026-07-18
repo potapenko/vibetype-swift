@@ -284,10 +284,14 @@ microphone appear active.
   Processing, Result, Failed, or Unavailable record is handled exactly once,
   even when its Darwin notification arrives late. It clears only when the
   canonical snapshot is still the expired one.
-- The containing app remains the canonical owner of Latest and any History
-  entry. Shared state is transient coordination, not a second transcript store.
-- An uncertain insertion is never retried automatically. The user recovers from
-  Latest with an explicit Insert or Copy action.
+- The containing app remains the canonical owner of app-private Latest Result,
+  canonical History, and the separate History-derived keyboard Latest
+  projection. Shared state is transient coordination, not a second transcript
+  store.
+- An uncertain insertion is never retried automatically. The user may explicitly
+  consume the same-request transient result while it remains available or use
+  the History-derived keyboard Latest projection. This recovery does not expose
+  or restore an app-private Latest card.
 - Cancelled, failed, expired, or superseded requests never insert text. A
   provider operation already started from protected Pending audio remains
   authoritative even if the idle warm session later expires.
