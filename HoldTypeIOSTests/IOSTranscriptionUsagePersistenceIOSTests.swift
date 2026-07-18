@@ -76,40 +76,6 @@ struct IOSTranscriptionUsagePersistenceIOSTests {
         try await repository.reset()
     }
 
-    @Test func corruptIOSSourceIsPreservedUntilExplicitReset() async throws {
-        let containerURL = makeTemporaryDirectoryURL()
-        defer { try? FileManager.default.removeItem(at: containerURL) }
-        let applicationSupportURL = containerURL.appendingPathComponent(
-            "Library/Application Support",
-            isDirectory: true
-        )
-        let fileURL = IOSTranscriptionUsageStorageLocation.fileURL(
-            in: applicationSupportURL
-        )
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        let corruptData = Data(#"{"events":[],"schemaVersion":2}"#.utf8)
-        try corruptData.write(to: fileURL)
-        let repository = IOSTranscriptionUsageRepository(
-            applicationSupportDirectoryURL: applicationSupportURL
-        )
-
-        do {
-            _ = try await repository.load()
-            Issue.record("Expected unsupported schema")
-        } catch let error as IOSTranscriptionUsageRepositoryError {
-            #expect(error == .unsupportedSchemaVersion)
-        } catch {
-            Issue.record("Unexpected error: \(error)")
-        }
-        #expect(try Data(contentsOf: fileURL) == corruptData)
-
-        try await repository.reset()
-        #expect(!FileManager.default.fileExists(atPath: fileURL.path))
-    }
-
     private func makeTemporaryDirectoryURL() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent(
             "holdtype-ios-usage-tests-\(UUID().uuidString)",

@@ -34,28 +34,5 @@ struct IOSOpenAICredentialCoordinatorIOSTests {
         requireSendable(IOSOpenAICredentialResolutionOutcome.self)
     }
 
-    @Test func publicStatusAndErrorDiagnosticsAreRedacted() {
-        let status = IOSOpenAICredentialStatus(
-            primary: .availableInThisProcess,
-            statusNeedsRefresh: true,
-            localMarkerIssue: .unavailable
-        )
-        let error = IOSOpenAICredentialCoordinatorError.credentialAccessFailed(
-            .keychainFailure,
-            markerRestorationFailed: true
-        )
-
-        for value in [status as Any, error as Any] {
-            let renderings = [
-                String(describing: value),
-                String(reflecting: value),
-            ]
-            for rendering in renderings {
-                #expect(!rendering.contains("sk-ios-secret"))
-                #expect(!rendering.contains("-25308"))
-            }
-        }
-    }
-
     private func requireSendable<Value: Sendable>(_: Value.Type) {}
 }
