@@ -56,7 +56,7 @@
     "HoldTypeIOSTests/IOSVoiceRecorderAdapterTests.swift": 1878,
     "HoldTypeIOSTests/KeyboardViewControllerTests.swift": 2510,
     "HoldTypeKeyboard/BrandStageKeyboardView.swift": 1387,
-    "HoldTypeKeyboard/KeyboardViewController.swift": 1804,
+    "HoldTypeKeyboard/KeyboardViewController.swift": 1660,
     "HoldTypeTests/AppSettingsTests.swift": 1315,
     "HoldTypeTests/AudioRecorderServiceTests.swift": 1047,
     "HoldTypeTests/DictationSessionControllerTests.swift": 5403,
