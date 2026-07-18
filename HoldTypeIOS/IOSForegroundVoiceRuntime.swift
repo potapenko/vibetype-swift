@@ -130,7 +130,6 @@ final class IOSForegroundVoiceRuntime {
     var historyAudioPlaybackOwner: IOSHistoryAudioPlaybackOwner? {
         historyPlaybackArbitrator as? IOSHistoryAudioPlaybackOwner
     }
-    let latestResultOwner: IOSForegroundVoiceLatestResultOwner
     let voiceDraftOwner: IOSVoiceDraftOwner
     let voiceDraftTextActionOwner: IOSVoiceDraftTextActionOwner
     let workflow: IOSForegroundVoiceWorkflow
@@ -195,11 +194,6 @@ final class IOSForegroundVoiceRuntime {
         let historyPlaybackArbitrator = factories
             .makeHistoryPlaybackArbitrator()
         self.historyPlaybackArbitrator = historyPlaybackArbitrator
-        let latestResultOwner = IOSForegroundVoiceLatestResultOwner(
-            persistenceOwner: persistenceOwner,
-            publishKeyboardSnapshot: publishKeyboardSnapshot
-        )
-        self.latestResultOwner = latestResultOwner
         self.voiceDraftOwner = voiceDraftOwner
         voiceDraftTextActionOwner = IOSVoiceDraftTextActionOwner(
             draftOwner: voiceDraftOwner,
@@ -233,7 +227,7 @@ final class IOSForegroundVoiceRuntime {
                 try await persistenceOwner.load()
             },
             loadLatest: {
-                try await latestResultOwner.loadForVoiceWorkflow()
+                try await persistenceOwner.loadLatestResult()
             },
             loadSettings: {
                 try await settingsStateOwner
@@ -323,7 +317,7 @@ final class IOSForegroundVoiceRuntime {
                     },
                     refreshAcceptedHistory: refreshAcceptedHistory,
                     publish: {
-                        await latestResultOwner.refreshKeyboardProjection()
+                        _ = await publishKeyboardSnapshot()
                     }
                 )
             },

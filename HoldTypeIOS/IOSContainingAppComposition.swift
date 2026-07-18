@@ -387,8 +387,7 @@ final class IOSContainingAppComposition {
                     policy: policy
                 )
             }
-            await foregroundVoiceRuntime.latestResultOwner
-                .refreshKeyboardProjection()
+            _ = await publishKeyboardSnapshot()
             return disposition
         }
         self.lifecycleScheduler = lifecycleScheduler
