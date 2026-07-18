@@ -21,6 +21,10 @@ project's MVP constraints:
   `https://developer.apple.com/videos/play/wwdc2020/10040/`
 - SwiftUI identity, lifetime, and dependencies:
   `https://developer.apple.com/videos/play/wwdc2021/10022/`
+- Declaring and composing custom SwiftUI views:
+  `https://developer.apple.com/documentation/swiftui/declaring-a-custom-view`
+- Previews in Xcode:
+  `https://developer.apple.com/documentation/swiftui/previews-in-xcode`
 - Swift Package Manager documentation:
   `https://docs.swift.org/swiftpm/documentation/packagemanagerdocs/`
 - Swift Testing and XCTest documentation:
@@ -51,27 +55,81 @@ project's MVP constraints:
 - Do not add global mutable state. Put long-lived state in app models,
   controllers, services, or actors with explicit ownership.
 
+## File Shape And Size
+
+File size is a maintainability signal, not a reason to split code at arbitrary
+line numbers. Count physical lines, including comments and blank lines, because
+the goal is that an agent or person can open one file and understand its single
+primary responsibility.
+
+- Aim for at most 300 lines in every repo-owned Swift production, test, and
+  test-support file.
+- Files from 301 through 500 lines are an acceptable review band only when the
+  file still has one cohesive owner or responsibility.
+- More than 500 lines is a hard structural violation for a new file. Existing
+  files above 500 lines are migration debt recorded in
+  `scripts/swift_structure_baseline.json`; they must never grow above their
+  recorded ceiling.
+- When an oversized file shrinks, update the baseline in the same checkpoint so
+  its ceiling ratchets down. Remove the entry permanently once the file is at
+  or below 500 lines.
+- There is no minimum file size. A small file with a clear name and ownership
+  boundary is preferable to a large catch-all file.
+- Do not create `Part1`, `Part2`, `Misc`, or generic `Helpers` files. Split by a
+  named capability, state owner, adapter boundary, model family, or UI
+  component.
+- Keep one primary type or extension responsibility per file. Small private
+  value types may remain beside their only owner when separating them would
+  obscure that ownership.
+- Do not widen `private` or `fileprivate` access merely to satisfy a line limit.
+  Choose a semantic boundary that already has a valid module-level contract, or
+  defer the extraction until that contract can be designed cleanly.
+- Tests follow the same 300-line target and 500-line hard boundary. Split large
+  suites by behavior or boundary, and move reusable fixtures into narrowly
+  named test-support files rather than duplicating them.
+
+Run the dependency-free structure gate before expensive builds:
+
+```sh
+python3 scripts/check_swift_structure.py
+```
+
+Use `--report` for the current inventory. After a real reduction, use
+`--update-baseline`; that mode may only lower or remove existing debt and
+refuses new or increased debt. Exact-path exceptions require a committed
+reason, owner, and review date. Generated or external code is excluded only by
+an explicit repository rule, never because a large file is inconvenient.
+
 ## Development Check Loop
 
-1. Fast build after non-trivial Swift edits:
+1. Structure gate after Swift source changes:
+
+   ```sh
+   python3 scripts/check_swift_structure.py
+   ```
+
+2. Fast build after non-trivial Swift edits:
 
    ```sh
    xcodebuild -project HoldType.xcodeproj -scheme HoldType -destination 'platform=macOS' build
    ```
 
-2. Test gate when tests or testable behavior changed:
+3. Test gate when tests or testable behavior changed:
 
    ```sh
    xcodebuild -project HoldType.xcodeproj -scheme HoldType -destination 'platform=macOS' test
    ```
 
-3. Swift Package Manager gate, only if a `Package.swift` target is introduced:
+4. Swift Package Manager gate for the exact changed local package:
 
    ```sh
-   swift test
+   swift test --package-path Packages/<PackageName>
    ```
 
-4. Diff hygiene gate:
+   There is no root `Package.swift`; do not run bare `swift test` from the
+   repository root.
+
+5. Diff hygiene gate:
 
    ```sh
    git diff --check
@@ -132,6 +190,20 @@ boundary.
 ## SwiftUI Rules
 
 - Keep views declarative and small.
+- Put each non-private, independently meaningful `View`,
+  `UIViewRepresentable`, or `NSViewRepresentable` in a file named for that
+  component. A tightly coupled private leaf may remain only when it has no
+  independent state, action, accessibility surface, or reuse value and stays
+  roughly within 40 lines.
+- Give every standalone UI component a deterministic, colocated `#Preview`.
+  Include representative empty, populated, error, disabled, or accessibility
+  states when those states materially change the component.
+- Preview code must not use live Keychain, UserDefaults, files, microphone,
+  clipboard, network, wall-clock timers, randomness, or process singletons.
+  Supply immutable values, local bindings, and in-memory fakes instead.
+- App entry points, invisible container hosts, and system-only adapters may omit
+  a preview only through an exact-path exception with a concrete reason and
+  review date.
 - Keep `body` free of hidden side effects.
 - Use a single source of truth for app state.
 - Use local view state only for local visual state.
