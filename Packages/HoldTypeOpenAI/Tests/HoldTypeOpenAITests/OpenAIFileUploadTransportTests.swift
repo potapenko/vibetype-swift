@@ -939,7 +939,6 @@ nonisolated private final class UploadTestURLProtocol: URLProtocol {
     struct Observation: Sendable {
         let url: URL
         let authorization: String?
-        let hasBodyOrStream: Bool
         let body: Data?
     }
 
@@ -1113,7 +1112,6 @@ nonisolated private final class UploadTestURLProtocol: URLProtocol {
                     Observation(
                         url: url,
                         authorization: request.value(forHTTPHeaderField: "Authorization"),
-                        hasBodyOrStream: request.httpBody != nil || request.httpBodyStream != nil,
                         body: body
                     )
                 )

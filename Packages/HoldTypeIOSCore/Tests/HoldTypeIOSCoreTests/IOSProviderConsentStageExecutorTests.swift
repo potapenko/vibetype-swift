@@ -290,9 +290,7 @@ private struct CanaryProviderError: Error, Sendable {
     let payload: String
 }
 
-private struct ProviderConsentStageAuthorization: Equatable, Sendable {
-    private let identifier = UUID()
-}
+private struct ProviderConsentStageAuthorization: Sendable {}
 
 private struct ProviderConsentStageRegistration: Equatable, Sendable {
     private let identifier = UUID()
