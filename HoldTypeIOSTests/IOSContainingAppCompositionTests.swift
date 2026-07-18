@@ -175,7 +175,6 @@ struct IOSContainingAppCompositionTests {
             ]
         )
         #expect(providerScheduleCount == 1)
-        #expect(composition.availability == .ready)
         #expect(
             composition.settingsStateOwner
                 === capturedSettingsStateOwner
@@ -420,7 +419,6 @@ struct IOSContainingAppCompositionTests {
         let rootPresentation = rootView(for: composition)
 
         await composition.lifecycleScheduler.waitUntilIdle()
-        #expect(composition.availability == .credentialUnavailable)
         #expect(rootPresentation.presentation == .shell)
         #expect(composition.settingsStateOwner != nil)
         #expect(composition.libraryStateOwner != nil)
@@ -532,7 +530,6 @@ struct IOSContainingAppCompositionTests {
 
         await composition.lifecycleScheduler.waitUntilIdle()
         #expect(credentialFactoryCalls == 1)
-        #expect(composition.availability == .credentialUnavailable)
         #expect(composition.settingsStateOwner != nil)
         #expect(composition.libraryStateOwner != nil)
         #expect(composition.settingsStateOwner?.state == .ready(.defaults))
@@ -630,7 +627,6 @@ struct IOSContainingAppCompositionTests {
         #expect(root.libraryStateOwner == nil)
         #expect(root.openAISettingsStateOwner == nil)
         #expect(root.usageEstimateStateOwner == nil)
-        #expect(composition.availability == .storageUnavailable)
         #expect(composition.applicationSupportDirectoryURL == nil)
         #expect(composition.settingsStateOwner == nil)
         #expect(composition.libraryStateOwner == nil)
@@ -669,7 +665,6 @@ struct IOSContainingAppCompositionTests {
 
         await app.composition.lifecycleScheduler.waitUntilIdle()
         #expect(providerScheduleCount == 1)
-        #expect(app.composition.availability == .injected)
         #expect(app.composition.applicationSupportDirectoryURL == nil)
         #expect(app.composition.settingsStateOwner == nil)
         #expect(app.composition.libraryStateOwner == nil)

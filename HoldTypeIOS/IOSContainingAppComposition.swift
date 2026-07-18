@@ -4,13 +4,6 @@ import HoldTypeDomain
 import HoldTypeOpenAI
 @_spi(HoldTypeIOSCore) import HoldTypePersistence
 
-enum IOSContainingAppCompositionAvailability: Equatable {
-    case ready
-    case credentialUnavailable
-    case storageUnavailable
-    case injected
-}
-
 /// One process-owned dependency graph shared by every containing-app scene.
 /// Construction is synchronous and passive: it never reads Keychain, contacts
 /// a provider, or performs persistence recovery inline.
@@ -176,8 +169,6 @@ final class IOSContainingAppComposition {
         IOSRecordingCacheLifecycleActions?
     let lifecycleScheduler: IOSContainingAppLifecycleScheduler
     let voiceSceneLifecycleBinding: IOSVoiceSceneLifecycleBinding?
-    let availability: IOSContainingAppCompositionAvailability
-
     init(
         factories: Factories? = nil,
         scheduleProviderStartupMaintenance: @MainActor () -> Void = {
@@ -210,7 +201,6 @@ final class IOSContainingAppComposition {
             historyPlaybackActions = nil
             pendingRecordingHistoryStateOwner = nil
             recordingCacheLifecycleActions = nil
-            availability = .storageUnavailable
             lifecycleScheduler = IOSContainingAppLifecycleScheduler { _ in
                 .pendingLocalRecovery
             }
@@ -334,9 +324,6 @@ final class IOSContainingAppComposition {
             )
         }
         self.foregroundVoiceProcessor = foregroundVoiceProcessor
-        availability = credentialCoordinator == nil
-            ? .credentialUnavailable
-            : .ready
         let foregroundVoiceRuntime = IOSForegroundVoiceRuntime(
             settingsStateOwner: settingsStateOwner,
             libraryStateOwner: libraryStateOwner,
@@ -442,7 +429,6 @@ final class IOSContainingAppComposition {
         historyPlaybackActions = nil
         pendingRecordingHistoryStateOwner = nil
         recordingCacheLifecycleActions = nil
-        availability = .injected
         lifecycleScheduler = IOSContainingAppLifecycleScheduler(
             recover: recoverContainingAppLifecycle
         )
@@ -487,16 +473,4 @@ extension IOSContainingAppComposition:
 
     nonisolated var debugDescription: String { description }
     nonisolated var customMirror: Mirror { Mirror(self, children: [:]) }
-}
-
-extension IOSContainingAppCompositionAvailability:
-    CustomStringConvertible,
-    CustomDebugStringConvertible,
-    CustomReflectable {
-    var description: String {
-        "IOSContainingAppCompositionAvailability(redacted)"
-    }
-
-    var debugDescription: String { description }
-    var customMirror: Mirror { Mirror(self, children: [:]) }
 }
