@@ -28,7 +28,7 @@
     "HoldTypeIOS/IOSUIQualificationGallery.swift": 1017,
     "HoldTypeIOS/IOSVoiceBoundaryFeedbackAdapter.swift": 929,
     "HoldTypeIOS/IOSVoiceDraftOwner.swift": 587,
-    "HoldTypeIOS/IOSVoiceHomeView.swift": 1663,
+    "HoldTypeIOS/IOSVoiceHomeView.swift": 1526,
     "HoldTypeIOS/IOSVoiceRecorderAdapter.swift": 1492,
     "HoldTypeIOS/IOSVoiceSceneRegistry.swift": 589,
     "HoldTypeIOSTests/BrandStageKeyboardViewTests.swift": 1605,
