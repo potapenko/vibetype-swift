@@ -9,12 +9,6 @@ import AppKit
 import SwiftUI
 
 @MainActor
-protocol TranscriptHistoryPresenting {
-    func showAfterMenuDismissal()
-    func show()
-}
-
-@MainActor
 final class TranscriptHistoryWindowPresenter: NSObject, NSWindowDelegate {
     static let shared = TranscriptHistoryWindowPresenter()
 
@@ -58,5 +52,3 @@ final class TranscriptHistoryWindowPresenter: NSObject, NSWindowDelegate {
         return historyWindow
     }
 }
-
-extension TranscriptHistoryWindowPresenter: TranscriptHistoryPresenting {}

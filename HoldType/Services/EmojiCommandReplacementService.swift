@@ -1,3 +1,0 @@
-import HoldTypeDomain
-
-typealias EmojiCommandReplacementService = HoldTypeDomain.EmojiCommandReplacementService

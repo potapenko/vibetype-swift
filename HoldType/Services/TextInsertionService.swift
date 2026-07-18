@@ -221,11 +221,7 @@ struct CGEventTextEventPoster: TextEventPosting {
     }
 }
 
-protocol TextInsertionSleeping {
-    func sleep(seconds: TimeInterval) async throws
-}
-
-struct TaskTextInsertionSleeper: TextInsertionSleeping {
+struct TaskTextInsertionSleeper {
     func sleep(seconds: TimeInterval) async throws {
         guard seconds > 0 else {
             return

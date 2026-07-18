@@ -9,7 +9,6 @@ import Foundation
 import HoldTypeOpenAI
 
 typealias OpenAICredential = HoldTypeOpenAI.OpenAICredential
-typealias OpenAICredentialSource = HoldTypeOpenAI.OpenAICredentialSource
 typealias OpenAICredentialResolving = HoldTypeOpenAI.OpenAICredentialResolving
 
 struct OpenAICredentialResolver: OpenAICredentialResolving {

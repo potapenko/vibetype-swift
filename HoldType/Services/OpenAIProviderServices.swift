@@ -3,8 +3,6 @@ import HoldTypeOpenAI
 typealias OpenAITranscriptionServing = HoldTypeOpenAI.OpenAITranscriptionServing
 typealias OpenAITranscriptionService = HoldTypeOpenAI.OpenAITranscriptionService
 typealias OpenAITranscriptionServiceError = HoldTypeOpenAI.OpenAITranscriptionServiceError
-typealias OpenAITranscriptionRequestBuilderError =
-    HoldTypeOpenAI.OpenAITranscriptionRequestBuilderError
 
 typealias OpenAITextCorrectionServing = HoldTypeOpenAI.OpenAITextCorrectionServing
 typealias OpenAITextCorrectionService = HoldTypeOpenAI.OpenAITextCorrectionService
