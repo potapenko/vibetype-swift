@@ -160,11 +160,6 @@
 			path = HoldTypeIOS;
 			sourceTree = "<group>";
 		};
-		9DB749AA2FE7B0000053C3F3 /* Shared */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Shared;
-			sourceTree = "<group>";
-		};
 		9DB749B12FE800000053C3F3 /* HoldTypeIOSTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = HoldTypeIOSTests;
@@ -270,7 +265,6 @@
 			children = (
 				D4A174012FEF174000000001 /* Config/HoldTypeSigning.xcconfig */,
 				9DB7496B2FE6D7300053C3F3 /* HoldType */,
-				9DB749AA2FE7B0000053C3F3 /* Shared */,
 				9DB749A22FE7A0000053C3F3 /* HoldTypeIOS */,
 				D4A175032FF0000000000003 /* HoldTypeKeyboard */,
 				D4A175042FF0000000000004 /* KeyboardShared */,
@@ -315,7 +309,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				9DB7496B2FE6D7300053C3F3 /* HoldType */,
-				9DB749AA2FE7B0000053C3F3 /* Shared */,
 			);
 			name = HoldType;
 			packageProductDependencies = (
@@ -391,7 +384,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				9DB749A22FE7A0000053C3F3 /* HoldTypeIOS */,
-				9DB749AA2FE7B0000053C3F3 /* Shared */,
 				D4A175042FF0000000000004 /* KeyboardShared */,
 			);
 			name = "HoldType-iOS";
@@ -419,7 +411,6 @@
 				D4A181022FF6000000000002 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				9DB749AA2FE7B0000053C3F3 /* Shared */,
 				9DB749B12FE800000053C3F3 /* HoldTypeIOSTests */,
 				D4A175032FF0000000000003 /* HoldTypeKeyboard */,
 				D4A175042FF0000000000004 /* KeyboardShared */,
