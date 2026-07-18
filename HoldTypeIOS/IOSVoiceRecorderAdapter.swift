@@ -479,15 +479,10 @@ final class IOSVoiceRecorderAdapter {
 
     @MainActor
     private final class TerminalWaiter: Sendable {
-        let identifier: UInt64
         private var continuation:
             CheckedContinuation<IOSVoiceRecorderTerminalEvent, Never>?
         private var bufferedEvent: IOSVoiceRecorderTerminalEvent?
         private var wasResolved = false
-
-        init(identifier: UInt64) {
-            self.identifier = identifier
-        }
 
         func value() async -> IOSVoiceRecorderTerminalEvent {
             if let bufferedEvent {
@@ -568,7 +563,6 @@ final class IOSVoiceRecorderAdapter {
     private var phase = Phase.idle
     private var activeAttempt: Attempt?
     private var nextGeneration: UInt64 = 0
-    private var nextTerminalWaiterIdentifier: UInt64 = 0
     private var lastTerminal: LastTerminal?
     private var activeAttemptTeardown: IOSVoiceRecorderMainActorActionToken?
 
@@ -846,13 +840,7 @@ final class IOSVoiceRecorderAdapter {
             guard attempt.terminalWaiter == nil else {
                 return IOSVoiceRecorderTerminalWait(wait: { .stale })
             }
-            nextTerminalWaiterIdentifier &+= 1
-            if nextTerminalWaiterIdentifier == 0 {
-                nextTerminalWaiterIdentifier = 1
-            }
-            let waiter = TerminalWaiter(
-                identifier: nextTerminalWaiterIdentifier
-            )
+            let waiter = TerminalWaiter()
             attempt.terminalWaiter = waiter
             let generation = attempt.generation
             return IOSVoiceRecorderTerminalWait(
