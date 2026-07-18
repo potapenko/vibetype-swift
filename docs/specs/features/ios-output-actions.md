@@ -406,15 +406,15 @@ one non-release-qualified train until this final activation passes.
   delivery.
 - Pending result, latest result, History entry, and insertion acknowledgement
   have independent lifetimes.
-- `OutputDeliveryState.expired` means accepted-result delivery eligibility or
-  snapshot expiry. It is not Quick Session expiry or the utterance duration
-  limit.
+- Accepted-result delivery expiry and snapshot expiry are distinct from Quick
+  Session expiry and the utterance duration limit.
 - `VoiceAttemptStage.outputDelivery` identifies only the controller operation
   that passed a runtime `OutputDeliveryRequest` to a platform output adapter.
-  Eligibility, pre-insert claim,
-  acknowledgement, `confirmedInserted`, `submittedUnverified`, recovery, and
-  expiry remain owned by `OutputDeliveryState` and the bridge contract. A
-  delivery-stage failure never recreates provider work or becomes a failed-
+  Eligibility, the pre-insert claim, acknowledgement, `confirmedInserted`,
+  `submittedUnverified`, recovery, and expiry remain owned by the concrete
+  accepted-result, claim-ledger, acknowledgement, and bridge records. The
+  contract does not introduce a second observer-wide delivery enum. A
+  delivery-stage failure never recreates provider work or becomes a failed
   transcription History row.
 - The production bridge must define bounded expiry before automatic insertion
   is enabled.

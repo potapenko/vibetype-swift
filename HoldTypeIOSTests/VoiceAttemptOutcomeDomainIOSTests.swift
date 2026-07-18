@@ -21,7 +21,6 @@ struct VoiceAttemptOutcomeDomainIOSTests {
         #expect(((outcomes[0] as Any) is any LocalizedError) == false)
         #expect(((outcomes[0] as Any) is any CustomStringConvertible) == false)
         #expect(VoiceAttemptOutcome.expired == .expired)
-        #expect(OutputDeliveryState.expired == .expired)
     }
 
     private func marker(for outcome: VoiceAttemptOutcome) -> Int {

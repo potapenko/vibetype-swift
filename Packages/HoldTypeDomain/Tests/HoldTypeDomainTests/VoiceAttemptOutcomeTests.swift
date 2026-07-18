@@ -32,18 +32,15 @@ struct VoiceAttemptOutcomeTests {
         #expect(((outcome as Any) is any CustomStringConvertible) == false)
     }
 
-    @Test func remainsIndependentFromWorkStageAndDeliveryState() {
+    @Test func remainsIndependentFromWorkPhaseAndStage() {
         let phase = VoiceWorkPhase.inactive
         let stage = VoiceAttemptStage.outputDelivery
         let outcome = VoiceAttemptOutcome.resultReady
-        let delivery = OutputDeliveryState.insertionOutcome(.submittedUnverified)
 
         #expect(phase == .inactive)
         #expect(stage == .outputDelivery)
         #expect(outcome == .resultReady)
-        #expect(delivery == .insertionOutcome(.submittedUnverified))
         #expect(VoiceAttemptOutcome.expired == .expired)
-        #expect(OutputDeliveryState.expired == .expired)
     }
 
     private func marker(for outcome: VoiceAttemptOutcome) -> Int {

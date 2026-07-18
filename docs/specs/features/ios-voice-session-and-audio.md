@@ -788,12 +788,13 @@ presentation state, not a durable journal, App Group record, keyboard command,
 or authority to retry, discard, insert, record, or call a provider.
 
 The value is independent of `VoiceWorkPhase`, `VoiceAttemptStage`, setup, and
-`OutputDeliveryState`. P1 macOS compatibility may project only a non-empty
-accepted final result as `resultReady`, or the current failed presentation as
-`recoverableFailure` when its eligible attempt is still retained. Ordinary
-cancel projects no outcome, and macOS does not synthesize `interrupted` or
-`expired`. iOS interruption/expiry adapters, detailed portable failure
-categories, and durable outcome reconciliation remain later milestone work.
+the bridge-owned output-delivery observations. P1 macOS compatibility may
+project only a non-empty accepted final result as `resultReady`, or the current
+failed presentation as `recoverableFailure` when its eligible attempt is still
+retained. Ordinary cancel projects no outcome, and macOS does not synthesize
+`interrupted` or `expired`. iOS interruption/expiry adapters, detailed portable
+failure categories, and durable outcome reconciliation remain later milestone
+work.
 
 The containing app and keyboard presentations derive their understandable
 user-facing state from separate sources instead of persisting or transporting
