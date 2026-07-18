@@ -125,9 +125,7 @@ struct IOSReplacementRuleEditorSupportTests {
         #expect(textView.textContentType == nil)
         #expect(textView.adjustsFontForContentSizeCategory)
         #expect(textView.accessibilityLabel == "Search text")
-        if #available(iOS 17.0, *) {
-            #expect(textView.inlinePredictionType == .no)
-        }
+        #expect(textView.inlinePredictionType == .no)
         if #available(iOS 18.0, *) {
             #expect(textView.mathExpressionCompletionType == .no)
             #expect(textView.writingToolsBehavior == .none)

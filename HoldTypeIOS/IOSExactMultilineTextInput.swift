@@ -84,9 +84,7 @@ struct IOSExactMultilineTextInput: UIViewRepresentable {
         textView.smartDashesType = .no
         textView.smartInsertDeleteType = .no
         textView.textContentType = nil
-        if #available(iOS 17.0, *) {
-            textView.inlinePredictionType = .no
-        }
+        textView.inlinePredictionType = .no
         if #available(iOS 18.0, *) {
             textView.mathExpressionCompletionType = .no
             textView.writingToolsBehavior = .none
