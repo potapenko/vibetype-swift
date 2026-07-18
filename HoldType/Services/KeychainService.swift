@@ -123,18 +123,6 @@ protocol KeychainClient {
 }
 
 extension KeychainClient {
-    func saveGenericPassword(_ data: Data, service: String, account: String) throws {
-        try saveGenericPassword(data, service: service, account: account, authenticationUI: .allow)
-    }
-
-    func updateGenericPassword(_ data: Data, service: String, account: String) throws {
-        try updateGenericPassword(data, service: service, account: account, authenticationUI: .allow)
-    }
-
-    func loadGenericPassword(service: String, account: String) throws -> Data? {
-        try loadGenericPassword(service: service, account: account, authenticationUI: .allow)
-    }
-
     func loadGenericPasswordWithoutUI(service: String, account: String) throws -> Data? {
         try loadGenericPassword(service: service, account: account, authenticationUI: .skip)
     }

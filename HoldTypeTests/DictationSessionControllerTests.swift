@@ -5142,9 +5142,6 @@ final class FakeTranscriptionFailureRecovery: TranscriptionFailureRecoveryRecord
         return failedAttempts.count != previousCount
     }
 
-    func clear() {
-        failedAttempts = []
-    }
 }
 
 @MainActor
@@ -5369,10 +5366,6 @@ private final class CheckpointPersistenceFailureRecovery:
         return failedAttempts.count != oldCount
     }
 
-    func clear() {
-        failedAttempts = []
-        pendingAttempt = nil
-    }
 }
 
 private actor ControllerAsyncGate {

@@ -147,8 +147,6 @@ struct SpecialClipboardHotkeyServiceTests {
 private struct WaitForPostedTextsTimeout: Error {}
 
 private final class FakeSpecialClipboardHotkeyService: SpecialClipboardHotkeyListening {
-    let shortcut = GlobalHotkeyShortcut.appClipboardPaste
-
     private var handler: (() -> Void)?
     private(set) var startCount = 0
     private(set) var stopCount = 0

@@ -221,10 +221,6 @@ private final class RecordingCacheManagingSpy: RecordingCacheManaging {
     let directoryURL = URL(fileURLWithPath: "/tmp/holdtype-cache-manager-spy", isDirectory: true)
     private(set) var completedRecordingCalls: [CompletedRecordingCall] = []
 
-    func makeRecordingFileURL() throws -> URL {
-        directoryURL.appendingPathComponent("recording.m4a")
-    }
-
     func summary() throws -> RecordingCacheSummary {
         RecordingCacheSummary(directoryURL: directoryURL, items: [])
     }

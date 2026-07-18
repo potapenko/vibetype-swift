@@ -340,7 +340,6 @@ protocol TranscriptionFailureRecoveryRecording: AnyObject {
         completionKind: TranscriptionRecoveryCompletionKind
     ) -> FailedTranscriptionAttempt?
     func markSaved(id: FailedTranscriptionAttempt.ID, acceptedTranscriptText: String) throws
-    func repairLocalRecovery(id: FailedTranscriptionAttempt.ID) throws
     func sealProviderDispatch(id: FailedTranscriptionAttempt.ID) throws
     func markProviderOutcomeUncertain(id: FailedTranscriptionAttempt.ID)
     func recordProviderAccepted(
@@ -351,7 +350,6 @@ protocol TranscriptionFailureRecoveryRecording: AnyObject {
     func updateFailedAttempt(id: FailedTranscriptionAttempt.ID, reason: FailedTranscriptionReason) throws
     @discardableResult
     func removeFailedAttempt(id: FailedTranscriptionAttempt.ID) throws -> Bool
-    func clear()
 }
 
 extension TranscriptionFailureRecoveryRecording {
@@ -397,10 +395,6 @@ extension TranscriptionFailureRecoveryRecording {
         id: FailedTranscriptionAttempt.ID,
         acceptedTranscriptText: String
     ) throws {
-        throw TranscriptionFailureRecoveryError.saveFailed
-    }
-
-    func repairLocalRecovery(id: FailedTranscriptionAttempt.ID) throws {
         throw TranscriptionFailureRecoveryError.saveFailed
     }
 

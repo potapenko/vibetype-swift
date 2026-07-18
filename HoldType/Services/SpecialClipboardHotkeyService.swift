@@ -9,7 +9,6 @@ import Carbon.HIToolbox
 import Foundation
 
 protocol SpecialClipboardHotkeyListening: AnyObject {
-    var shortcut: GlobalHotkeyShortcut { get }
     var isListening: Bool { get }
 
     func start(handler: @escaping () -> Void) throws
@@ -17,8 +16,6 @@ protocol SpecialClipboardHotkeyListening: AnyObject {
 }
 
 final class CarbonSpecialClipboardHotkeyService: SpecialClipboardHotkeyListening {
-    let shortcut = GlobalHotkeyShortcut.appClipboardPaste
-
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandlerRef: EventHandlerRef?
     private var handlerBox: SpecialClipboardHotkeyHandlerBox?

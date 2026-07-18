@@ -27,18 +27,6 @@ final class SettingsPermissionsViewModel: ObservableObject {
     private var lastDebugSnapshot: PermissionDebugSnapshot?
     private var failedInputMonitoringActionCount = 0
 
-    convenience init(visiblePollingIntervalNanoseconds: UInt64 = 1_000_000_000) {
-        self.init(
-            microphonePermissionService: MicrophonePermissionService(),
-            accessibilityPermissionService: AccessibilityPermissionService(),
-            inputMonitoringPermissionService: InputMonitoringPermissionService(),
-            inputMonitoringRecoveryLauncher: {
-                InputMonitoringPermissionLaunchRecovery.launchFreshRequest()
-            },
-            visiblePollingIntervalNanoseconds: visiblePollingIntervalNanoseconds
-        )
-    }
-
     init(
         microphonePermissionService: MicrophonePermissionService,
         accessibilityPermissionService: AccessibilityPermissionService,

@@ -71,7 +71,6 @@ enum RecordingCacheServiceError: Error, Equatable, LocalizedError {
 protocol RecordingCacheManaging: RecordingCacheLifecycleHandling {
     var directoryURL: URL { get }
 
-    func makeRecordingFileURL() throws -> URL
     func summary() throws -> RecordingCacheSummary
     func handleCompletedRecording(at fileURL: URL, policy: RecordingCachePolicy) throws
     func applyRetentionPolicy(_ policy: RecordingCachePolicy) throws
