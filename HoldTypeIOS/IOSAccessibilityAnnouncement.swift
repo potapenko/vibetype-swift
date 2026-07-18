@@ -4,7 +4,6 @@ nonisolated struct IOSAccessibilityAnnouncementCandidate:
     Equatable,
     Sendable {
     nonisolated enum Priority: Int, Sendable {
-        case passive = 0
         case status = 1
         case content = 2
     }

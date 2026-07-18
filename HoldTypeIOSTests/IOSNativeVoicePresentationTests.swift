@@ -212,11 +212,6 @@ struct IOSNativeVoicePresentationTests {
             message: "Latest Result available",
             priority: .content
         )
-        let passive = IOSAccessibilityAnnouncementCandidate(
-            message: "No Latest Result",
-            priority: .passive
-        )
-
         #expect(
             IOSAccessibilityAnnouncementCandidate.preferred(
                 current: status,
@@ -226,7 +221,7 @@ struct IOSNativeVoicePresentationTests {
         #expect(
             IOSAccessibilityAnnouncementCandidate.preferred(
                 current: content,
-                incoming: passive
+                incoming: status
             ) == content
         )
     }
