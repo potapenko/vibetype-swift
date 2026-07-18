@@ -16,7 +16,6 @@ struct APIKeySettingsStateTests {
         state.applyAvailability(.saved)
 
         #expect(state.input.isEmpty)
-        #expect(state.savedAPIKey == nil)
         #expect(state.status == .saved)
         #expect(state.apiKeyAvailability == .saved)
         #expect(state.shouldAutosaveInput == false)
@@ -37,7 +36,6 @@ struct APIKeySettingsStateTests {
         state.applyAvailability(.missing)
 
         #expect(state.input.isEmpty)
-        #expect(state.savedAPIKey == nil)
         #expect(state.status == .missing)
         #expect(state.shouldAutosaveInput == false)
     }
@@ -59,19 +57,17 @@ struct APIKeySettingsStateTests {
         state.applySavedInput()
 
         #expect(state.input.isEmpty)
-        #expect(state.savedAPIKey == nil)
         #expect(state.status == .saved)
         #expect(state.shouldAutosaveInput == false)
     }
 
-    @Test func deleteClearsSavedKeyAndInput() {
+    @Test func deleteClearsInputAndShowsMissingStatus() {
         var state = APIKeySettingsState()
         state.applyAvailability(.saved)
 
         state.applyDeletedAPIKey()
 
         #expect(state.input.isEmpty)
-        #expect(state.savedAPIKey == nil)
         #expect(state.status == .missing)
     }
 

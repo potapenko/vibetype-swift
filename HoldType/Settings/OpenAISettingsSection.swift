@@ -253,16 +253,13 @@ enum APIKeySettingsStatus: Equatable {
 
 struct APIKeySettingsState: Equatable {
     var input: String
-    private(set) var savedAPIKey: String?
     var status: APIKeySettingsStatus
 
     init(
         input: String = "",
-        savedAPIKey: String? = nil,
         status: APIKeySettingsStatus = .unknown
     ) {
         self.input = input
-        self.savedAPIKey = Self.normalizedAPIKey(savedAPIKey)
         self.status = status
     }
 
@@ -271,7 +268,7 @@ struct APIKeySettingsState: Equatable {
     }
 
     var shouldAutosaveInput: Bool {
-        !normalizedInput.isEmpty && normalizedInput != savedAPIKey
+        !normalizedInput.isEmpty
     }
 
     var apiKeyAvailability: APIKeyAvailability {
@@ -283,11 +280,9 @@ struct APIKeySettingsState: Equatable {
         case .unknown:
             status = .unknown
         case .saved:
-            savedAPIKey = nil
             input = ""
             status = .saved
         case .missing:
-            savedAPIKey = nil
             input = ""
             status = .missing
         case .unavailable(let message):
@@ -296,33 +291,21 @@ struct APIKeySettingsState: Equatable {
     }
 
     mutating func applySavedInput() {
-        let normalizedAPIKey = normalizedInput
-        guard !normalizedAPIKey.isEmpty else {
+        guard !normalizedInput.isEmpty else {
             return
         }
 
-        savedAPIKey = nil
         input = ""
         status = .saved
     }
 
     mutating func applyDeletedAPIKey() {
-        savedAPIKey = nil
         input = ""
         status = .missing
     }
 
     mutating func applyFailure(_ message: String) {
         status = .failure(message)
-    }
-
-    private static func normalizedAPIKey(_ apiKey: String?) -> String? {
-        guard let trimmedAPIKey = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !trimmedAPIKey.isEmpty else {
-            return nil
-        }
-
-        return trimmedAPIKey
     }
 }
 
