@@ -45,10 +45,6 @@ enum IOSContainingAppDestination: String, CaseIterable, Identifiable,
         "ios.destination.\(rawValue)"
     }
 
-    static func resolve(storedRawValue: String) -> Self {
-        Self(rawValue: storedRawValue) ?? .voice
-    }
-
 }
 
 enum IOSContainingAppShellLayout: Equatable, Sendable {

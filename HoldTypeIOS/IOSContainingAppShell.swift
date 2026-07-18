@@ -13,8 +13,8 @@ enum IOSKeyboardHandoffSceneDecision: Equatable, Sendable {
 struct IOSContainingAppShell: View {
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var selectedDestinationRawValue =
-        IOSContainingAppDestination.voice.rawValue
+    @State private var selectedDestination =
+        IOSContainingAppDestination.voice
 
     @State private var settingsNavigationPath = NavigationPath()
     @State private var libraryNavigationPath = NavigationPath()
@@ -83,7 +83,6 @@ struct IOSContainingAppShell: View {
                 splitShell
             }
         }
-        .onAppear(perform: restoreSelectionIfNeeded)
         .onChange(of: scenePhase) { _, _ in
             startAcceptedKeyboardHandoffIfPossible()
         }
@@ -206,12 +205,6 @@ struct IOSContainingAppShell: View {
                 guard !isPresented else { return }
                 keyboardHandoffPresentationOwner?.cancelFromSheet()
             }
-        )
-    }
-
-    private var selectedDestination: IOSContainingAppDestination {
-        IOSContainingAppDestination.resolve(
-            storedRawValue: selectedDestinationRawValue
         )
     }
 
@@ -342,16 +335,6 @@ struct IOSContainingAppShell: View {
         }
     }
 
-    private func restoreSelectionIfNeeded() {
-        if IOSContainingAppDestination(
-            rawValue: selectedDestinationRawValue
-        ) == nil {
-            selectedDestinationRawValue =
-                IOSContainingAppDestination.voice.rawValue
-        }
-
-    }
-
     private func requestDestination(
         _ destination: IOSContainingAppDestination
     ) {
@@ -423,7 +406,7 @@ struct IOSContainingAppShell: View {
     private func applyDestination(
         _ destination: IOSContainingAppDestination
     ) {
-        selectedDestinationRawValue = destination.rawValue
+        selectedDestination = destination
         if layout == .split {
             preferredCompactColumn = .detail
         }

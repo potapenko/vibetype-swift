@@ -5,7 +5,7 @@ import UIKit
 
 @MainActor
 struct IOSContainingAppShellTests {
-    @Test func destinationsHaveStableOrderPresentationAndFallback() {
+    @Test func destinationsHaveStableOrderAndPresentation() {
         #expect(
             IOSContainingAppDestination.allCases == [
                 .voice,
@@ -42,16 +42,6 @@ struct IOSContainingAppShellTests {
         )
         #expect(UIImage(systemName: "checklist") != nil)
         #expect(UIImage(systemName: "chart.bar.xaxis") != nil)
-        #expect(
-            IOSContainingAppDestination.resolve(
-                storedRawValue: "library"
-            ) == .library
-        )
-        #expect(
-            IOSContainingAppDestination.resolve(
-                storedRawValue: "not-a-destination"
-            ) == .voice
-        )
     }
 
     @Test func shellLayoutUsesTabsForPhoneAndSplitForPad() {
