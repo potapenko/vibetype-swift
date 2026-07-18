@@ -59,21 +59,4 @@ struct DictationStatusTests {
         #expect(DictationStatus.success(transcript: "Typed text").lastTranscriptText == "Typed text")
     }
 
-    @Test func projectsOnlyANonEmptySuccessAsAReadyAttemptResult() {
-        let statuses: [DictationStatus] = [
-            .idle,
-            .recording,
-            .transcribing,
-            .failure(message: "Failure"),
-            .success(transcript: ""),
-            .success(transcript: "  \n\t  "),
-            .success(transcript: "  First accepted text\n"),
-            .success(transcript: "Second accepted text"),
-        ]
-        let projectedOutcomes = statuses.compactMap(\.voiceAttemptOutcome)
-
-        #expect(projectedOutcomes == [.resultReady, .resultReady])
-        #expect(projectedOutcomes.contains(.interrupted) == false)
-    }
-
 }

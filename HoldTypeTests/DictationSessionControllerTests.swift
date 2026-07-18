@@ -146,7 +146,6 @@ struct DictationSessionControllerTests {
         await controller.performRecordingAction()
 
         #expect(controller.status == .success(transcript: "Shared controller transcript"))
-        #expect(controller.voiceAttemptOutcome == .resultReady)
         #expect(controller.lastTranscriptText == "Shared controller transcript")
         #expect(controller.status.lastTranscriptText == "Shared controller transcript")
         #expect(controller.outputStatusText == "Paste Last Result is disabled.")
@@ -2234,7 +2233,6 @@ struct DictationSessionControllerTests {
         )
         #expect(controller.outputStatusText == "The failed recording could not be saved for retry.")
         #expect(controller.failurePresentation?.failedAttemptID != nil)
-        #expect(controller.voiceAttemptOutcome == .recoverableFailure)
         #expect(failureRecovery.failedAttempts.count == 1)
         #expect(failureRecovery.failedAttempts.first?.audioFileURL == artifact.fileURL)
         #expect(recordingCache.completedRecordingCalls.isEmpty)
@@ -2788,7 +2786,6 @@ struct DictationSessionControllerTests {
         controller.cancelRecording()
 
         #expect(controller.status == .idle)
-        #expect(controller.voiceAttemptOutcome == nil)
         #expect(controller.lastTranscriptText == "previous transcript")
         #expect(controller.outputStatusText == nil)
         #expect(recorder.cancelCount == 1)
@@ -2871,12 +2868,10 @@ struct DictationSessionControllerTests {
         await yieldUntil {
             controller.status == .transcribing && transcriptionService.calls.count == 1
         }
-        #expect(controller.voiceAttemptOutcome == nil)
 
         controller.cancelRecording()
 
         #expect(controller.status == .idle)
-        #expect(controller.voiceAttemptOutcome == nil)
         #expect(controller.lastTranscriptText == "previous accepted transcript")
         #expect(controller.outputStatusText == nil)
         #expect(transcriptionService.cancelCount == 1)
@@ -2885,7 +2880,6 @@ struct DictationSessionControllerTests {
         await stopTask.value
 
         #expect(controller.status == .idle)
-        #expect(controller.voiceAttemptOutcome == nil)
         #expect(controller.lastTranscriptText == "previous accepted transcript")
         #expect(controller.outputStatusText == nil)
         #expect(transcriptOutput.calls.isEmpty)
@@ -3724,7 +3718,6 @@ struct DictationSessionControllerTests {
         #expect(controller.failurePresentation?.settingsTarget == nil)
         #expect(controller.failurePresentation?.failedAttemptID == failureRecovery.failedAttempts.first?.id)
         #expect(controller.failurePresentation?.canRetry == false)
-        #expect(controller.voiceAttemptOutcome == .recoverableFailure)
         #expect(
             attemptStageFailureEvents(in: eventLogger.events) == [
                 .transcriptionFailed(category: "network_unavailable")
@@ -3735,7 +3728,6 @@ struct DictationSessionControllerTests {
         try failureRecovery.removeFailedAttempt(id: retainedAttemptID)
 
         #expect(controller.failurePresentation?.failedAttemptID == retainedAttemptID)
-        #expect(controller.voiceAttemptOutcome == nil)
     }
 
     @Test func ambiguousTransportFailuresAfterDispatchAreNonRetryable() async throws {
@@ -3785,7 +3777,6 @@ struct DictationSessionControllerTests {
         #expect(controller.status == .idle)
         #expect(controller.failurePresentation == nil)
         #expect(failureRecovery.failedAttempts.map(\.reason) == [.providerOutcomeUncertain])
-        #expect(controller.voiceAttemptOutcome == nil)
     }
 
     @Test func invalidAPIKeyFailureRecordsAttemptAndPresentsOpenAISettingsRecovery() async {
@@ -4180,12 +4171,10 @@ struct DictationSessionControllerTests {
         await yieldUntil {
             controller.status == .transcribing && transcriptionService.calls.count == 1
         }
-        #expect(controller.voiceAttemptOutcome == nil)
 
         controller.cancelRecording()
 
         #expect(controller.status == .idle)
-        #expect(controller.voiceAttemptOutcome == nil)
         #expect(transcriptionService.cancelCount == 1)
         #expect(usageRecorder.calls.isEmpty)
         #expect(failureRecovery.failedAttempts.map(\.id) == [attemptID])
@@ -4194,7 +4183,6 @@ struct DictationSessionControllerTests {
         await retryTask.value
 
         #expect(controller.status == .idle)
-        #expect(controller.voiceAttemptOutcome == nil)
         #expect(usageRecorder.calls.isEmpty)
         #expect(transcriptOutput.calls.isEmpty)
         #expect(failureRecovery.failedAttempts.map(\.id) == [attemptID])
@@ -4448,7 +4436,6 @@ struct DictationSessionControllerTests {
         await controller.performRecordingAction()
 
         #expect(controller.status == .success(transcript: "Delivered text"))
-        #expect(controller.voiceAttemptOutcome == .resultReady)
         #expect(controller.lastTranscriptText == "Delivered text")
         #expect(controller.outputStatusText == "Inserting text into the active app timed out.")
         #expect(

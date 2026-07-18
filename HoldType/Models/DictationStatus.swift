@@ -26,14 +26,6 @@ enum DictationStatus: Equatable {
         }
     }
 
-    var voiceAttemptOutcome: VoiceAttemptOutcome? {
-        guard case .success = self, lastTranscriptText != nil else {
-            return nil
-        }
-
-        return .resultReady
-    }
-
     var menuStatusText: String {
         switch self {
         case .idle:
