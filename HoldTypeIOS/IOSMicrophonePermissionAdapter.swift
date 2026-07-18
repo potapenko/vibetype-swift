@@ -68,7 +68,6 @@ final class IOSMicrophonePermissionAdapter {
                     Never
                 >
         ] = [:]
-        var requestTask: Task<Void, Never>?
         var timeoutTask: Task<Void, Never>?
         var terminalResult: IOSMicrophonePermissionRequestResult?
         var acceptsWaiters = true
@@ -167,11 +166,10 @@ final class IOSMicrophonePermissionAdapter {
         let client = client
         let timeout = timeout
         let sleep = sleep
-        request.requestTask = Task { @MainActor [weak self, request] in
+        Task { @MainActor [weak self, request] in
             await client.request()
             let result = Self.map(client.read())
             request.resolveWaitingCallers(with: result)
-            request.requestTask = nil
             if self?.activeRequest === request {
                 self?.activeRequest = nil
             }
