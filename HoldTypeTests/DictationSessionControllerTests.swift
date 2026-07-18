@@ -3657,34 +3657,6 @@ struct DictationSessionControllerTests {
         #expect(monitor.stopCount == 1)
     }
 
-    @Test func recordingTimeoutBecomesUserVisibleFailureWithoutTranscription() async {
-        let recorder = FakeAudioRecorderService(
-            currentStatus: .recording,
-            stopResult: .failure(.recordingTimedOut(duration: 300, maximumDuration: 300))
-        )
-        let transcriptionService = FakeControllerTranscriptionService()
-        let transcriptOutput = FakeTranscriptOutput()
-        let controller = makeController(
-            recorder: recorder,
-            transcriptionService: transcriptionService,
-            transcriptOutput: transcriptOutput,
-            initialStatus: .recording,
-            lastTranscriptText: "previous transcript"
-        )
-
-        await controller.performRecordingAction()
-
-        #expect(
-            controller.status == .failure(
-                message: "Recording reached the maximum length. Try again with a shorter dictation."
-            )
-        )
-        #expect(controller.lastTranscriptText == "previous transcript")
-        #expect(recorder.stopCount == 1)
-        #expect(transcriptionService.calls.isEmpty)
-        #expect(transcriptOutput.calls.isEmpty)
-    }
-
     @Test func stopFailureBecomesUserVisibleFailureWithoutTranscription() async {
         let recorder = FakeAudioRecorderService(
             currentStatus: .recording,

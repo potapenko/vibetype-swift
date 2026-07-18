@@ -6,7 +6,7 @@
   },
   "generatedFiles": [],
   "oversizedFiles": {
-    "HoldType/Services/AudioRecorderService.swift": 827,
+    "HoldType/Services/AudioRecorderService.swift": 824,
     "HoldType/Services/DictationSessionController.swift": 2046,
     "HoldType/Services/RecordingCaptureJournal.swift": 610,
     "HoldType/Services/TranscriptionFailureRecoveryStore.swift": 1583,
@@ -54,7 +54,7 @@
     "HoldTypeKeyboard/KeyboardViewController.swift": 1660,
     "HoldTypeTests/AppSettingsTests.swift": 1060,
     "HoldTypeTests/AudioRecorderServiceTests.swift": 969,
-    "HoldTypeTests/DictationSessionControllerTests.swift": 5267,
+    "HoldTypeTests/DictationSessionControllerTests.swift": 5239,
     "HoldTypeTests/PermissionsServiceTests.swift": 683,
     "HoldTypeTests/TextInsertionServiceTests.swift": 535,
     "HoldTypeTests/TranscriptionFailureRecoveryStoreTests.swift": 1463,

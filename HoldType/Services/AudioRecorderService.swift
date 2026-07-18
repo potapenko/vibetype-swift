@@ -96,7 +96,6 @@ enum AudioRecorderServiceError: Error, Equatable, LocalizedError {
     case missingRecordingFile
     case emptyRecording
     case recordingTooShort(duration: TimeInterval, minimumDuration: TimeInterval)
-    case recordingTimedOut(duration: TimeInterval, maximumDuration: TimeInterval)
 
     var errorDescription: String? {
         switch self {
@@ -122,8 +121,6 @@ enum AudioRecorderServiceError: Error, Equatable, LocalizedError {
             return "No audio was captured. Try recording again."
         case .recordingTooShort:
             return "Recording was too short. Try speaking for a little longer."
-        case .recordingTimedOut:
-            return "Recording reached the maximum length. Try again with a shorter dictation."
         }
     }
 }

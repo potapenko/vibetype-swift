@@ -60,8 +60,6 @@ private extension AudioRecorderServiceError {
             return "empty_recording"
         case .recordingTooShort:
             return "recording_too_short"
-        case .recordingTimedOut:
-            return "recording_timed_out"
         }
     }
 }
