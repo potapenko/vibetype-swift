@@ -31,7 +31,7 @@
     "HoldTypeIOSTests/IOSAcceptedTextHistoryStateOwnerTests.swift": 503,
     "HoldTypeIOSTests/IOSAppSettingsEditorSupportTests.swift": 627,
     "HoldTypeIOSTests/IOSAudioSessionAdapterTests.swift": 648,
-    "HoldTypeIOSTests/IOSContainingAppCompositionTests.swift": 732,
+    "HoldTypeIOSTests/IOSContainingAppCompositionTests.swift": 727,
     "HoldTypeIOSTests/IOSContainingAppStateOwnerTests.swift": 731,
     "HoldTypeIOSTests/IOSForegroundVoiceControllerTests.swift": 1463,
     "HoldTypeIOSTests/IOSForegroundVoiceRecorderBridgeTests.swift": 554,

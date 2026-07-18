@@ -80,10 +80,6 @@ final class IOSForegroundVoiceSceneHostOwner:
         Mirror(self, children: ["sceneHost": "content-free"])
     }
 
-    var isRegistered: Bool {
-        sceneFacade != nil && !isRetired
-    }
-
     var promptPresentation: IOSVoiceScenePromptPresentation {
         guard !isRetired, let sceneFacade else { return .unavailable }
         return sceneFacade.promptPresentation

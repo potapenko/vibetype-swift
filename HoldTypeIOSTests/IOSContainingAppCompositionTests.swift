@@ -238,11 +238,6 @@ struct IOSContainingAppCompositionTests {
         )
         #expect(composition.historyPlaybackActions != nil)
         #expect(composition.pendingRecordingHistoryStateOwner != nil)
-        #expect(
-            IOSKeyboardHandoffSavedRecordingOwnerSelection.resolve(
-                composition
-            ) === composition.pendingRecordingHistoryStateOwner
-        )
         #expect(composition.recordingCacheLifecycleActions != nil)
         #expect(composition.voiceSceneLifecycleBinding != nil)
         #expect(voiceRuntime.sceneRegistry.activeEventSubscriptionCount == 1)

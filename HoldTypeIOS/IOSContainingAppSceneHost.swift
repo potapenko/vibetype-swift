@@ -39,10 +39,6 @@ private struct IOSRegisteredContainingAppSceneHost: View {
         _voiceSceneOwner = State(
             initialValue: IOSForegroundVoiceSceneHostOwner(runtime: runtime)
         )
-        let handoffSavedRecordingOwner =
-            IOSKeyboardHandoffSavedRecordingOwnerSelection.resolve(
-                composition
-            )
         _keyboardHandoffPresentationOwner = State(
             initialValue: IOSKeyboardHandoffPresentationOwner(
                 session: runtime.keyboardDictationSession,
@@ -54,7 +50,7 @@ private struct IOSRegisteredContainingAppSceneHost: View {
                     permission: runtime.permissionOwner.client
                 ),
                 pendingRecordingOwner:
-                    handoffSavedRecordingOwner
+                    composition.pendingRecordingHistoryStateOwner
             )
         )
     }
@@ -79,15 +75,6 @@ private struct IOSRegisteredContainingAppSceneHost: View {
             .onDisappear {
                 voiceSceneOwner.unregister()
             }
-    }
-}
-
-@MainActor
-enum IOSKeyboardHandoffSavedRecordingOwnerSelection {
-    static func resolve(
-        _ composition: IOSContainingAppComposition
-    ) -> IOSPendingRecordingHistoryStateOwner? {
-        composition.pendingRecordingHistoryStateOwner
     }
 }
 
