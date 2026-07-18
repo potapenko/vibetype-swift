@@ -65,7 +65,7 @@
     "Packages/HoldTypeIOSCore/Tests/HoldTypeIOSCoreTests/IOSForegroundVoiceProcessorTests.swift": 1293,
     "Packages/HoldTypeIOSCore/Tests/HoldTypeIOSCoreTests/IOSOpenAICredentialCoordinatorTests.swift": 1348,
     "Packages/HoldTypeIOSCore/Tests/HoldTypeIOSCoreTests/IOSProviderConsentStageExecutorTests.swift": 663,
-    "Packages/HoldTypeOpenAI/Sources/HoldTypeOpenAI/OpenAIFileUploadTransport.swift": 896,
+    "Packages/HoldTypeOpenAI/Sources/HoldTypeOpenAI/OpenAIFileUploadTransport.swift": 835,
     "Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests/OpenAIFileUploadTransportTests.swift": 1147,
     "Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests/OpenAIProviderStartupMaintenanceTests.swift": 1255,
     "Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests/OpenAIReaderTranscriptionRequestTests.swift": 833,
