@@ -9,7 +9,6 @@ struct VoiceSessionPreferencesTests {
         requireSendable(VoiceSessionWarningUrgency.self)
         requireSendable(VoiceSessionWarning.self)
         requireSendable(VoiceSessionCountdown.self)
-        requireSendable(VoiceSessionMilestone.self)
         requireSendable(VoiceSessionPreferences.self)
     }
 
@@ -142,69 +141,14 @@ struct VoiceSessionPreferencesTests {
             == VoiceSessionWarningSchedule.warningRemainingWholeSeconds)
     }
 
-    @Test func terminalMilestoneIsDistinctFromWarnings() {
-        let schedule = VoiceSessionWarningSchedule(limit: .default)
-        let milestones = schedule.milestones
-
-        #expect(milestones.count == 11)
-        #expect(milestones.dropLast().allSatisfy {
-            if case .warning = $0 {
-                return true
-            }
-            return false
-        })
-        #expect(
-            milestones.last
-                == .maximumDurationReached(elapsedWholeSeconds: 300)
-        )
-        #expect(milestones.map(\.elapsedWholeSeconds) == [
-            240,
-            270,
-            290,
-            292,
-            294,
-            295,
-            296,
-            297,
-            298,
-            299,
-            300,
-        ])
-        #expect(
-            schedule.warning(atElapsedWholeSecond: 300) == nil
-        )
-        #expect(
-            schedule.milestone(atElapsedWholeSecond: 300)
-                == .maximumDurationReached(elapsedWholeSeconds: 300)
-        )
-    }
-
-    @Test func wholeSecondLookupDoesNotDependOnFloatingPointEquality() {
+    @Test func warningLookupDoesNotDependOnFloatingPointEquality() {
         let schedule = VoiceSessionWarningSchedule(limit: .default)
         #expect(
             schedule.warning(atElapsedWholeSecond: 240)
                 == schedule.warnings[0]
         )
-        #expect(
-            schedule.milestone(atElapsedWholeSecond: 239) == nil
-        )
-        #expect(
-            schedule.milestone(atElapsedWholeSecond: 241) == nil
-        )
-
-        let crossed = schedule.milestones(
-            afterElapsedWholeSecond: 289,
-            throughElapsedWholeSecond: 295
-        )
-        #expect(crossed.map(\.elapsedWholeSeconds) == [290, 292, 294, 295])
-        #expect(schedule.milestones(
-            afterElapsedWholeSecond: 295,
-            throughElapsedWholeSecond: 295
-        ).isEmpty)
-        #expect(schedule.milestones(
-            afterElapsedWholeSecond: 300,
-            throughElapsedWholeSecond: 299
-        ).isEmpty)
+        #expect(schedule.warning(atElapsedWholeSecond: 239) == nil)
+        #expect(schedule.warning(atElapsedWholeSecond: 241) == nil)
     }
 
     @Test func countdownUsesWholeSecondsAndChangesUrgencyAtTenRemaining() {

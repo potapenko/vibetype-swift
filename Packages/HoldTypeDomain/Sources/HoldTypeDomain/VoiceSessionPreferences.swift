@@ -112,20 +112,6 @@ public struct VoiceSessionCountdown: Equatable, Sendable {
     }
 }
 
-public enum VoiceSessionMilestone: Equatable, Sendable {
-    case warning(VoiceSessionWarning)
-    case maximumDurationReached(elapsedWholeSeconds: Int)
-
-    public var elapsedWholeSeconds: Int {
-        switch self {
-        case .warning(let warning):
-            return warning.elapsedWholeSeconds
-        case .maximumDurationReached(let elapsedWholeSeconds):
-            return elapsedWholeSeconds
-        }
-    }
-}
-
 /// Whole-second milestones for one bounded voice recording.
 ///
 /// Consumers schedule or compare these integer offsets against a monotonic
@@ -149,8 +135,6 @@ public struct VoiceSessionWarningSchedule: Equatable, Sendable {
     public let maximumDurationWholeSeconds: Int
     public let countdownStartElapsedWholeSecond: Int
     public let warnings: [VoiceSessionWarning]
-    public let milestones: [VoiceSessionMilestone]
-
     public init(limit: RecordingDurationLimit) {
         maximumDurationWholeSeconds = limit.wholeSeconds
         countdownStartElapsedWholeSecond = max(
@@ -174,46 +158,12 @@ public struct VoiceSessionWarningSchedule: Equatable, Sendable {
                 )
             )
         }
-        milestones = warnings.map(VoiceSessionMilestone.warning)
-            + [
-                .maximumDurationReached(
-                    elapsedWholeSeconds: limit.wholeSeconds
-                )
-            ]
     }
 
     public func warning(
         atElapsedWholeSecond elapsedWholeSecond: Int
     ) -> VoiceSessionWarning? {
         warnings.first { $0.elapsedWholeSeconds == elapsedWholeSecond }
-    }
-
-    public func milestone(
-        atElapsedWholeSecond elapsedWholeSecond: Int
-    ) -> VoiceSessionMilestone? {
-        if elapsedWholeSecond == maximumDurationWholeSeconds {
-            return .maximumDurationReached(
-                elapsedWholeSeconds: maximumDurationWholeSeconds
-            )
-        }
-
-        return warning(atElapsedWholeSecond: elapsedWholeSecond).map(
-            VoiceSessionMilestone.warning
-        )
-    }
-
-    public func milestones(
-        afterElapsedWholeSecond previousElapsedWholeSecond: Int,
-        throughElapsedWholeSecond currentElapsedWholeSecond: Int
-    ) -> [VoiceSessionMilestone] {
-        guard currentElapsedWholeSecond > previousElapsedWholeSecond else {
-            return []
-        }
-
-        return milestones.filter {
-            $0.elapsedWholeSeconds > previousElapsedWholeSecond
-                && $0.elapsedWholeSeconds <= currentElapsedWholeSecond
-        }
     }
 
     public func countdown(
