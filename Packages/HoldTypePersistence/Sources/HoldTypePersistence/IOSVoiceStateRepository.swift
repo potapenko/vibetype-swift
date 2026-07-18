@@ -892,22 +892,6 @@ actor IOSVoiceStateRepository {
         throw IOSVoiceStateRepositoryError.invalidTransition
     }
 
-    @discardableResult
-    func clearLatest(
-        resultID: UUID
-    ) throws -> IOSVoiceStateMutationResult {
-        var snapshot = try load()
-        guard let latest = snapshot.latest else {
-            return .unchanged(snapshot)
-        }
-        guard latest.resultID == resultID else {
-            throw IOSVoiceStateRepositoryError.invalidTransition
-        }
-        snapshot.latest = nil
-        try replace(snapshot)
-        return .changed(snapshot)
-    }
-
     /// Relaunch performs only local state repair; it never owns provider work.
     @discardableResult
     func reconcileAfterLaunch() throws -> IOSVoiceStateSnapshot {

@@ -599,32 +599,6 @@ struct IOSVoiceStateRepositoryTests {
         #expect(afterDiscard.latest?.resultID == IDs.result)
     }
 
-    @Test func latestClearIsExactAndIdempotentWithoutTouchingPending() async throws {
-        let repository = makeRepository()
-        try await moveToOutputDelivery(repository)
-        _ = try await repository.commitAccepted(
-            attemptID: IDs.attempt,
-            resultID: IDs.result,
-            text: "accepted text",
-            createdAt: Dates.accepted
-        )
-
-        await #expect(throws: IOSVoiceStateRepositoryError.invalidTransition) {
-            _ = try await repository.clearLatest(resultID: IDs.otherResult)
-        }
-        let changed = try await repository.clearLatest(resultID: IDs.result)
-        guard case .changed(let snapshot) = changed else {
-            Issue.record("Expected exact Latest clear")
-            return
-        }
-        #expect(snapshot.latest == nil)
-        #expect(snapshot.pending != nil)
-        #expect(
-            try await repository.clearLatest(resultID: IDs.result)
-                == .unchanged(snapshot)
-        )
-    }
-
     @Test func relaunchBlocksReplayForLostTranscribingDispatch() async throws {
         let fileSystem = VoiceStateFileSystem()
         let repository = makeRepository(fileSystem: fileSystem)

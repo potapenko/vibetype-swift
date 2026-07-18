@@ -116,42 +116,6 @@ struct IOSV1ForegroundVoicePersistenceTests {
         #expect(fixture.events.values == ["history-write"])
     }
 
-    @Test func clearLatestPreservesAcceptedCleanupWhenHistoryWriteFails()
-        async throws {
-        let fixture = FacadeFixture()
-        let expected = try await fixture.moveToOutputDelivery()
-        fixture.historyMetadata.failNextWrite = true
-        let accepted = try await fixture.owner.accept(
-            try fixture.acceptance(),
-            expectedPending: expected
-        )
-        guard case .resultReady(let record, _) = accepted else {
-            Issue.record("Expected accepted result")
-            return
-        }
-        let latest = IOSV1AcceptedOutputDeliveryExpectation(record: record)
-        fixture.historyMetadata.failNextWrite = true
-
-        await #expect(
-            throws: IOSV1ForegroundVoicePersistenceError.cleanupUncertain
-        ) {
-            _ = try await fixture.owner.clearLatestResult(expected: latest)
-        }
-        let preserved = try await fixture.repository.load()
-        #expect(preserved.latest?.resultID == record.resultID)
-        #expect(preserved.pending != nil)
-        #expect(fixture.audio.contains(FacadeIDs.attempt))
-
-        #expect(
-            try await fixture.owner.clearLatestResult(expected: latest)
-                == .cleared
-        )
-        #expect(try await fixture.repository.load().pending == nil)
-        #expect(try await fixture.repository.load().latest == nil)
-        #expect(!fixture.audio.contains(FacadeIDs.attempt))
-        #expect(try await fixture.history.load().entries.count == 1)
-    }
-
     @Test func disabledHistoryIsNotAnAcceptanceFailure() async throws {
         let fixture = FacadeFixture()
         let history = try await fixture.history.load()
@@ -487,45 +451,6 @@ struct IOSV1ForegroundVoicePersistenceTests {
         #expect(state.latest?.resultID == FacadeIDs.result)
         #expect(!fixture.audio.contains(FacadeIDs.attempt))
         #expect(fixture.events.values == ["audio-unlink", "voice-write"])
-    }
-
-    @Test func clearLatestFinishesMatchingCleanupOrPreservesLatest()
-        async throws {
-        let fixture = FacadeFixture()
-        let expected = try await fixture.moveToOutputDelivery()
-        fixture.audio.failNextUnlink = true
-        let result = try await fixture.owner.accept(
-            try fixture.acceptance(),
-            expectedPending: expected
-        )
-        guard case .resultReady(let record, _) = result else {
-            Issue.record("Expected the durable Latest result")
-            return
-        }
-        let latestExpectation = IOSV1AcceptedOutputDeliveryExpectation(
-            record: record
-        )
-
-        fixture.audio.failNextUnlink = true
-        await #expect(
-            throws: IOSV1ForegroundVoicePersistenceError.cleanupUncertain
-        ) {
-            _ = try await fixture.owner.clearLatestResult(
-                expected: latestExpectation
-            )
-        }
-        #expect(try await fixture.repository.load().latest?.resultID
-            == FacadeIDs.result)
-        #expect(try await fixture.repository.load().pending != nil)
-
-        #expect(
-            try await fixture.owner.clearLatestResult(
-                expected: latestExpectation
-            ) == .cleared
-        )
-        let cleared = try await fixture.repository.load()
-        #expect(cleared.pending == nil)
-        #expect(cleared.latest == nil)
     }
 
     @Test func failedAttemptRetriesWithCurrentSettingsAndDiscardsExactly()

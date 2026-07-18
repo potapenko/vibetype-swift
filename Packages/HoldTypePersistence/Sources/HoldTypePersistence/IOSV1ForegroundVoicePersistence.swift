@@ -343,17 +343,6 @@ public struct IOSV1AcceptedOutputDeliveryRecord: Equatable, Sendable {
 }
 
 @_spi(HoldTypeIOSCore)
-public struct IOSV1AcceptedOutputDeliveryExpectation: Equatable, Sendable {
-    public let resultID: UUID
-    public let sourceAttemptID: UUID
-
-    public init(record: IOSV1AcceptedOutputDeliveryRecord) {
-        resultID = record.resultID
-        sourceAttemptID = record.sourceAttemptID
-    }
-}
-
-@_spi(HoldTypeIOSCore)
 public enum IOSV1ForegroundVoiceAcceptanceNotice: Equatable, Sendable {
     case historyWriteFailed
     case localCleanupPending
@@ -372,12 +361,6 @@ public enum IOSV1ForegroundVoiceAcceptanceResult: Equatable, Sendable {
 public enum IOSV1ForegroundVoiceLatestResultObservation: Equatable, Sendable {
     case absent
     case resultReady(IOSV1AcceptedOutputDeliveryRecord)
-}
-
-@_spi(HoldTypeIOSCore)
-public enum IOSV1ForegroundVoiceClearResult: Equatable, Sendable {
-    case cleared
-    case alreadyAbsent
 }
 
 @_spi(HoldTypeIOSCore)
@@ -1828,38 +1811,6 @@ public actor IOSV1ForegroundVoicePersistenceOwner {
             }
             return .resultReady(IOSV1AcceptedOutputDeliveryRecord(latest))
         } catch { throw mapRepositoryError(error) }
-    }
-
-    public func clearLatestResult(
-        expected: IOSV1AcceptedOutputDeliveryExpectation
-    ) async throws -> IOSV1ForegroundVoiceClearResult {
-        await acquireOperation()
-        defer { releaseOperation() }
-        let snapshot: IOSVoiceStateSnapshot
-        do { snapshot = try await repository.load() }
-        catch { throw mapRepositoryError(error) }
-        guard let latest = snapshot.latest else { return .alreadyAbsent }
-        guard latest.resultID == expected.resultID,
-              latest.sourceAttemptID == expected.sourceAttemptID else {
-            throw IOSV1ForegroundVoicePersistenceError.invalidTransition
-        }
-        if let state = snapshot.pending,
-           case .acceptedCleanup(let accepted) = state.status,
-           accepted.resultID == latest.resultID,
-           accepted.sourceAttemptID == latest.sourceAttemptID {
-            let record = IOSV1AcceptedOutputDeliveryRecord(latest)
-            guard await appendHistory(record) != .historyWriteFailed else {
-                throw IOSV1ForegroundVoicePersistenceError.cleanupUncertain
-            }
-            try await finishAcceptedCleanup(
-                pending: IOSV1PendingRecording(state),
-                record: record
-            )
-        }
-        do {
-            _ = try await repository.clearLatest(resultID: latest.resultID)
-        } catch { throw mapRepositoryError(error) }
-        return .cleared
     }
 
     public func recoverContainingAppLifecycle(
