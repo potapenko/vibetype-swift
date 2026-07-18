@@ -1,21 +1,23 @@
 # iOS Voice Session And Audio
 
-Status: foreground-audio reference for V1.1. `ios-v1-release.md` supersedes any
-conflicting Quick Session or background-audio requirement; those behaviors are
-deferred until a new product review after the signed keyboard gate.
+Status: foreground-audio reference for V1.1. `ios-v1-release.md` is authoritative
+for current release scope. Every Quick Session clause in this document is
+historical design exploration, not an active product requirement. V1.1 has no
+standalone Quick Session duration contract; promoting one requires a new product
+review and an explicit active-spec update.
 
 ## Goal
 
-Provide reliable foreground dictation in the iOS app and validate a bounded,
-visible Quick Session for keyboard-triggered voice input without hiding
-microphone activity or losing completed recordings.
+Provide reliable foreground dictation in the iOS app without hiding microphone
+activity or losing completed recordings.
 
 ## Scope
 
 - foreground one-shot recording in the containing app
 - microphone and audio-session lifecycle
 - configurable 1-15 minute per-utterance maximum, five minutes by default
-- fixed five-minute Quick Session hypothesis
+- historical Quick Session design hypotheses, retained only as non-normative
+  reference
 - recording tail, cues, interruptions, routes, lock, and background behavior
 - completed recording journaling and provider handoff
 - cancellation, expiry, and recovery
@@ -416,8 +418,10 @@ microphone activity or losing completed recordings.
 
 ## Quick Session hypothesis
 
-- Quick Session is fixed at five minutes for the first implementation and is
-  separate from the user-selected maximum for one utterance.
+This section is retained as historical design exploration. It does not define
+current production behavior, and no fixed Quick Session duration may be inferred
+from it.
+
 - It starts only after an explicit foreground action and separate Quick Session
   consent.
 - The Voice screen shows `Voice session on`, remaining time, current phase, and

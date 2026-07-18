@@ -21,7 +21,6 @@ struct VoiceSessionPreferencesTests {
         #expect(preferences.recordingDurationLimit == .default)
         #expect(preferences.recordingDurationLimit.minutes == 5)
         #expect(preferences.recordingDurationLimit.duration == 300)
-        #expect(VoiceSessionPreferences.quickSessionDuration == 300)
     }
 
     @Test func durationLimitValidatesClampsAndDerivesRuntimeBounds() {

@@ -193,8 +193,6 @@ public struct VoiceSessionWarningSchedule: Equatable, Sendable {
 }
 
 public struct VoiceSessionPreferences: Equatable, Sendable {
-    /// Separate lifecycle hypothesis; it is not the per-recording limit.
-    public static let quickSessionDuration: TimeInterval = 300
     public static let defaults = VoiceSessionPreferences()
 
     public var audioCuesEnabled: Bool
