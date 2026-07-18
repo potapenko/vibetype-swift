@@ -113,16 +113,9 @@ final class IOSForegroundVoiceRuntime {
     }
 
     let sceneRegistry: IOSVoiceSceneRegistry
-    let permissionAdapter: IOSMicrophonePermissionAdapter
     let permissionOwner: IOSForegroundVoiceWorkflowPermissionOwner
     let providerConsentPresentationOwner:
         IOSProviderConsentPresentationOwner
-    let audioAdapter: IOSAudioSessionAdapter
-    let audioOwner: IOSForegroundVoiceWorkflowAudioOwner
-    let feedbackBridge: IOSForegroundVoiceFeedbackBridge
-    let finalizationOwner: IOSForegroundVoiceWorkflowFinalizationOwner
-    let keyboardWarmInputKeeper: IOSKeyboardWarmInputKeeper
-    let recorderBridge: IOSForegroundVoiceRecorderBridge
     let providerBridge: IOSForegroundVoiceProviderBridge
     let historyPlaybackArbitrator:
         any IOSForegroundVoiceHistoryPlaybackArbitrating
@@ -156,7 +149,6 @@ final class IOSForegroundVoiceRuntime {
         self.sceneRegistry = sceneRegistry
 
         let permissionAdapter = factories.makePermissionAdapter()
-        self.permissionAdapter = permissionAdapter
         let permissionOwner = factories.makePermissionOwner(
             permissionAdapter
         )
@@ -171,21 +163,15 @@ final class IOSForegroundVoiceRuntime {
             providerConsentPresentationOwner
 
         let audioAdapter = factories.makeAudioAdapter()
-        self.audioAdapter = audioAdapter
         let audioOwner = factories.makeAudioOwner(audioAdapter)
-        self.audioOwner = audioOwner
 
         let feedbackBridge = factories.makeFeedbackBridge()
-        self.feedbackBridge = feedbackBridge
         let finalizationOwner = factories.makeFinalizationOwner()
-        self.finalizationOwner = finalizationOwner
         let keyboardWarmInputKeeper = IOSKeyboardWarmInputKeeper()
-        self.keyboardWarmInputKeeper = keyboardWarmInputKeeper
         let recorderBridge = factories.makeRecorderBridge(
             persistenceOwner,
             feedbackBridge
         )
-        self.recorderBridge = recorderBridge
         let providerBridge = factories.makeProviderBridge(
             credentialCoordinator,
             processor
