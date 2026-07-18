@@ -5205,7 +5205,6 @@ private final class PreparedCaptureRecorder: AudioRecorderService {
     private let startErrorAfterWrite: AudioRecorderServiceError?
     private let stopError: AudioRecorderServiceError?
     private var activeFileURL: URL?
-    private var automaticStopHandler: AudioRecorderAutomaticStopHandler?
 
     private(set) var currentStatus: AudioRecorderStatus = .idle
     private(set) var stopCount = 0
@@ -5274,9 +5273,6 @@ private final class PreparedCaptureRecorder: AudioRecorderService {
         currentStatus = .cancelled
     }
 
-    func setAutomaticStopHandler(_ handler: AudioRecorderAutomaticStopHandler?) {
-        automaticStopHandler = handler
-    }
 }
 
 @MainActor
