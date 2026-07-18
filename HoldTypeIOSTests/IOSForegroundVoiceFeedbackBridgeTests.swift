@@ -241,8 +241,6 @@ private final class FeedbackBridgeFixture {
     var startResult = IOSVoiceBoundaryStartResult.completed
     var tokens: [IOSVoiceBoundaryFeedbackToken] = []
     private(set) var startTokens: [IOSVoiceBoundaryFeedbackToken] = []
-    private(set) var cancelledStarts: [IOSVoiceBoundaryFeedbackToken] = []
-    private(set) var retainedTokens: [IOSVoiceBoundaryFeedbackToken] = []
     private(set) var abandonedTokens: [IOSVoiceBoundaryFeedbackToken] = []
     private(set) var closeCalls: [CloseCall] = []
     lazy var driver = IOSForegroundVoiceFeedbackBridgeDriver(
@@ -251,13 +249,8 @@ private final class FeedbackBridgeFixture {
             startTokens.append(token)
             return startResult
         },
-        cancelStart: { [weak self] token, _ in
-            self?.cancelledStarts.append(token)
-        },
-        retainedCaptureDidBegin: { [weak self] token in
-            self?.retainedTokens.append(token)
-            return true
-        },
+        cancelStart: { _, _ in },
+        retainedCaptureDidBegin: { _ in true },
         abandonReadyBoundary: { [weak self] token in
             self?.abandonedTokens.append(token)
             return true
