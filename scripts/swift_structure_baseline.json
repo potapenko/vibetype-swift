@@ -14,7 +14,6 @@
     "HoldType/Services/TranscriptionFailureRecoveryStore.swift": 2012,
     "HoldType/SettingsView.swift": 510,
     "HoldType/TranscriptHistoryView.swift": 749,
-    "HoldTypeIOS/IOSAppSettingsEditorSupport.swift": 799,
     "HoldTypeIOS/IOSAudioSessionAdapter.swift": 654,
     "HoldTypeIOS/IOSContainingAppStateOwners.swift": 609,
     "HoldTypeIOS/IOSCustomEmojiCommandEditorView.swift": 619,
@@ -108,7 +107,6 @@
   "missingPreviews": {
     "HoldType/Settings/LaunchAtLoginSettingsRows.swift": 1,
     "HoldType/Settings/SettingsTextInputStyle.swift": 1,
-    "HoldTypeIOS/IOSAppSettingsEditorSupport.swift": 1,
     "HoldTypeIOS/IOSContainingAppSceneHost.swift": 1,
     "HoldTypeIOS/IOSContainingAppShell.swift": 1,
     "HoldTypeIOS/IOSContainingAppStateViews.swift": 1,
@@ -138,7 +136,6 @@
   },
   "multiplePrimaryViews": {
     "HoldType/Settings/SettingsTextInputStyle.swift": 6,
-    "HoldTypeIOS/IOSAppSettingsEditorSupport.swift": 5,
     "HoldTypeIOS/IOSContainingAppShell.swift": 2,
     "HoldTypeIOS/IOSContainingAppStateViews.swift": 3,
     "HoldTypeIOS/IOSDictionaryView.swift": 2,
