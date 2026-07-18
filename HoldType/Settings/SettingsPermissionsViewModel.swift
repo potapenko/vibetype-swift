@@ -48,18 +48,18 @@ final class SettingsPermissionsViewModel: ObservableObject {
 
     func refreshOnAppearOrFocus() {
         refreshSystemPermissionStatuses()
-        recordDebugSnapshot(reason: "appear-or-focus", includesSecureStorage: false)
+        recordDebugSnapshot(reason: "appear-or-focus")
     }
 
     func refreshAfterSettingsChange() {
         refreshSystemPermissionStatuses()
-        recordDebugSnapshot(reason: "settings-change", includesSecureStorage: false)
+        recordDebugSnapshot(reason: "settings-change")
     }
 
     func startVisiblePermissionsPolling() {
         visiblePollingTask?.cancel()
         refreshSystemPermissionStatuses()
-        recordDebugSnapshot(reason: "poll-start", includesSecureStorage: false)
+        recordDebugSnapshot(reason: "poll-start")
 
         let intervalNanoseconds = visiblePollingIntervalNanoseconds
         visiblePollingTask = Task { @MainActor [weak self] in
@@ -75,7 +75,7 @@ final class SettingsPermissionsViewModel: ObservableObject {
                 }
 
                 self?.refreshSystemPermissionStatuses()
-                self?.recordDebugSnapshot(reason: "poll", includesSecureStorage: false)
+                self?.recordDebugSnapshot(reason: "poll")
             }
         }
     }
@@ -159,12 +159,11 @@ final class SettingsPermissionsViewModel: ObservableObject {
         showsInputMonitoringManualFallbackWarning = false
     }
 
-    private func recordDebugSnapshot(reason: String, includesSecureStorage: Bool) {
+    private func recordDebugSnapshot(reason: String) {
         let snapshot = PermissionDebugSnapshot(
             microphone: microphonePermissionStatus.settingsStatusText,
             accessibility: accessibilityPermissionStatus.settingsStatusText,
-            inputMonitoring: inputMonitoringPermissionStatus.settingsStatusText,
-            secureStorage: includesSecureStorage ? "not-applicable" : nil
+            inputMonitoring: inputMonitoringPermissionStatus.settingsStatusText
         )
 
         guard SettingsPermissionsDebugLogger.shouldRecord(
@@ -188,7 +187,6 @@ private struct PermissionDebugSnapshot: Equatable {
     let microphone: String
     let accessibility: String
     let inputMonitoring: String
-    let secureStorage: String?
 }
 
 private enum SettingsPermissionsDebugLogger {
@@ -210,14 +208,12 @@ private enum SettingsPermissionsDebugLogger {
     }
 
     static func record(snapshot: PermissionDebugSnapshot, reason: String) {
-        let secureStorage = snapshot.secureStorage ?? "not-refreshed"
         logger.info(
             """
             Permission refresh: reason=\(reason, privacy: .public), \
             \(snapshot.microphone, privacy: .public), \
             \(snapshot.accessibility, privacy: .public), \
-            \(snapshot.inputMonitoring, privacy: .public), \
-            \(secureStorage, privacy: .public)
+            \(snapshot.inputMonitoring, privacy: .public)
             """
         )
     }
