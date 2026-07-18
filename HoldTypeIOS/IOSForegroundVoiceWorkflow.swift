@@ -2988,14 +2988,6 @@ final class IOSForegroundVoiceWorkflow {
         return .accepted(observed)
     }
 
-    private func resolveCredential() async
-        -> IOSForegroundVoiceWorkflowCredentialProof? {
-        switch await dependencies.resolveCredential() {
-        case .available(let credential): credential
-        case .needsSetup, .unavailable: nil
-        }
-    }
-
     private func resolvePermission(
         for attempt: Attempt
     ) async -> PermissionResolution {

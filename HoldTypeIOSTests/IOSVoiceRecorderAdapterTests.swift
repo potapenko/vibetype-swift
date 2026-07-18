@@ -1855,11 +1855,6 @@ private final class VoiceRecorderDiagnosticCapture {
 }
 
 private extension IOSVoiceRecorderStopResult {
-    var isCompleted: Bool {
-        if case .completed = self { return true }
-        return false
-    }
-
     var isDiscarded: Bool {
         if case .discarded = self { return true }
         return false

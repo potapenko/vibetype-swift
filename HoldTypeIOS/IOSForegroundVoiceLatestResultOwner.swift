@@ -75,7 +75,6 @@ nonisolated enum IOSForegroundVoiceLatestResultOwnerError:
     Error,
     Equatable,
     Sendable {
-    case invalidObservation
     case loadFailed
 }
 

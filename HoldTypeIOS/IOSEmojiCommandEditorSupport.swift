@@ -1,6 +1,5 @@
 import Foundation
 import HoldTypeDomain
-import HoldTypePersistence
 
 nonisolated struct IOSBuiltInEmojiCommandReference: Equatable, Hashable,
     Sendable {
@@ -28,8 +27,6 @@ nonisolated struct IOSBuiltInEmojiCommandReference: Equatable, Hashable,
 
 nonisolated struct IOSCustomEmojiCommandReference: Equatable, Sendable {
     let expected: CustomEmojiCommand
-
-    var id: UUID { expected.id }
 }
 
 extension IOSBuiltInEmojiSetSelection {
@@ -130,12 +127,6 @@ struct IOSEmojiCommandEditorDraft: Equatable, Sendable {
         output = command.emoji
         primaryPhrase = command.command
         aliasesText = command.aliases.joined(separator: "\n")
-    }
-
-    var hasAnyInput: Bool {
-        [output, primaryPhrase, aliasesText].contains {
-            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
     }
 
     func candidate(isEnabled: Bool) -> CustomEmojiCommand {

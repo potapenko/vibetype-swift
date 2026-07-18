@@ -55,11 +55,6 @@ enum IOSAccessibilityAnnouncement {
     }
 
     @MainActor
-    static func post(title: String, detail: String) {
-        post(message(title: title, detail: detail))
-    }
-
-    @MainActor
     static func post(_ message: String) {
         guard UIAccessibility.isVoiceOverRunning else { return }
         UIAccessibility.post(

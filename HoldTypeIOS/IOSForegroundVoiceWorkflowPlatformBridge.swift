@@ -1,14 +1,5 @@
 import Foundation
 
-extension IOSForegroundVoiceWorkflowPermissionClient {
-    @MainActor
-    init(adapter: IOSMicrophonePermissionAdapter) {
-        self = IOSForegroundVoiceWorkflowPermissionOwner(
-            adapter: adapter
-        ).client
-    }
-}
-
 /// Thin typed mapping over the process permission adapter. Timeout,
 /// cancellation, coalescing, and late callback isolation live in that single
 /// owner rather than being raced a second time by the Voice workflow.

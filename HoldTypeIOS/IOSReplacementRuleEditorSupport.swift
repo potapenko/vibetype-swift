@@ -1,11 +1,8 @@
 import Foundation
 import HoldTypeDomain
-import HoldTypePersistence
 
 nonisolated struct IOSReplacementRuleReference: Equatable, Sendable {
     let expected: TextReplacementRule
-
-    var id: UUID { expected.id }
 }
 
 nonisolated struct IOSReplacementRuleEditorDraft: Equatable, Sendable {

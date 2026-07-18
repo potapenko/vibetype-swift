@@ -3989,14 +3989,6 @@ private final class WorkflowFixture {
         audioEventHandler?(event)
     }
 
-    func withdrawConsent() async throws {
-        let observation = await consentCoordinator.observe()
-        _ = try await consentCoordinator.withdraw(
-            using: observation,
-            decisionAt: Date(timeIntervalSince1970: 1_800_000_001)
-        )
-    }
-
     func releaseWorkflow() {
         workflow = nil
     }

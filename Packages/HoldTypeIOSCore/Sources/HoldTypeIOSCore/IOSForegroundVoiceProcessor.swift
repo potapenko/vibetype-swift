@@ -33,10 +33,6 @@ protocol IOSForegroundVoicePersisting: Sendable {
         operationID: UUID
     ) async throws -> IOSV1PendingRecording
 
-    func markPostProcessing(
-        expected: IOSV1PendingRecordingExpectation
-    ) async throws -> IOSV1PendingRecording
-
     func markOutputDelivery(
         expected: IOSV1PendingRecordingExpectation
     ) async throws -> IOSV1PendingRecording

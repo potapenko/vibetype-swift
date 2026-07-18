@@ -172,11 +172,6 @@ private enum IOSVoiceDraftWireCodec {
         "text",
     ]
 
-    private struct RecordWireV1: Codable {
-        let schemaVersion: Int
-        let segments: [SegmentWireV1]
-    }
-
     private struct RecordWireV2: Codable {
         let schemaVersion: Int
         let text: String

@@ -578,7 +578,6 @@ final class IOSForegroundVoiceController {
 
         let initial = initialPresentation(for: operation)
         activeProgressPosition = initialProgressPosition(
-            for: operation,
             presentation: initial
         )
         publish(
@@ -812,7 +811,6 @@ final class IOSForegroundVoiceController {
             stage: stage,
             setup: setup,
             recovery: recovery,
-            latestAvailability: latestAvailability,
             translationAvailable: translationAvailable
         )
         presentation = IOSForegroundVoicePresentation(
@@ -843,7 +841,6 @@ final class IOSForegroundVoiceController {
         stage: VoiceAttemptStage?,
         setup: IOSForegroundVoiceSetup,
         recovery: IOSForegroundVoiceRecovery,
-        latestAvailability: IOSForegroundVoiceLatestAvailability,
         translationAvailable: Bool
     ) -> [IOSForegroundVoiceAction] {
         if case .activation? = activeWork { return [] }
@@ -1115,7 +1112,6 @@ final class IOSForegroundVoiceController {
     }
 
     private func initialProgressPosition(
-        for operation: IOSForegroundVoiceOperation,
         presentation: (phase: VoiceWorkPhase, stage: VoiceAttemptStage?)
     ) -> ProgressPosition {
         switch presentation.phase {

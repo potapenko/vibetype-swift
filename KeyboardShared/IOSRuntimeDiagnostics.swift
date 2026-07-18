@@ -151,21 +151,6 @@ nonisolated enum IOSDiagnosticDurationBucket: String, Sendable {
     case tenToSixtySeconds = "10s_60s"
     case oneToFiveMinutes = "1m_5m"
     case overFiveMinutes = "over_5m"
-
-    init(duration: TimeInterval) {
-        switch duration {
-        case ..<1:
-            self = .underOneSecond
-        case ..<10:
-            self = .oneToTenSeconds
-        case ..<60:
-            self = .tenToSixtySeconds
-        case ..<300:
-            self = .oneToFiveMinutes
-        default:
-            self = .overFiveMinutes
-        }
-    }
 }
 
 /// Closed, content-free event vocabulary shared by the iOS app and keyboard.
@@ -432,12 +417,6 @@ nonisolated final class IOSRuntimeDiagnosticsStore: @unchecked Sendable {
                 return date >= startDate
             }
             return Array(filtered.suffix(limit))
-        }
-    }
-
-    func prune() throws {
-        try lock.withLock {
-            try pruneLocked()
         }
     }
 

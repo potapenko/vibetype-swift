@@ -1,5 +1,4 @@
 import Foundation
-import HoldTypeDomain
 @_spi(HoldTypeIOSCore) @testable import HoldTypePersistence
 import Testing
 @testable import HoldTypeIOS

@@ -1070,12 +1070,6 @@ private final class CommitThenThrowPersistence:
         )
     }
 
-    func markPostProcessing(
-        expected: IOSV1PendingRecordingExpectation
-    ) async throws -> IOSV1PendingRecording {
-        try await base.markPostProcessing(expected: expected)
-    }
-
     func markOutputDelivery(
         expected: IOSV1PendingRecordingExpectation
     ) async throws -> IOSV1PendingRecording {
