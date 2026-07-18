@@ -6,7 +6,7 @@
   },
   "generatedFiles": [],
   "oversizedFiles": {
-    "HoldType/Services/DictationSessionController.swift": 2029,
+    "HoldType/Services/DictationSessionController.swift": 1927,
     "HoldType/Services/RecordingCaptureJournal.swift": 602,
     "HoldType/Services/TranscriptionFailureRecoveryStore.swift": 1583,
     "HoldTypeIOS/IOSAudioSessionAdapter.swift": 654,

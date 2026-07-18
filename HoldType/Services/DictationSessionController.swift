@@ -60,8 +60,7 @@ final class DictationSessionController {
 
     private let recorder: any AudioRecorderService
     private let transcriptionService: any OpenAITranscriptionServing
-    private let textCorrectionService: any TextCorrectionServing
-    private let translationService: any TranscriptTranslationServing
+    private let transcriptPipeline: DictationTranscriptPipeline
     private let settingsProvider: () -> AppSettings
     private let transcriptOutput: any TranscriptOutputDelivering
     private let cuePlayer: any DictationCuePlaying
@@ -160,8 +159,10 @@ final class DictationSessionController {
     ) {
         self.recorder = recorder
         self.transcriptionService = transcriptionService
-        self.textCorrectionService = textCorrectionService
-        self.translationService = translationService
+        self.transcriptPipeline = DictationTranscriptPipeline(
+            textCorrectionService: textCorrectionService,
+            translationService: translationService
+        )
         self.settingsProvider = settingsProvider
         self.transcriptOutput = transcriptOutput
         self.cuePlayer = cuePlayer
@@ -261,8 +262,7 @@ final class DictationSessionController {
         case .processing:
             markActiveRecoveryCheckpointInterrupted()
             transcriptionService.cancelActiveTranscription()
-            textCorrectionService.cancelActiveCorrection()
-            translationService.cancelActiveTranslation()
+            transcriptPipeline.cancelActivePostProcessing()
             cancelActiveSession()
             outputStatusText = nil
             failurePresentation = nil
@@ -328,7 +328,7 @@ final class DictationSessionController {
             status = .transcribing
             let settings = settingsProvider()
             let transcriptionID = transcriptionIDGenerator()
-            let transcriptionRequest = try makeAudioTranscriptionRequest(
+            let transcriptionRequest = try transcriptPipeline.makeAudioTranscriptionRequest(
                 audioFileURL: attempt.audioFileURL,
                 settings: settings,
                 context: nil
@@ -359,7 +359,7 @@ final class DictationSessionController {
                 model: transcriptionRequest.model,
                 audioDuration: attempt.audioDuration
             )
-            let correctedTranscriptText = await correctedTranscriptText(
+            let correctedTranscriptText = await transcriptPipeline.correctedTranscriptText(
                 from: transcribedTranscript,
                 settings: settings,
                 credential: credential
@@ -819,7 +819,7 @@ final class DictationSessionController {
                 playCue(.stopRecording, settings: settings)
             }
 
-            let transcriptionSettings = transcriptionSettings(
+            let transcriptionSettings = transcriptPipeline.transcriptionSettings(
                 for: outputIntent,
                 settings: settings
             )
@@ -920,7 +920,7 @@ final class DictationSessionController {
             activeCredential = credential
             let context = activeTextContextReader.currentContext(settings: transcriptionSettings)
             let transcriptionID = transcriptionIDGenerator()
-            let transcriptionRequest = try makeAudioTranscriptionRequest(
+            let transcriptionRequest = try transcriptPipeline.makeAudioTranscriptionRequest(
                 audioFileURL: recoveryCheckpoint?.audioFileURL ?? artifact.fileURL,
                 settings: transcriptionSettings,
                 context: context
@@ -957,7 +957,7 @@ final class DictationSessionController {
                 audioDuration: artifact.duration
             )
             stage = .postProcessing
-            let correctedTranscriptText = await correctedTranscriptText(
+            let correctedTranscriptText = await transcriptPipeline.correctedTranscriptText(
                 from: transcribedTranscript,
                 settings: settings,
                 credential: credential
@@ -966,7 +966,7 @@ final class DictationSessionController {
                 return
             }
 
-            let outputText = try await postActionTranscriptText(
+            let outputText = try await transcriptPipeline.postActionTranscriptText(
                 from: correctedTranscriptText,
                 intent: outputIntent,
                 settings: settings,
@@ -1320,8 +1320,7 @@ final class DictationSessionController {
         if status.voiceWorkPhase == .processing {
             markActiveRecoveryCheckpointInterrupted()
             transcriptionService.cancelActiveTranscription()
-            textCorrectionService.cancelActiveCorrection()
-            translationService.cancelActiveTranslation()
+            transcriptPipeline.cancelActivePostProcessing()
             cancelActiveSession()
             status = .idle
             return
@@ -1840,107 +1839,6 @@ final class DictationSessionController {
 
             outputStatusText = Self.userFacingMessage(for: error)
         }
-    }
-
-    private func correctedTranscriptText(
-        from transcript: AcceptedTranscript,
-        settings: AppSettings,
-        credential: OpenAICredential
-    ) async -> String {
-        let request = TextCorrectionRequest(
-            acceptedTranscript: transcript,
-            correctionConfiguration: settings.textCorrectionConfiguration,
-            postProcessingConfiguration: settings.transcriptPostProcessingConfiguration
-        )
-        do {
-            return try await textCorrectionService.correct(
-                request,
-                credential: credential
-            )
-        } catch {
-            return transcript.text
-        }
-    }
-
-    private func transcriptionSettings(for intent: DictationOutputIntent, settings: AppSettings) -> AppSettings {
-        guard intent == .translate,
-              settings.translationShortcutEnabled,
-              settings.translationSourceMode == .override,
-              settings.isTranslationSourceConfigurationValid else {
-            return settings
-        }
-
-        var transcriptionSettings = settings
-        transcriptionSettings.language = settings.translationSourceLanguage
-        transcriptionSettings.customLanguageCode = settings.customTranslationSourceLanguageCode
-        return transcriptionSettings
-    }
-
-    private func makeAudioTranscriptionRequest(
-        audioFileURL: URL,
-        settings: AppSettings,
-        context: TranscriptionPromptContext?
-    ) throws -> AudioTranscriptionRequest {
-        do {
-            return try settings.audioTranscriptionRequest(
-                audioFileURL: audioFileURL,
-                context: context
-            )
-        } catch AudioTranscriptionRequest.ValidationError.invalidCustomLanguageCode(let code) {
-            throw OpenAITranscriptionServiceError.invalidRecording(
-                .invalidCustomLanguageCode(code)
-            )
-        }
-    }
-
-    private func postActionTranscriptText(
-        from transcript: String,
-        intent: DictationOutputIntent,
-        settings: AppSettings,
-        credential: OpenAICredential
-    ) async throws -> String {
-        guard intent == .translate else {
-            return transcript
-        }
-
-        guard settings.translationShortcutEnabled else {
-            return transcript
-        }
-
-        guard settings.canRunTranslation else {
-            throw OpenAITextTranslationServiceError.invalidLanguageConfiguration
-        }
-
-        let acceptedTranscript: AcceptedTranscript
-        do {
-            acceptedTranscript = try AcceptedTranscript(rawText: transcript)
-        } catch {
-            throw OpenAITextTranslationServiceError.emptyTranslation
-        }
-        let request = TextTranslationRequest(
-            acceptedTranscript: acceptedTranscript,
-            translationConfiguration: settings.translationConfiguration,
-            transcriptionConfiguration: settings.transcriptionConfiguration
-        )
-        let translatedTranscript = try await translationService.translate(
-            request,
-            credential: credential
-        )
-        guard let acceptedTranslation = AcceptedTranscript.nonEmptyNormalizedText(
-            from: translatedTranscript
-        ) else {
-            throw OpenAITextTranslationServiceError.emptyTranslation
-        }
-
-        return finalTranslatedTranscriptText(acceptedTranslation, settings: settings)
-    }
-
-    private func finalTranslatedTranscriptText(_ transcript: String, settings: AppSettings) -> String {
-        guard settings.localTextCleanupEnabled else {
-            return transcript
-        }
-
-        return TranscriptTextPostProcessor.normalizedInformalTypography(from: transcript)
     }
 
     private func resolvedCredential(providedCredential: OpenAICredential?) throws -> OpenAICredential {
