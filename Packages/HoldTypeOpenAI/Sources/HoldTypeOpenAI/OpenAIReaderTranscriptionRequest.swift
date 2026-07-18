@@ -58,9 +58,6 @@ public struct OpenAIReaderTranscriptionRequest: Sendable {
     /// Accepts recorder close post-roll through the longest supported recording.
     /// Per-attempt validation applies the selected limit earlier; this is only
     /// the absolute local media ceiling, not a provider duration limit.
-    public static let maximumDurationMillisecondsInclusive =
-        RecordingDurationLimit
-            .maximumSupportedFinalizedMediaDurationMilliseconds
     public static let maximumAudioByteCountExclusive: Int64 = 25_000_000
 
     public let format: AudioFormat
@@ -82,7 +79,8 @@ public struct OpenAIReaderTranscriptionRequest: Sendable {
         reader: OpenAITranscriptionAudioReader
     ) throws {
         guard durationMilliseconds > 0,
-              durationMilliseconds <= Self.maximumDurationMillisecondsInclusive else {
+              durationMilliseconds <= RecordingDurationLimit
+                .maximumSupportedFinalizedMediaDurationMilliseconds else {
             throw ValidationError.invalidDurationMilliseconds
         }
         guard byteCount > 0,

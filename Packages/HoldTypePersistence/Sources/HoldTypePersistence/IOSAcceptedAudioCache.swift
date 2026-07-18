@@ -14,7 +14,7 @@ public enum IOSAcceptedAudioRetention: String, Equatable, Sendable {
     case recordingCachePolicy
     case savedFiveMinute
 
-    public static func savedRecordingMinimumDurationMilliseconds(
+    private static func savedRecordingMinimumDurationMilliseconds(
         for recordingDurationLimit: RecordingDurationLimit
     ) -> Int64 {
         Int64(recordingDurationLimit.wholeSeconds) * 1_000 - 500
