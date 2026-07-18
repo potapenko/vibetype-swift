@@ -21,13 +21,6 @@ final class IOSForegroundVoiceWorkflow {
         case maximumDuration
     }
 
-    private enum ConfigurationResolution {
-        case available(IOSForegroundVoiceWorkflowConfiguration)
-        case settingsUnavailable
-        case libraryUnavailable
-        case invalid(RecoveryDestination)
-    }
-
     private enum ConsentResolution {
         case accepted(IOSV1ProviderConsentObservation)
         case needsSetup
@@ -140,6 +133,7 @@ final class IOSForegroundVoiceWorkflow {
     }
 
     private let dependencies: IOSForegroundVoiceWorkflowDependencies
+    private let configurationLoader: IOSForegroundVoiceConfigurationLoader
     private var activeAttempt: Attempt?
     private var captureRecoveryAttemptID: UUID?
     private var pendingObservation: IOSV1PendingRecordingObservation?
@@ -157,6 +151,10 @@ final class IOSForegroundVoiceWorkflow {
 
     init(dependencies: IOSForegroundVoiceWorkflowDependencies) {
         self.dependencies = dependencies
+        configurationLoader = IOSForegroundVoiceConfigurationLoader(
+            loadSettings: dependencies.loadSettings,
+            loadLibrary: dependencies.loadLibrary
+        )
     }
 
     func bindInterruptedCaptureRecoveryObserver(
@@ -255,7 +253,8 @@ final class IOSForegroundVoiceWorkflow {
                 self?.endKeyboardWarmSession()
             },
             loadTranslationAvailability: { [weak self] in
-                await self?.loadKeyboardTranslationAvailability() ?? false
+                await self?.configurationLoader
+                    .loadKeyboardTranslationAvailability() ?? false
             }
         )
     }
@@ -326,17 +325,6 @@ final class IOSForegroundVoiceWorkflow {
         pendingObservation = canonical
         let resolution = await runRetryPending(progress: { _ in })
         return resolution.failure == nil
-    }
-
-    private func loadKeyboardTranslationAvailability() async -> Bool {
-        guard let settings = try? await dependencies.loadSettings() else {
-            return false
-        }
-        guard !settings.transcriptionConfiguration
-            .customLanguageCodeValidation.isInvalid else {
-            return false
-        }
-        return settings.translationConfiguration.isConfigurationReady
     }
 
     private func runControllerStart(
@@ -709,7 +697,7 @@ final class IOSForegroundVoiceWorkflow {
                     capture: capture,
                     pending: pending
                 ) == .none {
-                switch await loadConfiguration(
+                switch await configurationLoader.load(
                     .standard,
                     continueIf: continueIf
                 ) {
@@ -908,7 +896,7 @@ final class IOSForegroundVoiceWorkflow {
             return await blockedPreflight(failure: .localRecovery)
         }
         let configuration: IOSForegroundVoiceWorkflowConfiguration
-        switch await loadConfiguration(
+        switch await configurationLoader.load(
             intent,
             continueIf: { [weak self, weak attempt] in
                 guard let self, let attempt else { return false }
@@ -1649,7 +1637,7 @@ final class IOSForegroundVoiceWorkflow {
         }
 
         let configuration: IOSForegroundVoiceWorkflowConfiguration
-        switch await loadConfiguration(
+        switch await configurationLoader.load(
             pending.recording.outputIntent,
             validateProviderSettings: false,
             continueIf: {
@@ -1687,10 +1675,11 @@ final class IOSForegroundVoiceWorkflow {
             )
         }
         if providerRequirement == .required,
-           let destination = invalidProviderConfigurationDestination(
-               pending.recording.outputIntent,
-               configuration: configuration
-           ) {
+           let destination = configurationLoader
+               .invalidProviderConfigurationDestination(
+                   pending.recording.outputIntent,
+                   configuration: configuration
+               ) {
             return await pendingRetryPreflightResolution(
                 setup: .needsSetup(destination),
                 failure: .unavailable,
@@ -1769,7 +1758,7 @@ final class IOSForegroundVoiceWorkflow {
         // Immediately before dispatch, prove the exact Pending and the frozen
         // Settings/Library snapshot still match canonical storage.
         let currentConfiguration: IOSForegroundVoiceWorkflowConfiguration
-        switch await loadConfiguration(
+        switch await configurationLoader.load(
             pending.recording.outputIntent,
             validateProviderSettings: false,
             continueIf: {
@@ -1793,10 +1782,11 @@ final class IOSForegroundVoiceWorkflow {
             )
         }
         if providerRequirement == .required,
-           let destination = invalidProviderConfigurationDestination(
-               pending.recording.outputIntent,
-               configuration: currentConfiguration
-           ) {
+           let destination = configurationLoader
+               .invalidProviderConfigurationDestination(
+                   pending.recording.outputIntent,
+                   configuration: currentConfiguration
+               ) {
             return await pendingRetryPreflightResolution(
                 setup: .needsSetup(destination),
                 failure: .unavailable,
@@ -2227,57 +2217,6 @@ final class IOSForegroundVoiceWorkflow {
         return await task.value
     }
 
-    private func loadConfiguration(
-        _ intent: DictationOutputIntent,
-        validateProviderSettings: Bool = true,
-        continueIf: @MainActor () -> Bool = { true }
-    ) async -> ConfigurationResolution {
-        let settings: IOSAppSettings
-        do {
-            settings = try await dependencies.loadSettings()
-        } catch {
-            return .settingsUnavailable
-        }
-        guard continueIf() else { return .settingsUnavailable }
-
-        let library: IOSLibraryContent
-        do {
-            library = try await dependencies.loadLibrary()
-        } catch {
-            return .libraryUnavailable
-        }
-        guard continueIf() else { return .libraryUnavailable }
-
-        let configuration = IOSForegroundVoiceWorkflowConfiguration(
-            settings: settings,
-            library: library
-        )
-        if validateProviderSettings,
-           let destination = invalidProviderConfigurationDestination(
-               intent,
-               configuration: configuration
-           ) {
-            return .invalid(destination)
-        }
-        return .available(configuration)
-    }
-
-    private func invalidProviderConfigurationDestination(
-        _ intent: DictationOutputIntent,
-        configuration: IOSForegroundVoiceWorkflowConfiguration
-    ) -> RecoveryDestination? {
-        if configuration.settings.transcriptionConfiguration
-            .customLanguageCodeValidation.isInvalid {
-            return .transcription
-        }
-        if intent == .translate,
-           !configuration.settings.translationConfiguration
-            .isConfigurationReady {
-            return .translation
-        }
-        return nil
-    }
-
     private func resolveConsent(
         for attempt: Attempt
     ) async -> ConsentResolution {
@@ -2430,7 +2369,7 @@ final class IOSForegroundVoiceWorkflow {
             requireInitiatingScene: attempt.requiresInitiatingScene
         ) else { return false }
         let current: IOSForegroundVoiceWorkflowConfiguration
-        switch await loadConfiguration(
+        switch await configurationLoader.load(
             intent,
             continueIf: { [weak self, weak attempt] in
                 guard let self, let attempt else { return false }
