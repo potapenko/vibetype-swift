@@ -7,7 +7,6 @@ enum IOSVoiceDraftTypographyTier: Equatable {
 }
 
 struct IOSVoiceDraftTypographyPolicy {
-    static let largePointSize: CGFloat = 20
     static let compactPointSize: CGFloat = 18
     static let returnHeadroomInLines: CGFloat = 1.5
 

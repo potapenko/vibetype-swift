@@ -211,8 +211,6 @@ struct IOSVoiceDraftOwnerTests {
             #expect(try await repository.load().text == "One\n\nExternal")
             #expect(owner.notice == .draftChanged)
 
-            owner.cancelEditing()
-            #expect(owner.visibleText == "One\n\nExternal")
         }
     }
 

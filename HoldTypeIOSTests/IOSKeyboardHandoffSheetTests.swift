@@ -15,7 +15,6 @@ struct IOSKeyboardHandoffSheetTests {
         #expect(presentation.detail == "Getting your microphone ready.")
         #expect(presentation.activityPhase == .ready)
         #expect(!presentation.returnInstructionIsActive)
-        #expect(!presentation.accessibilityStatus.contains("is listening"))
     }
 
     @Test func listeningPresentationActivatesTheReturnInstruction() {

@@ -349,13 +349,6 @@ final class IOSVoiceDraftOwner {
         return true
     }
 
-    func cancelEditing() {
-        editingText = nil
-        editBaseline = nil
-        editHasConflict = false
-        notice = nil
-    }
-
     func beginTransformation()
         -> IOSVoiceDraftTransformationReservation? {
         guard let current = confirmedRecord,

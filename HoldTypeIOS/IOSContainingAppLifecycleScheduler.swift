@@ -1,5 +1,4 @@
 @_spi(HoldTypeIOSCore) import HoldTypePersistence
-import SwiftUI
 
 @MainActor
 final class IOSContainingAppLifecycleScheduler {
@@ -33,16 +32,6 @@ final class IOSContainingAppLifecycleScheduler {
         enqueue(.foregroundOpportunity)
     }
 
-    func observeScenePhase(
-        _ phase: ScenePhase,
-        isInitialObservation: Bool
-    ) {
-        observeAggregateForeground(
-            isActive: phase == .active,
-            isInitialObservation: isInitialObservation
-        )
-    }
-
     func observeAggregateForeground(
         isActive: Bool,
         isInitialObservation: Bool
@@ -55,8 +44,8 @@ final class IOSContainingAppLifecycleScheduler {
         }
 
         // A process binding seeds exactly one initial aggregate snapshot. The
-        // compatibility ScenePhase source may repeat initial observations, so
-        // refresh its baseline without scheduling lifecycle work.
+        // The aggregate source may repeat initial observations, so refresh
+        // its baseline without scheduling lifecycle work.
         if isInitialObservation {
             aggregateForegroundIsActive = isActive
             if isActive { initialActivationCoveredByLaunch = true }

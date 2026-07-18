@@ -839,20 +839,6 @@ final class IOSVoiceRecorderAdapter {
         claimTerminalWait(for: token)
     }
 
-    func presentationCurrentTime(
-        for token: IOSVoiceRecorderAttemptToken
-    ) -> TimeInterval? {
-        guard phase == .recording,
-              let attempt = activeAttempt,
-              attempt.token == token,
-              let recorder = attempt.recorder else {
-            return nil
-        }
-        let value = recorder.currentTime
-        guard value.isFinite, value >= 0 else { return nil }
-        return min(value, maximumDuration)
-    }
-
     func isActivelyRecording(
         for token: IOSVoiceRecorderAttemptToken
     ) -> Bool {

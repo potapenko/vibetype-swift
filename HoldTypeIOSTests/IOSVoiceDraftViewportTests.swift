@@ -60,7 +60,6 @@ struct IOSVoiceDraftViewportTests {
                 usesAccessibilitySize: false
             ) == .compact
         )
-        #expect(IOSVoiceDraftTypographyPolicy.largePointSize == 20)
         #expect(IOSVoiceDraftTypographyPolicy.compactPointSize == 18)
     }
 

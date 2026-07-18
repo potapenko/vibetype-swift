@@ -63,7 +63,6 @@ struct IOSVoiceRecorderAdapterTests {
         )
         #expect(IOSVoiceRecorderAdapter.maximumDuration == 300)
         #expect(IOSVoiceRecorderAdapter.recorderSafetyDuration == 301)
-        #expect(adapter.presentationCurrentTime(for: token) == 12.5)
         #expect(adapter.isActivelyRecording(for: token))
         #expect(adapter.presentationInputLevel(for: token) == 0.75)
 
@@ -113,10 +112,6 @@ struct IOSVoiceRecorderAdapterTests {
             #expect(
                 fixture.sleep.requestedDurations
                     == [.seconds(limit.wholeSeconds)]
-            )
-            #expect(
-                adapter.presentationCurrentTime(for: token)
-                    == limit.duration
             )
 
             _ = await adapter.stop(for: token, reason: .cancelled)
@@ -379,8 +374,6 @@ struct IOSVoiceRecorderAdapterTests {
         let adapter = fixture.makeAdapter()
         let token = IOSVoiceRecorderAttemptToken()
         #expect(await adapter.start(for: token) == .recording)
-        #expect(adapter.presentationCurrentTime(for: token) == 99)
-
         let result = await adapter.stop(for: token, reason: .done)
         let completed: IOSVoiceRecorderCompletedCapture
         switch result {

@@ -1,5 +1,4 @@
 @_spi(HoldTypeIOSCore) import HoldTypePersistence
-import SwiftUI
 import Testing
 @testable import HoldTypeIOS
 
@@ -18,13 +17,25 @@ struct IOSContainingAppLifecycleSchedulerTests {
         #expect(await recorder.opportunities().isEmpty)
 
         scheduler.scheduleProcessLaunch()
-        scheduler.observeScenePhase(.active, isInitialObservation: true)
+        scheduler.observeAggregateForeground(
+            isActive: true,
+            isInitialObservation: true
+        )
         await scheduler.waitUntilIdle()
         #expect(await recorder.opportunities() == [.processLaunch])
 
-        scheduler.observeScenePhase(.inactive, isInitialObservation: true)
-        scheduler.observeScenePhase(.background, isInitialObservation: false)
-        scheduler.observeScenePhase(.active, isInitialObservation: false)
+        scheduler.observeAggregateForeground(
+            isActive: false,
+            isInitialObservation: true
+        )
+        scheduler.observeAggregateForeground(
+            isActive: false,
+            isInitialObservation: false
+        )
+        scheduler.observeAggregateForeground(
+            isActive: true,
+            isInitialObservation: false
+        )
         await scheduler.waitUntilIdle()
         #expect(
             await recorder.opportunities()

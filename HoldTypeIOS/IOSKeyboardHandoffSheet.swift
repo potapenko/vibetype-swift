@@ -88,12 +88,6 @@ struct IOSKeyboardHandoffSheetPresentation: Equatable, Sendable {
         phase == .starting || phase == .listening
     }
 
-    var accessibilityStatus: String {
-        [title, detail, showsReturnInstruction ? instructionTitle : nil,
-         showsReturnInstruction ? instructionDetail : nil]
-            .compactMap { $0 }
-            .joined(separator: ". ")
-    }
 }
 
 struct IOSKeyboardHandoffSavedRecordingContent: Equatable, Sendable {
