@@ -10,7 +10,6 @@
     "HoldType/Services/RecordingCaptureJournal.swift": 610,
     "HoldType/Services/TranscriptionFailureRecoveryStore.swift": 1583,
     "HoldType/SettingsView.swift": 510,
-    "HoldType/TranscriptHistoryView.swift": 749,
     "HoldTypeIOS/IOSAudioSessionAdapter.swift": 654,
     "HoldTypeIOS/IOSContainingAppStateOwners.swift": 609,
     "HoldTypeIOS/IOSEmojiCommandEditorSupport.swift": 537,
