@@ -87,7 +87,7 @@
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSAppSettingsRepository.swift": 586,
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSLibraryRepository.swift": 540,
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSTranscriptionUsageRepository.swift": 633,
-    "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSV1ForegroundVoicePersistence.swift": 2245,
+    "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSV1ForegroundVoicePersistence.swift": 2026,
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSV1ProviderConsent.swift": 937,
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSV1VoiceCapture.swift": 784,
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSVoiceStateRepository.swift": 1831,
