@@ -316,8 +316,6 @@ struct GlobalHotkeyServiceTests {
 
         #expect(service.startListeningCount == 1)
         #expect(service.currentRegistrationStatus == .registered(.defaultDictation))
-        #expect(service.triggeredActions == [.keyDown, .keyUp])
-        #expect(service.triggeredEvents == [.keyDown(), .keyUp()])
         #expect(receivedActions == [.keyDown, .keyUp])
     }
 
@@ -331,11 +329,10 @@ struct GlobalHotkeyServiceTests {
         service.trigger(.keyDown(outputIntent: .translate))
 
         #expect(
-            service.triggeredEvents == [
+            receivedEvents == [
                 .keyDown(outputIntent: .translate)
             ]
         )
-        #expect(receivedEvents == service.triggeredEvents)
     }
 
     @Test func fakeHotkeyCanSimulateFallbackRegistration() throws {
@@ -387,7 +384,6 @@ struct GlobalHotkeyServiceTests {
                 message: "Right Command is already in use."
             )
         )
-        #expect(service.triggeredActions == [.keyDown])
         #expect(receivedActions.isEmpty)
     }
 

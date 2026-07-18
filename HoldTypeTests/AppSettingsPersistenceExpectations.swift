@@ -1,0 +1,38 @@
+@testable import HoldType
+
+let expectedAppSettingsPersistedKeys = Set(
+    [
+        "transcriptionModel",
+        "language",
+        "customLanguageCode",
+        "prompt",
+        "customDictionary",
+        "emojiCommandsEnabled",
+        "enabledEmojiCommandSetIDs",
+        "customEmojiCommands",
+        "useActiveTextContext",
+        "textCorrectionEnabled",
+        "textCorrectionModelPreset",
+        "customTextCorrectionModel",
+        "textCorrectionPrompt",
+        "localTextCleanupEnabled",
+        "textReplacementRules",
+        "translationShortcutEnabled",
+        "translationSourceMode",
+        "translationSourceLanguage",
+        "customTranslationSourceLanguageCode",
+        "translationTargetLanguage",
+        "customTranslationTargetLanguageCode",
+        "translationModel",
+        "translationPrompt",
+        "automaticallyInsertTranscripts",
+        "saveTranscriptsToAppClipboard",
+        "soundEnabled",
+        "showFloatingIndicator",
+        "recordingStopTailDuration",
+        "recordingDurationLimitMinutes",
+        "saveTranscriptHistory",
+        "recordingCachePolicyMode",
+        "recordingCacheRetainedRecordingLimit",
+    ].map { AppSettingsStore.keyPrefix + $0 }
+)

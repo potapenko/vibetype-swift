@@ -11,7 +11,6 @@ import HoldTypeDomain
 
 struct AppSettings: Equatable {
     static let defaultTranscriptionModel = TranscriptionConfiguration.defaultModel
-    static let defaultTextCorrectionModel = TextCorrectionConfiguration.defaultModel
     static let defaultTranslationModel = TranslationConfiguration.defaultModel
     static let emojiCommandsPromptPrefix =
         TranscriptionPromptComposition.emojiCommandsPromptPrefix
@@ -298,41 +297,6 @@ struct AppSettings: Equatable {
 struct AppSettingsStore {
     static let keyPrefix = "holdtype.settings."
     private static let migrationKeyPrefix = "holdtype.migrations."
-
-    static let persistedKeys: Set<String> = [
-        Key.transcriptionModel,
-        Key.language,
-        Key.customLanguageCode,
-        Key.prompt,
-        Key.customDictionary,
-        Key.emojiCommandsEnabled,
-        Key.enabledEmojiCommandSetIDs,
-        Key.customEmojiCommands,
-        Key.useActiveTextContext,
-        Key.textCorrectionEnabled,
-        Key.textCorrectionModelPreset,
-        Key.customTextCorrectionModel,
-        Key.textCorrectionPrompt,
-        Key.localTextCleanupEnabled,
-        Key.textReplacementRules,
-        Key.translationShortcutEnabled,
-        Key.translationSourceMode,
-        Key.translationSourceLanguage,
-        Key.customTranslationSourceLanguageCode,
-        Key.translationTargetLanguage,
-        Key.customTranslationTargetLanguageCode,
-        Key.translationModel,
-        Key.translationPrompt,
-        Key.automaticallyInsertTranscripts,
-        Key.saveTranscriptsToAppClipboard,
-        Key.soundEnabled,
-        Key.showFloatingIndicator,
-        Key.recordingStopTailDuration,
-        Key.recordingDurationLimitMinutes,
-        Key.saveTranscriptHistory,
-        Key.recordingCachePolicyMode,
-        Key.recordingCacheRetainedRecordingLimit,
-    ]
 
     private enum Key {
         static let transcriptionModel = keyPrefix + "transcriptionModel"

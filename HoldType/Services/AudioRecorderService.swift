@@ -15,10 +15,6 @@ enum AudioRecorderStatus: Equatable {
     case finished(artifact: AudioRecordingArtifact)
     case cancelled
     case failed(message: String)
-
-    var isRecording: Bool {
-        self == .recording
-    }
 }
 
 protocol AudioRecorderService {

@@ -247,7 +247,7 @@ struct AppSettingsTests {
         settings.customTextCorrectionModel = "  "
         settings.textCorrectionPrompt = "  "
 
-        #expect(settings.resolvedTextCorrectionModel == AppSettings.defaultTextCorrectionModel)
+        #expect(settings.resolvedTextCorrectionModel == TextCorrectionConfiguration.defaultModel)
         #expect(
             settings.textCorrectionConfiguration.resolvedPrompt
                 == AppSettings.defaultTextCorrectionPrompt
@@ -760,7 +760,7 @@ struct AppSettingsTests {
                 $0.hasPrefix(AppSettingsStore.keyPrefix)
             }
         )
-        #expect(persistedKeys == AppSettingsStore.persistedKeys)
+        #expect(persistedKeys == expectedAppSettingsPersistedKeys)
         #expect(persistedKeys.contains { $0.localizedCaseInsensitiveContains("api") } == false)
         #expect(persistedKeys.contains { $0.localizedCaseInsensitiveContains("key") } == false)
     }

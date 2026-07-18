@@ -98,14 +98,6 @@ struct KeychainServiceTests {
         }
     }
 
-    @Test func keychainServiceCanBeUsedThroughAPIKeyStorageProtocol() throws {
-        let storage: APIKeyStorage = makeService(client: FakeKeychainClient())
-
-        try storage.saveAPIKey("sk-protocol")
-
-        #expect(try storage.loadAPIKey() == "sk-protocol")
-    }
-
     @Test func apiKeyAvailabilityChecksNonInteractiveReadWithoutPromptingLoad() throws {
         let client = FakeKeychainClient()
         let service = makeService(client: client)

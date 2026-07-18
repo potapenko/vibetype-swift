@@ -22,19 +22,6 @@ struct AudioRecorderServiceTests {
         #expect(AVFoundationAudioRecorderService.defaultMaximumRecordingDuration == 300)
     }
 
-    @Test func statusExposesRecordingState() {
-        let artifact = AudioRecordingArtifact(
-            fileURL: URL(fileURLWithPath: "/tmp/holdtype-test.m4a"),
-            duration: 1.2,
-            byteCount: 512
-        )
-
-        #expect(AudioRecorderStatus.idle.isRecording == false)
-        #expect(AudioRecorderStatus.recording.isRecording)
-        #expect(AudioRecorderStatus.finished(artifact: artifact).isRecording == false)
-        #expect(AudioRecorderStatus.cancelled.isRecording == false)
-    }
-
     @Test func fakeRecorderTracksSuccessfulLifecycle() async throws {
         let artifact = AudioRecordingArtifact(
             fileURL: URL(fileURLWithPath: "/tmp/holdtype-success.m4a"),

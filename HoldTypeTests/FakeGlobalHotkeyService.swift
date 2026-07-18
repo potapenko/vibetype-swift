@@ -14,8 +14,6 @@ final class FakeGlobalHotkeyService: GlobalHotkeyService {
 
     private(set) var startListeningCount = 0
     private(set) var stopListeningCount = 0
-    private(set) var triggeredActions: [GlobalHotkeyAction] = []
-    private(set) var triggeredEvents: [GlobalHotkeyEvent] = []
     private(set) var currentRegistrationStatus: GlobalHotkeyRegistrationStatus
 
     var preferredConfiguration: GlobalHotkeyConfiguration
@@ -56,15 +54,10 @@ final class FakeGlobalHotkeyService: GlobalHotkeyService {
     }
 
     func trigger(_ action: GlobalHotkeyAction) {
-        triggeredActions.append(action)
-        let event = GlobalHotkeyEvent(action: action, outputIntent: .standard)
-        triggeredEvents.append(event)
-        actionHandler?(event)
+        actionHandler?(GlobalHotkeyEvent(action: action, outputIntent: .standard))
     }
 
     func trigger(_ event: GlobalHotkeyEvent) {
-        triggeredActions.append(event.action)
-        triggeredEvents.append(event)
         actionHandler?(event)
     }
 }

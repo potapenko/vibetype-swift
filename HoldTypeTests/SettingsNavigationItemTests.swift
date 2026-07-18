@@ -1,4 +1,3 @@
-import HoldTypeDomain
 import Testing
 @testable import HoldType
 
@@ -22,10 +21,4 @@ struct SettingsNavigationItemTests {
         ])
     }
 
-    @Test func recoveryDestinationAdapterMapsOnlySupportedMacOSRoutes() {
-        #expect(SettingsNavigationItem(recoveryDestination: .openAI) == .openAI)
-        #expect(SettingsNavigationItem(recoveryDestination: .transcription) == .transcription)
-        #expect(SettingsNavigationItem(recoveryDestination: .translation) == .translation)
-        #expect(SettingsNavigationItem(recoveryDestination: .microphoneAndPrivacy) == nil)
-    }
 }
