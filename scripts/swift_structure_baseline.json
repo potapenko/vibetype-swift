@@ -80,7 +80,7 @@
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSTranscriptionUsageRepository.swift": 633,
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSV1ForegroundVoicePersistence.swift": 1776,
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSV1ProviderConsent.swift": 937,
-    "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSVoiceStateRepository.swift": 1317,
+    "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSVoiceStateRepository.swift": 1000,
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/ProtectedAtomicMetadataFileSystem.swift": 907,
     "Packages/HoldTypePersistence/Tests/HoldTypePersistenceTests/BoundedJSONMemberValidatorTests.swift": 501,
     "Packages/HoldTypePersistence/Tests/HoldTypePersistenceTests/CredentialPresenceMarkerTests.swift": 551,
