@@ -2328,7 +2328,7 @@ struct DictationSessionControllerTests {
         let recoveryURL = rootURL.appendingPathComponent("Recovery", isDirectory: true)
         let failureRecovery = TranscriptionFailureRecoveryStore(directoryURL: recoveryURL)
         let transcriptHistory = FakeTranscriptRecoveryHistory(
-            recordError: TranscriptHistoryStoreError.saveFailed
+            recordError: FakeTranscriptRecoveryHistoryError.saveFailed
         )
         let usageRecorder = FakeTranscriptionUsageRecorder()
         let transcriptOutput = FakeTranscriptOutput()
@@ -4968,6 +4968,10 @@ private final class FakeTranscriptionUsageRecorder: TranscriptionUsageRecording 
     func recordSuccessfulTranscriptionUsage(_ usage: SuccessfulTranscriptionUsage) {
         calls.append(usage)
     }
+}
+
+private enum FakeTranscriptRecoveryHistoryError: Error {
+    case saveFailed
 }
 
 @MainActor

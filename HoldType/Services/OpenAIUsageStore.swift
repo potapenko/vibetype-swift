@@ -15,7 +15,19 @@ protocol OpenAIUsagePersistence {
     func removeData(forKey key: String) throws
 }
 
-extension UserDefaults: OpenAIUsagePersistence {}
+extension UserDefaults: OpenAIUsagePersistence {
+    func loadData(forKey key: String) throws -> Data? {
+        data(forKey: key)
+    }
+
+    func saveData(_ data: Data, forKey key: String) throws {
+        set(data, forKey: key)
+    }
+
+    func removeData(forKey key: String) throws {
+        removeObject(forKey: key)
+    }
+}
 
 enum OpenAIUsageStoreError: Error, Equatable, LocalizedError {
     case loadFailed
