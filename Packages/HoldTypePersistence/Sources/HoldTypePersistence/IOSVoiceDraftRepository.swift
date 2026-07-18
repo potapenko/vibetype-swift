@@ -38,11 +38,6 @@ public actor IOSVoiceDraftRepository {
         fileSystem = FoundationProtectedAtomicMetadataFileSystem()
     }
 
-    init(fileURL: URL) {
-        self.fileURL = fileURL
-        fileSystem = FoundationProtectedAtomicMetadataFileSystem()
-    }
-
     init(
         fileURL: URL,
         fileSystem: any ProtectedAtomicMetadataFileSystem

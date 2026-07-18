@@ -164,25 +164,6 @@ public actor IOSForegroundVoiceProcessor {
         postProcessor = TranscriptTextPostProcessor()
     }
 
-    /// Test-only convenience. Production composition injects one shared
-    /// recording client so failures are ordered against Reset.
-    init(
-        persistenceOwner: IOSV1ForegroundVoicePersistenceOwner,
-        consentCoordinator: IOSV1ProviderConsentCoordinator,
-        usageRepository: IOSTranscriptionUsageRepository,
-        credentialCoordinator: IOSOpenAICredentialCoordinator
-    ) {
-        self.init(
-            persistenceOwner: persistenceOwner,
-            consentCoordinator: consentCoordinator,
-            usageRecordingClient: IOSTranscriptionUsageRecordingClient(
-                repository: usageRepository,
-                reportFailure: { _ in }
-            ),
-            credentialCoordinator: credentialCoordinator
-        )
-    }
-
     init(
         persistenceOwner: any IOSForegroundVoicePersisting,
         consentCoordinator: IOSV1ProviderConsentCoordinator,

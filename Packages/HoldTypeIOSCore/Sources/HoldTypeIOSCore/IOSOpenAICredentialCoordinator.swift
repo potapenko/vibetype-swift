@@ -65,19 +65,6 @@ public actor IOSOpenAICredentialCoordinator {
 
     init(
         keychainStorage: any OpenAIAPIKeyStoring,
-        markerRepository: CredentialPresenceMarkerRepository,
-        now: @escaping @Sendable () -> Date = { Date() }
-    ) {
-        self.keychainStorage = keychainStorage
-        markerStore = RepositoryCredentialPresenceMarkerStore(
-            repository: markerRepository
-        )
-        self.now = now
-        operationGate = CredentialOperationGate()
-    }
-
-    init(
-        keychainStorage: any OpenAIAPIKeyStoring,
         markerStore: any IOSCredentialPresenceMarkerStoring,
         now: @escaping @Sendable () -> Date = { Date() },
         operationGate: CredentialOperationGate = CredentialOperationGate()

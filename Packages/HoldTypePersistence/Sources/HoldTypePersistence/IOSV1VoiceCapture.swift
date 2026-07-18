@@ -278,17 +278,6 @@ actor IOSV1VoiceCaptureOwner {
     private let mediaValidator: any IOSV1VoiceCaptureMediaValidating
     private weak var liveLease: IOSV1VoiceCaptureLease?
 
-    init(applicationSupportDirectoryURL: URL) {
-        repository = IOSVoiceStateRepository(
-            applicationSupportDirectoryURL: applicationSupportDirectoryURL
-        )
-        directoryURL = IOSVoiceStateStorageLocation.directoryURL(
-            in: applicationSupportDirectoryURL
-        )
-        fileSystem = IOSV1VoiceCaptureDarwinFileSystem()
-        mediaValidator = IOSV1VoiceCaptureMediaValidator()
-    }
-
     init(
         repository: IOSVoiceStateRepository,
         directoryURL: URL,

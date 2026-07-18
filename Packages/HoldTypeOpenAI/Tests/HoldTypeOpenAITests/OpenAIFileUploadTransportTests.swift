@@ -552,7 +552,6 @@ struct OpenAIFileUploadTransportTests {
                 String(describing: error),
                 String(reflecting: error),
                 error.localizedDescription,
-                error.operatorLogCategory,
             ].joined(separator: " ")
             for secret in secretValues {
                 #expect(rendered.contains(secret) == false)

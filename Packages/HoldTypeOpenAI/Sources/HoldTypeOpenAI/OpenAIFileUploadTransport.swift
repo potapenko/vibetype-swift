@@ -87,22 +87,6 @@ nonisolated enum OpenAIFileUploadTransportError: Error, Equatable, LocalizedErro
         }
     }
 
-    var operatorLogCategory: String {
-        switch self {
-        case .invalidRequest:
-            return "invalid_request"
-        case .invalidResponse:
-            return "invalid_response"
-        case .responseTooLarge:
-            return "response_too_large"
-        case .redirectRejected:
-            return "redirect_rejected"
-        case .cancelled:
-            return "cancelled"
-        case .transportFailure:
-            return "transport_failure"
-        }
-    }
 }
 
 nonisolated private struct UploadOrigin: Equatable, Sendable {
