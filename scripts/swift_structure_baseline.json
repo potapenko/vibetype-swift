@@ -58,7 +58,7 @@
     "HoldTypeKeyboard/KeyboardViewController.swift": 1660,
     "HoldTypeTests/AppSettingsTests.swift": 1315,
     "HoldTypeTests/AudioRecorderServiceTests.swift": 1047,
-    "HoldTypeTests/DictationSessionControllerTests.swift": 5403,
+    "HoldTypeTests/DictationSessionControllerTests.swift": 5267,
     "HoldTypeTests/HoldTypeTests.swift": 563,
     "HoldTypeTests/PermissionsServiceTests.swift": 683,
     "HoldTypeTests/TextInsertionServiceTests.swift": 535,
