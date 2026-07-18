@@ -44,7 +44,7 @@ struct IOSAcceptedTextHistoryStateOwnerTests {
                 .loadFailed(lastConfirmed: entries)
             ) == .history(
                 record: entries,
-                content: .entries(count: 2),
+                content: .entries,
                 isStale: true
             )
         )

@@ -62,7 +62,7 @@ enum IOSAcceptedTextHistoryHomePresentation: Equatable, Sendable {
     enum Content: Equatable, Sendable {
         case disabled
         case empty
-        case entries(count: Int)
+        case entries
     }
 
     case loading
@@ -98,7 +98,7 @@ enum IOSAcceptedTextHistoryHomePresentation: Equatable, Sendable {
         } else if record.entries.isEmpty {
             content = .empty
         } else {
-            content = .entries(count: record.entries.count)
+            content = .entries
         }
         return .history(
             record: record,
