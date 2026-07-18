@@ -81,7 +81,6 @@
     "Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests/OpenAITranscriptionRequestBuilderTests.swift": 1663,
     "Packages/HoldTypeOpenAI/Tests/HoldTypeOpenAITests/OpenAITranscriptionServiceTests.swift": 1372,
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/BoundedJSONMemberValidator.swift": 666,
-    "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSAppSettingsRepository.swift": 586,
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSTranscriptionUsageRepository.swift": 633,
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSV1ForegroundVoicePersistence.swift": 1776,
     "Packages/HoldTypePersistence/Sources/HoldTypePersistence/IOSV1ProviderConsent.swift": 937,
