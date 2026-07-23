@@ -1,7 +1,7 @@
 import Foundation
 import HoldTypeDomain
 
-public enum IOSTextFixCatalogRepositoryError: Error, Equatable, Sendable {
+public enum TextFixCatalogRepositoryError: Error, Equatable, Sendable {
     case readFailed
     case sourceTooLarge
     case malformedData
@@ -18,8 +18,8 @@ public enum IOSTextFixCatalogRepositoryError: Error, Equatable, Sendable {
     case writeFailed
 }
 
-/// Serializes access to the containing app's canonical app-private Fixes catalog.
-public actor IOSTextFixCatalogRepository {
+/// Serializes access to one canonical, platform-local Fixes catalog.
+public actor TextFixCatalogRepository {
     public static let maximumByteCount = 1_024 * 1_024
 
     private static let filePolicy = ProtectedAtomicMetadataFilePolicy(
@@ -31,9 +31,18 @@ public actor IOSTextFixCatalogRepository {
     private let fileURL: URL
     private let fileSystem: any ProtectedAtomicMetadataFileSystem
 
+    /// Compatibility initializer for the containing iOS app's private catalog.
     public init(applicationSupportDirectoryURL: URL) {
         fileURL = IOSTextFixCatalogStorageLocation.fileURL(
             in: applicationSupportDirectoryURL
+        )
+        fileSystem = FoundationProtectedAtomicMetadataFileSystem()
+    }
+
+    /// Creates the macOS repository at its stable local Application Support path.
+    public init(macOSApplicationSupportDirectoryURL: URL) {
+        fileURL = MacOSTextFixCatalogStorageLocation.fileURL(
+            in: macOSApplicationSupportDirectoryURL
         )
         fileSystem = FoundationProtectedAtomicMetadataFileSystem()
     }
@@ -54,9 +63,9 @@ public actor IOSTextFixCatalogRepository {
                 policy: Self.filePolicy
             )
         } catch ProtectedAtomicMetadataFileSystemError.sizeLimitExceeded {
-            throw IOSTextFixCatalogRepositoryError.sourceTooLarge
+            throw TextFixCatalogRepositoryError.sourceTooLarge
         } catch {
-            throw IOSTextFixCatalogRepositoryError.readFailed
+            throw TextFixCatalogRepositoryError.readFailed
         }
 
         guard let data else {
@@ -72,7 +81,7 @@ public actor IOSTextFixCatalogRepository {
     public func save(_ catalog: TextFixCatalog) throws -> TextFixCatalog {
         let encoding = try IOSTextFixCatalogWireCodec.encode(catalog)
         guard encoding.data.count <= Self.filePolicy.maximumByteCount else {
-            throw IOSTextFixCatalogRepositoryError.encodedDataTooLarge
+            throw TextFixCatalogRepositoryError.encodedDataTooLarge
         }
         do {
             try BoundedJSONMemberValidator.validate(
@@ -82,11 +91,11 @@ public actor IOSTextFixCatalogRepository {
                 )
             )
         } catch BoundedJSONMemberValidationError.inputTooLarge {
-            throw IOSTextFixCatalogRepositoryError.encodedDataTooLarge
+            throw TextFixCatalogRepositoryError.encodedDataTooLarge
         } catch BoundedJSONMemberValidationError.resourceLimitExceeded {
-            throw IOSTextFixCatalogRepositoryError.encodedStructureTooComplex
+            throw TextFixCatalogRepositoryError.encodedStructureTooComplex
         } catch {
-            throw IOSTextFixCatalogRepositoryError.encodingFailed
+            throw TextFixCatalogRepositoryError.encodingFailed
         }
 
         do {
@@ -96,19 +105,25 @@ public actor IOSTextFixCatalogRepository {
                 policy: Self.filePolicy
             )
         } catch ProtectedAtomicMetadataFileSystemError.sizeLimitExceeded {
-            throw IOSTextFixCatalogRepositoryError.encodedDataTooLarge
+            throw TextFixCatalogRepositoryError.encodedDataTooLarge
         } catch {
-            throw IOSTextFixCatalogRepositoryError.writeFailed
+            throw TextFixCatalogRepositoryError.writeFailed
         }
         return encoding.catalog
     }
 }
 
-extension IOSTextFixCatalogRepository: CustomStringConvertible,
+extension TextFixCatalogRepository: CustomStringConvertible,
     CustomDebugStringConvertible {
     public nonisolated var description: String {
-        "IOSTextFixCatalogRepository(redacted)"
+        "TextFixCatalogRepository(redacted)"
     }
 
     public nonisolated var debugDescription: String { description }
 }
+
+/// Source-compatible iOS name retained while both platforms share one facade.
+public typealias IOSTextFixCatalogRepository = TextFixCatalogRepository
+/// Source-compatible iOS error name retained for existing callers.
+public typealias IOSTextFixCatalogRepositoryError =
+    TextFixCatalogRepositoryError

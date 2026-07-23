@@ -18,16 +18,23 @@ struct IOSTextFixCatalogRepositoryTests {
         #expect(IOSTextFixCatalogStorageLocation.fileName == "ios-text-fixes.json")
         #expect(IOSTextFixCatalogRepository.maximumByteCount == 1_024 * 1_024)
 
+        let publicRepository = IOSTextFixCatalogRepository(
+            applicationSupportDirectoryURL: root
+        )
+        #expect(
+            String(describing: publicRepository) ==
+                "TextFixCatalogRepository(redacted)"
+        )
         let repository = makeTextFixCatalogRepository(
             fileSystem: TextFixCatalogFileSystemFake()
         )
         #expect(
             String(describing: repository) ==
-                "IOSTextFixCatalogRepository(redacted)"
+                "TextFixCatalogRepository(redacted)"
         )
         #expect(
             String(reflecting: repository) ==
-                "IOSTextFixCatalogRepository(redacted)"
+                "TextFixCatalogRepository(redacted)"
         )
     }
 
