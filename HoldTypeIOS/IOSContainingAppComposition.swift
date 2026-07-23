@@ -160,6 +160,7 @@ final class IOSContainingAppComposition {
     let transcriptionUsageRepository: IOSTranscriptionUsageRepository?
     let usageEstimateStateOwner: IOSUsageEstimateStateOwner?
     let foregroundVoiceProcessor: IOSForegroundVoiceProcessor?
+    let keyboardFixRuntimeOwner: IOSKeyboardFixRuntimeOwner?
     let foregroundVoiceRuntime: IOSForegroundVoiceRuntime?
     let historyPlaybackActions: IOSHistoryPlaybackActions?
     let pendingRecordingHistoryStateOwner:
@@ -195,6 +196,7 @@ final class IOSContainingAppComposition {
             transcriptionUsageRepository = nil
             usageEstimateStateOwner = nil
             foregroundVoiceProcessor = nil
+            keyboardFixRuntimeOwner = nil
             foregroundVoiceRuntime = nil
             historyPlaybackActions = nil
             pendingRecordingHistoryStateOwner = nil
@@ -324,6 +326,14 @@ final class IOSContainingAppComposition {
             )
         }
         self.foregroundVoiceProcessor = foregroundVoiceProcessor
+        keyboardFixRuntimeOwner = IOSKeyboardFixProductionFactory
+            .makeRuntimeOwner(
+                catalogRepository: textFixCatalogRepository,
+                settingsStateOwner: settingsStateOwner,
+                consentCoordinator: providerConsentCoordinator,
+                credentialCoordinator: credentialCoordinator,
+                foregroundVoiceProcessor: foregroundVoiceProcessor
+            )
         let foregroundVoiceRuntime = IOSForegroundVoiceRuntime(
             settingsStateOwner: settingsStateOwner,
             libraryStateOwner: libraryStateOwner,
@@ -426,6 +436,7 @@ final class IOSContainingAppComposition {
         transcriptionUsageRepository = nil
         usageEstimateStateOwner = nil
         foregroundVoiceProcessor = nil
+        keyboardFixRuntimeOwner = nil
         foregroundVoiceRuntime = nil
         historyPlaybackActions = nil
         pendingRecordingHistoryStateOwner = nil

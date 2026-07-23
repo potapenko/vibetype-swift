@@ -82,17 +82,35 @@ nonisolated enum IOSKeyboardFixSettingsReadiness: Equatable, Sendable {
 nonisolated struct IOSKeyboardFixBridgeClient: Sendable {
     typealias ConsumeRequest = @Sendable (Date) throws ->
         KeyboardFixRequestRecord?
+    typealias ConsumeCancellation = @Sendable (Date) throws ->
+        KeyboardFixCancellationRecord?
     typealias PublishResult = @Sendable (KeyboardFixResultRecord) throws -> Void
+    typealias PublishCancellationAcknowledgement = @Sendable (
+        KeyboardFixCancellationRecord
+    ) throws -> Bool
+    typealias RetireRequest = @Sendable (UUID) throws -> Void
 
     let consumeRequest: ConsumeRequest
+    let consumeCancellation: ConsumeCancellation
     let publishResult: PublishResult
+    let publishCancellationAcknowledgement:
+        PublishCancellationAcknowledgement
+    let retireRequest: RetireRequest
 
     init(
         consumeRequest: @escaping ConsumeRequest,
-        publishResult: @escaping PublishResult
+        consumeCancellation: @escaping ConsumeCancellation = { _ in nil },
+        publishResult: @escaping PublishResult,
+        publishCancellationAcknowledgement:
+            @escaping PublishCancellationAcknowledgement = { _ in false },
+        retireRequest: @escaping RetireRequest = { _ in }
     ) {
         self.consumeRequest = consumeRequest
+        self.consumeCancellation = consumeCancellation
         self.publishResult = publishResult
+        self.publishCancellationAcknowledgement =
+            publishCancellationAcknowledgement
+        self.retireRequest = retireRequest
     }
 
     init(store: KeyboardFixBridgeStore) {
@@ -101,8 +119,19 @@ nonisolated struct IOSKeyboardFixBridgeClient: Sendable {
             consumeRequest: { date in
                 try box.store.consumeRequest(at: date)
             },
+            consumeCancellation: { date in
+                try box.store.consumeCancellationRequest(at: date)
+            },
             publishResult: { result in
                 try box.store.publishResult(result)
+            },
+            publishCancellationAcknowledgement: { acknowledgement in
+                try box.store.publishCancellationAcknowledgement(
+                    acknowledgement
+                )
+            },
+            retireRequest: { requestID in
+                try box.store.cancelRequest(requestID: requestID)
             }
         )
     }
@@ -236,6 +265,7 @@ nonisolated enum IOSKeyboardFixProcessorSignal: Equatable, Sendable {
     case expired(requestID: UUID, actionIdentifier: String)
     case bridgeUnavailable
     case rejectedWhileBusy
+    case cancellationAcknowledged(requestID: UUID)
 }
 
 nonisolated extension IOSKeyboardFixProcessorSignal:

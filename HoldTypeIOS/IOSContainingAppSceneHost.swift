@@ -72,6 +72,12 @@ private struct IOSRegisteredContainingAppSceneHost: View {
                 voiceSceneOwner.registerOrUpdateActivity(
                     IOSVoiceSceneActivity(newPhase)
                 )
+                composition.keyboardFixRuntimeOwner?.handleSceneActivity(
+                    IOSVoiceSceneActivity(newPhase)
+                )
+            }
+            .onOpenURL { url in
+                composition.keyboardFixRuntimeOwner?.handleLaunchURL(url)
             }
             .onDisappear {
                 voiceSceneOwner.unregister()
