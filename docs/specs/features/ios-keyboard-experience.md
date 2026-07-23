@@ -7,9 +7,9 @@ conflict about microphone behavior, launch routing, reconnection, or delivery.
 ## Goal
 
 Provide a compact HoldType command keyboard whose primary action is voice
-dictation. The user taps the keyboard microphone, completes any targeted setup
-in HoldType when necessary, speaks, finishes, and receives eligible accepted
-text in the active host field.
+dictation and whose Fixes workspace transforms user-selected text. The user
+taps the keyboard microphone for dictation or explicitly chooses a Fix for the
+current compatible field.
 
 The extension itself never records audio. The containing app owns microphone
 capture, OpenAI processing, text rules, Latest, and History. The keyboard owns
@@ -40,7 +40,7 @@ through `UITextDocumentProxy`.
 ## Product Role
 
 - HoldType is selected with Globe when the user wants voice dictation, Latest
-  insertion, or compact sentence-editing controls.
+  insertion, immediate Fixes, or compact sentence-editing controls.
 - The system keyboard remains the normal alphabetic, numeric, emoji, and
   language-layout keyboard.
 - HoldType inserts accepted Unicode text in any transcription language
@@ -55,21 +55,17 @@ through `UITextDocumentProxy`.
 The keyboard keeps one stable composition in Light and Dark Mode:
 
 1. Top rail: Quick Insert and `Auto` form the leading group. A separate
-   44-point History action sits immediately before `Latest` in the trailing
-   group. The center remains an unoccupied flexible gap with no logo, label, or
-   control. Every neutral key in the rail uses the same surface treatment as
-   the editing keys below.
-2. Workspace: either the Voice stage or Quick Insert. One toggle tap replaces
-   Voice directly with Quick Insert; there is no intermediate launcher, task
-   picker, menu, or containing-app transition. The close icon restores the
-   exact Voice presentation underneath.
+   44-point Fixes action occupies the center. A 44-point History action sits
+   immediately before `Latest` in the trailing group. Every neutral key in the
+   rail uses the same surface treatment as the editing keys below.
+2. Workspace: Voice, Quick Insert, or Fixes. One toggle tap replaces Voice
+   directly with the chosen workspace; there is no intermediate launcher. The
+   close icon restores the exact Voice presentation underneath.
 3. Editing row: Globe, wide Space, Delete, and adaptive Return.
 
-The top center stays empty during Ready, Starting, Listening, Processing, and
-Quick Insert. No state label appears under or beside it. Ready, unavailable,
-listening, starting, processing, and failure information belongs exclusively to
-the central voice stage so the interface never repeats the same state in two
-places.
+The center Fixes action is a control, never a second status surface. Ready,
+unavailable, listening, starting, processing, and failure information belongs
+to the Voice stage so the interface never repeats the same state in two places.
 
 The approved Brand Stage reference remains the geometry source of truth. On
 iPhone the surface uses approximately 18-point side insets, 8-point editing-key
@@ -159,6 +155,34 @@ contains no transcript card, alphabet layout, number deck, Shift, Caps Lock,
   keyboard never receives History rows, text previews, or History actions.
   The launch remains subject to the same platform and App Review gate as other
   keyboard-to-containing-app routes.
+
+## Fixes Workspace
+
+- Fixes opens and closes in one tap and is mutually exclusive with Quick
+  Insert. Opening either closes the other.
+- The workspace presents enabled actions as native icon-and-title tiles with
+  Translate and Fix first, followed by custom actions in durable order.
+- Tiles use one or two horizontally scrollable rows as height allows. Every
+  target is at least 44 by 44 points; long titles truncate without changing the
+  catalog value.
+- The workspace never renders the selected source, complete field, custom
+  prompt, or provider result.
+- Choosing a Fix captures the host-provided non-empty selection. With no
+  selection, HoldType may traverse and replace the complete field only after
+  the signed-device capability gate in `text-fixes.md` passes for that host.
+- Partial, nil, oversized, secure, phone-pad, changed, or otherwise uncertain
+  context is unavailable and starts no provider request.
+- Fixes uses the containing app's current consent, credential, saved typed
+  routes, and app-private custom prompts. Full Access is required for its
+  transient request/result bridge.
+- While an action is running, the chosen tile shows bounded progress and
+  further Fix taps are ignored. Failure or stale-target state leaves the host
+  text unchanged and keeps the workspace available.
+- A voice request in Starting, Listening, or Processing keeps the Fixes control
+  visible but unavailable. Fixes never interrupts, finishes, or changes the
+  active dictation request.
+- Voice-state refreshes do not dismiss an already open Fixes workspace. Closing
+  it reveals the latest Voice presentation.
 
 ## Automatic Voice Modes
 
@@ -280,10 +304,15 @@ without showing `Inserted` or rendering a result preview.
 - Commands and state use atomic replacement. One opaque delivery claim and its
   acknowledgement share those same two projections; they add no outbox,
   transcript queue, lease, or second persistence system.
-- App Group state may include only a boolean Translation-route-valid capability.
-  It contains no language codes, translation route, model, API key, prompt,
-  dictionary, canonical History, raw audio, provider body, or durable host
-  context.
+- App Group state may include a boolean Translation-route-valid capability,
+  bounded Fixes metadata, and one expiring immediate-Fix request/result pair
+  governed by `text-fixes.md`. It contains no language codes, translation
+  route, model, API key, custom prompt, dictionary, canonical History, raw
+  audio, provider body, or durable host context.
+- The Fix request contains only the explicitly chosen source and opaque action,
+  request, and document identity needed for stale-result rejection. It is not a
+  keystroke stream, surrounding-context collector, History record, or replay
+  queue.
 - Existing Latest remains a separate app-written projection of the first
   accepted History entry. It stays available for explicit insertion when
   automatic insertion is unsafe and changes only when History changes.
@@ -299,6 +328,9 @@ without showing `Inserted` or rendering a result preview.
   provider processing are app-owned.
 - Provider consent is checked before every remote request. API keys remain in
   app-owned Keychain storage.
+- Running a Fix sends only the captured selected text or qualified complete
+  field to the containing app and then OpenAI under the explicit Fixes
+  disclosure. Ordinary keystrokes remain local.
 - Accepted text follows existing Latest, History, and optional Recording Cache
   policy. The command boundary does not introduce another transcript history.
 
@@ -315,9 +347,9 @@ without showing `Inserted` or rendering a result preview.
 
 ## Accessibility And Appearance
 
-- VoiceOver names Quick Insert, Auto and its selected modes, History, the
-  microphone state/action, Latest, Globe, Space, Delete, and
-  adaptive Return.
+- VoiceOver names Quick Insert, Auto and its selected modes, Fixes, History,
+  the microphone state/action, Latest, Globe, Space, Delete, and adaptive
+  Return.
 - Listening, processing, success, and failure never rely on color alone.
 - Increase Contrast strengthens boundaries; Reduce Transparency replaces
   material effects with opaque system colors.
@@ -347,7 +379,9 @@ Automated and Simulator coverage must prove composition, both appearances,
 absence of retired manual-session copy, local editing, state reduction, stale-request
 rejection, bounded record decoding, one insertion per accepted live request,
 explicit Latest fallback, always-available Quick Insert and Auto, and stable
-same-phase activity rendering.
+same-phase activity rendering. It also proves Fixes metadata reduction,
+workspace state, selected-text request handling, expiry, and exactly-once
+replacement with fakes.
 
 Signed physical-iPhone evidence must additionally prove:
 
@@ -360,6 +394,10 @@ Signed physical-iPhone evidence must additionally prove:
   eviction, and microphone privacy indication;
 - no automatic insertion after host-context or extension ownership changes;
 - one explicitly authorized live microphone-to-OpenAI-to-host-field smoke.
+- selected-text Fixes through the app-owned provider path in representative
+  hosts;
+- no-selection Fixes only where complete traversal and exact replacement are
+  proven, with uncertain contexts refusing the action.
 
 The first TestFlight candidate is not ready until that device evidence passes.
 App Store approval is never inferred from Simulator behavior or competitor

@@ -16,6 +16,7 @@ This spec covers:
 - menu and Settings display for the active shortcut
 - app clipboard paste shortcut
 - post-transcription output intent for the translation shortcut
+- immediate Fixes palette shortcut
 
 ## Non-goals
 
@@ -75,6 +76,15 @@ This spec covers:
   flags on the generated text events.
 - Paste Last Result must not write transcript text to the macOS system
   clipboard.
+- The immediate Fixes palette shortcut is `Option+J`.
+- `Option+J` captures the current compatible external text target and opens the
+  palette governed by `text-fixes.md`. It does not start recording or reuse the
+  current-line behavior of another product.
+- The shortcut must be suppressed from the target app only when HoldType has
+  accepted the invocation. Failed or unavailable registration must not make
+  ordinary `Option+J` typing disappear silently.
+- If `Option+J` conflicts with another owner, HoldType keeps dictation and menu
+  controls usable and reports only the Fixes shortcut as unavailable.
 - When enabled in Settings, `Right Command+Option` may act as a hold-to-record
   dictation shortcut that requests configured translation after transcription
   under `post-transcription-actions.md`.
@@ -101,6 +111,8 @@ This spec covers:
   unavailable.
 - Shortcut handling must not log dictated text, raw audio, API keys, or full
   provider responses.
+- Fixes shortcut handling must capture the target before HoldType takes focus
+  and must not log source text, prompts, or results.
 
 ## Edge cases and failure policy
 
@@ -125,6 +137,8 @@ This spec covers:
   must not imply hidden recording, open required Settings recovery by itself, or
   prevent menu-driven recording controls.
 - If registration fails, Settings should show that no global hotkey is active.
+- A Fixes registration failure does not downgrade, disable, or change the
+  separate Right Command dictation registration.
 
 ## Route / state / data implications
 
@@ -135,6 +149,7 @@ The app state must distinguish:
 - shortcut registration status: registered or unavailable
 - whether a hotkey press token currently owns the active recording session
 - the output intent attached to the active hotkey-started recording session
+- the independent `Option+J` Fixes registration status
 
 The fixed shortcut is local runtime configuration. Until shortcut editing
 exists, the app uses the spec-defined default and persists no custom hotkey

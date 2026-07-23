@@ -18,6 +18,7 @@ This spec covers:
 - Input Monitoring consent when native global-hotkey listening requires it
 - recording visibility
 - OpenAI remote-service disclosure
+- immediate Fixes text-processing disclosure
 - local persistence defaults
 - debug logging boundaries
 - local diagnostics and crash-report handling boundaries
@@ -57,6 +58,12 @@ This spec covers:
 - When the translation shortcut is enabled, the product must disclose that the
   post-correction transcript text may be sent to OpenAI in a separate
   translation request before output delivery.
+- Before immediate Fixes are available, the product must disclose that running
+  a Fix sends the selected text, or the complete compatible field when nothing
+  is selected, plus the chosen instruction to OpenAI.
+- HoldType Keyboard sends only the user-invoked Fix source through bounded
+  transient App Group coordination to the containing app. Ordinary keystrokes
+  and unrelated surrounding host text remain excluded.
 - Local plain-typography cleanup and literal replacement rules must run locally
   and must not send text to a remote service by themselves.
 - API keys must be stored locally in macOS Keychain, not in UserDefaults or
@@ -97,8 +104,15 @@ This spec covers:
 - OpenAI translation input and output are current-request-only unless the final
   translated transcript is later saved by Last Transcript, Last Result,
   or recovery history under their own specs.
+- Immediate Fix source, custom prompt, and result are current-request-only.
+  They are not written to Last Transcript, Last Result, History, Usage,
+  diagnostics, or default logs. The durable Fix catalog stores prompts but
+  never source or result text.
 - Debug logging must not include raw dictated text, raw audio payloads, tokens,
   credentials, or full provider responses in the default product log stream.
+- Fixes logging may include only opaque action identity and closed lifecycle or
+  outcome categories. It must not include source text, selected text, complete
+  field contents, custom prompts, or results.
 - Local diagnostics may reveal or export HoldType crash reports only after an
   explicit user action. Diagnostics must not automatically upload crash reports
   or collect broad system logs.

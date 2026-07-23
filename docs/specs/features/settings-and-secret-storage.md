@@ -31,6 +31,7 @@ This spec covers:
 - built-in and custom voice emoji command settings inside Dictionary
 - text correction settings
 - configurable OpenAI translation shortcut settings
+- local Fixes catalog and editor
 - local OpenAI usage estimates and projected API cost
 - local diagnostics and crash-report discovery/export
 - software update preferences
@@ -61,8 +62,8 @@ This spec covers:
 - The Settings window should use sidebar navigation once it contains multiple
   settings groups. The sidebar should put Permissions first and provide stable
   entries for Permissions, API key, Billing, Transcription, Text Correction,
-  Translation, Dictionary, Shortcut, Behavior, Recording Cache, Updates, and
-  Diagnostics, with the selected entry shown in the detail pane.
+  Translation, Fixes, Dictionary, Shortcut, Behavior, Recording Cache, Updates,
+  and Diagnostics, with the selected entry shown in the detail pane.
 - The Settings window title should identify both the app and the current
   section using the format `HoldType: <section title>`, such as
   `HoldType: Permissions` or `HoldType: Recording Cache`.
@@ -257,6 +258,13 @@ This spec covers:
   Translation section.
 - Translation shortcut settings and behavior are governed by
   `post-transcription-actions.md`.
+- The Settings window should include a dedicated Fixes editor governed by
+  `text-fixes.md`.
+- The Fixes editor shows the typed Translate and Fix actions first and provides
+  search, Add, title, prompt, supported icon, enablement, reorder, Delete, and
+  Restore Defaults for custom actions.
+- Fixes catalog changes are local-only and must not start a provider request,
+  read the active text field, or change the current dictation session.
 - Missing API key should be reported as a user-visible blocked state before
   transcription is attempted.
 - Missing API key should not open the Permissions section. Missing-key recovery
@@ -373,6 +381,8 @@ The MVP non-secret settings default to:
 - translation target language: unconfigured
 - translation model: `gpt-5.4-mini`
 - translation prompt: standard translation prompt
+- fixes catalog: Translate, Fix, Improve Writing, Make Shorter, Summarize,
+  Bullet Points, Change to Casual, and Markdown
 - insert transcripts automatically: on
 - keep last result: on
 - dictation start/stop sounds: on
@@ -421,8 +431,8 @@ The OpenAI API key has no UserDefaults value or default. It is Keychain-only.
   fail in-app/test instead of opening the system dialog. Automation must also
   ignore any configured debug key-file source.
 - Prompt text, nearby active-text context, custom dictionary entries,
-  correction prompts, replacement rules, transcript text, and raw audio must
-  not be stored in usage estimate records or logged by default.
+  correction prompts, Fix prompts, replacement rules, transcript text, and raw
+  audio must not be stored in usage estimate records or logged by default.
 - Settings should be local-only for the MVP.
 - No account, subscription, telemetry, or server-side billing setting should
   appear in the MVP.
@@ -521,6 +531,11 @@ Keychain stores:
 A local debug key file may contain an OpenAI API key only for explicit Debug
 developer launches. It is not a production persistence store, must be gitignored,
 and must not be used by normal automated verification.
+
+The macOS Fixes catalog is one versioned local non-secret record. It stores
+action metadata and custom prompts but no source text, provider result,
+credential, host identity, or request history. Corrupt or unsupported bytes are
+preserved and reported instead of being silently replaced by defaults.
 
 Local OpenAI usage estimate records may store:
 

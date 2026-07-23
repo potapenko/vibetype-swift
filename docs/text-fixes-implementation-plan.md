@@ -1,12 +1,13 @@
 # HoldType Text Fixes Implementation Plan
 
-Status: research complete; planning only
+Status: approved for implementation; Phase 0 in progress
 
 Date: 2026-07-23
 
-Implementation authorization: not granted
+Implementation authorization: granted 2026-07-23
 
-Product code changed by this planning pass: none
+Current execution follows the active contract in
+`docs/specs/features/text-fixes.md`.
 
 ## 1. Goal
 
@@ -17,7 +18,7 @@ transformation to the text currently being edited:
 - otherwise use the complete editable field or complete HoldType Voice Draft;
 - replace only the captured target with the transformation result;
 - expose the same action concept in:
-  - the macOS app through a global `Option-G` shortcut and a popup near the
+  - the macOS app through a global `Option-J` shortcut and a popup near the
     active text field;
   - the iOS containing app's Voice panel;
   - the HoldType iOS keyboard extension.
@@ -103,9 +104,8 @@ The installed build currently advertises:
 - `Option-J` for **Open prompt picker**;
 - `Option-S` for **Fix current line**.
 
-That differs from the requested HoldType shortcut. HoldType should use the
-user-requested `Option-G` by default; it should not copy the installed
-FixKey shortcut.
+This matches the corrected HoldType shortcut requirement. HoldType should use
+`Option-J` by default.
 
 The installed FixKey commands were disabled in the observed runtime state, so
 this research does not claim provider-result or replacement behavior that
@@ -155,7 +155,7 @@ Before the first implementation edit:
 
 1. Add one active umbrella spec for the Fixes catalog and shared transformation
    contract.
-2. Update `global-hotkey.md` for `Option-G`, collision behavior, enablement,
+2. Update `global-hotkey.md` for `Option-J`, collision behavior, enablement,
    and palette lifecycle.
 3. Update `post-transcription-actions.md` and `text-correction.md` to move
    one-shot Translate and Fix into the catalog without changing their typed
@@ -286,7 +286,7 @@ locally in their respective containers. Sync can be specified separately.
 
 ### 7.1 macOS global palette
 
-Default invocation: `Option-G`.
+Default invocation: `Option-J`.
 
 The palette should:
 
@@ -473,7 +473,7 @@ Keep UI frameworks and AX/keyboard host types out of the shared domain model.
   - restores the exact range and performs one replacement;
   - reports unsupported Undo or host behavior instead of hiding it.
 - `FixesHotkeyService`
-  - owns `Option-G`, registration conflicts, enablement, and teardown.
+  - owns `Option-J`, registration conflicts, enablement, and teardown.
 - `FixesPalettePanelController`
   - owns palette window, positioning, keyboard/mouse interaction, and states.
 - `FixesRuntime`
@@ -528,7 +528,7 @@ macOS spike:
 
 - capture selected and complete values from representative AX controls;
 - anchor a temporary panel to caret/selection bounds;
-- register and suppress `Option-G` without breaking typing;
+- register and suppress `Option-J` without breaking typing;
 - replace exact ranges, test stale targets, and inspect Undo;
 - document incompatible hosts.
 
@@ -566,7 +566,7 @@ Exit: package tests prove catalog and provider behavior without any host UI.
 
 ### Phase 3 — macOS vertical slice
 
-1. Implement `Option-G`.
+1. Implement `Option-J`.
 2. Capture and retain the focused target.
 3. Show a minimal native palette near the target.
 4. Run one built-in and one custom action.
@@ -735,7 +735,7 @@ Before any UI automation:
 
 The feature is complete only when:
 
-- `Option-G` opens a responsive native palette for a compatible macOS text
+- `Option-J` opens a responsive native palette for a compatible macOS text
   target;
 - a selection is transformed without changing surrounding text;
 - no-selection macOS behavior transforms only the complete compatible field;
@@ -766,24 +766,22 @@ The feature is complete only when:
 - promising compatibility with secure or inaccessible custom controls;
 - storing external host text for later processing.
 
-## 15. Product Decisions To Settle In Phase 0
+## 15. Phase 0 Product Decisions
 
-1. If complete no-selection input cannot be proved in the iOS keyboard, should
-   keyboard Fixes ship as selection-only or wait?
-2. Should built-in Translate and Fix be reorderable and hideable, or always
-   pinned first?
-3. Should the initial custom defaults be the eight-action recommendation in
-   Section 6, and should they be editable copies?
-4. Which model owns custom Fixes initially: the saved Writing & Correction
-   model or a new Fixes-specific setting?
-5. Are custom catalogs intentionally separate on macOS and iOS for version
-   one?
-6. What exact source and prompt size limits balance latency, cost, and keyboard
-   memory?
-7. Which keyboard provider architecture passes the consent and credential
-   bar?
-8. What exact output cleanup, whitespace, and formatting contract should
-   custom prompts follow?
+1. If complete no-selection input cannot be proved in the iOS keyboard,
+   keyboard Fixes ships selection-only; macOS and iOS Voice remain unaffected.
+2. Built-in Translate and Fix stay pinned first and cannot be deleted.
+3. The initial eight-action catalog is the recommendation in Section 6; the six
+   custom defaults are editable.
+4. Custom Fixes initially use the saved Writing & Correction model.
+5. macOS and iOS catalogs remain intentionally separate in version one.
+6. Titles are limited to 80 user-perceived characters, prompts to 8 KiB UTF-8,
+   and one source to 32 KiB UTF-8.
+7. Keyboard Fixes use the containing app's provider through a 60-second
+   bounded App Group request/result bridge. Credentials and custom prompts stay
+   app-private.
+8. Custom output is inserted exactly as returned. Empty or whitespace-only
+   output is invalid; HoldType performs no generic trimming or normalization.
 
 ## 16. Working-Tree Coordination
 

@@ -27,6 +27,8 @@ model-based correction on.
 - Automatic learning from corrections in other apps.
 - Regex, scripting, or arbitrary code replacement rules.
 - Translation, summarization, tone rewriting, or content expansion.
+- Immediate selected-text and Draft Fixes, which are governed by
+  `text-fixes.md`.
 - Live OpenAI calls in normal tests.
 
 ## User-visible behavior
@@ -124,6 +126,9 @@ model-based correction on.
   and automatic insertion receive the final corrected text.
 - If correction is disabled or every correction stage is skipped, the accepted
   transcript is the normal transcription result.
+- The immediate built-in Fix action may force this saved correction model and
+  prompt for one captured text target without enabling automatic correction.
+  It changes no dictation, Latest, History, or Usage state.
 
 ## Invariants
 

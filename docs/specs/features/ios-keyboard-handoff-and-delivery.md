@@ -7,6 +7,10 @@ Keyboard. It supersedes conflicting requirements in older iOS specs and plans
 that say the keyboard must not open HoldType or that the user must first start
 a Keyboard Dictation Session manually.
 
+It also governs the bounded app-mediated coordination used by immediate
+keyboard Fixes. The Fixes product contract and target rules remain in
+`text-fixes.md`; a Fix never joins or mutates the microphone request.
+
 The containing app's ordinary Voice experience remains governed by the iOS
 release and voice specs. A keyboard handoff lands on that same first Voice
 screen and may present a temporary handoff sheet over it. The sheet is not a
@@ -186,6 +190,37 @@ resolved by silently degrading the keyboard into that manual-session design.
   Ready. That is an exception path, not the normal workflow, and it produces no
   host-change warning.
 
+## Immediate Fixes Coordination
+
+- Choosing an enabled Fix is a separate explicit request. It never writes
+  Start, Finish, Cancel, or an Auto mode and never claims Listening.
+- The active visible keyboard controller captures either the host-provided
+  non-empty selection or a complete field proven by the signed-device
+  traversal gate. An uncertain or partial no-selection context is unavailable.
+- The extension atomically publishes one bounded request containing opaque
+  request, action, and document identity; the exact chosen source; source kind;
+  fingerprint; creation date; and 60-second expiry.
+- The request contains no prompt, model, language route, credential,
+  surrounding context outside the chosen source, or append-only history.
+- The containing app resolves the canonical app-private Fix, current consent,
+  and current credential. It performs at most one bounded provider request and
+  atomically publishes one matching result or closed failure.
+- A cold Fix request may use the same public containing-app opening route as a
+  cold microphone handoff, but it never starts recording or changes ordinary
+  Voice. The user may need to return to the host before replacement.
+- The extension may display progress while awaiting the exact result. Process
+  loss, expiry, replacement by a newer request, or action cancellation ends the
+  request without applying late output.
+- Before replacement, the same active visible controller revalidates request
+  ownership, non-empty document identity where available, selected source or
+  qualified complete-field traversal, and source fingerprint.
+- One result may cause at most one replacement invocation. The extension
+  acknowledges that invocation, then clears or retires the transient request
+  and result. Uncertain replacement is never replayed.
+- Immediate Fix source and result are transient App Group content disclosed to
+  the user. They are not Latest, History, a delivery queue, or reusable
+  clipboard state.
+
 ## State Contract
 
 The keyboard may present these product states:
@@ -307,9 +342,9 @@ microphone appear active.
   Voice controller, scene owner, presentation model, or recovery UI.
 - Full Access may be required for shared coordination. Editing controls that do
   not need shared state remain useful when Full Access is off.
-- Shared storage stays bounded and expiring. It contains request/state/result
-  coordination only, never raw audio, API keys, provider payloads, prompts, or
-  durable History.
+- Shared storage stays bounded and expiring. It contains voice coordination,
+  safe Fix metadata, and one current Fix source/result pair only; never raw
+  audio, API keys, provider payloads, custom prompts, or durable History.
 - External transcription calls use the existing explicit timeout and failure
   rules. No error automatically resubmits user audio.
 
@@ -364,5 +399,9 @@ microphone appear active.
   ordinary Voice.
 - Incomplete Translation setup leaves keyboard Translate actionable and routes
   to field-level Translation guidance instead of silently ignoring the tap.
+- Selected-text Fixes use the containing app's provider path and replace only
+  the revalidated selection exactly once.
+- No-selection Fixes remain unavailable unless signed-device evidence proves
+  complete traversal and exact replacement for the host.
 - An app-only release can exclude the keyboard cleanly without weakening the
   standalone Voice experience.

@@ -16,6 +16,7 @@ and the OpenAI API key.
 - defaults, validation, persistence, and migrations
 - app-only OpenAI Keychain item and runtime credential state
 - publication of a minimal keyboard settings snapshot
+- app-private Fixes catalog and bounded keyboard metadata projection
 - truthful setup/readiness presentation
 - iPhone and iPad settings navigation
 
@@ -94,6 +95,8 @@ and the OpenAI API key.
 - compact successful-text History: on under `ios-v1-release.md`
 - recording cache: off; when enabled keep last 20 by default, with unlimited
   available only as an explicit choice
+- Fixes catalog: Translate, Fix, Improve Writing, Make Shorter, Summarize,
+  Bullet Points, Change to Casual, and Markdown
 
 The Phase 0 `en-US` extension metadata is not a product language or typing-layout
 default. V1.1 has no alphabetic layouts or keyboard dictionaries; transcription
@@ -333,11 +336,13 @@ result after the operation returns.
   migrated marker.
 - Dictionary, emoji commands, and replacement rules use an app-private
   versioned structured repository with atomic writes and Data Protection.
+- Fixes use a separate app-private versioned catalog with atomic writes and
+  Data Protection. Full prompts never enter general Settings or Library.
 - History, pending recordings, cache audio, usage, and diagnostics follow their
   dedicated specs and are not serialized into the general settings record.
 - The App Group receives only the exact keyboard snapshot and short-lived voice
-  records defined by their specs. It never receives the complete settings or
-  Library repository.
+  and Fixes records defined by their specs. It never receives the complete
+  settings, Library, or Fixes repository.
 - Settings and Library data do not use CloudKit, iCloud Drive, or any other
   cross-device synchronization service.
 - User-authored preferences, dictionary entries, emoji commands, and
@@ -351,23 +356,23 @@ result after the operation returns.
 
 ### Protected atomic metadata files
 
-- The general settings record, Library record, credential-presence marker, and
-  provider-consent record share one app-private metadata-file boundary. It
-  accepts only regular files and rejects symbolic links, directories, and
-  special files without following them.
+- The general settings record, Library record, Fixes catalog,
+  credential-presence marker, and provider-consent record share one app-private
+  metadata-file boundary. It accepts only regular files and rejects symbolic
+  links, directories, and special files without following them.
 - Reads are bounded before allocation and while bytes are loaded. The marker is
-  limited to 16 KiB, provider consent to 4 KiB, and the settings and Library
-  records to 1 MiB each; the exact limit is valid, while one byte more is
+  limited to 16 KiB, provider consent to 4 KiB, and the settings, Library, and
+  Fixes records to 1 MiB each; the exact limit is valid, while one byte more is
   rejected without changing the source.
 - A read uses one pinned regular-file identity and accepts bytes only when its
   size and modification/change timestamps remain stable through the complete
   read. A save stops before publish if the durable destination changes, even
   when a raced write keeps the same inode and byte count.
-- A settings or Library load that exceeds its limit is reported separately from
-  a value whose canonical encoding is too large to save. The marker uses one
-  storage-limit failure for either direction. These failures do not expose
-  file locations, source content, system error numbers, or attacker-controlled
-  fields or values.
+- A settings, Library, or Fixes load that exceeds its limit is reported
+  separately from a value whose canonical encoding is too large to save. The
+  marker uses one storage-limit failure for either direction. These failures
+  do not expose file locations, source content, system error numbers, or
+  attacker-controlled fields or values.
 - An oversized save fails before a temporary file is created and leaves the
   durable destination unchanged. A valid save uses an exclusive, owner-only
   temporary regular file in the destination directory, applies Complete
@@ -398,9 +403,9 @@ result after the operation returns.
 ### Bounded JSON structural validation
 
 - Before Foundation turns JSON objects into dictionaries, the credential
-  marker, provider-consent, general-settings, and Library decoders run one
-  shared structural pass over the complete source. It accepts strict UTF-8 JSON
-  and JSON whitespace; a byte-order mark, invalid UTF-8, malformed token,
+  marker, provider-consent, general-settings, Library, and Fixes decoders run
+  one shared structural pass over the complete source. It accepts strict UTF-8
+  JSON and JSON whitespace; a byte-order mark, invalid UTF-8, malformed token,
   trailing value, or truncated document is corrupt input.
 - Object-member identity matches Swift `String` equality over the decoded UTF-8
   scalars, because the repositories consume Swift dictionaries. Literal and
@@ -414,11 +419,11 @@ result after the operation returns.
   and 256 bytes in one number token. Hitting a structural limit is corruption,
   not a partial decode.
 - The repository byte limit is checked first. A source beyond that limit keeps
-  the existing settings/Library source-too-large or marker storage-limit error;
-  malformed JSON, duplicate members, and structural resource-limit failures
-  map to the repository's existing malformed/corrupt-data error. The complete
-  structural pass precedes unsupported-schema and unexpected-field checks, so
-  structural corruption wins when both are present.
+  the existing settings/Library/Fixes source-too-large or marker storage-limit
+  error; malformed JSON, duplicate members, and structural resource-limit
+  failures map to the repository's existing malformed/corrupt-data error. The
+  complete structural pass precedes unsupported-schema and unexpected-field
+  checks, so structural corruption wins when both are present.
 - Every validation failure preserves the exact source and performs no rewrite,
   removal, default publication, or Usage-style compaction. This pass is scoped
   to app-private `HoldTypePersistence` metadata; the bounded App Group bridge
@@ -762,13 +767,25 @@ result after the operation returns.
   validation, notices, accessibility announcements, diagnostics, reflection,
   and default logs never echo their values.
 
-### P3 Library editors
+### Library and Fixes editors
 
-- The iOS Library root owns three native content routes: Dictionary, Voice
-  Emoji Commands, and Replacement Rules. They use searchable `List` and
+- The iOS Library root owns four native content routes: Dictionary, Voice Emoji
+  Commands, Replacement Rules, and Fixes. They use searchable `List` and
   focused detail/editor surfaces rather than one macOS-style Settings form.
   Import, export, cloud sync, dictionary rename/reorder, and custom-command
   reorder remain absent until a later spec.
+- Fixes uses its own process-owned state owner and durable record rather than
+  expanding `ios-library.json`. Its editor follows `text-fixes.md`: typed
+  Translate and Fix stay first, while custom actions support Add, explicit
+  Save, supported icon selection, enablement, reorder, confirmed Delete, and
+  Restore Defaults.
+- A Fix draft owns only title, prompt, and icon. It never performs provider,
+  Keychain, microphone, clipboard, or App Group work. Prompt content never
+  enters navigation identity, accessibility identifiers, notices,
+  announcements, reflection, diagnostics, or default logs.
+- The app may publish only enabled Fix metadata to the keyboard: identifier,
+  kind, title, supported icon, and order. It never publishes custom prompts,
+  models, language routes, credentials, or editor state.
 - The Replacement Rules route begins with an Automatic Cleanup section backed
   by the existing `localTextCleanupEnabled` value in general Settings. The
   section shows one working toggle and the complete user-relevant cleanup
@@ -852,6 +869,27 @@ result after the operation returns.
   built-in catalog, editor state, repository path, or mutation is copied into
   App Group state or the keyboard extension. CRUD performs no Keychain,
   microphone, clipboard, network, or provider action.
+
+### Fixes catalog v1
+
+- The canonical iOS Fixes record lives at
+  `HoldType/ios-text-fixes.json` inside the containing app's Application
+  Support directory. It is never stored in UserDefaults, App Group, CloudKit,
+  or iCloud Drive and remains eligible for system-managed device backup.
+- The private v1 root contains `schemaVersion` and the ordered custom action
+  rows. Translate and Fix are typed defaults projected at runtime rather than
+  mutable prompt rows.
+- Every custom row requires a unique UUID, title, prompt, supported icon token,
+  enabled state, and stable order. The title and prompt limits, defaults, and
+  Restore Defaults behavior follow `text-fixes.md`.
+- A missing file returns the complete default catalog without writing it.
+  Corrupt, oversized, structurally invalid, or unsupported bytes are preserved
+  and reported; load never silently publishes defaults over them.
+- The process-owned repository serializes mutation and uses the same protected,
+  bounded, atomic publication boundary as general Settings and Library.
+- The keyboard metadata snapshot is a replaceable cache derived from this
+  canonical app-private catalog. Publication failure never mutates or rolls
+  back the catalog.
 
 ## Truthful setup status
 

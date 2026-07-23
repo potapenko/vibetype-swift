@@ -19,13 +19,12 @@ without opening the custom keyboard.
 - Append, Auto Translate, and Auto Correction are session modes in one compact
   `Auto` menu at the leading edge of the bottom Draft action area. Flexible
   space separates that menu from the labeled `Copy` capsule at the trailing
-  edge. Neither control expands to fill the row. The existing one-shot
-  Translate and Correction actions, plus Undo and Redo, remain together as a
-  compact leading icon group in the top action area. Clear remains the only
-  trailing top action and is a neutral labeled Draft action, not a red delete
-  or History action. On compact widths or at large Dynamic Type sizes, the
-  leading icon group may wrap internally without moving Clear into that group
-  or removing its label.
+  edge. Neither control expands to fill the row. One Fixes launcher plus Undo
+  and Redo remain together as a compact leading icon group in the top action
+  area. Clear remains the only trailing top action and is a neutral labeled
+  Draft action, not a red delete or History action. On compact widths or at
+  large Dynamic Type sizes, the leading icon group may wrap internally without
+  moving Clear into that group or removing its label.
   Keyboard Dictation Session and the practice field remain reachable from the
   compact Voice More menu; the keyboard tools are presented as a sheet and
   none of them occupies the primary Voice canvas.
@@ -62,9 +61,8 @@ without opening the custom keyboard.
   unavailable.
 - Copy operates on the visible working text. Clear first commits the visible
   working text when editing is active, then atomically replaces that exact
-  Draft with empty so Undo restores what the user saw before Clear. Translate,
-  Correction, and new dictation are unavailable until the edit is safely
-  committed.
+  Draft with empty so Undo restores what the user saw before Clear. Fixes and
+  new dictation are unavailable until the edit is safely committed.
 - Starting, Listening, Finalizing, or Processing makes the editor read-only and
   cannot summon the keyboard. Clear and other Draft mutation controls remain
   unavailable throughout those active Voice phases. App-level Undo and Redo
@@ -102,7 +100,7 @@ without opening the custom keyboard.
   is empty, and has at least a 44-point tap target. A successful Copy does not
   add a visible notice or change the Draft card's layout; assistive technology
   still receives a concise confirmation.
-- Copy, Clear, Translate, Correction, Undo, and Redo never add a visible
+- Copy, Clear, Fixes, Undo, and Redo never add a visible
   post-action notice, footer, banner, toast, technical result, or inline Undo
   row to the Draft card. The text itself is the visible result: it either
   changes or remains unchanged. Completion, no-change, and failure outcomes do
@@ -234,24 +232,28 @@ without opening the custom keyboard.
   footer. If a later start, recording, provider, or cancellation stage fails,
   the Draft stays cleared and process-local Undo may restore its prior
   meaningful text. Retry does not clear a second time.
-- The top one-shot Translate and Correction actions transform the complete
-  current Draft in place. They never start recording or transcription and do
-  not change the selected state of the bottom Auto menu.
-- A one-shot action freezes the current confirmed Draft, shows the purple
-  processing activity, and atomically replaces that same Draft only after the
-  provider result is accepted. Translate uses the saved Translation route;
-  Correction forces the saved Writing & Correction model and prompt without
-  changing the durable correction preference.
+- The top Fixes launcher presents the enabled catalog governed by
+  `text-fixes.md`, with Translate and Fix first. It never starts recording or
+  transcription and does not change the selected state of the bottom Auto
+  menu.
+- After editing ends and commits, a Fix freezes the current confirmed Draft and
+  its non-empty selection or complete-Draft fallback, shows the purple
+  processing activity, and atomically splices accepted output into that exact
+  range.
+  Translate uses the saved Translation route; Fix forces the saved Writing &
+  Correction model and prompt without changing the durable correction
+  preference; custom actions use their app-private prompts.
 - If Translation setup is incomplete, Translate remains tappable and opens the
   exact invalid source or missing target input with inline guidance. Provider,
-  consent, timeout, validation, or local-save failure leaves the Draft
-  unchanged without adding post-action copy to the Draft card.
-- A successful one-shot replacement creates one app-level Undo snapshot and
-  clears Redo. Repeating either action after completion processes the newly
-  confirmed Draft. A tap while another one-shot action is active is ignored;
-  actions are never queued or run concurrently.
-- Translate and Correction may be enabled together. The existing processing
-  order remains correction before translation for new dictation attempts.
+  consent, timeout, validation, stale revision, or local-save failure leaves
+  the Draft unchanged without adding post-action copy to the Draft card.
+- A successful Fix replacement creates one app-level Undo snapshot and clears
+  Redo. Repeating an action after completion processes the newly confirmed
+  Draft. A tap while another Fix is active is ignored; actions are never queued
+  or run concurrently.
+- Translate and Fix remain independent immediate actions. The existing
+  correction-before-translation order remains unchanged for new dictation
+  attempts that select both Auto modes.
 - The exact translation and correction modes plus the accepted-result insertion
   behavior are frozen at Start and carried by recoverable Pending state so Retry
   and relaunch cannot change the meaning of that attempt. Auto Clear itself is
@@ -322,7 +324,7 @@ without opening the custom keyboard.
   thresholds, follow-tail suspension and resumption, and the absence of any
   Draft post-action notice presentation.
 - Geometry regression coverage compares the populated Ready layout with Copy,
-  Clear, Undo, Redo, Translate, Correction, no-change, and failure outcomes.
+  Clear, Undo, Redo, Fixes, no-change, and failure outcomes.
   Draft bounds, text viewport bounds, Voice-stage bounds, and the primary
   activity center remain identical for a fixed device size and Dynamic Type.
 - Simulator QA covers cold launch without focus, tap-to-edit, keyboard Done and

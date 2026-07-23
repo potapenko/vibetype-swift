@@ -34,6 +34,7 @@ ownership with `rg --files`.
 | Floating indicator | `features/floating-indicator.md` | Recording/transcribing indicator presentation and lifecycle |
 | Post-processing actions | `features/post-transcription-actions.md` | Output intent, correction/translation dispatch after transcription |
 | Text correction | `features/text-correction.md` | Correction prompt, correction toggle, corrected transcript behavior |
+| Text Fixes | `features/text-fixes.md` | Immediate selected-text or complete-field Translate, Fix, custom prompt actions, macOS palette, iOS Voice, or keyboard Fixes |
 | Voice emoji commands | `features/voice-emoji-commands.md` | Built-in spoken emoji aliases, Dictionary placement, local emoji replacement |
 | Transcript history | `features/transcript-history.md` | History storage, display, recovery, retention |
 | Diagnostics | `features/diagnostics-and-crash-reports.md` | Logs, crash/diagnostic reports, operator-facing error evidence |

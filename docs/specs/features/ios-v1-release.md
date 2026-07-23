@@ -44,6 +44,8 @@ V1.1 includes:
 - one recoverable pending recording;
 - one Latest Result;
 - one app-private composed Voice Draft governed by `ios-voice-draft.md`;
+- one app-private Fixes catalog and immediate selected-text transformation flow
+  governed by `text-fixes.md`;
 - up to 20 successful text-only History entries;
 - an optional app-private Recording Cache, off by default and available for
   local History playback when the user explicitly enables it;
@@ -80,7 +82,8 @@ alphabetic layouts.
   transaction protocols;
 - automatic provider retry after relaunch;
 - automatic insertion into an unverified or changed host field;
-- microphone, API key, prompts, OpenAI code, or raw audio in the extension;
+- microphone, API key, custom prompts, OpenAI code, or raw audio in the
+  extension;
 - alphabetic QWERTY, number or symbol decks, Shift, Caps Lock, predictions,
   autocorrection, or locale-specific typing dictionaries;
 - pixel-identical Apple keyboard trade dress or Apple emoji assets;
@@ -104,8 +107,8 @@ The containing app exposes five useful destinations only, in this order:
 
 - `Voice`: record, recover one pending attempt, and work with one composed
   editable Draft while Latest remains the last accepted result;
-- `Rules`: opens `Dictation Rules` for Dictionary, Emoji Commands, and
-  Replacements;
+- `Rules`: opens `Dictation Rules` for Dictionary, Emoji Commands,
+  Replacements, and Fixes;
 - `History`: successful accepted text only;
 - `Usage`: device-local successful-transcription minutes, estimated cost, and
   the 30-day chart governed by `ios-usage-estimate.md`;
@@ -208,16 +211,17 @@ destination. History remains a separate tab and is not previewed on Voice.
   switches labeled `Clear Draft`, `Translate Result`, and `Correct Result`;
   Clear Draft explains that it runs when a new dictation starts. The trigger
   has no numeric badge. Flexible space separates it from the compact labeled
-  `Copy` action at the trailing edge. The existing one-shot Translate and
-  Correction actions, plus Undo and Redo, stay in the action row above; Clear
-  remains its only trailing action. Auto Clear starts on while Auto Translate
-  and Auto Correction start off on cold launch. All three remain selected for
-  subsequent containing-app attempts until changed and never rewrite durable
-  Settings.
-  The top one-shot Translate and Correction actions operate on the complete
-  current Draft without recording or transcription. They show the purple
-  processing activity, replace the Draft atomically on success, participate in
-  app-level Undo, and leave Latest, History, Pending, and Usage unchanged.
+  `Copy` action at the trailing edge. One Fixes launcher plus Undo and Redo stay
+  in the action row above; Clear remains its only trailing action. Auto Clear
+  starts on while Auto Translate and Auto Correction start off on cold launch.
+  All three remain selected for subsequent containing-app attempts until
+  changed and never rewrite durable Settings.
+  The top Fixes launcher presents Translate, Fix, and enabled custom actions.
+  A Fix operates on the non-empty committed Draft selection or otherwise the
+  complete current Draft without recording or transcription. It shows the
+  purple processing activity, replaces only the captured range atomically on
+  success, participates in app-level Undo, and leaves Latest, History, Pending,
+  and Usage unchanged.
   If Auto Translate's saved route is incomplete, its control remains tappable
   and opens the exact owning Translation input with inline guidance. Auto
   Correction forces the saved correction configuration for the selected
@@ -407,8 +411,7 @@ purple are reserved for the microphone and small active-state accents.
 The first-release surface provides:
 
 - a compact top row with Quick Insert and one labeled `Auto` menu on the left,
-  the HoldType mark centered without status text, and `Latest` insertion on the
-  right;
+  a center Fixes control, and History plus `Latest` on the right;
 - one medium central Voice indicator with bounded symmetric side waveforms for
   Ready, Opening, Starting, Listening, Processing, and compact failures; the
   microphone starts warm capture or cold handoff and becomes Finish while
@@ -419,6 +422,9 @@ The first-release surface provides:
   intermediate launcher, has no visible title, shows two emoji rows in regular
   height, and closes back to the exact underlying Voice state after any
   insertion;
+- one direct, reversible Fixes workspace containing icon-and-title tiles for
+  Translate, Fix, and enabled custom actions; it replaces Voice without
+  exposing source or result text and closes back to the current Voice state;
 - one `Auto` menu with independent Auto Translate and Auto Correction modes;
   both may be combined, the microphone remains the only Start action, an
   incomplete Translation route opens its exact owning input, and keyboard
@@ -436,10 +442,9 @@ The first-release surface provides:
   Access, even when voice dictation is unavailable; active Starting, Listening,
   and Processing states keep Voice visible and disable Quick Insert and Auto.
 
-The HoldType mark is identity only, not a button or status surface. No state
-label appears under or beside it; all operational state lives in the voice
-stage. The keyboard
-contains no alphabet, number deck, `A` probe key, `Refresh`, Shift, Caps Lock,
+The top rail has no duplicate HoldType mark or status surface; all operational
+state lives in the voice or Fixes workspace. The keyboard contains no alphabet,
+number deck, `A` probe key, `Refresh`, Shift, Caps Lock,
 `123`, predictions, or autocorrection. Accepted results may contain arbitrary
 Unicode; ordinary free typing and system emoji remain available through Globe.
 
@@ -448,6 +453,10 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
 - The extension never records audio, requests microphone permission, reads
   Keychain, or contacts OpenAI. The containing app owns the recorder and the
   existing provider/text-rule pipeline.
+- Immediate keyboard Fixes use a separate bounded app-mediated request governed
+  by `text-fixes.md`. The extension may send only the user-selected source and
+  opaque action identity; the containing app resolves prompts and performs the
+  provider request.
 - Keyboard Start joins the same process-owned Voice workflow and recorder
   arbitration used by foreground Voice. It does not create a second recorder,
   provider pipeline, persistence owner, or recovery path. Foreground Voice,
@@ -462,11 +471,11 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
 - The extension declares HoldType dictation support. iOS disables or suppresses
   its own Dictation key; a retained disabled icon in the system strip remains
   Apple-owned and is not a HoldType action.
-- Microphone, Translate, and Improve may each write Start for one request id.
-  Start also freezes that request's standard, translation, or forced-correction
-  action. `Listening…` appears only after the app acknowledges real capture. A
+- The microphone writes Start for one request id and freezes the selected Auto
+  modes. `Listening…` appears only after the app acknowledges real capture. A
   second microphone tap writes Finish; Cancel ends the request without provider
-  processing.
+  processing. Immediate Translate and Fix actions belong to the Fixes workspace
+  and never start capture.
 - After capture stops, `Processing…` reflects the app-owned provider chain.
   Provider work has explicit timeout and cancellation and never starts
   automatically after relaunch.
@@ -546,9 +555,10 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
   authority, storage implementation, or milestone names.
 - The OpenAI consent review answers four product questions in concise language:
   what is sent, why it is sent, who processes it, and what remains on the
-  device. Ordinary keystrokes and surrounding host-field text are explicitly
-  excluded. Detailed implementation guarantees are not required reading for
-  acceptance.
+  device. Ordinary keystrokes and unrelated surrounding host-field text are
+  explicitly excluded. A separate user-invoked Fix disclosure explains that
+  the selected text or qualified complete field is sent for that action.
+  Detailed implementation guarantees are not required reading for acceptance.
 - `RequestsOpenAccess` is true for the production dictation keyboard. Setup and
   Privacy explain why Allow Full Access is needed for keyboard-to-app command
   exchange. The extension itself does not contact OpenAI or transmit host
@@ -560,10 +570,12 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
   bounded command and Latest-result transport remains an implementation and
   verification contract rather than primary setup copy.
 - The extension receives no API key or provider client.
-- Pending audio and the canonical 20-entry History remain app-private,
+- Pending audio, the canonical 20-entry History, and full Fixes prompts remain
+  app-private,
   protected, and backup-excluded according to their data type. Raw audio never
-  enters App Group storage. Expiry removes command, state, result, and Latest
-  eligibility according to their separate bounded lifetimes.
+  enters App Group storage. Expiry removes command, state, immediate-Fix
+  source/result, and Latest eligibility according to their separate bounded
+  lifetimes.
 - An idle Keyboard Dictation Session does not retain or upload spoken content.
   Actual capture begins only after Start and ends on Finish, Cancel, timeout,
   interruption, or failure. Product state and the system recording indicator
@@ -608,7 +620,9 @@ Unicode; ordinary free typing and system emoji remain available through Globe.
   central indicator states, punctuation,
   Delete repeat, Space cursor movement, Return traits, session-state honesty,
   bounded command/state decoding, stale-request rejection, one History-derived
-  Latest item, automatic insertion ownership, and explicit Latest insertion.
+  Latest item, automatic insertion ownership, explicit Latest insertion, Fixes
+  metadata projection, selected-text replacement, expiry, and stale-document
+  rejection.
 
 ### Signed Physical iPhone
 
@@ -624,6 +638,10 @@ V1.1 is not release-complete until a recorded device pass proves:
 - keyboard enablement and Globe switching;
 - punctuation and editing controls in Notes, Messages, Mail, Safari, and two
   third-party apps;
+- selected-text Fixes in compatible fields, with exact range replacement and
+  no change after focus, selection, or source mutation;
+- no-selection Fixes only in hosts where complete traversal and exact
+  replacement are proven; every uncertain or partial context fails closed;
 - restricted-mode local editing and any supported read-only Latest behavior with
   Allow Full Access off;
 - Full Access setup and one-writer command/state exchange with it on;

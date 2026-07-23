@@ -22,7 +22,9 @@ started with a dedicated shortcut.
 
 - Automatic language detection for translation mode.
 - Review-before-insert UI.
-- Chained action editing, scripting, templates, summaries, or tone rewriting.
+- Chained actions inside the post-transcription pipeline.
+- Immediate selected-text and Draft actions, which are governed by
+  `text-fixes.md`.
 - Live OpenAI calls in normal tests.
 
 ## User-visible behavior
@@ -80,6 +82,10 @@ started with a dedicated shortcut.
   is off, so the user can prepare settings before enabling the shortcut.
 - A blank or whitespace-only translation prompt should fall back to HoldType's
   default translation prompt.
+- The immediate Translate Fix reuses this saved route and provider behavior but
+  is not a post-transcription output intent. It changes only the captured text
+  target and never Last Transcript, Last Result, History, or automatic
+  insertion.
 
 ## Runtime Translation Request
 
