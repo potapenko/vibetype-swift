@@ -15,17 +15,20 @@ Contract:
 ## Result
 
 The implementation and Text Fix-specific automated qualification pass. The
-full macOS suite also passes. Simulator runtime qualification covers iOS Voice,
-the iOS editor, and the actual embedded HoldType keyboard extension.
+full macOS suite also passes. Controlled macOS runtime qualification covers
+TextEdit selection and complete-field replacement, one-step Undo, stale input,
+provider failure, timeout, cancellation, and secure-field refusal. Simulator
+runtime qualification covers iOS Voice, the iOS editor, and the actual embedded
+HoldType keyboard extension.
 
 This run does not claim complete release qualification. The following live
 gates remain:
 
-1. the representative macOS host matrix, including real `Option+J`, target
-   capture, refusal, focus-loss, placement, and host Undo behavior;
+1. a real system-global `Option+J` invocation plus the extended macOS host,
+   placement, menu-status, and accessibility matrix;
 2. end-to-end keyboard behavior in real host apps on a signed physical iPhone;
-3. the final live normal/debug log audit and the remaining VoiceOver, Dynamic
-   Type, and RTL checks.
+3. the release-normal log audit and the remaining VoiceOver, Dynamic Type, and
+   RTL checks.
 
 The paired physical iPhone was locked during device setup, so Xcode could not
 mount its Developer Disk Image. A generic `iphoneos` Debug build and strict
@@ -36,7 +39,7 @@ runtime evidence.
 
 Verified:
 
-- the full macOS unit suite passed: **568 passed, 0 failed, 0 skipped**;
+- the full macOS unit suite passed: **585 passed, 0 failed, 0 skipped**;
 - targeted coverage includes `Option+J`, versioned OpenAI consent, pre-focus
   target capture, exact-range replacement, stale-target rejection, palette
   interaction, native status-item activation, the application Quit menu,
@@ -47,24 +50,53 @@ Verified:
   while stale, secure, or otherwise incompatible external focus clears it;
 - the Fixes editor is a separate normal window, and SwiftUI navigation changes
   cannot replace its stable `HoldType: Edit Fixes` window title;
+- the controlled palette exposes `Option J`, with Translate and Fix first;
+- a selected TextEdit range was replaced exactly while its prefix and suffix
+  remained unchanged, and one host Undo restored the exact source;
+- a zero-selection TextEdit field was replaced in full, and one host Undo
+  restored the exact source;
+- changing the source after capture produced the explicit Text Changed refusal
+  and preserved the newer text without starting the provider;
+- controlled provider failure and timeout preserved the source and exposed the
+  bounded failure state;
+- `Escape` cancelled an in-flight controlled action and preserved the source;
+- a focused synthetic `NSSecureTextField` disabled every action, exposed the
+  secure-field refusal, and never dispatched the provider;
 - the app and test bundle use the same configured Apple Development identity.
 
 Full-suite result bundle:
 
-`~/Library/Developer/Xcode/DerivedData/HoldType-aiagnlkblhltvacjmbtlpyjistgi/Logs/Test/Test-HoldType-2026.07.23_18-58-04-+0200.xcresult`
+`~/Library/Developer/Xcode/DerivedData/HoldType-aiagnlkblhltvacjmbtlpyjistgi/Logs/Test/Test-HoldType-2026.07.23_19-59-51-+0200.xcresult`
+
+The first controlled replacement exposed a focus-restoration defect: the
+nonactivating palette could retain keyboard focus immediately before returning
+to the captured target. Checkpoint `d277734` releases palette focus before
+replacement and treats an already-focused target idempotently. Regression
+coverage and the complete macOS suite pass after the fix.
+
+The app-owned debug log and a bounded unified-log export were scanned for every
+source, result, prompt, API-key, and provider-body canary used by the run:
+**0 matches**. Recorded Fixes diagnostics contained only closed stage/outcome
+values and one content-free opaque action tag.
 
 Not claimed by this run:
 
-- live replacement in TextEdit, Notes, Safari, Chrome, and Xcode;
-- secure/custom-control refusal and one-step host Undo across that matrix;
+- a real system-global `Option+J` event; app-targeted automation key presses do
+  not prove global shortcut registration;
+- live replacement in Notes, Safari, Chrome, Xcode, and representative custom
+  controls;
+- unsupported custom-control refusal and one-step host Undo across the extended
+  matrix;
 - real pointer, keyboard, and VoiceOver activation of the menu-bar status item;
 - multi-monitor and screen-edge placement in live external apps.
 
 The sanitized debug app ran as a menu-bar-only UI element without opening an
-accidental blank Settings window. The available Computer Use surface could not
-attach to the status item/SystemUIServer, so that launch is not reported as
-visual menu acceptance. The installed HoldType and FixKey processes were left
-untouched, and this run makes no shortcut-owner claim.
+accidental blank Settings window. It used the debug-only controlled provider
+seam, sanitized Keychain access, and no network provider. The available
+Computer Use surface could not attach to the status item/SystemUIServer, so
+that launch is not reported as visual menu acceptance. The installed HoldType,
+its user data, and FixKey were left untouched, and this run makes no
+shortcut-owner claim.
 
 ## iOS Voice And Editor
 
@@ -144,6 +176,8 @@ Physical-device signing audit:
 - the device-specific build stopped before compilation with
   `kAMDMobileImageMounterDeviceLocked` and `passcodeRequired=true`.
 
+A final bounded lock-state recheck still reported `passcodeRequired=true`.
+
 Accordingly, selected-text replacement, Full Access on/off, focus survival,
 extension recreation, and real host proxy behavior remain unqualified on a
 physical iPhone.
@@ -173,6 +207,11 @@ actions.
 - Full Access remained off in the Simulator keyboard check;
 - source text, prompts, provider output, and credentials were not added to
   normal product logs;
+- a bounded app-owned and unified-log canary scan found **0** occurrences of
+  the controlled source, result, prompt, API-key, or provider-body values;
+- controlled macOS diagnostics exposed only capture/availability/action
+  stages, closed outcomes such as succeeded, stale, cancelled, provider
+  failure, provider timeout, and a content-free opaque action tag;
 - automated coverage exercises versioned consent, TTL, cancellation, stale
   results, strict decoding, metadata-only projection, and exactly-once result
   claims.
@@ -181,13 +220,14 @@ actions.
 
 Before claiming the complete acceptance matrix:
 
-1. run `Option+J`, selection, whole-field, stale-target, unsupported/secure,
-   focus-loss, Undo, and placement checks in the documented macOS hosts;
+1. prove a real system-global `Option+J` event and run the remaining selection,
+   whole-field, stale-target, unsupported, focus-loss, Undo, and placement
+   checks in Notes, Safari, Chrome, Xcode, and representative custom controls;
 2. activate the menu-bar status item with pointer, keyboard, and VoiceOver;
 3. on the paired unlocked signed iPhone, enable HoldType deliberately, exercise
    Full Access off/on, transform selected text in single- and multiline hosts,
    and confirm partial/nil/no-selection contexts fail closed;
 4. exercise timeout, cancellation, extension eviction/recreation, TTL expiry,
    exactly-once claim, and app cold-state behavior on that device;
-5. finish VoiceOver, Dynamic Type, RTL, and live normal/debug log checks without
+5. finish VoiceOver, Dynamic Type, RTL, and release-normal log checks without
    exposing source text, prompts, output, or credentials.

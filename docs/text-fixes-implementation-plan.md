@@ -1,8 +1,9 @@
 # HoldType Text Fixes Implementation Plan
 
-Status: implementation delivered through Phase 7; Text Fix-specific automation
-and Simulator qualification complete; Phase 8 live macOS, signed-device, and
-final log/accessibility qualification remain
+Status: implementation delivered through Phase 7; Phase 8 controlled macOS
+runtime and redacted-log qualification complete; extended macOS
+host/accessibility, signed-device, and final release-normal qualification
+remain
 
 Date: 2026-07-23
 
@@ -18,15 +19,21 @@ Current execution follows the active contract in
 | 0 — Product contract | Complete | Active specs define the shared catalog, `Option+J`, privacy, targeting, and platform boundaries. |
 | 1 — Feasibility spikes | Architecture complete; signed-device exit pending | macOS and Voice paths are viable. Keyboard no-selection behavior is narrowed to fail closed when completeness cannot be proved, and the app-owned 60-second bridge is the selected provider boundary. A signed physical-iPhone run is still required to qualify the real keyboard-host boundary. |
 | 2 — Shared foundation | Complete for Text Fixes | Domain, persistence, generic OpenAI transformation, typed Translate/Fix routing, timeout, cancellation, and validation are implemented. Text Fix-focused package tests pass; the full Persistence package still has 17 pre-existing state-transition failures reproduced at the pre-feature base. |
-| 3 — macOS vertical slice | Implemented | Target capture, native palette, `Option+J`, stale-target rejection, execution, and exact-range replacement are covered by the macOS suite. The representative live-host matrix remains a Phase 8 release gate. |
+| 3 — macOS vertical slice | Implemented and controlled-runtime qualified | Target capture, native palette, `Option+J`, stale-target rejection, execution, exact-range replacement, and focus restoration are covered by the macOS suite. Controlled TextEdit checks passed for selected-range and complete-field replacement with one-step Undo; stale, provider failure, timeout, cancellation, and synthetic secure-field refusal also passed. The extended live-host and real global-shortcut matrix remains a Phase 8 release gate. |
 | 4 — macOS editor | Complete | Menu commands and the native searchable catalog editor with validation, CRUD, reorder, enablement, icons, and Restore Defaults are implemented. |
 | 5 — iOS Voice | Complete | Selection-aware and whole-Draft Fixes, typed actions, catalog presentation, stale-result protection, and Undo are implemented and verified in Simulator. |
 | 6 — Keyboard service | Implemented; signed-device exit pending | The bounded App Group request/result bridge, metadata projection, consent, Full Access, TTL, cancellation, privacy, and exactly-once guards are implemented. End-to-end selected-text proof on a signed physical iPhone remains required. |
 | 7 — Keyboard UX | Complete in Simulator | The center Fixes control, scrollable tile workspace, progress/error/privacy states, and mutual exclusion with Quick Insert are implemented and exercised in the real embedded keyboard extension. |
-| 8 — Integrated qualification | In progress | The full macOS suite passes, Text Fix-specific package/iOS checks pass, and Simulator runtime QA covers Voice, editor, and the embedded keyboard. The broader iOS and Persistence baselines retain reproduced pre-feature failures. The macOS compatibility matrix, physical-iPhone keyboard matrix, accessibility/RTL/Dynamic Type checks, and final live log audit remain. |
+| 8 — Integrated qualification | In progress | The full macOS suite passes, controlled TextEdit and secure-field runtime checks pass, and app-owned plus unified-log canary scans found no Text Fix content. Text Fix-specific package/iOS checks pass, and Simulator runtime QA covers Voice, editor, and the embedded keyboard. The broader iOS and Persistence baselines retain reproduced pre-feature failures. The extended macOS host/global-shortcut matrix, physical-iPhone keyboard matrix, accessibility/RTL/Dynamic Type checks, and release-normal log audit remain. |
 
 The recorded automated and runtime evidence is in
 `docs/qa/runs/text-fixes-implementation-2026-07-23.md`.
+
+The controlled macOS run found that the nonactivating palette could retain
+keyboard focus immediately before replacement. Checkpoint `d277734` now
+releases palette focus before returning to the captured external target and
+treats an already-focused target idempotently. The product contract did not
+change.
 
 ## 1. Goal
 
@@ -289,9 +296,9 @@ Translate and Fix should remain typed actions:
   automatic correction for dictation is off.
 - Neither action is implemented as a duplicate free-form default prompt.
 
-Typed actions can be reordered or hidden, but their semantic payload is edited
-through the existing settings that own it. Custom actions can be created,
-edited, reordered, hidden, and deleted.
+Typed actions remain pinned in the first two positions and cannot be hidden or
+deleted; their semantic payload is edited through the existing settings that
+own it. Custom actions can be created, edited, reordered, hidden, and deleted.
 
 **Restore Defaults** should restore missing default actions without deleting
 custom actions. Catalog corruption or an unsupported schema must recover
