@@ -29,10 +29,22 @@ struct MenuBarPresentation: Equatable {
     static let pasteLastResultTitle = "Paste Last Result"
     static let translationShortcutHint = GlobalHotkeyShortcut.translationDictation.menuHoldText
     static let pasteLastResultShortcutHint = GlobalHotkeyShortcut.appClipboardPaste.menuKeyEquivalentText
+    static let fixesTitle = "Fixes…"
+    static let fixesShortcutHint = GlobalHotkeyShortcut.fixesPalette.menuKeyEquivalentText
+    static let editFixesTitle = "Edit Fixes…"
     static let historyTitle = "Transcript History"
     static let settingsTitle = "Settings\u{2026}"
     static let checkForUpdatesTitle = "Check for Updates..."
     static let quitTitle = "Quit HoldType"
+
+    static func fixesShortcutHint(
+        for status: FixesHotkeyRegistrationStatus
+    ) -> String {
+        if case .unavailable = status {
+            return "Shortcut unavailable"
+        }
+        return fixesShortcutHint
+    }
 
     let appTitle: String
     let statusText: String

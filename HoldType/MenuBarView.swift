@@ -14,11 +14,14 @@ struct MenuBarView: View {
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var dictationRuntime: DictationRuntime
+    @StateObject private var fixesRuntime: FixesRuntime
 
     init(
-        dictationRuntime: DictationRuntime? = nil
+        dictationRuntime: DictationRuntime? = nil,
+        fixesRuntime: FixesRuntime? = nil
     ) {
         _dictationRuntime = StateObject(wrappedValue: dictationRuntime ?? .shared)
+        _fixesRuntime = StateObject(wrappedValue: fixesRuntime ?? .shared)
     }
 
     var body: some View {
@@ -66,6 +69,16 @@ struct MenuBarView: View {
             .keyboardShortcut("v", modifiers: [.control, .command])
 
             Divider()
+
+            MenuBarActionButton(
+                title: MenuBarPresentation.fixesTitle,
+                shortcutHint: MenuBarPresentation.fixesShortcutHint(
+                    for: fixesRuntime.hotkeyRegistrationStatus
+                )
+            ) {
+                dismiss()
+                fixesRuntime.showPaletteAfterMenuDismissal()
+            }
 
             MenuBarActionButton(title: MenuBarPresentation.historyTitle) {
                 dismiss()

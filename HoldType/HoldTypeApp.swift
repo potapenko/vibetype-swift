@@ -205,6 +205,7 @@ enum DebugTranscriptionFailurePromptLaunch {
 final class HoldTypeAppDelegate: NSObject, NSApplicationDelegate {
     private let specialClipboardHotkeyCoordinator = SpecialClipboardHotkeyCoordinator()
     private let dictationRuntime = DictationRuntime.shared
+    private let fixesRuntime = FixesRuntime.shared
     private let floatingIndicatorCoordinator = FloatingIndicatorCoordinator.shared
     private let quitConfirmationPresenter: any QuitConfirmationPresenting
     private let transcriptionFailurePromptCoordinator: (any TranscriptionFailurePromptCoordinating)?
@@ -297,6 +298,7 @@ final class HoldTypeAppDelegate: NSObject, NSApplicationDelegate {
             floatingIndicatorCoordinator.start()
             specialClipboardHotkeyCoordinator.start()
             dictationRuntime.startHotkeyListening()
+            fixesRuntime.startHotkeyListening()
         }
 
         #if DEBUG
@@ -336,6 +338,7 @@ final class HoldTypeAppDelegate: NSObject, NSApplicationDelegate {
             stopRuntimeComponentsOverride()
         } else {
             floatingIndicatorCoordinator.stop()
+            fixesRuntime.stopHotkeyListening()
             dictationRuntime.stopHotkeyListening()
             specialClipboardHotkeyCoordinator.stop()
         }

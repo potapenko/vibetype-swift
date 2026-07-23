@@ -111,6 +111,25 @@ struct FixesRuntimeTests {
         #expect(!fixture.runtime.isPaletteVisible)
     }
 
+    @Test func optionJCoordinatorStartsTriggersCaptureAndStops() async throws {
+        let fixture = try makeFixture()
+
+        fixture.runtime.startHotkeyListening()
+        #expect(fixture.runtime.hotkeyRegistrationStatus == .registered)
+        fixture.hotkey.trigger()
+
+        #expect(fixture.targetClient.focusedElementCallCount == 1)
+        try await waitUntil {
+            fixture.panel.model != nil
+        }
+
+        fixture.runtime.stopHotkeyListening()
+        #expect(!fixture.hotkey.isListening)
+        #expect(
+            fixture.runtime.hotkeyRegistrationStatus == .notRegistered
+        )
+    }
+
     private func makeFixture() throws -> FixesRuntimeFixture {
         let token = FocusedTextElementToken()
         let state = FocusedTextElementState(
@@ -155,7 +174,8 @@ struct FixesRuntimeTests {
             targetClient: targetClient,
             replacement: replacement,
             execution: execution,
-            panel: panel
+            panel: panel,
+            hotkey: hotkeyService
         )
     }
 
@@ -179,6 +199,7 @@ private struct FixesRuntimeFixture {
     let replacement: FixesRuntimeReplacementService
     let execution: FixesRuntimeExecutionService
     let panel: FixesRuntimePanelPresenter
+    let hotkey: FixesRuntimeHotkeyService
 }
 
 private actor FixesRuntimeCatalogStore: MacOSTextFixCatalogStoring {
@@ -339,13 +360,20 @@ private struct FixesRuntimeCredentialResolver:
 
 private final class FixesRuntimeHotkeyService: FixesHotkeyListening {
     private(set) var isListening = false
+    private var handler: (() -> Void)?
 
     func start(handler: @escaping () -> Void) throws {
+        self.handler = handler
         isListening = true
     }
 
     func stop() {
+        handler = nil
         isListening = false
+    }
+
+    func trigger() {
+        handler?()
     }
 }
 

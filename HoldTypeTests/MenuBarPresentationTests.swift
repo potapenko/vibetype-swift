@@ -33,6 +33,14 @@ struct MenuBarPresentationTests {
         #expect(presentation.pasteLastResultActionShortcutHint == "⌃⌘V")
         #expect(presentation.isPasteLastResultEnabled)
         #expect(MenuBarPresentation.pasteLastResultShortcutHint == "⌃⌘V")
+        #expect(MenuBarPresentation.fixesTitle == "Fixes…")
+        #expect(MenuBarPresentation.fixesShortcutHint == "⌥J")
+        #expect(
+            MenuBarPresentation.fixesShortcutHint(
+                for: .unavailable(message: "Already in use")
+            ) == "Shortcut unavailable"
+        )
+        #expect(MenuBarPresentation.editFixesTitle == "Edit Fixes…")
         #expect(MenuBarPresentation.historyTitle == "Transcript History")
         #expect(HoldTypeWindowTitle.history == "HoldType: History")
         #expect(MenuBarPresentation.settingsTitle == "Settings…")
